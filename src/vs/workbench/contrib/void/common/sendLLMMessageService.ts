@@ -15,6 +15,7 @@ import { Disposable } from '../../../../base/common/lifecycle.js';
 import { IVoidSettingsService } from './voidSettingsService.js';
 import { IMCPService } from './mcpService.js';
 
+
 // calls channel to implement features
 export const ILLMMessageService = createDecorator<ILLMMessageService>('llmMessageService');
 
@@ -103,6 +104,9 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 	sendLLMMessage(params: ServiceSendLLMMessageParams) {
 		const { onText, onFinalMessage, onError, onAbort, modelSelection, ...proxyParams } = params;
 
+		const { settingsOfProvider, globalSettings } = this.voidSettingsService.state
+		const { clerkSessionId } = globalSettings
+
 		// throw an error if no model/provider selected (this should usually never be reached, the UI should check this first, but might happen in cases like Apply where we haven't built much UI/checks yet, good practice to have check logic on backend)
 		if (modelSelection === null) {
 			const message = `Please add a provider in Void's Settings.`
@@ -116,8 +120,7 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 			return null
 		}
 
-		const { settingsOfProvider, } = this.voidSettingsService.state
-
+		const isLoggedIn = !!clerkSessionId
 		const mcpTools = this.mcpService.getMCPTools()
 
 		// add state for request id
@@ -134,6 +137,7 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 			settingsOfProvider,
 			modelSelection,
 			mcpTools,
+			isLoggedIn,
 		} satisfies MainSendLLMMessageParams);
 
 		return requestId
@@ -149,7 +153,9 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 	ollamaList = (params: ServiceModelListParams<OllamaModelResponse>) => {
 		const { onSuccess, onError, ...proxyParams } = params
 
-		const { settingsOfProvider } = this.voidSettingsService.state
+		const { settingsOfProvider, globalSettings } = this.voidSettingsService.state
+		const { clerkSessionId } = globalSettings
+		const isLoggedIn = !!clerkSessionId
 
 		// add state for request id
 		const requestId_ = generateUuid();
@@ -161,6 +167,7 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 			settingsOfProvider,
 			providerName: 'ollama',
 			requestId: requestId_,
+			isLoggedIn,
 		} satisfies MainModelListParams<OllamaModelResponse>)
 	}
 
@@ -168,7 +175,9 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 	openAICompatibleList = (params: ServiceModelListParams<OpenaiCompatibleModelResponse>) => {
 		const { onSuccess, onError, ...proxyParams } = params
 
-		const { settingsOfProvider } = this.voidSettingsService.state
+		const { settingsOfProvider, globalSettings } = this.voidSettingsService.state
+		const { clerkSessionId } = globalSettings
+		const isLoggedIn = !!clerkSessionId
 
 		// add state for request id
 		const requestId_ = generateUuid();
@@ -179,6 +188,7 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 			...proxyParams,
 			settingsOfProvider,
 			requestId: requestId_,
+			isLoggedIn
 		} satisfies MainModelListParams<OpenaiCompatibleModelResponse>)
 	}
 

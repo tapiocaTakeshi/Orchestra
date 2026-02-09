@@ -5,13 +5,14 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useAccessor, useIsDark, useSettingsState } from '../util/services.js';
-import { Brain, Check, ChevronRight, DollarSign, ExternalLink, Lock, X } from 'lucide-react';
-import { displayInfoOfProviderName, ProviderName, providerNames, localProviderNames, featureNames, FeatureName, isFeatureNameDisabled } from '../../../../common/voidSettingsTypes.js';
+import { Brain, Check, ChevronRight, DollarSign, ExternalLink, Lock, X, Code, FileText, Search, Palette } from 'lucide-react';
+import { displayInfoOfProviderName, ProviderName, providerNames, localProviderNames, featureNames, FeatureName, isFeatureNameDisabled, AgentRole, RoleAssignment } from '../../../../common/voidSettingsTypes.js';
 import { ChatMarkdownRender } from '../markdown/ChatMarkdownRender.js';
 import { OllamaSetupInstructions, OneClickSwitchButton, SettingsForProvider, ModelDump } from '../void-settings-tsx/Settings.js';
 import { ColorScheme } from '../../../../../../../platform/theme/common/theme.js';
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js';
 import { isLinux } from '../../../../../../../base/common/platform.js';
+import { useAuth, useUser, SignInButton, SignUpButton, UserButton, SignedIn, SignedOut } from '@clerk/clerk-react';
 
 const OVERRIDE_VALUE = false
 
@@ -43,17 +44,18 @@ const VoidIcon = () => {
 	const accessor = useAccessor()
 	const themeService = accessor.get('IThemeService')
 
-	const divRef = useRef<HTMLDivElement | null>(null)
+	const imgRef = useRef<HTMLImageElement | null>(null)
 
 	useEffect(() => {
-		// void icon style
+		// Orchestra icon style
 		const updateTheme = () => {
 			const theme = themeService.getColorTheme().type
 			const isDark = theme === ColorScheme.DARK || theme === ColorScheme.HIGH_CONTRAST_DARK
-			if (divRef.current) {
-				divRef.current.style.maxWidth = '220px'
-				divRef.current.style.opacity = '50%'
-				divRef.current.style.filter = isDark ? '' : 'invert(1)' //brightness(.5)
+			if (imgRef.current) {
+				imgRef.current.style.maxWidth = '220px'
+				imgRef.current.style.opacity = '70%'
+				imgRef.current.style.filter = isDark ? '' : 'invert(1)'
+				imgRef.current.style.border = '10px solid red' // DEBUG MARKER
 			}
 		}
 		updateTheme()
@@ -61,8 +63,11 @@ const VoidIcon = () => {
 		return () => d.dispose()
 	}, [])
 
-	return <div ref={divRef} className='@@void-void-icon' />
+	// Use orchestra_nonbackground.png for UI
+	const logoPath = new URL('../assets/orchestra_logo.png', import.meta.url).href
+	return <img ref={imgRef} src={logoPath} alt="Orchestra Logo" />
 }
+
 
 const FADE_DURATION_MS = 2000
 
@@ -269,8 +274,162 @@ const AddProvidersPage = ({ pageIndex, setPageIndex }: { pageIndex: number, setP
 				</div>
 			</div>
 		</div>
-	</div>);
+	</div>)
 };
+
+// =============================================
+//  Role Assignment Page Component
+// =============================================
+
+const RoleSelector = ({
+	role,
+	description,
+	icon: Icon,
+	currentAssignment,
+	onAssignmentChange
+}: {
+	role: AgentRole;
+	description: string;
+	icon: any;
+	currentAssignment: RoleAssignment | undefined;
+	onAssignmentChange: (provider: ProviderName, model: string) => void;
+}) => {
+	const settingsState = useSettingsState();
+	const [selectedProvider, setSelectedProvider] = useState<ProviderName>(currentAssignment?.provider || 'openAI');
+	const [selectedModel, setSelectedModel] = useState<string>(currentAssignment?.model || '');
+
+	// Get available models for selected provider
+	const availableModels = settingsState.settingsOfProvider[selectedProvider]?.models || [];
+
+	// Update selected model when provider changes
+	useEffect(() => {
+		if (availableModels.length > 0 && !selectedModel) {
+			const firstModel = availableModels[0].modelName;
+			setSelectedModel(firstModel);
+			onAssignmentChange(selectedProvider, firstModel);
+		}
+	}, [selectedProvider, availableModels]);
+
+	const handleProviderChange = (provider: ProviderName) => {
+		setSelectedProvider(provider);
+		const providerModels = settingsState.settingsOfProvider[provider]?.models || [];
+		if (providerModels.length > 0) {
+			const firstModel = providerModels[0].modelName;
+			setSelectedModel(firstModel);
+			onAssignmentChange(provider, firstModel);
+		}
+	};
+
+	const handleModelChange = (model: string) => {
+		setSelectedModel(model);
+		onAssignmentChange(selectedProvider, model);
+	};
+
+	return (
+		<div className="flex items-center gap-4 p-4 bg-void-bg-2 rounded-lg border border-void-border-2">
+			<div className="flex items-center gap-3 flex-1">
+				<Icon className="w-5 h-5 text-void-fg-2" />
+				<div className="flex-1">
+					<div className="text-lg font-medium capitalize">{role}</div>
+					<div className="text-sm text-void-fg-3 opacity-80">{description}</div>
+				</div>
+			</div>
+			<div className="flex gap-2">
+				<select
+					value={selectedProvider}
+					onChange={(e) => handleProviderChange(e.target.value as ProviderName)}
+					className="px-3 py-2 bg-void-bg-3 border border-void-border-2 rounded text-sm"
+				>
+					{providerNames.map(pn => (
+						<option key={pn} value={pn}>
+							{displayInfoOfProviderName(pn).title}
+						</option>
+					))}
+				</select>
+				<select
+					value={selectedModel}
+					onChange={(e) => handleModelChange(e.target.value)}
+					className="px-3 py-2 bg-void-bg-3 border border-void-border-2 rounded text-sm min-w-[200px]"
+					disabled={availableModels.length === 0}
+				>
+					{availableModels.length === 0 ? (
+						<option>No models available</option>
+					) : (
+						availableModels.map(model => (
+							<option key={model.modelName} value={model.modelName}>
+								{model.modelName}
+							</option>
+						))
+					)}
+				</select>
+			</div>
+		</div>
+	);
+};
+
+const RoleAssignmentPage = ({
+	pageIndex,
+	setPageIndex
+}: {
+	pageIndex: number;
+	setPageIndex: (index: number) => void;
+}) => {
+	const settingsState = useSettingsState();
+	const accessor = useAccessor();
+	const voidSettingsService = accessor.get('IVoidSettingsService');
+
+	const roleDescriptions: Record<AgentRole, string> = {
+		leader: 'Coordinates the overall task and delegates to other agents',
+		coder: 'Writes and modifies code with deep technical expertise',
+		planner: 'Creates implementation plans and architectural designs',
+		search: 'Searches documentation and external resources',
+		design: 'Generates UI designs and visual assets',
+	};
+
+	const roleIcons: Record<AgentRole, any> = {
+		leader: Brain,
+		coder: Code,
+		planner: FileText,
+		search: Search,
+		design: Palette,
+	};
+
+	const handleAssignmentChange = (role: AgentRole, provider: ProviderName, model: string) => {
+		const newAssignments = settingsState.globalSettings.roleAssignments.map(a =>
+			a.role === role ? { role, provider, model } : a
+		);
+		voidSettingsService.setGlobalSetting('roleAssignments', newAssignments);
+	};
+
+	return (
+		<div className="flex flex-col w-full h-[80vh] gap-6 max-w-[900px] mx-auto p-6">
+			<div className="text-5xl font-light text-center mb-2">Configure AI Roles</div>
+			<div className="text-void-fg-3 text-center mb-4 text-lg">
+				Assign models to different roles for optimal orchestration
+			</div>
+
+			<div className="flex flex-col gap-4 overflow-y-auto flex-1">
+				{(['leader', 'coder', 'planner', 'search', 'design'] as AgentRole[]).map(role => (
+					<RoleSelector
+						key={role}
+						role={role}
+						description={roleDescriptions[role]}
+						icon={roleIcons[role]}
+						currentAssignment={settingsState.globalSettings.roleAssignments.find(a => a.role === role)}
+						onAssignmentChange={(provider, model) => handleAssignmentChange(role, provider, model)}
+					/>
+				))}
+			</div>
+
+			<div className="flex items-center gap-2 mt-auto justify-end">
+				<PreviousButton onClick={() => setPageIndex(pageIndex - 1)} />
+				<NextButton onClick={() => setPageIndex(pageIndex + 1)} />
+			</div>
+		</div>
+	);
+};
+
+
 // =============================================
 // 	OnboardingPage
 // 		title:
@@ -469,10 +628,23 @@ type WantToUseOption = 'smart' | 'private' | 'cheap' | 'all'
 
 const VoidOnboardingContent = () => {
 
-
 	const accessor = useAccessor()
 	const voidSettingsService = accessor.get('IVoidSettingsService')
 	const voidMetricsService = accessor.get('IMetricsService')
+	const clerkService = accessor.get('IClerkService')
+
+	const { userId, sessionId } = useAuth()
+	const { user } = useUser()
+
+	useEffect(() => {
+		clerkService.setAuthState(user ? {
+			id: user.id,
+			fullName: user.fullName,
+			primaryEmailAddress: user.primaryEmailAddress?.emailAddress || null,
+			imageUrl: user.imageUrl,
+			username: user.username,
+		} : null, sessionId || null)
+	}, [user, sessionId, clerkService])
 
 	const voidSettingsState = useSettingsState()
 
@@ -547,7 +719,7 @@ const VoidOnboardingContent = () => {
 					voidMetricsService.capture('Completed Onboarding', { selectedProviderName, wantToUseOption })
 				}}
 				ringSize={voidSettingsState.globalSettings.isOnboardingComplete ? 'screen' : undefined}
-			>Enter the Void</PrimaryActionButton>
+			>Enter Orchestra</PrimaryActionButton>
 		</div>
 	</div>
 
@@ -596,7 +768,7 @@ const VoidOnboardingContent = () => {
 		0: <OnboardingPageShell
 			content={
 				<div className='flex flex-col items-center gap-8'>
-					<div className="text-5xl font-light text-center">Welcome to Void</div>
+					<div className="text-5xl font-light text-center">Welcome to Orchestra (Build 1.0.2 - DEBUG)</div>
 
 					{/* Slice of Void image */}
 					<div className='max-w-md w-full h-[30vh] mx-auto flex items-center justify-center'>
@@ -606,12 +778,35 @@ const VoidOnboardingContent = () => {
 
 					<FadeIn
 						delayMs={1000}
+						className='flex flex-col items-center gap-4'
 					>
 						<PrimaryActionButton
 							onClick={() => { setPageIndex(1) }}
 						>
 							Get Started
 						</PrimaryActionButton>
+
+						<SignedIn>
+							<div className="mt-4 flex flex-col items-center gap-2">
+								<div className="text-emerald-500 font-medium flex items-center gap-2 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20">
+									<Check className="w-4 h-4" />
+									Signed in as {user?.fullName || user?.username || 'Orchestra User'}
+								</div>
+								<div className="text-xs text-void-fg-3 opacity-70 text-center">
+									You have access to built-in Orchestra API keys.
+								</div>
+							</div>
+						</SignedIn>
+						<SignedOut>
+							<SignInButton mode="modal">
+								<button
+									className="mt-4 px-6 py-2 bg-void-bg-2 border border-void-border-2 rounded-lg text-void-fg-1 hover:bg-void-bg-3 transition-all flex items-center gap-2"
+								>
+									<Lock className="w-4 h-4" />
+									Sign in with Orchestra
+								</button>
+							</SignInButton>
+						</SignedOut>
 					</FadeIn>
 
 				</div>
@@ -623,7 +818,12 @@ const VoidOnboardingContent = () => {
 				<AddProvidersPage pageIndex={pageIndex} setPageIndex={setPageIndex} />
 			}
 		/>,
-		2: <OnboardingPageShell
+		2: <OnboardingPageShell hasMaxWidth={false}
+			content={
+				<RoleAssignmentPage pageIndex={pageIndex} setPageIndex={setPageIndex} />
+			}
+		/>,
+		3: <OnboardingPageShell
 
 			content={
 				<div>
@@ -634,6 +834,36 @@ const VoidOnboardingContent = () => {
 						<OneClickSwitchButton className='w-full px-4 py-2' fromEditor="VS Code" />
 						<OneClickSwitchButton className='w-full px-4 py-2' fromEditor="Cursor" />
 						<OneClickSwitchButton className='w-full px-4 py-2' fromEditor="Windsurf" />
+
+						<div className="mt-8 pt-8 border-t border-void-border-4 w-full text-left">
+							<h4 className="text-void-fg-3 mb-4">Account</h4>
+							<SignedIn>
+								<div className="flex flex-col gap-4">
+									<div className="flex items-center justify-between p-4 bg-void-bg-2 rounded-lg border border-void-border-2">
+										<div className="flex items-center gap-3">
+											<UserButton afterSignOutUrl="/" />
+											<div>
+												<div className="font-medium text-void-fg-1">{user?.fullName || user?.username || 'Orchestra User'}</div>
+												<div className="text-xs text-void-fg-3 opacity-70">Authenticated via Clerk</div>
+											</div>
+										</div>
+									</div>
+									<div className="text-xs text-emerald-500 px-1 italic">
+										* You have access to built-in Orchestra API keys.
+									</div>
+								</div>
+							</SignedIn>
+							<SignedOut>
+								<SignInButton mode="modal">
+									<button
+										className="w-full px-4 py-2 bg-[#0e70c0] hover:bg-[#0e70c0]/90 text-white rounded transition-all flex items-center justify-center gap-2"
+									>
+										<Lock className="w-4 h-4" />
+										Log In to Orchestra
+									</button>
+								</SignInButton>
+							</SignedOut>
+						</div>
 					</div>
 				</div>
 			}

@@ -42,6 +42,7 @@ type InternalCommonMessageParams = {
 	overridesOfModel: OverridesOfModel | undefined;
 	modelName: string;
 	_setAborter: (aborter: () => void) => void;
+	isLoggedIn: boolean;
 }
 
 type SendChatParams_Internal = InternalCommonMessageParams & {
@@ -50,11 +51,23 @@ type SendChatParams_Internal = InternalCommonMessageParams & {
 	chatMode: ChatMode | null;
 	mcpTools: InternalToolInfo[] | undefined;
 }
-type SendFIMParams_Internal = InternalCommonMessageParams & { messages: LLMFIMMessage; separateSystemMessage: string | undefined; }
-export type ListParams_Internal<ModelResponse> = ModelListParams<ModelResponse>
+type SendFIMParams_Internal = InternalCommonMessageParams & { messages: LLMFIMMessage; separateSystemMessage: string | undefined; isLoggedIn: boolean; }
+export type ListParams_Internal<ModelResponse> = ModelListParams<ModelResponse> & { isLoggedIn: boolean }
 
 
 const invalidApiKeyMessage = (providerName: ProviderName) => `Invalid ${displayInfoOfProviderName(providerName).title} API key.`
+
+const getApiKey = (providerName: ProviderName, providedKey: string | undefined, isLoggedIn: boolean): string | undefined => {
+	if (providedKey) return providedKey;
+	if (!isLoggedIn) return undefined;
+
+	switch (providerName) {
+		case 'anthropic': return process.env.ANTHROPIC_API_KEY;
+		case 'openAI': return process.env.OPENAI_API_KEY;
+		case 'gemini': return process.env.GOOGLE_API_KEY;
+		default: return undefined;
+	}
+}
 
 // ------------ OPENAI-COMPATIBLE (HELPERS) ------------
 
@@ -69,14 +82,14 @@ const parseHeadersJSON = (s: string | undefined): Record<string, string | null |
 	}
 }
 
-const newOpenAICompatibleSDK = async ({ settingsOfProvider, providerName, includeInPayload }: { settingsOfProvider: SettingsOfProvider, providerName: ProviderName, includeInPayload?: { [s: string]: any } }) => {
+const newOpenAICompatibleSDK = async ({ settingsOfProvider, providerName, includeInPayload, isLoggedIn }: { settingsOfProvider: SettingsOfProvider, providerName: ProviderName, includeInPayload?: { [s: string]: any }, isLoggedIn: boolean }) => {
 	const commonPayloadOpts: ClientOptions = {
 		dangerouslyAllowBrowser: true,
 		...includeInPayload,
 	}
 	if (providerName === 'openAI') {
 		const thisConfig = settingsOfProvider[providerName]
-		return new OpenAI({ apiKey: thisConfig.apiKey, ...commonPayloadOpts })
+		return new OpenAI({ apiKey: getApiKey(providerName, thisConfig.apiKey, isLoggedIn), ...commonPayloadOpts })
 	}
 	else if (providerName === 'ollama') {
 		const thisConfig = settingsOfProvider[providerName]
@@ -98,7 +111,7 @@ const newOpenAICompatibleSDK = async ({ settingsOfProvider, providerName, includ
 		const thisConfig = settingsOfProvider[providerName]
 		return new OpenAI({
 			baseURL: 'https://openrouter.ai/api/v1',
-			apiKey: thisConfig.apiKey,
+			apiKey: getApiKey(providerName, thisConfig.apiKey, isLoggedIn),
 			defaultHeaders: {
 				'HTTP-Referer': 'https://voideditor.com', // Optional, for including your app on openrouter.ai rankings.
 				'X-Title': 'Void', // Optional. Shows in rankings on openrouter.ai.
@@ -119,60 +132,46 @@ const newOpenAICompatibleSDK = async ({ settingsOfProvider, providerName, includ
 		const thisConfig = settingsOfProvider[providerName]
 		const endpoint = `https://${thisConfig.project}.openai.azure.com/`;
 		const apiVersion = thisConfig.azureApiVersion ?? '2024-04-01-preview';
-		const options = { endpoint, apiKey: thisConfig.apiKey, apiVersion };
+		const options = { endpoint, apiKey: getApiKey(providerName, thisConfig.apiKey, isLoggedIn), apiVersion };
 		return new AzureOpenAI({ ...options, ...commonPayloadOpts });
 	}
 	else if (providerName === 'awsBedrock') {
-		/**
-		  * We treat Bedrock as *OpenAI-compatible only through a proxy*:
-		  *   • LiteLLM default → http://localhost:4000/v1
-		  *   • Bedrock-Access-Gateway → https://<api-id>.execute-api.<region>.amazonaws.com/openai/
-		  *
-		  * The native Bedrock runtime endpoint
-		  *   https://bedrock-runtime.<region>.amazonaws.com
-		  * is **NOT** OpenAI-compatible, so we do *not* fall back to it here.
-		  */
 		const { endpoint, apiKey } = settingsOfProvider.awsBedrock
-
-		// ① use the user-supplied proxy if present
-		// ② otherwise default to local LiteLLM
 		let baseURL = endpoint || 'http://localhost:4000/v1'
-
-		// Normalize: make sure we end with “/v1”
 		if (!baseURL.endsWith('/v1'))
 			baseURL = baseURL.replace(/\/+$/, '') + '/v1'
 
-		return new OpenAI({ baseURL, apiKey, ...commonPayloadOpts })
+		return new OpenAI({ baseURL, apiKey: getApiKey(providerName, apiKey, isLoggedIn), ...commonPayloadOpts })
 	}
 
 
 	else if (providerName === 'deepseek') {
 		const thisConfig = settingsOfProvider[providerName]
-		return new OpenAI({ baseURL: 'https://api.deepseek.com/v1', apiKey: thisConfig.apiKey, ...commonPayloadOpts })
+		return new OpenAI({ baseURL: 'https://api.deepseek.com/v1', apiKey: getApiKey(providerName, thisConfig.apiKey, isLoggedIn), ...commonPayloadOpts })
 	}
 	else if (providerName === 'openAICompatible') {
 		const thisConfig = settingsOfProvider[providerName]
 		const headers = parseHeadersJSON(thisConfig.headersJSON)
-		return new OpenAI({ baseURL: thisConfig.endpoint, apiKey: thisConfig.apiKey, defaultHeaders: headers, ...commonPayloadOpts })
+		return new OpenAI({ baseURL: thisConfig.endpoint, apiKey: getApiKey(providerName, thisConfig.apiKey, isLoggedIn), defaultHeaders: headers, ...commonPayloadOpts })
 	}
 	else if (providerName === 'groq') {
 		const thisConfig = settingsOfProvider[providerName]
-		return new OpenAI({ baseURL: 'https://api.groq.com/openai/v1', apiKey: thisConfig.apiKey, ...commonPayloadOpts })
+		return new OpenAI({ baseURL: 'https://api.groq.com/openai/v1', apiKey: getApiKey(providerName, thisConfig.apiKey, isLoggedIn), ...commonPayloadOpts })
 	}
 	else if (providerName === 'xAI') {
 		const thisConfig = settingsOfProvider[providerName]
-		return new OpenAI({ baseURL: 'https://api.x.ai/v1', apiKey: thisConfig.apiKey, ...commonPayloadOpts })
+		return new OpenAI({ baseURL: 'https://api.x.ai/v1', apiKey: getApiKey(providerName, thisConfig.apiKey, isLoggedIn), ...commonPayloadOpts })
 	}
 	else if (providerName === 'mistral') {
 		const thisConfig = settingsOfProvider[providerName]
-		return new OpenAI({ baseURL: 'https://api.mistral.ai/v1', apiKey: thisConfig.apiKey, ...commonPayloadOpts })
+		return new OpenAI({ baseURL: 'https://api.mistral.ai/v1', apiKey: getApiKey(providerName, thisConfig.apiKey, isLoggedIn), ...commonPayloadOpts })
 	}
 
 	else throw new Error(`Void providerName was invalid: ${providerName}.`)
 }
 
 
-const _sendOpenAICompatibleFIM = async ({ messages: { prefix, suffix, stopTokens }, onFinalMessage, onError, settingsOfProvider, modelName: modelName_, _setAborter, providerName, overridesOfModel }: SendFIMParams_Internal) => {
+const _sendOpenAICompatibleFIM = async ({ messages: { prefix, suffix, stopTokens }, onFinalMessage, onError, settingsOfProvider, modelName: modelName_, _setAborter, providerName, overridesOfModel, isLoggedIn }: SendFIMParams_Internal) => {
 
 	const {
 		modelName,
@@ -188,7 +187,7 @@ const _sendOpenAICompatibleFIM = async ({ messages: { prefix, suffix, stopTokens
 		return
 	}
 
-	const openai = await newOpenAICompatibleSDK({ providerName, settingsOfProvider, includeInPayload: additionalOpenAIPayload })
+	const openai = await newOpenAICompatibleSDK({ providerName, settingsOfProvider, includeInPayload: additionalOpenAIPayload, isLoggedIn })
 	openai.completions
 		.create({
 			model: modelName,
@@ -270,7 +269,7 @@ const rawToolCallObjOfAnthropicParams = (toolBlock: Anthropic.Messages.ToolUseBl
 // ------------ OPENAI-COMPATIBLE ------------
 
 
-const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onError, settingsOfProvider, modelSelectionOptions, modelName: modelName_, _setAborter, providerName, chatMode, separateSystemMessage, overridesOfModel, mcpTools }: SendChatParams_Internal) => {
+const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onError, settingsOfProvider, modelSelectionOptions, modelName: modelName_, _setAborter, providerName, chatMode, separateSystemMessage, overridesOfModel, mcpTools, isLoggedIn }: SendChatParams_Internal) => {
 	const {
 		modelName,
 		specialToolFormat,
@@ -296,7 +295,7 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 		: {}
 
 	// instance
-	const openai: OpenAI = await newOpenAICompatibleSDK({ providerName, settingsOfProvider, includeInPayload })
+	const openai: OpenAI = await newOpenAICompatibleSDK({ providerName, settingsOfProvider, includeInPayload, isLoggedIn })
 	if (providerName === 'microsoftAzure') {
 		// Required to select the model
 		(openai as AzureOpenAI).deploymentName = modelName;
@@ -395,7 +394,7 @@ type OpenAIModel = {
 	object: 'model';
 	owned_by: string;
 }
-const _openaiCompatibleList = async ({ onSuccess: onSuccess_, onError: onError_, settingsOfProvider, providerName }: ListParams_Internal<OpenAIModel>) => {
+const _openaiCompatibleList = async ({ onSuccess: onSuccess_, onError: onError_, settingsOfProvider, providerName, isLoggedIn }: ListParams_Internal<OpenAIModel>) => {
 	const onSuccess = ({ models }: { models: OpenAIModel[] }) => {
 		onSuccess_({ models })
 	}
@@ -403,7 +402,7 @@ const _openaiCompatibleList = async ({ onSuccess: onSuccess_, onError: onError_,
 		onError_({ error })
 	}
 	try {
-		const openai = await newOpenAICompatibleSDK({ providerName, settingsOfProvider })
+		const openai = await newOpenAICompatibleSDK({ providerName, settingsOfProvider, isLoggedIn })
 		openai.models.list()
 			.then(async (response) => {
 				const models: OpenAIModel[] = []
@@ -455,7 +454,7 @@ const anthropicTools = (chatMode: ChatMode | null, mcpTools: InternalToolInfo[] 
 
 
 // ------------ ANTHROPIC ------------
-const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessage, onError, settingsOfProvider, modelSelectionOptions, overridesOfModel, modelName: modelName_, _setAborter, separateSystemMessage, chatMode, mcpTools }: SendChatParams_Internal) => {
+const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessage, onError, settingsOfProvider, modelSelectionOptions, overridesOfModel, modelName: modelName_, _setAborter, separateSystemMessage, chatMode, mcpTools, isLoggedIn }: SendChatParams_Internal) => {
 	const {
 		modelName,
 		specialToolFormat,
@@ -480,7 +479,7 @@ const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessag
 
 	// instance
 	const anthropic = new Anthropic({
-		apiKey: thisConfig.apiKey,
+		apiKey: getApiKey(providerName, thisConfig.apiKey, isLoggedIn),
 		dangerouslyAllowBrowser: true
 	});
 
@@ -582,7 +581,7 @@ const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessag
 
 // ------------ MISTRAL ------------
 // https://docs.mistral.ai/api/#tag/fim
-const sendMistralFIM = ({ messages, onFinalMessage, onError, settingsOfProvider, overridesOfModel, modelName: modelName_, _setAborter, providerName }: SendFIMParams_Internal) => {
+const sendMistralFIM = ({ messages, onFinalMessage, onError, settingsOfProvider, overridesOfModel, modelName: modelName_, _setAborter, providerName, isLoggedIn }: SendFIMParams_Internal) => {
 	const { modelName, supportsFIM } = getModelCapabilities(providerName, modelName_, overridesOfModel)
 	if (!supportsFIM) {
 		if (modelName === modelName_)
@@ -592,7 +591,7 @@ const sendMistralFIM = ({ messages, onFinalMessage, onError, settingsOfProvider,
 		return
 	}
 
-	const mistral = new MistralCore({ apiKey: settingsOfProvider.mistral.apiKey })
+	const mistral = new MistralCore({ apiKey: getApiKey(providerName, settingsOfProvider.mistral.apiKey, isLoggedIn) })
 	fimComplete(mistral,
 		{
 			model: modelName,
@@ -728,6 +727,7 @@ const sendGeminiChat = async ({
 	modelSelectionOptions,
 	chatMode,
 	mcpTools,
+	isLoggedIn,
 }: SendChatParams_Internal) => {
 
 	if (providerName !== 'gemini') throw new Error(`Sending Gemini chat, but provider was ${providerName}`)
@@ -759,7 +759,7 @@ const sendGeminiChat = async ({
 		: undefined
 
 	// instance
-	const genAI = new GoogleGenAI({ apiKey: thisConfig.apiKey });
+	const genAI = new GoogleGenAI({ apiKey: getApiKey(providerName, thisConfig.apiKey, isLoggedIn) || '' });
 
 
 	// manually parse out tool results if XML
@@ -846,6 +846,144 @@ const sendGeminiChat = async ({
 
 
 
+// --------- DIVISION API ---------
+
+// Map Orchestra provider names to Division API provider names
+const mapProviderNameToDivisionAPI = (providerName: string): string => {
+	const mapping: Record<string, string> = {
+		'openAI': 'openai',
+		'anthropic': 'anthropic',
+		'gemini': 'google',
+		'deepseek': 'openai', // DeepSeek uses OpenAI-compatible API
+		'openRouter': 'openai',
+		'groq': 'openai',
+		'xAI': 'openai',
+		'mistral': 'openai',
+	};
+	return mapping[providerName] || 'openai'; // Default to openai if not mapped
+};
+
+const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<void> => {
+	const {
+		messages,
+		onText,
+		onFinalMessage,
+		onError,
+		settingsOfProvider,
+		providerName,
+		_setAborter,
+		separateSystemMessage,
+	} = params
+
+	try {
+		const endpointBase = settingsOfProvider[providerName]?.endpoint || 'https://api.division.he-ro.jp'
+		const endpoint = `${endpointBase}/api/agent/run`
+
+		// Build the prompt from messages - handle LLMChatMessage union types (OpenAI/Anthropic use 'content', Gemini uses 'parts')
+		let prompt = ''
+		if (separateSystemMessage) {
+			prompt += `[System] ${separateSystemMessage}\n\n`
+		}
+		for (const msg of messages) {
+			const role = msg.role || 'user'
+			if ('content' in msg) {
+				if (typeof msg.content === 'string') {
+					prompt += `[${role}] ${msg.content}\n`
+				} else if (Array.isArray(msg.content)) {
+					for (const part of msg.content) {
+						if (typeof part === 'string') {
+							prompt += `[${role}] ${part}\n`
+						} else if (part && typeof part === 'object' && 'text' in part) {
+							prompt += `[${role}] ${(part as { text: string }).text}\n`
+						}
+					}
+				}
+			} else if ('parts' in msg) {
+				// Gemini format
+				for (const part of msg.parts) {
+					if ('text' in part) {
+						prompt += `[${role}] ${part.text}\n`
+					}
+				}
+			}
+		}
+
+		const controller = new AbortController()
+		_setAborter(() => { controller.abort() })
+
+		// Get role assignments - for now using defaults
+		// TODO: Pass globalSettings through params to use user-configured role assignments
+		const roleAssignments: Array<{ role: string; provider: string; model: string }> = [
+			{ role: 'leader', provider: 'openAI', model: 'gpt-4o' },
+			{ role: 'coder', provider: 'anthropic', model: 'claude-sonnet-4-20250514' },
+			{ role: 'planner', provider: 'gemini', model: 'gemini-2.0-flash' },
+			{ role: 'search', provider: 'openAI', model: 'gpt-4o' },
+			{ role: 'design', provider: 'gemini', model: 'gemini-2.0-flash' },
+		];
+
+		// Build agents array from role assignments
+		const agents = roleAssignments.map(assignment => ({
+			role: assignment.role,
+			provider: mapProviderNameToDivisionAPI(assignment.provider),
+			model: assignment.model,
+		}));
+
+		const response = await fetch(endpoint, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify({
+				prompt: prompt.trim(),
+				agents,
+			}),
+			signal: controller.signal,
+		})
+
+		if (!response.ok) {
+			const errorText = await response.text()
+			onError({ message: `Division API error (${response.status}): ${errorText}`, fullError: null })
+			return
+		}
+
+		// Parse JSON response (Division API returns JSON, not a stream)
+		const data = await response.json()
+
+		// Extract the orchestrated result
+		let fullText = ''
+		if (data.result) {
+			fullText = typeof data.result === 'string' ? data.result : JSON.stringify(data.result, null, 2)
+		} else if (data.responses && Array.isArray(data.responses)) {
+			// Multi-agent response format
+			const responseParts: string[] = []
+			for (const resp of data.responses) {
+				if (resp.content) {
+					responseParts.push(resp.content)
+				}
+			}
+			fullText = responseParts.join('\n\n')
+		} else {
+			fullText = JSON.stringify(data, null, 2)
+		}
+
+		// Emit text progressively (simulate streaming for UX)
+		const chunkSize = 50
+		for (let i = 0; i < fullText.length; i += chunkSize) {
+			onText({ fullText: fullText.slice(0, i + chunkSize), fullReasoning: '' })
+		}
+
+		onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null })
+
+	} catch (error: any) {
+		if (error?.name === 'AbortError') {
+			onFinalMessage({ fullText: '', fullReasoning: '', anthropicReasoning: null })
+			return
+		}
+		onError({ message: error?.message || 'Division API request failed', fullError: error instanceof Error ? error : null })
+	}
+};
+
+
 type CallFnOfProvider = {
 	[providerName in ProviderName]: {
 		sendChat: (params: SendChatParams_Internal) => Promise<void>;
@@ -855,6 +993,11 @@ type CallFnOfProvider = {
 }
 
 export const sendLLMMessageToProviderImplementation = {
+	divisionAPI: {
+		sendChat: sendDivisionAPIChat,
+		sendFIM: null,
+		list: null,
+	},
 	anthropic: {
 		sendChat: sendAnthropicChat,
 		sendFIM: null,
