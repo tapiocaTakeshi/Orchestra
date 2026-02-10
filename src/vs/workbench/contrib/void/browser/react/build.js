@@ -13,6 +13,19 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Load .env from project root
+const envPath = findDesiredPathFromLocalPath('.env', __dirname);
+if (envPath) {
+	const envContent = fs.readFileSync(envPath, 'utf8');
+	envContent.split('\n').forEach(line => {
+		const [key, ...value] = line.split('=');
+		if (key && value.length > 0) {
+			process.env[key.trim()] = value.join('=').trim();
+		}
+	});
+	console.log('✅ Loaded .env file');
+}
+
 function doesPathExist(filePath) {
 	try {
 		const stats = fs.statSync(filePath);

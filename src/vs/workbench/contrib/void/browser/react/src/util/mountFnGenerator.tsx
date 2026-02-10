@@ -8,7 +8,7 @@ import * as ReactDOM from 'react-dom/client'
 import { _registerServices } from './services.js';
 import { ClerkProvider } from '@clerk/clerk-react'
 
-const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
+const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string
 
 if (!PUBLISHABLE_KEY) {
 	console.warn('Missing Clerk Publishable Key')
