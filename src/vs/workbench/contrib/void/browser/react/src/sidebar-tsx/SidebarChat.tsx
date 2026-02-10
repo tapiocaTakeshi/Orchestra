@@ -3032,7 +3032,12 @@ export const SidebarChat = () => {
 
 		{/* loading indicator */}
 		{isRunning === 'LLM' || isRunning === 'idle' && !toolIsGenerating ? <ProseWrapper>
-			{<IconLoading className='opacity-50 text-sm' />}
+			<span className='flex items-center gap-2'>
+				{<IconLoading className='opacity-50 text-sm' />}
+				{settingsState.modelSelectionOfFeature.Chat?.providerName === 'divisionAPI' && isRunning === 'LLM'
+					? <span className='opacity-50 text-xs'>Multi-Agent Processing</span>
+					: null}
+			</span>
 		</ProseWrapper> : null}
 
 

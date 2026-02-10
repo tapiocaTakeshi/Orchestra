@@ -863,6 +863,294 @@ const mapProviderNameToDivisionAPI = (providerName: string): string => {
 	return mapping[providerName] || 'openai'; // Default to openai if not mapped
 };
 
+// Role display info for multi-agent progress
+const divisionRoleDisplay: Record<string, { emoji: string; label: string }> = {
+	'leader': { emoji: '\u{1F9E0}', label: 'Leader' },
+	'search': { emoji: '\u{1F50D}', label: 'Search' },
+	'planning': { emoji: '\u{1F4CB}', label: 'Planning' },
+	'planner': { emoji: '\u{1F4CB}', label: 'Planning' },
+	'coding': { emoji: '\u{1F4BB}', label: 'Coding' },
+	'coder': { emoji: '\u{1F4BB}', label: 'Coding' },
+	'review': { emoji: '\u2705', label: 'Review' },
+	'writing': { emoji: '\u270D\uFE0F', label: 'Writing' },
+	'design': { emoji: '\u{1F3A8}', label: 'Design' },
+};
+
+const getDivisionRoleHeader = (role: string, model?: string, provider?: string): string => {
+	const info = divisionRoleDisplay[role] || { emoji: '\u{1F916}', label: role };
+	const modelInfo = model ? ` (${model})` : '';
+	const providerInfo = provider ? ` - ${provider}` : '';
+	return `### ${info.emoji} ${info.label}${modelInfo}${providerInfo}`;
+};
+
+// Build prompt from LLM chat messages
+const buildDivisionPrompt = (messages: LLMChatMessage[], separateSystemMessage: string | undefined): string => {
+	let prompt = ''
+	if (separateSystemMessage) {
+		prompt += `[System] ${separateSystemMessage}\n\n`
+	}
+	for (const msg of messages) {
+		const role = msg.role || 'user'
+		if ('content' in msg) {
+			if (typeof msg.content === 'string') {
+				prompt += `[${role}] ${msg.content}\n`
+			} else if (Array.isArray(msg.content)) {
+				for (const part of msg.content) {
+					if (typeof part === 'string') {
+						prompt += `[${role}] ${part}\n`
+					} else if (part && typeof part === 'object' && 'text' in part) {
+						prompt += `[${role}] ${(part as { text: string }).text}\n`
+					}
+				}
+			}
+		} else if ('parts' in msg) {
+			// Gemini format
+			for (const part of msg.parts) {
+				if ('text' in part) {
+					prompt += `[${role}] ${part.text}\n`
+				}
+			}
+		}
+	}
+	return prompt.trim()
+}
+
+// Parse SSE event stream from Division API
+const parseDivisionSSEStream = async (
+	response: Response,
+	onText: (p: { fullText: string; fullReasoning: string }) => void,
+	onFinalMessage: (p: { fullText: string; fullReasoning: string; anthropicReasoning: null }) => void,
+	onError: (p: { message: string; fullError: Error | null }) => void,
+	signal: AbortSignal,
+): Promise<void> => {
+	const reader = response.body!.getReader()
+	const decoder = new TextDecoder()
+	let buffer = ''
+	let fullText = ''
+	const agentOutputs: Map<string, { header: string; content: string; done: boolean }> = new Map()
+
+	const rebuildFullText = (): string => {
+		const parts: string[] = ['**Division API - Multi-Agent Orchestration**\n']
+		for (const [, agent] of agentOutputs) {
+			parts.push(agent.header)
+			if (agent.content) {
+				parts.push(agent.content)
+			}
+			if (agent.done) {
+				parts.push('')
+			} else {
+				parts.push('\n_generating..._\n')
+			}
+		}
+		return parts.join('\n')
+	}
+
+	try {
+		while (true) {
+			if (signal.aborted) break
+			const { done, value } = await reader.read()
+			if (done) break
+
+			buffer += decoder.decode(value, { stream: true })
+
+			// Parse SSE events from buffer
+			const lines = buffer.split('\n')
+			buffer = lines.pop() || '' // keep incomplete last line
+
+			let eventType = ''
+			let eventData = ''
+
+			for (const line of lines) {
+				if (line.startsWith('event: ')) {
+					eventType = line.slice(7).trim()
+				} else if (line.startsWith('data: ')) {
+					eventData = line.slice(6)
+				} else if (line === '' && eventType && eventData) {
+					// End of event - process it
+					try {
+						const data = JSON.parse(eventData)
+						switch (eventType) {
+							case 'agent_start': {
+								const role = data.role || 'unknown'
+								const header = getDivisionRoleHeader(role, data.model, data.provider)
+								agentOutputs.set(role, { header, content: '', done: false })
+								fullText = rebuildFullText()
+								onText({ fullText, fullReasoning: '' })
+								break
+							}
+							case 'agent_chunk': {
+								const role = data.role || 'unknown'
+								const existing = agentOutputs.get(role)
+								if (existing) {
+									existing.content += data.content || ''
+									fullText = rebuildFullText()
+									onText({ fullText, fullReasoning: '' })
+								}
+								break
+							}
+							case 'agent_done': {
+								const role = data.role || 'unknown'
+								const existing = agentOutputs.get(role)
+								if (existing) {
+									if (data.output) {
+										existing.content = data.output
+									}
+									existing.done = true
+									fullText = rebuildFullText()
+									onText({ fullText, fullReasoning: '' })
+								}
+								break
+							}
+							case 'done': {
+								fullText = rebuildFullText()
+								onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null })
+								return
+							}
+							case 'error': {
+								onError({ message: data.message || 'Division API streaming error', fullError: null })
+								return
+							}
+						}
+					} catch {
+						// ignore malformed JSON in event data
+					}
+					eventType = ''
+					eventData = ''
+				}
+			}
+		}
+
+		// If we get here without a 'done' event, finalize with what we have
+		if (fullText) {
+			onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null })
+		} else {
+			onError({ message: 'Division API stream ended unexpectedly', fullError: null })
+		}
+	} catch (error: any) {
+		if (error?.name === 'AbortError') {
+			onFinalMessage({ fullText: fullText || '', fullReasoning: '', anthropicReasoning: null })
+		} else {
+			onError({ message: error?.message || 'Division API stream error', fullError: error instanceof Error ? error : null })
+		}
+	}
+}
+
+// Format a complete JSON response with multi-agent headers
+const formatDivisionJsonResponse = (data: any): string => {
+	const parts: string[] = ['**Division API - Multi-Agent Orchestration**\n']
+
+	if (data.leaderModel) {
+		parts.push(`> Leader: ${data.leaderModel} (${data.leaderProvider || 'unknown'})`)
+		parts.push('')
+	}
+
+	// Handle tasks array (documented response format)
+	if (data.tasks && Array.isArray(data.tasks)) {
+		for (const task of data.tasks) {
+			const header = getDivisionRoleHeader(
+				task.role || 'unknown',
+				task.model,
+				task.provider,
+			)
+			parts.push(header)
+			if (task.output) {
+				parts.push(task.output)
+			}
+			if (task.durationMs) {
+				parts.push(`\n_Completed in ${(task.durationMs / 1000).toFixed(1)}s_`)
+			}
+			parts.push('---')
+		}
+	}
+	// Handle result field
+	else if (data.result) {
+		const result = typeof data.result === 'string' ? data.result : JSON.stringify(data.result, null, 2)
+		parts.push(result)
+	}
+	// Handle responses array (alternative format)
+	else if (data.responses && Array.isArray(data.responses)) {
+		for (const resp of data.responses) {
+			if (resp.role) {
+				parts.push(getDivisionRoleHeader(resp.role, resp.model, resp.provider))
+			}
+			if (resp.content) {
+				parts.push(resp.content)
+			}
+			parts.push('---')
+		}
+	}
+	// Fallback: raw JSON
+	else {
+		parts.push(JSON.stringify(data, null, 2))
+	}
+
+	if (data.totalDurationMs) {
+		parts.push(`\n**Total: ${(data.totalDurationMs / 1000).toFixed(1)}s**`)
+	}
+
+	return parts.join('\n')
+}
+
+// Stream a JSON response progressively using ReadableStream
+const streamDivisionJsonResponse = async (
+	response: Response,
+	onText: (p: { fullText: string; fullReasoning: string }) => void,
+	onFinalMessage: (p: { fullText: string; fullReasoning: string; anthropicReasoning: null }) => void,
+	onError: (p: { message: string; fullError: Error | null }) => void,
+	signal: AbortSignal,
+): Promise<void> => {
+	const reader = response.body!.getReader()
+	const decoder = new TextDecoder()
+	let jsonBuffer = ''
+
+	// Show initial progress
+	onText({ fullText: '**Division API - Multi-Agent Orchestration**\n\n_Agents are processing your request..._', fullReasoning: '' })
+
+	try {
+		while (true) {
+			if (signal.aborted) break
+			const { done, value } = await reader.read()
+			if (done) break
+			jsonBuffer += decoder.decode(value, { stream: true })
+
+			// Show progressive loading as data arrives
+			const receivedKB = (jsonBuffer.length / 1024).toFixed(1)
+			onText({
+				fullText: `**Division API - Multi-Agent Orchestration**\n\n_Receiving agent responses... (${receivedKB} KB)_`,
+				fullReasoning: '',
+			})
+		}
+
+		// Flush remaining decoder buffer
+		jsonBuffer += decoder.decode()
+
+		// Parse the complete JSON response
+		const data = JSON.parse(jsonBuffer)
+		const fullText = formatDivisionJsonResponse(data)
+
+		// Stream the formatted output progressively for smooth UX
+		const chunkSize = 80
+		for (let i = 0; i < fullText.length; i += chunkSize) {
+			if (signal.aborted) break
+			onText({ fullText: fullText.slice(0, i + chunkSize), fullReasoning: '' })
+			// Small delay for visual streaming effect
+			await new Promise(resolve => setTimeout(resolve, 5))
+		}
+
+		onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null })
+	} catch (error: any) {
+		if (error?.name === 'AbortError') {
+			onFinalMessage({ fullText: '', fullReasoning: '', anthropicReasoning: null })
+		} else if (error instanceof SyntaxError) {
+			// JSON parse failed - show raw response
+			const fallbackText = jsonBuffer || '(empty response)'
+			onFinalMessage({ fullText: fallbackText, fullReasoning: '', anthropicReasoning: null })
+		} else {
+			onError({ message: error?.message || 'Division API response error', fullError: error instanceof Error ? error : null })
+		}
+	}
+}
+
 const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<void> => {
 	const {
 		messages,
@@ -877,36 +1165,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 
 	try {
 		const endpointBase = settingsOfProvider[providerName]?.endpoint || 'https://api.division.he-ro.jp'
-		const endpoint = `${endpointBase}/api/agent/run`
-
-		// Build the prompt from messages - handle LLMChatMessage union types (OpenAI/Anthropic use 'content', Gemini uses 'parts')
-		let prompt = ''
-		if (separateSystemMessage) {
-			prompt += `[System] ${separateSystemMessage}\n\n`
-		}
-		for (const msg of messages) {
-			const role = msg.role || 'user'
-			if ('content' in msg) {
-				if (typeof msg.content === 'string') {
-					prompt += `[${role}] ${msg.content}\n`
-				} else if (Array.isArray(msg.content)) {
-					for (const part of msg.content) {
-						if (typeof part === 'string') {
-							prompt += `[${role}] ${part}\n`
-						} else if (part && typeof part === 'object' && 'text' in part) {
-							prompt += `[${role}] ${(part as { text: string }).text}\n`
-						}
-					}
-				}
-			} else if ('parts' in msg) {
-				// Gemini format
-				for (const part of msg.parts) {
-					if ('text' in part) {
-						prompt += `[${role}] ${part.text}\n`
-					}
-				}
-			}
-		}
+		const prompt = buildDivisionPrompt(messages, separateSystemMessage)
 
 		const controller = new AbortController()
 		_setAborter(() => { controller.abort() })
@@ -928,15 +1187,51 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			model: assignment.model,
 		}));
 
-		const response = await fetch(endpoint, {
+		const requestBody = {
+			prompt,
+			agents,
+			stream: true, // Request SSE streaming if available
+		}
+
+		// Try SSE streaming first
+		const streamEndpoint = `${endpointBase}/api/agent/stream`
+		let response: Response
+
+		try {
+			response = await fetch(streamEndpoint, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'Accept': 'text/event-stream',
+				},
+				body: JSON.stringify(requestBody),
+				signal: controller.signal,
+			})
+
+			// If stream endpoint exists and returns SSE, use SSE parser
+			if (response.ok && response.headers.get('content-type')?.includes('text/event-stream')) {
+				await parseDivisionSSEStream(response, onText, onFinalMessage, onError, controller.signal)
+				return
+			}
+		} catch {
+			// Stream endpoint not available, fall through to standard endpoint
+		}
+
+		// Show progress while making the standard request
+		onText({
+			fullText: '**Division API - Multi-Agent Orchestration**\n\n_Connecting to orchestration service..._',
+			fullReasoning: '',
+		})
+
+		// Fall back to standard endpoint
+		const runEndpoint = `${endpointBase}/api/agent/run`
+		response = await fetch(runEndpoint, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
+				'Accept': 'text/event-stream, application/json',
 			},
-			body: JSON.stringify({
-				prompt: prompt.trim(),
-				agents,
-			}),
+			body: JSON.stringify(requestBody),
 			signal: controller.signal,
 		})
 
@@ -946,32 +1241,28 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			return
 		}
 
-		// Parse JSON response (Division API returns JSON, not a stream)
-		const data = await response.json()
+		const contentType = response.headers.get('content-type') || ''
 
-		// Extract the orchestrated result
-		let fullText = ''
-		if (data.result) {
-			fullText = typeof data.result === 'string' ? data.result : JSON.stringify(data.result, null, 2)
-		} else if (data.responses && Array.isArray(data.responses)) {
-			// Multi-agent response format
-			const responseParts: string[] = []
-			for (const resp of data.responses) {
-				if (resp.content) {
-					responseParts.push(resp.content)
-				}
-			}
-			fullText = responseParts.join('\n\n')
-		} else {
-			fullText = JSON.stringify(data, null, 2)
+		// Check if the standard endpoint returned SSE
+		if (contentType.includes('text/event-stream')) {
+			await parseDivisionSSEStream(response, onText, onFinalMessage, onError, controller.signal)
+			return
 		}
 
-		// Emit text progressively (simulate streaming for UX)
-		const chunkSize = 50
+		// Use ReadableStream for progressive JSON response handling
+		if (response.body) {
+			await streamDivisionJsonResponse(response, onText, onFinalMessage, onError, controller.signal)
+			return
+		}
+
+		// Final fallback: read entire response at once
+		const data = await response.json()
+		const fullText = formatDivisionJsonResponse(data)
+
+		const chunkSize = 80
 		for (let i = 0; i < fullText.length; i += chunkSize) {
 			onText({ fullText: fullText.slice(0, i + chunkSize), fullReasoning: '' })
 		}
-
 		onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null })
 
 	} catch (error: any) {
