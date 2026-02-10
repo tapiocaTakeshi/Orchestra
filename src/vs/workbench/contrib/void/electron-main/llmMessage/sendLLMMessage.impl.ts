@@ -939,8 +939,8 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				'Content-Type': 'application/json',
 			},
 			body: JSON.stringify({
-				...(divisionProjectId ? { projectId: divisionProjectId } : {}),
-				prompt: prompt.trim(),
+				projectId: divisionProjectId || '',
+				input: prompt.trim(),
 				agents,
 			}),
 			signal: controller.signal,
