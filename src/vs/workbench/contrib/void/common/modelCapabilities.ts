@@ -65,6 +65,9 @@ export const defaultProviderSettings = {
 		region: 'us-east-1', // add region setting
 		endpoint: '', // optionally allow overriding default
 	},
+	divisionAPI: { // Division API - AI orchestration
+		endpoint: 'https://api.division.he-ro.jp',
+	},
 
 } as const
 
@@ -153,6 +156,9 @@ export const defaultModelsOfProvider = {
 	microsoftAzure: [],
 	awsBedrock: [],
 	liteLLM: [],
+	divisionAPI: [ // Division API - multi-agent orchestration
+		'division-orchestrator',
+	],
 
 
 } as const satisfies Record<ProviderName, string[]>
@@ -1447,11 +1453,34 @@ const openRouterSettings: VoidStaticProviderInfo = {
 }
 
 
+// ---------------- DIVISION API ----------------
+const divisionAPIModelOptions = {
+	'division-orchestrator': {
+		contextWindow: 200_000,
+		reservedOutputTokenSpace: 32_768,
+		cost: { input: 0, output: 0 }, // orchestration cost handled by Division API
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'openai-style' as const,
+		supportsSystemMessage: 'system-role' as const,
+		reasoningCapabilities: false as const,
+	},
+} satisfies { [s: string]: VoidStaticModelInfo }
+
+const divisionAPISettings: VoidStaticProviderInfo = {
+	modelOptions: divisionAPIModelOptions,
+	modelOptionsFallback: (_modelName) => {
+		// Division API handles model selection internally via orchestration
+		return { modelName: 'division-orchestrator', recognizedModelName: 'division-orchestrator', ...divisionAPIModelOptions['division-orchestrator'] }
+	},
+}
 
 
 // ---------------- model settings of everything above ----------------
 
 const modelSettingsOfProvider: { [providerName in ProviderName]: VoidStaticProviderInfo } = {
+	divisionAPI: divisionAPISettings,
+
 	openAI: openAISettings,
 	anthropic: anthropicSettings,
 	xAI: xAISettings,

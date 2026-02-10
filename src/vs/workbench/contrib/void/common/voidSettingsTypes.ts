@@ -58,7 +58,10 @@ type DisplayInfoForProviderName = {
 }
 
 export const displayInfoOfProviderName = (providerName: ProviderName): DisplayInfoForProviderName => {
-	if (providerName === 'anthropic') {
+	if (providerName === 'divisionAPI') {
+		return { title: 'Division API', desc: 'AI Orchestration — auto-assigns optimal models per task' }
+	}
+	else if (providerName === 'anthropic') {
 		return { title: 'Anthropic', }
 	}
 	else if (providerName === 'openAI') {
@@ -112,6 +115,7 @@ export const displayInfoOfProviderName = (providerName: ProviderName): DisplayIn
 
 export const subTextMdOfProviderName = (providerName: ProviderName): string => {
 
+	if (providerName === 'divisionAPI') return 'Division API automatically assigns the optimal AI model for each task. [Learn more](https://api.division.he-ro.jp).'
 	if (providerName === 'anthropic') return 'Get your [API Key here](https://console.anthropic.com/settings/keys).'
 	if (providerName === 'openAI') return 'Get your [API Key here](https://platform.openai.com/api-keys).'
 	if (providerName === 'deepseek') return 'Get your [API Key here](https://platform.deepseek.com/api_keys).'
@@ -173,13 +177,14 @@ export const displayInfoOfSettingName = (providerName: ProviderName, settingName
 										providerName === 'awsBedrock' ? 'Endpoint' :
 											'(never)',
 
-			placeholder: providerName === 'ollama' ? defaultProviderSettings.ollama.endpoint
-				: providerName === 'vLLM' ? defaultProviderSettings.vLLM.endpoint
-					: providerName === 'openAICompatible' ? 'https://my-website.com/v1'
-						: providerName === 'lmStudio' ? defaultProviderSettings.lmStudio.endpoint
-							: providerName === 'liteLLM' ? 'http://localhost:4000'
-								: providerName === 'awsBedrock' ? 'http://localhost:4000/v1'
-									: '(never)',
+			placeholder: providerName === 'divisionAPI' ? defaultProviderSettings.divisionAPI.endpoint
+				: providerName === 'ollama' ? defaultProviderSettings.ollama.endpoint
+					: providerName === 'vLLM' ? defaultProviderSettings.vLLM.endpoint
+						: providerName === 'openAICompatible' ? 'https://my-website.com/v1'
+							: providerName === 'lmStudio' ? defaultProviderSettings.lmStudio.endpoint
+								: providerName === 'liteLLM' ? 'http://localhost:4000'
+									: providerName === 'awsBedrock' ? 'http://localhost:4000/v1'
+										: '(never)',
 
 
 		}
@@ -352,6 +357,12 @@ export const defaultSettingsOfProvider: SettingsOfProvider = {
 		...modelInfoOfDefaultModelNames(defaultModelsOfProvider.awsBedrock),
 		_didFillInProviderSettings: undefined,
 	},
+	divisionAPI: { // Division API - AI orchestration
+		...defaultCustomSettings,
+		...defaultProviderSettings.divisionAPI,
+		...modelInfoOfDefaultModelNames(defaultModelsOfProvider.divisionAPI),
+		_didFillInProviderSettings: true, // pre-configured, no setup needed
+	},
 }
 
 
@@ -438,6 +449,23 @@ export const isFeatureNameDisabled = (featureName: FeatureName, settingsState: V
 export type ChatMode = 'agent' | 'gather' | 'normal'
 
 
+// Division API role assignment types
+export type AgentRole = 'leader' | 'coder' | 'planner' | 'search' | 'design';
+
+export type RoleAssignment = {
+	role: AgentRole;
+	provider: ProviderName;
+	model: string;
+};
+
+export type ClerkUser = {
+	id: string;
+	fullName: string | null;
+	primaryEmailAddress: string | null;
+	imageUrl: string | null;
+	username: string | null;
+}
+
 export type GlobalSettings = {
 	autoRefreshModels: boolean;
 	aiInstructions: string;
@@ -452,7 +480,19 @@ export type GlobalSettings = {
 	isOnboardingComplete: boolean;
 	disableSystemMessage: boolean;
 	autoAcceptLLMChanges: boolean;
+	roleAssignments: RoleAssignment[];
+	clerkUser: ClerkUser | null;
+	clerkSessionId: string | null;
 }
+
+// Default role assignments for Division API
+export const defaultRoleAssignments: RoleAssignment[] = [
+	{ role: 'leader', provider: 'openAI', model: 'gpt-4o' },
+	{ role: 'coder', provider: 'anthropic', model: 'claude-sonnet-4-20250514' },
+	{ role: 'planner', provider: 'gemini', model: 'gemini-2.0-flash' },
+	{ role: 'search', provider: 'openAI', model: 'gpt-4o' },
+	{ role: 'design', provider: 'gemini', model: 'gemini-2.0-flash' },
+];
 
 export const defaultGlobalSettings: GlobalSettings = {
 	autoRefreshModels: true,
@@ -468,6 +508,9 @@ export const defaultGlobalSettings: GlobalSettings = {
 	isOnboardingComplete: false,
 	disableSystemMessage: false,
 	autoAcceptLLMChanges: false,
+	roleAssignments: defaultRoleAssignments,
+	clerkUser: null,
+	clerkSessionId: null,
 }
 
 export type GlobalSettingName = keyof GlobalSettings

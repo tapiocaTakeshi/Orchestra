@@ -289,9 +289,17 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 			}
 			// add disableSystemMessage feature
 			if (readS.globalSettings.disableSystemMessage === undefined) readS.globalSettings.disableSystemMessage = false;
-			
+
 			// add autoAcceptLLMChanges feature
 			if (readS.globalSettings.autoAcceptLLMChanges === undefined) readS.globalSettings.autoAcceptLLMChanges = false;
+
+			// Initialize Clerk state if missing
+			if (readS.globalSettings.clerkUser === undefined) readS.globalSettings.clerkUser = null;
+			if (readS.globalSettings.clerkSessionId === undefined) readS.globalSettings.clerkSessionId = null;
+
+			// Cleanup legacy Auth0 state
+			if ((readS.globalSettings as any).auth0Token !== undefined) delete (readS.globalSettings as any).auth0Token;
+			if ((readS.globalSettings as any).auth0User !== undefined) delete (readS.globalSettings as any).auth0User;
 		}
 		catch (e) {
 			readS = defaultState()

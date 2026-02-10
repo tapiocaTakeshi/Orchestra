@@ -98,6 +98,21 @@ class CodeMain {
 		// default electron error dialog popping up
 		setUnexpectedErrorHandler(err => console.error(err));
 
+		// Load .env file if it exists
+		try {
+			const envPath = resolve(cwd(), '.env');
+			const envContent = await promises.readFile(envPath, 'utf8');
+			envContent.split('\n').forEach((line: string) => {
+				const [key, ...valueParts] = line.split('=');
+				if (key && valueParts.length > 0) {
+					const value = valueParts.join('=').trim().replace(/^["']|["']$/g, '');
+					process.env[key.trim()] = value;
+				}
+			});
+		} catch (e) {
+			// .env not found or unreadable, ignore
+		}
+
 		// Create services
 		const [instantiationService, instanceEnvironment, environmentMainService, configurationService, stateMainService, bufferLogger, productService, userDataProfilesMainService] = this.createServices();
 

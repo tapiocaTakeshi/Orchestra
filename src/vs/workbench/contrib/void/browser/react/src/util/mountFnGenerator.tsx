@@ -6,7 +6,13 @@
 import React, { useEffect, useState } from 'react';
 import * as ReactDOM from 'react-dom/client'
 import { _registerServices } from './services.js';
+import { ClerkProvider } from '@clerk/clerk-react'
 
+const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
+
+if (!PUBLISHABLE_KEY) {
+	console.warn('Missing Clerk Publishable Key')
+}
 
 import { ServicesAccessor } from '../../../../../../../editor/browser/editorExtensions.js';
 
@@ -21,7 +27,11 @@ export const mountFnGenerator = (Component: (params: any) => React.ReactNode) =>
 	const root = ReactDOM.createRoot(rootElement)
 
 	const rerender = (props?: any) => {
-		root.render(<Component {...props} />); // tailwind dark theme indicator
+		root.render(
+			<ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignOutUrl="/">
+				<Component {...props} />
+			</ClerkProvider>
+		); // tailwind dark theme indicator
 	}
 	const dispose = () => {
 		root.unmount();

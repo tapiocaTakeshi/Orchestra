@@ -135,6 +135,7 @@ export type SendLLMMessageParams = {
 
 	settingsOfProvider: SettingsOfProvider;
 	mcpTools: InternalToolInfo[] | undefined;
+	isLoggedIn: boolean;
 } & SendLLMType
 
 
@@ -195,6 +196,7 @@ export type ModelListParams<ModelResponse> = {
 	settingsOfProvider: SettingsOfProvider;
 	onSuccess: (param: { models: ModelResponse[] }) => void;
 	onError: (param: { error: string }) => void;
+	isLoggedIn: boolean;
 }
 
 // params to the service
