@@ -61,6 +61,9 @@ import './miscWokrbenchContrib.js'
 // register file service (for explorer context menu)
 import './fileService.js'
 
+// register division project service (.division/agents.json)
+import './divisionProjectService.js'
+
 // register source control management
 import './voidSCMService.js'
 

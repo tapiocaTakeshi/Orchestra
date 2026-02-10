@@ -15,7 +15,7 @@ import { GoogleAuth } from 'google-auth-library'
 /* eslint-enable */
 
 import { AnthropicLLMChatMessage, GeminiLLMChatMessage, LLMChatMessage, LLMFIMMessage, ModelListParams, OllamaModelResponse, OnError, OnFinalMessage, OnText, RawToolCallObj, RawToolParamsObj } from '../../common/sendLLMMessageTypes.js';
-import { ChatMode, displayInfoOfProviderName, ModelSelectionOptions, OverridesOfModel, ProviderName, SettingsOfProvider } from '../../common/voidSettingsTypes.js';
+import { ChatMode, displayInfoOfProviderName, ModelSelectionOptions, OverridesOfModel, ProviderName, RoleAssignment, SettingsOfProvider } from '../../common/voidSettingsTypes.js';
 import { getSendableReasoningInfo, getModelCapabilities, getProviderCapabilities, defaultProviderSettings, getReservedOutputTokenSpace } from '../../common/modelCapabilities.js';
 import { extractReasoningWrapper, extractXMLToolsWrapper } from './extractGrammar.js';
 import { availableTools, InternalToolInfo } from '../../common/prompt/prompts.js';
@@ -50,6 +50,7 @@ type SendChatParams_Internal = InternalCommonMessageParams & {
 	separateSystemMessage: string | undefined;
 	chatMode: ChatMode | null;
 	mcpTools: InternalToolInfo[] | undefined;
+	divisionRoleAssignments?: RoleAssignment[];
 }
 type SendFIMParams_Internal = InternalCommonMessageParams & { messages: LLMFIMMessage; separateSystemMessage: string | undefined; isLoggedIn: boolean; }
 export type ListParams_Internal<ModelResponse> = ModelListParams<ModelResponse> & { isLoggedIn: boolean }
@@ -873,6 +874,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		providerName,
 		_setAborter,
 		separateSystemMessage,
+		divisionRoleAssignments,
 	} = params
 
 	try {
@@ -911,15 +913,16 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		const controller = new AbortController()
 		_setAborter(() => { controller.abort() })
 
-		// Get role assignments - for now using defaults
-		// TODO: Pass globalSettings through params to use user-configured role assignments
-		const roleAssignments: Array<{ role: string; provider: string; model: string }> = [
-			{ role: 'leader', provider: 'openAI', model: 'gpt-4o' },
-			{ role: 'coder', provider: 'anthropic', model: 'claude-sonnet-4-20250514' },
-			{ role: 'planner', provider: 'gemini', model: 'gemini-2.0-flash' },
-			{ role: 'search', provider: 'openAI', model: 'gpt-4o' },
-			{ role: 'design', provider: 'gemini', model: 'gemini-2.0-flash' },
-		];
+		// Use role assignments from .division/agents.json (synced via globalSettings), or fall back to defaults
+		const roleAssignments: Array<{ role: string; provider: string; model: string }> = divisionRoleAssignments
+			? divisionRoleAssignments.map(a => ({ role: a.role, provider: a.provider, model: a.model }))
+			: [
+				{ role: 'leader', provider: 'openAI', model: 'gpt-4o' },
+				{ role: 'coder', provider: 'anthropic', model: 'claude-sonnet-4-20250514' },
+				{ role: 'planner', provider: 'gemini', model: 'gemini-2.0-flash' },
+				{ role: 'search', provider: 'openAI', model: 'gpt-4o' },
+				{ role: 'design', provider: 'gemini', model: 'gemini-2.0-flash' },
+			];
 
 		// Build agents array from role assignments
 		const agents = roleAssignments.map(assignment => ({

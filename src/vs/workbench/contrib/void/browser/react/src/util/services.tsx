@@ -55,6 +55,7 @@ import { IExtensionManagementService } from '../../../../../../../platform/exten
 import { IMCPService } from '../../../../common/mcpService.js';
 import { IStorageService, StorageScope } from '../../../../../../../platform/storage/common/storage.js'
 import { OPT_OUT_KEY } from '../../../../common/storageKeys.js'
+import { DivisionProjectConfig, IDivisionProjectService } from '../../../divisionProjectService.js'
 
 
 // normally to do this you'd use a useEffect that calls .onDidChangeState(), but useEffect mounts too late and misses initial state changes
@@ -84,6 +85,9 @@ const activeURIListeners: Set<(uri: URI | null) => void> = new Set();
 
 const mcpListeners: Set<() => void> = new Set()
 
+let divisionProjectConfig: DivisionProjectConfig | null = null
+const divisionProjectListeners: Set<(c: DivisionProjectConfig | null) => void> = new Set()
+
 
 // must call this before you can use any of the hooks below
 // this should only be called ONCE! this is the only place you don't need to dispose onDidChange. If you use state.onDidChange anywhere else, make sure to dispose it!
@@ -102,9 +106,10 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 		voidCommandBarService: accessor.get(IVoidCommandBarService),
 		modelService: accessor.get(IModelService),
 		mcpService: accessor.get(IMCPService),
+		divisionProjectService: accessor.get(IDivisionProjectService),
 	}
 
-	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, voidCommandBarService, modelService, mcpService } = stateServices
+	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, voidCommandBarService, modelService, mcpService, divisionProjectService } = stateServices
 
 
 
@@ -177,6 +182,14 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 		})
 	)
 
+	divisionProjectConfig = divisionProjectService.projectConfig
+	disposables.push(
+		divisionProjectService.onDidChangeProject(() => {
+			divisionProjectConfig = divisionProjectService.projectConfig
+			divisionProjectListeners.forEach(l => l(divisionProjectConfig))
+		})
+	)
+
 
 	return disposables
 }
@@ -231,6 +244,7 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 
 		IStorageService: accessor.get(IStorageService),
 		IClerkService: accessor.get(IClerkService),
+		IDivisionProjectService: accessor.get(IDivisionProjectService),
 
 	} as const
 	return reactAccessor
@@ -405,6 +419,17 @@ export const useMCPServiceState = () => {
 	return s
 }
 
+
+
+export const useDivisionProjectConfig = () => {
+	const [s, ss] = useState(divisionProjectConfig)
+	useEffect(() => {
+		ss(divisionProjectConfig)
+		divisionProjectListeners.add(ss)
+		return () => { divisionProjectListeners.delete(ss) }
+	}, [ss])
+	return s
+}
 
 
 export const useIsOptedOut = () => {

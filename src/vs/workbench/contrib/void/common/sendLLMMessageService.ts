@@ -130,6 +130,11 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 		this.llmMessageHooks.onError[requestId] = onError
 		this.llmMessageHooks.onAbort[requestId] = onAbort // used internally only
 
+		// If using Division API, include role assignments from globalSettings
+		const divisionRoleAssignments = modelSelection.providerName === 'divisionAPI'
+			? globalSettings.roleAssignments
+			: undefined;
+
 		// params will be stripped of all its functions over the IPC channel
 		this.channel.call('sendLLMMessage', {
 			...proxyParams,
@@ -138,6 +143,7 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 			modelSelection,
 			mcpTools,
 			isLoggedIn,
+			divisionRoleAssignments,
 		} satisfies MainSendLLMMessageParams);
 
 		return requestId
