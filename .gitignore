@@ -23,6 +23,7 @@ product.overrides.json
 .vscode-test
 
 # Void added these:
+.env
 .tmp/
 .tmp2/
 .tool-versions
