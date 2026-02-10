@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FeatureName, featureNames, isFeatureNameDisabled, ModelSelection, modelSelectionsEqual, ProviderName, providerNames, SettingsOfProvider } from '../../../../../../../workbench/contrib/void/common/voidSettingsTypes.js'
-import { useSettingsState, useRefreshModelState, useAccessor, useDivisionProjectConfig } from '../util/services.js'
+import { useSettingsState, useRefreshModelState, useAccessor, useDivisionProjectConfig, useDivisionProjects } from '../util/services.js'
 import { _VoidSelectBox, VoidCustomDropdownBox } from '../util/inputs.js'
 import { SelectBox } from '../../../../../../../base/browser/ui/selectBox/selectBox.js'
 import { IconWarning } from '../sidebar-tsx/SidebarChat.js'
@@ -30,6 +30,7 @@ const ModelSelectBox = ({ options, featureName, className }: { options: ModelOpt
 	const accessor = useAccessor()
 	const voidSettingsService = accessor.get('IVoidSettingsService')
 	const divisionProjectConfig = useDivisionProjectConfig()
+	const divisionProjects = useDivisionProjects()
 
 	const selection = voidSettingsService.state.modelSelectionOfFeature[featureName]
 	const selectedOption = selection ? options.find(v => modelSelectionsEqual(v.selection, selection)) ?? options[0] : options[0]
@@ -47,10 +48,11 @@ const ModelSelectBox = ({ options, featureName, className }: { options: ModelOpt
 
 	const getDropdownDetail = useCallback((option: ModelOption) => {
 		if (isDivisionProjectOption(option.selection) && divisionProjectConfig) {
-			return divisionProjectConfig.name
+			const suffix = divisionProjects.length > 1 ? ` (${divisionProjects.length})` : ''
+			return divisionProjectConfig.name + suffix
 		}
 		return option.selection.providerName
-	}, [divisionProjectConfig])
+	}, [divisionProjectConfig, divisionProjects])
 
 	return <VoidCustomDropdownBox
 		options={options}

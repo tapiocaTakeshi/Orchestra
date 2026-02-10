@@ -86,7 +86,9 @@ const activeURIListeners: Set<(uri: URI | null) => void> = new Set();
 const mcpListeners: Set<() => void> = new Set()
 
 let divisionProjectConfig: DivisionProjectConfig | null = null
+let divisionProjects: DivisionProjectConfig[] = []
 const divisionProjectListeners: Set<(c: DivisionProjectConfig | null) => void> = new Set()
+const divisionProjectsListeners: Set<(projects: DivisionProjectConfig[]) => void> = new Set()
 
 
 // must call this before you can use any of the hooks below
@@ -183,10 +185,13 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 	)
 
 	divisionProjectConfig = divisionProjectService.projectConfig
+	divisionProjects = divisionProjectService.projects
 	disposables.push(
 		divisionProjectService.onDidChangeProject(() => {
 			divisionProjectConfig = divisionProjectService.projectConfig
+			divisionProjects = divisionProjectService.projects
 			divisionProjectListeners.forEach(l => l(divisionProjectConfig))
+			divisionProjectsListeners.forEach(l => l(divisionProjects))
 		})
 	)
 
@@ -427,6 +432,16 @@ export const useDivisionProjectConfig = () => {
 		ss(divisionProjectConfig)
 		divisionProjectListeners.add(ss)
 		return () => { divisionProjectListeners.delete(ss) }
+	}, [ss])
+	return s
+}
+
+export const useDivisionProjects = () => {
+	const [s, ss] = useState(divisionProjects)
+	useEffect(() => {
+		ss(divisionProjects)
+		divisionProjectsListeners.add(ss)
+		return () => { divisionProjectsListeners.delete(ss) }
 	}, [ss])
 	return s
 }
