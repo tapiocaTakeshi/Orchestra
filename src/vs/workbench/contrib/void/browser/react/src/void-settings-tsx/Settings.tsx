@@ -7,7 +7,7 @@ import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { ProviderName, SettingName, displayInfoOfSettingName, providerNames, VoidStatefulModelInfo, customSettingNamesOfProvider, RefreshableProviderName, refreshableProviderNames, displayInfoOfProviderName, nonlocalProviderNames, localProviderNames, GlobalSettingName, featureNames, displayInfoOfFeatureName, isProviderNameDisabled, FeatureName, hasDownloadButtonsOnModelsProviderNames, subTextMdOfProviderName } from '../../../../common/voidSettingsTypes.js'
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
 import { VoidButtonBgDarken, VoidCustomDropdownBox, VoidInputBox2, VoidSimpleInputBox, VoidSwitch } from '../util/inputs.js'
-import { useAccessor, useIsDark, useIsOptedOut, useRefreshModelListener, useRefreshModelState, useSettingsState } from '../util/services.js'
+import { useAccessor, useDivisionProjectConfig, useDivisionProjects, useIsDark, useIsOptedOut, useRefreshModelListener, useRefreshModelState, useSettingsState } from '../util/services.js'
 import { X, RefreshCw, Loader2, Check, Asterisk, Plus } from 'lucide-react'
 import { URI } from '../../../../../../../base/common/uri.js'
 import { ModelDropdown } from './ModelDropdown.js'
@@ -32,6 +32,7 @@ type Tab =
 	| 'providers'
 	| 'featureOptions'
 	| 'mcp'
+	| 'division'
 	| 'general'
 	| 'all';
 
@@ -1031,6 +1032,86 @@ const MCPServersList = () => {
 	return <div className="my-2">{content}</div>
 };
 
+const DivisionSettings = () => {
+	const accessor = useAccessor();
+	const divisionProjectService = accessor.get('IDivisionProjectService');
+	const projects = useDivisionProjects();
+	const activeConfig = useDivisionProjectConfig();
+
+	const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+
+	const handleAddProject = () => {
+		const newId = `project-${Date.now()}`;
+		divisionProjectService.addProject({
+			id: newId,
+			name: 'New Division Project',
+			projectId: '', // User will fill this in
+			agents: [], // defaultRoleAssignments will be used as fallback in service if needed
+		});
+	};
+
+	return (
+		<div className="flex flex-col gap-4">
+			{projects.map((project) => {
+				const isActive = activeConfig?.id === project.id;
+				return (
+					<div
+						key={project.id}
+						className={`border p-4 rounded-sm flex flex-col gap-3 ${isActive ? 'border-[#0e70c0] bg-[#0e70c0]/5' : 'border-void-border-2 bg-void-bg-2'}`}
+					>
+						<div className="flex items-center justify-between">
+							<div className="flex items-center gap-2 flex-grow">
+								<VoidSimpleInputBox
+									value={project.name}
+									onChangeValue={(val) => divisionProjectService.save({ ...project, name: val })}
+									className="bg-transparent border-none font-medium text-lg focus:ring-0 p-0"
+									placeholder="Project Name"
+								/>
+								{isActive && <span className="text-[10px] bg-[#0e70c0] text-white px-1.5 py-0.5 rounded-full uppercase font-bold">Active</span>}
+							</div>
+							<div className="flex items-center gap-2">
+								{!isActive && (
+									<VoidButtonBgDarken
+										onClick={() => divisionProjectService.setActiveProject(project.id)}
+										className="text-xs px-2 py-1"
+									>
+										Set Active
+									</VoidButtonBgDarken>
+								)}
+								<button
+									onClick={() => divisionProjectService.removeProject(project.id)}
+									className="text-void-fg-3 hover:text-red-500 transition-colors"
+									title="Delete Project"
+								>
+									<X size={16} />
+								</button>
+							</div>
+						</div>
+
+						<div className="flex flex-col gap-1">
+							<div className="text-xs text-void-fg-3 uppercase font-semibold">Project ID (from division.he-ro.jp)</div>
+							<VoidSimpleInputBox
+								value={project.projectId}
+								onChangeValue={(val) => divisionProjectService.save({ ...project, projectId: val })}
+								className="text-sm bg-void-bg-1 border-void-border-1"
+								placeholder="Paste your Project ID here"
+							/>
+						</div>
+					</div>
+				);
+			})}
+
+			<button
+				onClick={handleAddProject}
+				className="flex items-center gap-2 text-void-fg-1 hover:text-[#0e70c0] transition-colors mt-2 w-fit"
+			>
+				<Plus size={18} />
+				<span>Add Division Project</span>
+			</button>
+		</div>
+	);
+};
+
 export const Settings = () => {
 	const isDark = useIsDark()
 	// ─── sidebar nav ──────────────────────────
@@ -1042,6 +1123,7 @@ export const Settings = () => {
 		{ tab: 'localProviders', label: 'Local Providers' },
 		{ tab: 'providers', label: 'Main Providers' },
 		{ tab: 'featureOptions', label: 'Feature Options' },
+		{ tab: 'division', label: 'Division' },
 		{ tab: 'general', label: 'General' },
 		{ tab: 'mcp', label: 'MCP' },
 		{ tab: 'all', label: 'All Settings' },
@@ -1578,6 +1660,15 @@ Alternatively, place a \`.voidrules\` file in the root of your workspace.
 							</div>
 
 
+
+							{/* Division section */}
+							<div className={shouldShowTab('division') ? `` : 'hidden'}>
+								<ErrorBoundary>
+									<h2 className="text-3xl mb-2">Division</h2>
+									<h4 className="text-void-fg-3 mb-4">Manage your Division projects and role assignments.</h4>
+									<DivisionSettings />
+								</ErrorBoundary>
+							</div>
 
 							{/* MCP section */}
 							<div className={shouldShowTab('mcp') ? `` : 'hidden'}>
