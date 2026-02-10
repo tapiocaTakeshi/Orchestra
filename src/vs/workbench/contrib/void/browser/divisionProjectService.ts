@@ -19,11 +19,13 @@ import { IVoidSettingsService } from '../common/voidSettingsService.js';
 
 export type DivisionProjectConfig = {
 	name: string;
+	projectId: string;
 	agents: RoleAssignment[];
 };
 
 const defaultDivisionProjectConfig = (): DivisionProjectConfig => ({
 	name: 'Default Division Project',
+	projectId: '',
 	agents: [...defaultRoleAssignments],
 });
 
@@ -71,10 +73,11 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 	) {
 		super();
 
-		// Sync project config to globalSettings.roleAssignments when it changes
+		// Sync project config to globalSettings when it changes
 		this._register(this._onDidChangeProject.event(() => {
 			if (this._projectConfig) {
 				this.voidSettingsService.setGlobalSetting('roleAssignments', this._projectConfig.agents);
+				this.voidSettingsService.setGlobalSetting('divisionProjectId', this._projectConfig.projectId);
 			}
 		}));
 
@@ -136,6 +139,7 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 			const parsed = JSON.parse(content.value.toString());
 			this._projectConfig = {
 				name: parsed.name || 'Division Project',
+				projectId: typeof parsed.projectId === 'string' ? parsed.projectId : '',
 				agents: Array.isArray(parsed.agents) ? parsed.agents.map((a: any) => ({
 					role: a.role as AgentRole,
 					provider: a.provider as ProviderName,

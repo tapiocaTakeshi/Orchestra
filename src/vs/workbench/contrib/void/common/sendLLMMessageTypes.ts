@@ -137,6 +137,7 @@ export type SendLLMMessageParams = {
 	mcpTools: InternalToolInfo[] | undefined;
 	isLoggedIn: boolean;
 	divisionRoleAssignments?: RoleAssignment[];
+	divisionProjectId?: string;
 } & SendLLMType
 
 

@@ -51,6 +51,7 @@ type SendChatParams_Internal = InternalCommonMessageParams & {
 	chatMode: ChatMode | null;
 	mcpTools: InternalToolInfo[] | undefined;
 	divisionRoleAssignments?: RoleAssignment[];
+	divisionProjectId?: string;
 }
 type SendFIMParams_Internal = InternalCommonMessageParams & { messages: LLMFIMMessage; separateSystemMessage: string | undefined; isLoggedIn: boolean; }
 export type ListParams_Internal<ModelResponse> = ModelListParams<ModelResponse> & { isLoggedIn: boolean }
@@ -875,6 +876,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		_setAborter,
 		separateSystemMessage,
 		divisionRoleAssignments,
+		divisionProjectId,
 	} = params
 
 	try {
@@ -937,6 +939,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				'Content-Type': 'application/json',
 			},
 			body: JSON.stringify({
+				...(divisionProjectId ? { projectId: divisionProjectId } : {}),
 				prompt: prompt.trim(),
 				agents,
 			}),

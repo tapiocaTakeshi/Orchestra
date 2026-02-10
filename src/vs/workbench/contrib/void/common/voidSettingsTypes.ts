@@ -481,6 +481,7 @@ export type GlobalSettings = {
 	disableSystemMessage: boolean;
 	autoAcceptLLMChanges: boolean;
 	roleAssignments: RoleAssignment[];
+	divisionProjectId: string;
 	clerkUser: ClerkUser | null;
 	clerkSessionId: string | null;
 }
@@ -509,6 +510,7 @@ export const defaultGlobalSettings: GlobalSettings = {
 	disableSystemMessage: false,
 	autoAcceptLLMChanges: false,
 	roleAssignments: defaultRoleAssignments,
+	divisionProjectId: '',
 	clerkUser: null,
 	clerkSessionId: null,
 }
