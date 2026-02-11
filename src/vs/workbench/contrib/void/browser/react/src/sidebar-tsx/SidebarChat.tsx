@@ -35,6 +35,8 @@ import { ToolApprovalTypeSwitch } from '../void-settings-tsx/Settings.js';
 
 import { persistentTerminalNameOfId } from '../../../terminalToolService.js';
 import { removeMCPToolNamePrefix } from '../../../../common/mcpServiceTypes.js';
+import { SignedIn, SignedOut, UserButton, useAuth } from '@clerk/clerk-react';
+import { LoginScreen } from '../void-login-tsx/LoginScreen.js';
 
 
 
@@ -1321,6 +1323,113 @@ max-w-none
 		{children}
 	</div>
 }
+const DivisionOrchestrationComponent = ({ response, chatMessageLocation }: { response: any, chatMessageLocation: ChatMessageLocation }) => {
+	const tasks = response.tasks || [];
+	const status = response.status || 'success';
+	const totalDuration = response.totalDurationMs;
+	const [showInput, setShowInput] = useState(false);
+
+	return (
+		<div className="flex flex-col gap-2 my-2">
+			<div className="flex items-center gap-2 mb-1">
+				<div className={`w-2 h-2 rounded-full ${status === 'error' ? 'bg-red-500' : 'bg-green-500'}`} />
+				<span className="text-[12px] font-bold text-void-fg-3 uppercase tracking-wider">
+					Division Orchestration {status === 'error' ? '(Error)' : ''}
+				</span>
+				{totalDuration !== undefined && (
+					<span className="text-[11px] text-void-fg-4 ml-auto">
+						{totalDuration}ms
+					</span>
+				)}
+			</div>
+
+			{response.input && (
+				<div className="mb-2">
+					<button
+						onClick={() => setShowInput(!showInput)}
+						className="text-[11px] text-void-fg-4 hover:text-void-fg-2 transition-colors flex items-center gap-1"
+					>
+						<ChevronRight size={10} className={`transform transition-transform ${showInput ? 'rotate-90' : ''}`} />
+						{showInput ? 'Hide' : 'Show'} Context Input
+					</button>
+					{showInput && (
+						<div className="mt-1 p-2 bg-void-bg-2 rounded text-[11px] text-void-fg-4 font-mono overflow-auto max-h-[200px] whitespace-pre-wrap border border-void-border-1">
+							{response.input}
+						</div>
+					)}
+				</div>
+			)}
+
+			<div className="flex flex-col gap-2 border-l border-void-border-2 ml-1 pl-3 py-1">
+				{tasks.map((task: any, i: number) => (
+					<ToolHeaderWrapper
+						key={i}
+						title={task.role ? (task.role.charAt(0).toUpperCase() + task.role.slice(1)) : 'Task'}
+						desc1={
+							<div className="flex items-center gap-1.5 text-[11px] text-void-fg-4">
+								<span>{task.provider || 'AI'}</span>
+								<span>•</span>
+								<span>{task.model || 'Model'}</span>
+								{task.durationMs !== undefined && (
+									<>
+										<span>•</span>
+										<span>{task.durationMs}ms</span>
+									</>
+								)}
+							</div>
+						}
+						isOpen={task.status === 'error' || tasks.length === 1}
+					>
+						<ToolChildrenWrapper>
+							<div className="flex flex-col gap-2 py-1">
+								{task.reason && (
+									<div className="text-[12px] italic text-void-fg-3">
+										{task.reason}
+									</div>
+								)}
+								{task.output && (
+									<div className="text-[13px] leading-snug">
+										<ChatMarkdownRender
+											string={task.output}
+											chatMessageLocation={chatMessageLocation}
+											isApplyEnabled={true}
+											isLinkDetectionEnabled={true}
+										/>
+									</div>
+								)}
+								{task.status === 'error' && (
+									<div className="text-[12px] text-red-500 font-medium flex items-center gap-1">
+										<AlertTriangle size={12} />
+										Failed to execute this step.
+									</div>
+								)}
+							</div>
+						</ToolChildrenWrapper>
+					</ToolHeaderWrapper>
+				))}
+
+				{status === 'error' && (
+					<div className="text-[13px] text-red-500 p-2 bg-red-500/10 rounded border border-red-500/20 mt-2">
+						<div className="font-bold flex items-center gap-1 mb-1">
+							<AlertTriangle size={14} />
+							Orchestration Error
+						</div>
+						<div className="text-[12px]">
+							{response.error || 'The Division API encountered an error during orchestration.'}
+						</div>
+					</div>
+				)}
+
+				{tasks.length === 0 && status === 'success' && (
+					<div className="text-[12px] text-void-fg-4 italic">
+						No tasks data available in response.
+					</div>
+				)}
+			</div>
+		</div>
+	);
+};
+
 const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted, messageIdx }: { chatMessage: ChatMessage & { role: 'assistant' }, isCheckpointGhost: boolean, messageIdx: number, isCommitted: boolean }) => {
 
 	const accessor = useAccessor()
@@ -1336,6 +1445,38 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 		threadId: thread.id,
 		messageIdx: messageIdx,
 	}
+
+	const divisionResponse = useMemo(() => {
+		const content = chatMessage.displayContent?.trim();
+		if (!content) return null;
+
+		// Try to find JSON in the content
+		let jsonStr = content;
+
+		// Handle markdown code blocks
+		const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+		if (jsonMatch) {
+			jsonStr = jsonMatch[1];
+		}
+
+		try {
+			// Only try parsing if it looks like an object
+			const startIdx = jsonStr.indexOf('{');
+			const endIdx = jsonStr.lastIndexOf('}');
+			if (startIdx !== -1 && endIdx !== -1 && startIdx < endIdx) {
+				const candidate = jsonStr.substring(startIdx, endIdx + 1);
+				const parsed = JSON.parse(candidate);
+				// Heuristic for Division API response
+				if (parsed.sessionId && (parsed.tasks || parsed.status === 'error' || parsed.orchestration)) {
+					return parsed;
+				}
+			}
+			return null;
+		} catch {
+			return null;
+		}
+	}, [chatMessage.displayContent]);
+
 
 	const isEmpty = !chatMessage.displayContent && !chatMessage.reasoning
 	if (isEmpty) return null
@@ -1358,18 +1499,22 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 		}
 
 		{/* assistant message */}
-		{chatMessage.displayContent &&
-			<div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
-				<ProseWrapper>
-					<ChatMarkdownRender
-						string={chatMessage.displayContent || ''}
-						chatMessageLocation={chatMessageLocation}
-						isApplyEnabled={true}
-						isLinkDetectionEnabled={true}
-					/>
-				</ProseWrapper>
-			</div>
-		}
+		{chatMessage.displayContent && (
+			divisionResponse ? (
+				<DivisionOrchestrationComponent response={divisionResponse} chatMessageLocation={chatMessageLocation} />
+			) : (
+				<div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
+					<ProseWrapper>
+						<ChatMarkdownRender
+							string={chatMessage.displayContent || ''}
+							chatMessageLocation={chatMessageLocation}
+							isApplyEnabled={true}
+							isLinkDetectionEnabled={true}
+						/>
+					</ProseWrapper>
+				</div>
+			)
+		)}
 	</>
 
 }
@@ -2878,6 +3023,42 @@ const EditToolSoFar = ({ toolCallSoFar, }: { toolCallSoFar: RawToolCallObj }) =>
 }
 
 
+const SidebarHeader = ({ onLoginClick }: { onLoginClick: () => void }) => {
+	const accessor = useAccessor()
+	const chatThreadService = accessor.get('IChatThreadService')
+
+	return (
+		<div className="flex items-center justify-between px-4 py-2.5 bg-void-bg-2 border-b border-void-border-3 shrink-0">
+			<div className="flex items-center gap-2">
+				<IconShell1
+					Icon={CirclePlus}
+					className="size-4 text-void-fg-3 hover:text-void-fg-1 p-0"
+					onClick={() => chatThreadService.openNewThread()}
+					data-tooltip-id="void-tooltip"
+					data-tooltip-content="New Chat"
+				/>
+			</div>
+
+			<div className="flex items-center gap-3">
+				<SignedOut>
+					<button
+						onClick={onLoginClick}
+						className="text-[11px] font-medium px-2 py-0.5 rounded bg-white text-black hover:bg-zinc-200 transition-colors"
+					>
+						Log In
+					</button>
+				</SignedOut>
+				<SignedIn>
+					<div className="flex items-center gap-2 scale-[0.8] origin-right">
+						<UserButton afterSignOutUrl="/" />
+					</div>
+				</SignedIn>
+			</div>
+		</div>
+	)
+}
+
+
 export const SidebarChat = () => {
 	const textAreaRef = useRef<HTMLTextAreaElement | null>(null)
 	const textAreaFnsRef = useRef<TextAreaFns | null>(null)
@@ -2890,6 +3071,8 @@ export const SidebarChat = () => {
 	// ----- HIGHER STATE -----
 
 	// threads state
+	const [showLoginScreen, setShowLoginScreen] = useState(false);
+
 	const chatThreadsState = useChatThreadsState()
 
 	const currentThread = chatThreadsService.getCurrentThread()
@@ -3176,11 +3359,14 @@ export const SidebarChat = () => {
 
 
 	return (
-		<Fragment key={threadId} // force rerender when change thread
-		>
-			{isLandingPage ?
-				landingPageContent
-				: threadPageContent}
-		</Fragment>
+		<div className="flex flex-col h-full w-full">
+			<SidebarHeader onLoginClick={() => setShowLoginScreen(true)} />
+			{showLoginScreen && <LoginScreen onClose={() => setShowLoginScreen(false)} />}
+			<Fragment key={threadId}>
+				{isLandingPage ?
+					landingPageContent
+					: threadPageContent}
+			</Fragment>
+		</div>
 	)
 }

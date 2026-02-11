@@ -42,7 +42,7 @@ type InternalCommonMessageParams = {
 	overridesOfModel: OverridesOfModel | undefined;
 	modelName: string;
 	_setAborter: (aborter: () => void) => void;
-	isLoggedIn: boolean;
+	isLoggedIn?: boolean;
 }
 
 type SendChatParams_Internal = InternalCommonMessageParams & {
@@ -53,13 +53,13 @@ type SendChatParams_Internal = InternalCommonMessageParams & {
 	divisionRoleAssignments?: RoleAssignment[];
 	divisionProjectId?: string;
 }
-type SendFIMParams_Internal = InternalCommonMessageParams & { messages: LLMFIMMessage; separateSystemMessage: string | undefined; isLoggedIn: boolean; }
-export type ListParams_Internal<ModelResponse> = ModelListParams<ModelResponse> & { isLoggedIn: boolean }
+type SendFIMParams_Internal = InternalCommonMessageParams & { messages: LLMFIMMessage; separateSystemMessage: string | undefined; }
+export type ListParams_Internal<ModelResponse> = ModelListParams<ModelResponse> & { isLoggedIn?: boolean }
 
 
 const invalidApiKeyMessage = (providerName: ProviderName) => `Invalid ${displayInfoOfProviderName(providerName).title} API key.`
 
-const getApiKey = (providerName: ProviderName, providedKey: string | undefined, isLoggedIn: boolean): string | undefined => {
+const getApiKey = (providerName: ProviderName, providedKey: string | undefined, isLoggedIn: boolean | undefined): string | undefined => {
 	if (providedKey) return providedKey;
 	if (!isLoggedIn) return undefined;
 
@@ -84,7 +84,7 @@ const parseHeadersJSON = (s: string | undefined): Record<string, string | null |
 	}
 }
 
-const newOpenAICompatibleSDK = async ({ settingsOfProvider, providerName, includeInPayload, isLoggedIn }: { settingsOfProvider: SettingsOfProvider, providerName: ProviderName, includeInPayload?: { [s: string]: any }, isLoggedIn: boolean }) => {
+const newOpenAICompatibleSDK = async ({ settingsOfProvider, providerName, includeInPayload, isLoggedIn }: { settingsOfProvider: SettingsOfProvider, providerName: ProviderName, includeInPayload?: { [s: string]: any }, isLoggedIn: boolean | undefined }) => {
 	const commonPayloadOpts: ClientOptions = {
 		dangerouslyAllowBrowser: true,
 		...includeInPayload,

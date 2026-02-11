@@ -8,7 +8,7 @@ import * as ReactDOM from 'react-dom/client'
 import { _registerServices } from './services.js';
 import { ClerkProvider } from '@clerk/clerk-react'
 
-const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string
+const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || 'pk_test_bmVhdC1zbmFrZS0zOS5jbGVyay5hY2NvdW50cy5kZXYk'
 
 if (!PUBLISHABLE_KEY) {
 	console.warn('Missing Clerk Publishable Key')
@@ -27,11 +27,17 @@ export const mountFnGenerator = (Component: (params: any) => React.ReactNode) =>
 	const root = ReactDOM.createRoot(rootElement)
 
 	const rerender = (props?: any) => {
-		root.render(
-			<ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignOutUrl="/">
-				<Component {...props} />
-			</ClerkProvider>
-		); // tailwind dark theme indicator
+		const content = <Component {...props} />
+
+		if (PUBLISHABLE_KEY) {
+			root.render(
+				<ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignOutUrl="/">
+					{content}
+				</ClerkProvider>
+			);
+		} else {
+			root.render(content);
+		}
 	}
 	const dispose = () => {
 		root.unmount();

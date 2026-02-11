@@ -107,6 +107,11 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 		const { settingsOfProvider, globalSettings } = this.voidSettingsService.state
 		const { clerkSessionId } = globalSettings
 
+		// fallback for divisionProjectId
+		if (!globalSettings.divisionProjectId) {
+			globalSettings.divisionProjectId = 'demo-project-001';
+		}
+
 		// throw an error if no model/provider selected (this should usually never be reached, the UI should check this first, but might happen in cases like Apply where we haven't built much UI/checks yet, good practice to have check logic on backend)
 		if (modelSelection === null) {
 			const message = `Please add a provider in Void's Settings.`
@@ -145,7 +150,7 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 			settingsOfProvider,
 			modelSelection,
 			mcpTools,
-			isLoggedIn,
+			isLoggedIn: isLoggedIn ?? false,
 			divisionRoleAssignments,
 			divisionProjectId,
 		} satisfies MainSendLLMMessageParams);
@@ -177,7 +182,7 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 			settingsOfProvider,
 			providerName: 'ollama',
 			requestId: requestId_,
-			isLoggedIn,
+			isLoggedIn: isLoggedIn ?? false,
 		} satisfies MainModelListParams<OllamaModelResponse>)
 	}
 
@@ -198,7 +203,7 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 			...proxyParams,
 			settingsOfProvider,
 			requestId: requestId_,
-			isLoggedIn
+			isLoggedIn: isLoggedIn ?? false
 		} satisfies MainModelListParams<OpenaiCompatibleModelResponse>)
 	}
 
