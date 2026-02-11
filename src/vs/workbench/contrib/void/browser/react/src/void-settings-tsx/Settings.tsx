@@ -24,6 +24,7 @@ import { useMCPServiceState } from '../util/services.js';
 import { OPT_OUT_KEY } from '../../../../common/storageKeys.js';
 import { StorageScope, StorageTarget } from '../../../../../../../platform/storage/common/storage.js';
 import { useAuth, useUser, SignInButton, UserButton, SignedIn, SignedOut } from '@clerk/clerk-react';
+import { LoginScreen } from '../void-login-tsx/LoginScreen.js';
 import { Lock } from 'lucide-react';
 
 type Tab =
@@ -1144,6 +1145,7 @@ export const Settings = () => {
 
 	const { sessionId } = useAuth()
 	const { user } = useUser()
+	const [showLoginScreen, setShowLoginScreen] = useState(false)
 
 	useEffect(() => {
 		clerkService.setAuthState(user ? {
@@ -1222,6 +1224,7 @@ export const Settings = () => {
 
 	return (
 		<div className={`@@void-scope ${isDark ? 'dark' : ''}`} style={{ height: '100%', width: '100%', overflow: 'auto' }}>
+			{showLoginScreen && <LoginScreen onClose={() => setShowLoginScreen(false)} />}
 			<div className="flex flex-col md:flex-row w-full gap-6 max-w-[900px] mx-auto mb-32" style={{ minHeight: '80vh' }}>
 				{/* ──────────────  SIDEBAR  ────────────── */}
 
@@ -1511,15 +1514,13 @@ export const Settings = () => {
 										</SignedIn>
 										<SignedOut>
 											<div className="max-w-48 w-full">
-												<SignInButton mode="modal">
-													<VoidButtonBgDarken
-														onClick={() => { }} // Managed by SignInButton
-														className="px-4 py-2 bg-[#0e70c0] text-white w-full flex items-center justify-center gap-2"
-													>
-														<Lock className="w-4 h-4" />
-														Log In
-													</VoidButtonBgDarken>
-												</SignInButton>
+												<VoidButtonBgDarken
+													onClick={() => setShowLoginScreen(true)}
+													className="px-4 py-2 bg-[#0e70c0] text-white w-full flex items-center justify-center gap-2"
+												>
+													<Lock className="w-4 h-4" />
+													Log In
+												</VoidButtonBgDarken>
 											</div>
 										</SignedOut>
 									</ErrorBoundary>

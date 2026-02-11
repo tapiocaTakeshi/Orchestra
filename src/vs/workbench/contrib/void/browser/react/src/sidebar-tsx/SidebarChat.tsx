@@ -3023,6 +3023,21 @@ const EditToolSoFar = ({ toolCallSoFar, }: { toolCallSoFar: RawToolCallObj }) =>
 }
 
 
+const SignedOutChatOverlay = ({ onLoginClick }: { onLoginClick: () => void }) => {
+	return (
+		<div className="absolute inset-0 bg-void-bg-1/40 backdrop-blur-[1px] z-10 flex flex-col items-center justify-center p-4 text-center rounded-md border border-void-border-3 gap-3">
+			<div className="text-xs font-medium text-void-fg-1">Sign in to start chatting</div>
+			<button
+				onClick={(e) => { e.stopPropagation(); onLoginClick(); }}
+				className="px-4 py-1.5 rounded bg-white text-black text-[11px] font-bold hover:bg-zinc-200 transition-all shadow-md"
+			>
+				Log In
+			</button>
+		</div>
+	)
+}
+
+
 const SidebarHeader = ({ onLoginClick }: { onLoginClick: () => void }) => {
 	const accessor = useAccessor()
 	const chatThreadService = accessor.get('IChatThreadService')
@@ -3258,6 +3273,9 @@ export const SidebarChat = () => {
 		setSelections={setSelections}
 		onClickAnywhere={() => { textAreaRef.current?.focus() }}
 	>
+		<SignedOut>
+			<SignedOutChatOverlay onLoginClick={() => setShowLoginScreen(true)} />
+		</SignedOut>
 		<VoidInputBox2
 			enableAtToMention
 			className={`min-h-[81px] px-0.5 py-0.5`}
