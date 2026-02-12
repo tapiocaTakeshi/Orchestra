@@ -12,6 +12,8 @@ import { MistralCore } from '@mistralai/mistralai/core.js';
 import { fimComplete } from '@mistralai/mistralai/funcs/fimComplete.js';
 import { Tool as GeminiTool, FunctionDeclaration, GoogleGenAI, ThinkingConfig, Schema, Type } from '@google/genai';
 import { GoogleAuth } from 'google-auth-library'
+import * as fs from 'fs';
+import * as path from 'path';
 /* eslint-enable */
 
 import { AnthropicLLMChatMessage, GeminiLLMChatMessage, LLMChatMessage, LLMFIMMessage, ModelListParams, OllamaModelResponse, OnError, OnFinalMessage, OnText, RawToolCallObj, RawToolParamsObj } from '../../common/sendLLMMessageTypes.js';
@@ -52,6 +54,7 @@ type SendChatParams_Internal = InternalCommonMessageParams & {
 	mcpTools: InternalToolInfo[] | undefined;
 	divisionRoleAssignments?: RoleAssignment[];
 	divisionProjectId?: string;
+	workspaceFolderPath?: string;
 }
 type SendFIMParams_Internal = InternalCommonMessageParams & { messages: LLMFIMMessage; separateSystemMessage: string | undefined; }
 export type ListParams_Internal<ModelResponse> = ModelListParams<ModelResponse> & { isLoggedIn?: boolean }
@@ -850,19 +853,209 @@ const sendGeminiChat = async ({
 
 // --------- DIVISION API ---------
 
-// Map Orchestra provider names to Division API provider names
-const mapProviderNameToDivisionAPI = (providerName: string): string => {
-	const mapping: Record<string, string> = {
-		'openAI': 'openai',
-		'anthropic': 'anthropic',
-		'gemini': 'google',
-		'deepseek': 'openai', // DeepSeek uses OpenAI-compatible API
-		'openRouter': 'openai',
-		'groq': 'openai',
-		'xAI': 'openai',
-		'mistral': 'openai',
+// Auto file create/edit: extract code blocks from AI output and write to workspace
+const saveCodeBlocksFromOutput = (output: string, _sessionId: string, workspaceFolderPath?: string): { filePath: string; language: string; action: 'created' | 'updated' }[] => {
+	const savedFiles: { filePath: string; language: string; action: 'created' | 'updated' }[] = [];
+
+	// Match code blocks with file path annotations:
+	// ```language:path/to/file.ext  OR  ```language // path/to/file.ext
+	const codeBlockRegex = /```(\w+)(?::([^\n]+)|\s*\/\/\s*([^\n]+))?\n([\s\S]*?)```/g;
+	let match;
+
+	// Use workspace folder path if available, fallback to cwd
+	const workspaceRoot = workspaceFolderPath || process.cwd();
+
+	while ((match = codeBlockRegex.exec(output)) !== null) {
+		const language = match[1];
+		const rawFilePath = (match[2] || match[3] || '').trim();
+		const code = match[4];
+
+		if (!rawFilePath || !code) continue;
+
+		try {
+			// Resolve path: if absolute, use as-is; if relative, resolve from workspace root
+			const fullPath = path.isAbsolute(rawFilePath)
+				? rawFilePath
+				: path.join(workspaceRoot, rawFilePath);
+
+			// Security: ensure path is under workspace root
+			if (!fullPath.startsWith(workspaceRoot)) {
+				continue;
+			}
+
+			const existed = fs.existsSync(fullPath);
+			fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+			fs.writeFileSync(fullPath, code, 'utf-8');
+			savedFiles.push({ filePath: fullPath, language, action: existed ? 'updated' : 'created' });
+		} catch (_e) { /* ignore write errors */ }
+	}
+
+	return savedFiles;
+};
+
+// Basic analysis of generated files
+const analyzeGeneratedFiles = (files: { filePath: string; language: string }[]): { filePath: string; issues: string[] }[] => {
+	const results: { filePath: string; issues: string[] }[] = [];
+
+	for (const file of files) {
+		const issues: string[] = [];
+		try {
+			const content = fs.readFileSync(file.filePath, 'utf-8');
+			const lines = content.split('\n');
+
+			// Check file size
+			if (lines.length > 500) {
+				issues.push(`Large file (${lines.length} lines)`);
+			}
+
+			// Check for common issues based on language
+			const ext = path.extname(file.filePath).toLowerCase();
+			if (['.ts', '.tsx', '.js', '.jsx'].includes(ext)) {
+				// Check bracket balance
+				const opens = (content.match(/\{/g) || []).length;
+				const closes = (content.match(/\}/g) || []).length;
+				if (opens !== closes) {
+					issues.push(`Bracket mismatch: ${opens} open vs ${closes} close`);
+				}
+				// Check for TODO/FIXME
+				const todos = content.match(/\/\/.*(?:TODO|FIXME|HACK)/gi);
+				if (todos && todos.length > 0) {
+					issues.push(`${todos.length} TODO/FIXME comment(s)`);
+				}
+			} else if (['.py'].includes(ext)) {
+				// Check for pass placeholders
+				const passes = (content.match(/^\s*pass\s*$/gm) || []).length;
+				if (passes > 2) {
+					issues.push(`${passes} 'pass' placeholders found`);
+				}
+			}
+
+			if (content.trim().length === 0) {
+				issues.push('File is empty');
+			}
+
+			results.push({ filePath: file.filePath, issues });
+		} catch (_e) {
+			results.push({ filePath: file.filePath, issues: ['Could not read file for analysis'] });
+		}
+	}
+
+	return results;
+};
+
+
+
+// Call Division API /api/generate endpoint
+const callDivisionGenerate = async (
+	endpointBase: string,
+	divisionModelName: string,
+	input: string,
+	signal: AbortSignal
+): Promise<{ output: string; error?: string; provider?: string; durationMs?: number }> => {
+	try {
+		const apiKey = process.env.DIVISION_API_KEY || '';
+		const headers: Record<string, string> = {
+			'Content-Type': 'application/json',
+		};
+		if (apiKey) {
+			headers['Authorization'] = `Bearer ${apiKey}`;
+		}
+		const response = await fetch(`${endpointBase}/api/generate`, {
+			method: 'POST',
+			headers,
+			body: JSON.stringify({
+				input,
+				provider: divisionModelName,
+				model: divisionModelName,
+			}),
+			signal,
+		});
+
+		const responseText = await response.text();
+		if (!responseText) {
+			return { output: '', error: 'Empty response body' };
+		}
+
+		const data = JSON.parse(responseText);
+		if (data.status === 'error') {
+			return { output: '', error: data.error || 'Unknown error', provider: data.provider, durationMs: data.durationMs };
+		}
+		return { output: data.output || '', provider: data.provider, durationMs: data.durationMs };
+	} catch (e: any) {
+		return { output: '', error: e?.message || String(e) };
+	}
+};
+
+// Extract prompt from LLM messages
+const buildPromptFromMessages = (messages: any[], separateSystemMessage?: string): string => {
+	let prompt = '';
+	if (separateSystemMessage) {
+		prompt += `[System] ${separateSystemMessage}\n\n`;
+	}
+	for (const msg of messages) {
+		const role = msg.role || 'user';
+		if ('content' in msg) {
+			if (typeof msg.content === 'string') {
+				prompt += `[${role}] ${msg.content}\n`;
+			} else if (Array.isArray(msg.content)) {
+				for (const part of msg.content) {
+					if (typeof part === 'string') {
+						prompt += `[${role}] ${part}\n`;
+					} else if (part && typeof part === 'object' && 'text' in part) {
+						prompt += `[${role}] ${(part as { text: string }).text}\n`;
+					}
+				}
+			}
+		} else if ('parts' in msg) {
+			for (const part of msg.parts) {
+				if ('text' in part) {
+					prompt += `[${role}] ${part.text}\n`;
+				}
+			}
+		}
+	}
+	return prompt.trim();
+};
+
+// Division Tasks API response types
+interface DivisionTaskResponse {
+	id: string;
+	projectId: string;
+	sessionId: string;
+	role: string;
+	title: string;
+	description: string;
+	reason: string;
+	dependsOn: string[];
+	orderIndex: number;
+	status: string;
+	output: string | null;
+}
+
+interface DivisionTasksCreateResponse {
+	sessionId: string;
+	projectId: string;
+	input: string;
+	leader: { provider: string; model: string };
+	taskCount: number;
+	tasks: DivisionTaskResponse[];
+}
+
+// Helper: make authenticated Division API requests
+const divisionFetch = async (
+	endpointBase: string,
+	path: string,
+	options: RequestInit = {}
+): Promise<Response> => {
+	const apiKey = process.env.DIVISION_API_KEY || '';
+	const headers: Record<string, string> = {
+		'Content-Type': 'application/json',
+		...(options.headers as Record<string, string> || {}),
 	};
-	return mapping[providerName] || 'openai'; // Default to openai if not mapped
+	if (apiKey) {
+		headers['Authorization'] = `Bearer ${apiKey}`;
+	}
+	return fetch(`${endpointBase}${path}`, { ...options, headers });
 };
 
 const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<void> => {
@@ -871,114 +1064,202 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		onText,
 		onFinalMessage,
 		onError,
-		settingsOfProvider,
-		providerName,
 		_setAborter,
 		separateSystemMessage,
-		divisionRoleAssignments,
-		divisionProjectId,
+		divisionProjectId: divisionProjectIdParam,
+		workspaceFolderPath,
 	} = params
 
 	try {
-		const endpointBase = settingsOfProvider[providerName]?.endpoint || 'https://api.division.he-ro.jp'
-		const endpoint = `${endpointBase}/api/agent/run`
-
-		// Build the prompt from messages - handle LLMChatMessage union types (OpenAI/Anthropic use 'content', Gemini uses 'parts')
-		let prompt = ''
-		if (separateSystemMessage) {
-			prompt += `[System] ${separateSystemMessage}\n\n`
-		}
-		for (const msg of messages) {
-			const role = msg.role || 'user'
-			if ('content' in msg) {
-				if (typeof msg.content === 'string') {
-					prompt += `[${role}] ${msg.content}\n`
-				} else if (Array.isArray(msg.content)) {
-					for (const part of msg.content) {
-						if (typeof part === 'string') {
-							prompt += `[${role}] ${part}\n`
-						} else if (part && typeof part === 'object' && 'text' in part) {
-							prompt += `[${role}] ${(part as { text: string }).text}\n`
-						}
-					}
-				}
-			} else if ('parts' in msg) {
-				// Gemini format
-				for (const part of msg.parts) {
-					if ('text' in part) {
-						prompt += `[${role}] ${part.text}\n`
-					}
-				}
-			}
-		}
+		const endpointBase = 'https://division-git-preview-he-ros-projects.vercel.app';
+		const projectId = divisionProjectIdParam || 'demo-project-001';
+		const prompt = buildPromptFromMessages(messages, separateSystemMessage);
 
 		const controller = new AbortController()
 		_setAborter(() => { controller.abort() })
 
-		// Use role assignments from .division/agents.json (synced via globalSettings), or fall back to defaults
-		const roleAssignments: Array<{ role: string; provider: string; model: string }> = divisionRoleAssignments
-			? divisionRoleAssignments.map(a => ({ role: a.role, provider: a.provider, model: a.model }))
-			: [
-				{ role: 'leader', provider: 'openAI', model: 'gpt-4o' },
-				{ role: 'coder', provider: 'anthropic', model: 'claude-sonnet-4-20250514' },
-				{ role: 'planner', provider: 'gemini', model: 'gemini-2.0-flash' },
-				{ role: 'search', provider: 'openAI', model: 'gpt-4o' },
-				{ role: 'design', provider: 'gemini', model: 'gemini-2.0-flash' },
-			];
+		let fullText = '';
+		const appendText = (text: string) => {
+			fullText += text;
+			onText({ fullText, fullReasoning: '' });
+		};
 
-		// Build agents array from role assignments
-		const agents = roleAssignments.map(assignment => ({
-			role: assignment.role,
-			provider: mapProviderNameToDivisionAPI(assignment.provider),
-			model: assignment.model,
-		}));
+		// =============================================
+		// PHASE 1: Task Generation via /api/tasks/create
+		// Leader AI automatically breaks down the request into tasks
+		// =============================================
+		appendText(`## 📋 Phase 1: Task Generation\n`);
+		appendText(`**Division API** \`/api/tasks/create\` にリクエスト送信中...\n\n`);
 
-		const response = await fetch(endpoint, {
+		const createResponse = await divisionFetch(endpointBase, '/api/tasks/create', {
 			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-			},
-			body: JSON.stringify({
-				projectId: divisionProjectId || '',
-				input: prompt.trim(),
-				agents,
-			}),
+			body: JSON.stringify({ projectId, input: prompt }),
 			signal: controller.signal,
-		})
+		});
 
-		if (!response.ok) {
-			const errorText = await response.text()
-			onError({ message: `Division API error (${response.status}): ${errorText}`, fullError: null })
-			return
+		const createText = await createResponse.text();
+		if (!createText) {
+			appendText(`❌ **Error:** Empty response from /api/tasks/create\n`);
+			onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null });
+			return;
 		}
 
-		// Parse JSON response (Division API returns JSON, not a stream)
-		const data = await response.json()
+		const createData: DivisionTasksCreateResponse = JSON.parse(createText);
 
-		// Extract the orchestrated result
-		let fullText = ''
-		if (data.result) {
-			fullText = typeof data.result === 'string' ? data.result : JSON.stringify(data.result, null, 2)
-		} else if (data.responses && Array.isArray(data.responses)) {
-			// Multi-agent response format
-			const responseParts: string[] = []
-			for (const resp of data.responses) {
-				if (resp.content) {
-					responseParts.push(resp.content)
-				}
+		if ((createData as any).error) {
+			appendText(`❌ **Error:** ${(createData as any).error}\n\n`);
+			// Fallback: single agent via /api/generate
+			appendText(`---\n\n## 💬 Fallback: Single Agent Response\n`);
+			appendText(`⏳ /api/generate で直接質問中...\n\n`);
+			const fallbackResult = await callDivisionGenerate(endpointBase, 'gpt-4o', prompt, controller.signal);
+			if (fallbackResult.error) {
+				appendText(`❌ **Error:** ${fallbackResult.error}\n`);
+			} else {
+				appendText(fallbackResult.output + '\n');
 			}
-			fullText = responseParts.join('\n\n')
-		} else {
-			fullText = JSON.stringify(data, null, 2)
+			onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null });
+			return;
 		}
 
-		// Emit text progressively (simulate streaming for UX)
-		const chunkSize = 50
-		for (let i = 0; i < fullText.length; i += chunkSize) {
-			onText({ fullText: fullText.slice(0, i + chunkSize), fullReasoning: '' })
+		const { sessionId, leader, tasks } = createData;
+
+		appendText(`✅ **Leader:** \`${leader.provider}\` (\`${leader.model}\`)\n`);
+		appendText(`📎 **Session:** \`${sessionId}\`\n`);
+		appendText(`📦 **タスク数:** ${tasks.length}\n\n`);
+
+		// =============================================
+		// PHASE 2: Task Classification (display tasks from API)
+		// =============================================
+		appendText(`---\n\n## 🗂️ Phase 2: Task Classification\n\n`);
+		appendText(`| # | Role | Title | Description |\n`);
+		appendText(`|---|------|-------|-------------|\n`);
+		for (let i = 0; i < tasks.length; i++) {
+			const t = tasks[i];
+			appendText(`| ${i + 1} | ${t.role} | ${t.title} | ${t.description} |\n`);
+		}
+		appendText(`\n`);
+
+		// =============================================
+		// PHASE 3: Task Execution via /api/generate + PATCH status
+		// =============================================
+		appendText(`---\n\n## 🚀 Phase 3: Task Execution\n\n`);
+
+		for (let i = 0; i < tasks.length; i++) {
+			const task = tasks[i];
+
+			appendText(`### ${i + 1}. ${task.role} — ${task.title}\n`);
+			appendText(`**Description:** ${task.description}\n`);
+			if (task.reason) {
+				appendText(`**Reason:** ${task.reason}\n`);
+			}
+			appendText(`\n⏳ Division API で実行中...\n\n`);
+
+			// Map role to a model name for /api/generate
+			const modelForRole = task.role === 'coding' || task.role === 'coder'
+				? 'claude-sonnet-4-20250514'
+				: task.role === 'search' || task.role === 'research'
+					? 'perplexity-sonar-pro'
+					: task.role === 'planning' || task.role === 'planner'
+						? 'gemini-2.5-flash'
+						: task.role === 'design'
+							? 'gemini-2.5-flash'
+							: task.role === 'writing'
+								? 'gpt-4o'
+								: 'gpt-4o';
+
+			const taskPrompt = `You are a ${task.role} specialist. Complete the following task based on the original user request.
+
+IMPORTANT FILE OUTPUT RULES:
+- When generating code, you MUST use the following format for EACH file:
+\`\`\`language:relative/path/to/filename.ext
+full file content here
+\`\`\`
+- Use paths relative to the project root
+- Include the COMPLETE file content, not just snippets
+- For new files, provide the full implementation
+- For editing existing files, provide the complete updated file content
+
+Example:
+\`\`\`typescript:src/utils/auth.ts
+import { hash } from 'crypto';
+
+export function authenticate(token: string): boolean {
+  return verifyToken(token);
+}
+\`\`\`
+
+Original user request:
+${prompt}
+
+Your specific task:
+${task.title}
+
+Detailed instructions:
+${task.description}
+
+Provide a thorough and complete response. Output all code files with their paths.`;
+
+			const result = await callDivisionGenerate(endpointBase, modelForRole, taskPrompt, controller.signal);
+
+			if (result.error) {
+				appendText(`❌ **Error:** ${result.error}\n\n`);
+				// PATCH task status to "failed"
+				try {
+					await divisionFetch(endpointBase, `/api/tasks/${task.id}`, {
+						method: 'PATCH',
+						body: JSON.stringify({ status: 'failed', output: result.error }),
+						signal: controller.signal,
+					});
+				} catch (_patchErr) { /* ignore patch errors */ }
+			} else {
+				const durationInfo = result.durationMs ? ` *(${result.durationMs}ms)*` : '';
+				appendText(`✅ **Generated** ${durationInfo}\n\n`);
+				appendText(`${result.output}\n\n`);
+
+				// AUTO FILE OPERATIONS: Extract code blocks, create/edit files
+				appendText(`⏳ **Writing files to workspace...**\n`);
+				const savedFiles = saveCodeBlocksFromOutput(result.output, sessionId, workspaceFolderPath);
+				if (savedFiles.length > 0) {
+					appendText(`✅ **File Operations Complete** — ${savedFiles.length} file(s)\n\n`);
+					for (const sf of savedFiles) {
+						const icon = sf.action === 'created' ? '🆕' : '✏️';
+						const label = sf.action === 'created' ? 'CREATE' : 'EDIT';
+						appendText(`${icon} \`[${label}]\` \`${sf.filePath}\`\n`);
+					}
+					appendText(`\n`);
+
+					// AUTO ANALYZE: Check generated files for issues
+					appendText(`⏳ **Analyzing generated code...**\n`);
+					const analysisResults = analyzeGeneratedFiles(savedFiles);
+					const filesWithIssues = analysisResults.filter(r => r.issues.length > 0);
+					if (filesWithIssues.length > 0) {
+						appendText(`⚠️ **Analysis — Issues Found:**\n\n`);
+						for (const ar of filesWithIssues) {
+							appendText(`- \`${path.basename(ar.filePath)}\`: ${ar.issues.join(', ')}\n`);
+						}
+						appendText(`\n`);
+					} else {
+						appendText(`✅ **Analysis — No issues found**\n\n`);
+					}
+				} else {
+					appendText(`ℹ️ No code files detected in output\n\n`);
+				}
+
+				// PATCH task status to "completed"
+				try {
+					await divisionFetch(endpointBase, `/api/tasks/${task.id}`, {
+						method: 'PATCH',
+						body: JSON.stringify({ status: 'completed', output: result.output }),
+						signal: controller.signal,
+					});
+				} catch (_patchErr) { /* ignore patch errors */ }
+			}
 		}
 
-		onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null })
+		// Final separator
+		appendText(`---\n\n✅ **全${tasks.length}タスク完了** (Session: \`${sessionId}\`)\n`);
+
+		onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null });
 
 	} catch (error: any) {
 		if (error?.name === 'AbortError') {

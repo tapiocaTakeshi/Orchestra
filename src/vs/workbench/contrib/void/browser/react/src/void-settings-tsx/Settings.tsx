@@ -23,7 +23,7 @@ import { MCPServer } from '../../../../common/mcpServiceTypes.js';
 import { useMCPServiceState } from '../util/services.js';
 import { OPT_OUT_KEY } from '../../../../common/storageKeys.js';
 import { StorageScope, StorageTarget } from '../../../../../../../platform/storage/common/storage.js';
-import { useAuth, useUser, SignInButton, UserButton, SignedIn, SignedOut } from '@clerk/clerk-react';
+
 import { LoginScreen } from '../void-login-tsx/LoginScreen.js';
 import { Lock } from 'lucide-react';
 
@@ -1143,19 +1143,8 @@ export const Settings = () => {
 	const metricsService = accessor.get('IMetricsService')
 	const clerkService = accessor.get('IClerkService')
 
-	const { sessionId } = useAuth()
-	const { user } = useUser()
 	const [showLoginScreen, setShowLoginScreen] = useState(false)
-
-	useEffect(() => {
-		clerkService.setAuthState(user ? {
-			id: user.id,
-			fullName: user.fullName,
-			primaryEmailAddress: user.primaryEmailAddress?.emailAddress || null,
-			imageUrl: user.imageUrl,
-			username: user.username,
-		} : null, sessionId || null)
-	}, [user, sessionId, clerkService])
+	const clerkUser = settingsState.globalSettings.clerkUser
 	const isOptedOut = useIsOptedOut()
 
 	const onDownload = (t: 'Chats' | 'Settings') => {
@@ -1499,20 +1488,34 @@ export const Settings = () => {
 										<h2 className='text-3xl mb-2'>Account</h2>
 										<h4 className='text-void-fg-3 mb-4'>{`Manage your Orchestra account.`}</h4>
 
-										<SignedIn>
+										{clerkUser ? (
 											<div className="flex flex-col gap-4 max-w-md">
 												<div className="flex items-center justify-between p-4 bg-void-bg-1 rounded-lg border border-void-border-2">
 													<div className="flex items-center gap-3">
-														<UserButton afterSignOutUrl="/" />
+														{clerkUser.imageUrl ? (
+															<img src={clerkUser.imageUrl} alt="" className="w-8 h-8 rounded-full" />
+														) : (
+															<div className="w-8 h-8 rounded-full bg-[#0e70c0] flex items-center justify-center text-white text-sm font-bold">
+																{(clerkUser.fullName || clerkUser.primaryEmailAddress || '?')[0].toUpperCase()}
+															</div>
+														)}
 														<div>
-															<div className="font-medium text-void-fg-1">{user?.fullName || user?.username || 'Orchestra User'}</div>
-															<div className="text-xs text-void-fg-3 opacity-70">Authenticated via Clerk</div>
+															<div className="font-medium text-void-fg-1">{clerkUser.fullName || clerkUser.username || 'Orchestra User'}</div>
+															<div className="text-xs text-void-fg-3 opacity-70">Authenticated</div>
 														</div>
 													</div>
+													<button
+														onClick={() => {
+															voidSettingsService.setGlobalSetting('clerkUser', null)
+															voidSettingsService.setGlobalSetting('clerkSessionId', null)
+														}}
+														className="text-xs text-void-fg-3 hover:text-void-fg-1 transition-colors"
+													>
+														Sign Out
+													</button>
 												</div>
 											</div>
-										</SignedIn>
-										<SignedOut>
+										) : (
 											<div className="max-w-48 w-full">
 												<VoidButtonBgDarken
 													onClick={() => setShowLoginScreen(true)}
@@ -1522,7 +1525,7 @@ export const Settings = () => {
 													Log In
 												</VoidButtonBgDarken>
 											</div>
-										</SignedOut>
+										)}
 									</ErrorBoundary>
 								</div>
 

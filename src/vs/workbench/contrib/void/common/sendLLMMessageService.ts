@@ -14,6 +14,7 @@ import { Event } from '../../../../base/common/event.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { IVoidSettingsService } from './voidSettingsService.js';
 import { IMCPService } from './mcpService.js';
+import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 
 
 // calls channel to implement features
@@ -64,6 +65,7 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService,
 		// @INotificationService private readonly notificationService: INotificationService,
 		@IMCPService private readonly mcpService: IMCPService,
+		@IWorkspaceContextService private readonly workspaceContextService: IWorkspaceContextService,
 	) {
 		super()
 
@@ -143,6 +145,10 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 			? globalSettings.divisionProjectId
 			: undefined;
 
+		// Get workspace folder path for file operations
+		const workspaceFolders = this.workspaceContextService.getWorkspace().folders;
+		const workspaceFolderPath = workspaceFolders.length > 0 ? workspaceFolders[0].uri.fsPath : undefined;
+
 		// params will be stripped of all its functions over the IPC channel
 		this.channel.call('sendLLMMessage', {
 			...proxyParams,
@@ -153,6 +159,7 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 			isLoggedIn: isLoggedIn ?? false,
 			divisionRoleAssignments,
 			divisionProjectId,
+			workspaceFolderPath,
 		} satisfies MainSendLLMMessageParams);
 
 		return requestId

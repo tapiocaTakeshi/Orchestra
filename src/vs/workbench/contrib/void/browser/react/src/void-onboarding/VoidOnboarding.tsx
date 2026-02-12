@@ -12,7 +12,6 @@ import { OllamaSetupInstructions, OneClickSwitchButton, SettingsForProvider, Mod
 import { ColorScheme } from '../../../../../../../platform/theme/common/theme.js';
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js';
 import { isLinux } from '../../../../../../../base/common/platform.js';
-import { useAuth, useUser, SignInButton, SignUpButton, UserButton, SignedIn, SignedOut } from '@clerk/clerk-react';
 
 const OVERRIDE_VALUE = false
 
@@ -55,7 +54,6 @@ const VoidIcon = () => {
 				imgRef.current.style.maxWidth = '220px'
 				imgRef.current.style.opacity = '70%'
 				imgRef.current.style.filter = isDark ? '' : 'invert(1)'
-				imgRef.current.style.border = '10px solid red' // DEBUG MARKER
 			}
 		}
 		updateTheme()
@@ -633,18 +631,17 @@ const VoidOnboardingContent = () => {
 	const voidMetricsService = accessor.get('IMetricsService')
 	const clerkService = accessor.get('IClerkService')
 
-	const { userId, sessionId } = useAuth()
-	const { user } = useUser()
+	const settingsState_ = useSettingsState()
+	const clerkUser = settingsState_.globalSettings.clerkUser
+	const nativeHostService = accessor.get('INativeHostService')
 
-	useEffect(() => {
-		clerkService.setAuthState(user ? {
-			id: user.id,
-			fullName: user.fullName,
-			primaryEmailAddress: user.primaryEmailAddress?.emailAddress || null,
-			imageUrl: user.imageUrl,
-			username: user.username,
-		} : null, sessionId || null)
-	}, [user, sessionId, clerkService])
+	const openExternalLogin = async () => {
+		try {
+			await nativeHostService.openExternal('https://neat-snake-39.accounts.dev/sign-in');
+		} catch (e) {
+			console.error('Failed to open external browser:', e);
+		}
+	};
 
 	const voidSettingsState = useSettingsState()
 
@@ -786,27 +783,25 @@ const VoidOnboardingContent = () => {
 							Get Started
 						</PrimaryActionButton>
 
-						<SignedIn>
+						{clerkUser ? (
 							<div className="mt-4 flex flex-col items-center gap-2">
 								<div className="text-emerald-500 font-medium flex items-center gap-2 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20">
 									<Check className="w-4 h-4" />
-									Signed in as {user?.fullName || user?.username || 'Orchestra User'}
+									Signed in as {clerkUser.fullName || clerkUser.username || 'Orchestra User'}
 								</div>
 								<div className="text-xs text-void-fg-3 opacity-70 text-center">
 									You have access to built-in Orchestra API keys.
 								</div>
 							</div>
-						</SignedIn>
-						<SignedOut>
-							<SignInButton mode="modal">
-								<button
-									className="mt-4 px-6 py-2 bg-void-bg-2 border border-void-border-2 rounded-lg text-void-fg-1 hover:bg-void-bg-3 transition-all flex items-center gap-2"
-								>
-									<Lock className="w-4 h-4" />
-									Sign in with Orchestra
-								</button>
-							</SignInButton>
-						</SignedOut>
+						) : (
+							<button
+								onClick={openExternalLogin}
+								className="mt-4 px-6 py-2 bg-void-bg-2 border border-void-border-2 rounded-lg text-void-fg-1 hover:bg-void-bg-3 transition-all flex items-center gap-2"
+							>
+								<Lock className="w-4 h-4" />
+								Sign in with Orchestra
+							</button>
+						)}
 					</FadeIn>
 
 				</div>
@@ -837,14 +832,20 @@ const VoidOnboardingContent = () => {
 
 						<div className="mt-8 pt-8 border-t border-void-border-4 w-full text-left">
 							<h4 className="text-void-fg-3 mb-4">Account</h4>
-							<SignedIn>
+							{clerkUser ? (
 								<div className="flex flex-col gap-4">
 									<div className="flex items-center justify-between p-4 bg-void-bg-2 rounded-lg border border-void-border-2">
 										<div className="flex items-center gap-3">
-											<UserButton afterSignOutUrl="/" />
+											{clerkUser.imageUrl ? (
+												<img src={clerkUser.imageUrl} alt="" className="w-8 h-8 rounded-full" />
+											) : (
+												<div className="w-8 h-8 rounded-full bg-[#0e70c0] flex items-center justify-center text-white text-sm font-bold">
+													{(clerkUser.fullName || clerkUser.primaryEmailAddress || '?')[0].toUpperCase()}
+												</div>
+											)}
 											<div>
-												<div className="font-medium text-void-fg-1">{user?.fullName || user?.username || 'Orchestra User'}</div>
-												<div className="text-xs text-void-fg-3 opacity-70">Authenticated via Clerk</div>
+												<div className="font-medium text-void-fg-1">{clerkUser.fullName || clerkUser.username || 'Orchestra User'}</div>
+												<div className="text-xs text-void-fg-3 opacity-70">Authenticated</div>
 											</div>
 										</div>
 									</div>
@@ -852,17 +853,15 @@ const VoidOnboardingContent = () => {
 										* You have access to built-in Orchestra API keys.
 									</div>
 								</div>
-							</SignedIn>
-							<SignedOut>
-								<SignInButton mode="modal">
-									<button
-										className="w-full px-4 py-2 bg-[#0e70c0] hover:bg-[#0e70c0]/90 text-white rounded transition-all flex items-center justify-center gap-2"
-									>
-										<Lock className="w-4 h-4" />
-										Log In to Orchestra
-									</button>
-								</SignInButton>
-							</SignedOut>
+							) : (
+								<button
+									onClick={openExternalLogin}
+									className="w-full px-4 py-2 bg-[#0e70c0] hover:bg-[#0e70c0]/90 text-white rounded transition-all flex items-center justify-center gap-2"
+								>
+									<Lock className="w-4 h-4" />
+									Log In to Orchestra
+								</button>
+							)}
 						</div>
 					</div>
 				</div>

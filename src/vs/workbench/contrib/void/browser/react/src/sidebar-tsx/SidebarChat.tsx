@@ -6,7 +6,7 @@
 import React, { ButtonHTMLAttributes, FormEvent, FormHTMLAttributes, Fragment, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 
-import { useAccessor, useChatThreadsState, useChatThreadsStreamState, useSettingsState, useActiveURI, useCommandBarState, useFullChatThreadsStreamState } from '../util/services.js';
+import { useAccessor, useChatThreadsState, useChatThreadsStreamState, useSettingsState, useActiveURI, useCommandBarState, useFullChatThreadsStreamState, useDivisionProjects, useDivisionProjectConfig } from '../util/services.js';
 import { ScrollType } from '../../../../../../../editor/common/editorCommon.js';
 
 import { ChatMarkdownRender, ChatMessageLocation, getApplyBoxId } from '../markdown/ChatMarkdownRender.js';
@@ -35,7 +35,6 @@ import { ToolApprovalTypeSwitch } from '../void-settings-tsx/Settings.js';
 
 import { persistentTerminalNameOfId } from '../../../terminalToolService.js';
 import { removeMCPToolNamePrefix } from '../../../../common/mcpServiceTypes.js';
-import { SignedIn, SignedOut, UserButton, useAuth } from '@clerk/clerk-react';
 import { LoginScreen } from '../void-login-tsx/LoginScreen.js';
 
 
@@ -287,6 +286,41 @@ const ChatModeDropdown = ({ className }: { className: string }) => {
 
 }
 
+const DivisionProjectDropdown = ({ className }: { className: string }) => {
+	const accessor = useAccessor()
+	const projects = useDivisionProjects()
+	const activeConfig = useDivisionProjectConfig()
+	const settingsState = useSettingsState()
+
+	// Only show when Division API is selected
+	const modelSelection = settingsState.modelSelectionOfFeature['Chat']
+	const isDivision = modelSelection?.providerName === 'divisionAPI'
+
+	if (!isDivision || projects.length <= 1) return null
+
+	const divisionProjectService = accessor.get('IDivisionProjectService')
+
+	return (
+		<select
+			className={className}
+			value={activeConfig?.id ?? ''}
+			onChange={(e) => {
+				const selectedId = e.target.value
+				if (selectedId) {
+					divisionProjectService.setActiveProject(selectedId)
+				}
+			}}
+			title="Division Project"
+		>
+			{projects.map((p) => (
+				<option key={p.id} value={p.id}>
+					📁 {p.name || p.projectId || 'Unnamed'}
+				</option>
+			))}
+		</select>
+	)
+}
+
 
 
 
@@ -390,6 +424,7 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 
 						<div className='flex items-center flex-wrap gap-x-2 gap-y-1 text-nowrap '>
 							{featureName === 'Chat' && <ChatModeDropdown className='text-xs text-void-fg-3 bg-void-bg-1 border border-void-border-2 rounded py-0.5 px-1' />}
+							{featureName === 'Chat' && <DivisionProjectDropdown className='text-xs text-void-fg-3 bg-void-bg-1 border border-void-border-2 rounded py-0.5 px-1' />}
 							<ModelDropdown featureName={featureName} className='text-xs text-void-fg-3 bg-void-bg-1 rounded' />
 						</div>
 					</div>
@@ -3041,33 +3076,46 @@ const SignedOutChatOverlay = ({ onLoginClick }: { onLoginClick: () => void }) =>
 const SidebarHeader = ({ onLoginClick }: { onLoginClick: () => void }) => {
 	const accessor = useAccessor()
 	const chatThreadService = accessor.get('IChatThreadService')
+	const settingsService = accessor.get('IVoidSettingsService')
+	const settingsState = useSettingsState()
+	const clerkUser = settingsState.globalSettings.clerkUser
 
 	return (
 		<div className="flex items-center justify-between px-4 py-2.5 bg-void-bg-2 border-b border-void-border-3 shrink-0">
 			<div className="flex items-center gap-2">
-				<IconShell1
-					Icon={CirclePlus}
-					className="size-4 text-void-fg-3 hover:text-void-fg-1 p-0"
-					onClick={() => chatThreadService.openNewThread()}
-					data-tooltip-id="void-tooltip"
-					data-tooltip-content="New Chat"
-				/>
+				{/* The "New Chat" button is now handled by the VS Code ViewTitle action to avoid redundancy */}
 			</div>
 
 			<div className="flex items-center gap-3">
-				<SignedOut>
+				{!clerkUser ? (
 					<button
 						onClick={onLoginClick}
 						className="text-[11px] font-medium px-2 py-0.5 rounded bg-white text-black hover:bg-zinc-200 transition-colors"
 					>
 						Log In
 					</button>
-				</SignedOut>
-				<SignedIn>
+				) : (
 					<div className="flex items-center gap-2 scale-[0.8] origin-right">
-						<UserButton afterSignOutUrl="/" />
+						<div className="flex items-center gap-1.5">
+							{clerkUser.imageUrl ? (
+								<img src={clerkUser.imageUrl} alt="" className="w-6 h-6 rounded-full" />
+							) : (
+								<div className="w-6 h-6 rounded-full bg-[#0e70c0] flex items-center justify-center text-white text-[10px] font-bold">
+									{(clerkUser.fullName || clerkUser.primaryEmailAddress || '?')[0].toUpperCase()}
+								</div>
+							)}
+							<button
+								onClick={() => {
+									settingsService.setGlobalSetting('clerkUser', null)
+									settingsService.setGlobalSetting('clerkSessionId', null)
+								}}
+								className="text-[10px] text-void-fg-3 hover:text-void-fg-1 transition-colors"
+							>
+								Sign Out
+							</button>
+						</div>
 					</div>
-				</SignedIn>
+				)}
 			</div>
 		</div>
 	)
@@ -3273,9 +3321,9 @@ export const SidebarChat = () => {
 		setSelections={setSelections}
 		onClickAnywhere={() => { textAreaRef.current?.focus() }}
 	>
-		<SignedOut>
+		{!settingsState.globalSettings.clerkUser && (
 			<SignedOutChatOverlay onLoginClick={() => setShowLoginScreen(true)} />
-		</SignedOut>
+		)}
 		<VoidInputBox2
 			enableAtToMention
 			className={`min-h-[81px] px-0.5 py-0.5`}

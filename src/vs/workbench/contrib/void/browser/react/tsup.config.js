@@ -19,7 +19,7 @@ export default defineConfig({
 	format: ['esm'],
 	splitting: false,
 	define: {
-		'import.meta.env.VITE_CLERK_PUBLISHABLE_KEY': JSON.stringify(process.env.VITE_CLERK_PUBLISHABLE_KEY || 'pk_test_placeholder'),
+		'import.meta.env.VITE_CLERK_PUBLISHABLE_KEY': JSON.stringify(process.env.VITE_CLERK_PUBLISHABLE_KEY || 'pk_test_bmVhdC1zbmFrZS0zOS5jbGVyay5hY2NvdW50cy5kZXYk'),
 	},
 
 	// dts: true,

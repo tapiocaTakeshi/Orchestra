@@ -138,6 +138,7 @@ export type SendLLMMessageParams = {
 	isLoggedIn?: boolean;
 	divisionRoleAssignments?: RoleAssignment[];
 	divisionProjectId?: string;
+	workspaceFolderPath?: string;
 } & SendLLMType
 
 
