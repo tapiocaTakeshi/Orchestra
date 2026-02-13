@@ -4,11 +4,11 @@
  *--------------------------------------------------------------------------------------*/
 
 import React, { useState } from 'react';
-import { ChevronRight, ChevronDown, Brain, Code, FileText, Search, Palette, GitBranch, Layers } from 'lucide-react';
+import { ChevronRight, ChevronDown, Brain, Code, FileText, Search, Palette, GitBranch } from 'lucide-react';
 import { AgentRole } from '../../../../common/voidSettingsTypes.js';
 import { ThoughtNode, roleDisplayConfig } from './ConductorTypes.js';
 
-const roleIcons: Record<AgentRole, React.ComponentType<{ size?: number; className?: string; style?: React.CSSProperties }>> = {
+const roleIcons: Record<AgentRole, React.ComponentType<{ size?: number; style?: React.CSSProperties }>> = {
 	leader: Brain,
 	coder: Code,
 	planner: FileText,
@@ -16,7 +16,23 @@ const roleIcons: Record<AgentRole, React.ComponentType<{ size?: number; classNam
 	design: Palette,
 };
 
-// Demo thought tree for visualization
+const statusColors: Record<string, string> = {
+	completed: '#10b981',
+	running: '#3b82f6',
+	waiting: '#f59e0b',
+	error: '#ef4444',
+	idle: 'var(--void-fg-4)',
+};
+
+const statusLabels: Record<string, string> = {
+	completed: 'Done',
+	running: 'Active',
+	waiting: 'Queued',
+	error: 'Error',
+	idle: 'Idle',
+};
+
+// Demo thought tree
 const demoThoughtTree: ThoughtNode = {
 	id: 'root',
 	role: 'leader',
@@ -27,14 +43,14 @@ const demoThoughtTree: ThoughtNode = {
 		{
 			id: 'plan-1',
 			role: 'planner',
-			content: 'Architecture: React + D3.js, WebSocket for real-time data, responsive grid layout with CSS Grid',
+			content: 'Architecture: React + D3.js, WebSocket for real-time data, responsive grid layout',
 			status: 'completed',
 			depth: 1,
 			children: [
 				{
 					id: 'search-1',
 					role: 'search',
-					content: 'Found: D3.js v7 integration patterns, WebSocket best practices, responsive dashboard examples',
+					content: 'Found: D3.js v7 patterns, WebSocket best practices, responsive dashboard examples',
 					status: 'completed',
 					depth: 2,
 					children: [],
@@ -44,14 +60,14 @@ const demoThoughtTree: ThoughtNode = {
 		{
 			id: 'code-1',
 			role: 'coder',
-			content: 'Implementing dashboard component with chart widgets and data binding layer',
+			content: 'Implementing dashboard component with chart widgets and data binding',
 			status: 'running',
 			depth: 1,
 			children: [
 				{
 					id: 'design-1',
 					role: 'design',
-					content: 'UI mockup: dark theme, card-based layout, gradient charts, glassmorphism panels',
+					content: 'UI: dark theme, card layout, gradient charts, glassmorphism panels',
 					status: 'waiting',
 					depth: 2,
 					children: [],
@@ -61,7 +77,7 @@ const demoThoughtTree: ThoughtNode = {
 		{
 			id: 'search-2',
 			role: 'search',
-			content: 'Performance optimization: virtual scrolling, memoization strategies, WebSocket connection pooling',
+			content: 'Performance: virtual scrolling, memoization, WebSocket connection pooling',
 			status: 'waiting',
 			depth: 1,
 			children: [],
@@ -69,94 +85,63 @@ const demoThoughtTree: ThoughtNode = {
 	],
 };
 
-interface ThoughtNodeComponentProps {
-	node: ThoughtNode;
-	isLast?: boolean;
-}
-
-const ThoughtNodeComponent: React.FC<ThoughtNodeComponentProps> = ({ node, isLast = false }) => {
+const ThoughtNodeComponent: React.FC<{ node: ThoughtNode; isLast?: boolean }> = ({ node, isLast = false }) => {
 	const [expanded, setExpanded] = useState(true);
 	const Icon = roleIcons[node.role];
 	const display = roleDisplayConfig[node.role];
 	const hasChildren = node.children.length > 0;
 
 	return (
-		<div className="void-relative">
-			{/* Connection line from parent */}
-			{node.depth > 0 && (
-				<div
-					className="void-absolute void-left-0 void-top-0 void-w-4"
-					style={{
-						borderLeft: `1px solid var(--void-border-2)`,
-						borderBottom: `1px solid var(--void-border-2)`,
-						height: '20px',
-						marginLeft: `${(node.depth - 1) * 24 + 8}px`,
-						borderBottomLeftRadius: '6px',
-					}}
-				/>
-			)}
-
-			{/* Vertical line for siblings */}
-			{node.depth > 0 && !isLast && (
-				<div
-					className="void-absolute void-top-0 void-bottom-0"
-					style={{
-						borderLeft: `1px solid var(--void-border-2)`,
-						marginLeft: `${(node.depth - 1) * 24 + 8}px`,
-					}}
-				/>
-			)}
-
+		<div style={{ position: 'relative' }}>
 			{/* Node content */}
-			<div
-				className="void-flex void-items-start void-gap-2 void-py-1.5"
-				style={{ paddingLeft: `${node.depth * 24}px` }}
-			>
-				{/* Expand/collapse button or dot */}
+			<div style={{
+				display: 'flex', alignItems: 'flex-start', gap: '8px',
+				padding: '6px 0',
+				paddingLeft: `${node.depth * 20}px`,
+			}}>
+				{/* Expand toggle */}
 				{hasChildren ? (
 					<button
 						onClick={() => setExpanded(!expanded)}
-						className="void-flex-shrink-0 void-mt-0.5 void-p-0.5 void-rounded void-text-void-fg-3 hover:void-text-void-fg-1 hover:void-bg-void-bg-2 void-transition-colors"
+						style={{
+							flexShrink: 0, marginTop: '2px', padding: '2px', borderRadius: '3px',
+							background: 'none', border: 'none', cursor: 'pointer',
+							color: 'var(--void-fg-3)',
+						}}
 					>
 						{expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
 					</button>
 				) : (
-					<div className="void-w-5 void-flex-shrink-0" />
+					<div style={{ width: '16px', flexShrink: 0 }} />
 				)}
 
-				{/* Role icon */}
-				<div
-					className={`void-w-6 void-h-6 void-rounded void-flex void-items-center void-justify-center void-flex-shrink-0 void-mt-0.5
-						${node.status === 'running' ? 'conductor-pulse' : ''}`}
-					style={{
-						backgroundColor: `${display.color}15`,
-						boxShadow: node.status === 'running' ? `0 0 8px ${display.glowColor}` : undefined,
-					}}
-				>
+				{/* Status + icon */}
+				<div style={{
+					width: '24px', height: '24px', borderRadius: '6px',
+					display: 'flex', alignItems: 'center', justifyContent: 'center',
+					flexShrink: 0, marginTop: '1px',
+					backgroundColor: `${display.color}15`,
+					boxShadow: node.status === 'running' ? `0 0 8px ${display.glowColor}` : undefined,
+				}}>
 					<Icon size={12} style={{ color: display.color }} />
 				</div>
 
-				{/* Content */}
-				<div className="void-flex-1 void-min-w-0">
-					<div className="void-flex void-items-center void-gap-2 void-mb-0.5">
-						<span
-							className="void-text-xs void-font-semibold"
-							style={{ color: display.color }}
-						>
+				{/* Text content */}
+				<div style={{ flex: 1, minWidth: 0 }}>
+					<div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+						<span style={{ fontSize: '11px', fontWeight: 600, color: display.color }}>
 							{display.label}
 						</span>
-						<div
-							className={`void-w-1.5 void-h-1.5 void-rounded-full
-								${node.status === 'running' ? 'conductor-pulse' : ''}`}
-							style={{
-								backgroundColor: node.status === 'completed' ? '#10b981'
-									: node.status === 'running' ? '#3b82f6'
-										: node.status === 'error' ? '#ef4444'
-											: 'var(--void-fg-4)',
-							}}
-						/>
+						<div style={{
+							width: '6px', height: '6px', borderRadius: '50%',
+							backgroundColor: statusColors[node.status],
+							boxShadow: node.status === 'running' ? `0 0 4px ${statusColors[node.status]}` : undefined,
+						}} />
+						<span style={{ fontSize: '10px', color: 'var(--void-fg-4)' }}>
+							{statusLabels[node.status]}
+						</span>
 					</div>
-					<div className="void-text-xs void-text-void-fg-2 void-leading-relaxed">
+					<div style={{ fontSize: '11px', color: 'var(--void-fg-2)', lineHeight: 1.4 }}>
 						{node.content}
 					</div>
 				</div>
@@ -164,7 +149,7 @@ const ThoughtNodeComponent: React.FC<ThoughtNodeComponentProps> = ({ node, isLas
 
 			{/* Children */}
 			{expanded && hasChildren && (
-				<div>
+				<div style={{ borderLeft: node.depth >= 0 ? '1px solid var(--void-border-2)' : 'none', marginLeft: `${node.depth * 20 + 20}px` }}>
 					{node.children.map((child, index) => (
 						<ThoughtNodeComponent
 							key={child.id}
@@ -178,64 +163,7 @@ const ThoughtNodeComponent: React.FC<ThoughtNodeComponentProps> = ({ node, isLas
 	);
 };
 
-export const ThoughtTree: React.FC = () => {
-	const [viewMode, setViewMode] = useState<'tree' | 'timeline'>('tree');
-
-	return (
-		<div className="void-flex void-flex-col void-h-full void-overflow-hidden">
-			{/* Header */}
-			<div className="void-flex void-items-center void-justify-between void-px-4 void-py-3 void-border-b void-border-void-border-2">
-				<div className="void-flex void-items-center void-gap-2">
-					<GitBranch size={14} className="void-text-void-fg-2" />
-					<span className="void-text-sm void-text-void-fg-1 void-font-medium">Thought Process</span>
-				</div>
-				<div className="void-flex void-items-center void-gap-1 void-bg-void-bg-2 void-rounded-lg void-p-0.5">
-					<button
-						onClick={() => setViewMode('tree')}
-						className={`void-px-2 void-py-1 void-rounded void-text-xs void-transition-colors
-							${viewMode === 'tree' ? 'void-bg-void-bg-1 void-text-void-fg-1' : 'void-text-void-fg-3 hover:void-text-void-fg-1'}`}
-					>
-						Tree
-					</button>
-					<button
-						onClick={() => setViewMode('timeline')}
-						className={`void-px-2 void-py-1 void-rounded void-text-xs void-transition-colors
-							${viewMode === 'timeline' ? 'void-bg-void-bg-1 void-text-void-fg-1' : 'void-text-void-fg-3 hover:void-text-void-fg-1'}`}
-					>
-						Timeline
-					</button>
-				</div>
-			</div>
-
-			{/* Content */}
-			<div className="void-flex-1 void-overflow-y-auto void-p-3">
-				{viewMode === 'tree' ? (
-					<ThoughtNodeComponent node={demoThoughtTree} />
-				) : (
-					<TimelineView tree={demoThoughtTree} />
-				)}
-			</div>
-
-			{/* Legend */}
-			<div className="void-flex void-items-center void-gap-3 void-px-4 void-py-2 void-border-t void-border-void-border-2 void-text-xs void-text-void-fg-4">
-				<div className="void-flex void-items-center void-gap-1">
-					<div className="void-w-2 void-h-2 void-rounded-full void-bg-emerald-400" />
-					<span>Done</span>
-				</div>
-				<div className="void-flex void-items-center void-gap-1">
-					<div className="void-w-2 void-h-2 void-rounded-full void-bg-blue-400 conductor-pulse" />
-					<span>Active</span>
-				</div>
-				<div className="void-flex void-items-center void-gap-1">
-					<div className="void-w-2 void-h-2 void-rounded-full void-bg-amber-400" />
-					<span>Waiting</span>
-				</div>
-			</div>
-		</div>
-	);
-};
-
-// Timeline view - shows sequential flow
+// Timeline view
 const flattenTree = (node: ThoughtNode, result: ThoughtNode[] = []): ThoughtNode[] => {
 	result.push(node);
 	node.children.forEach(child => flattenTree(child, result));
@@ -246,56 +174,121 @@ const TimelineView: React.FC<{ tree: ThoughtNode }> = ({ tree }) => {
 	const nodes = flattenTree(tree);
 
 	return (
-		<div className="void-flex void-flex-col void-gap-0">
+		<div style={{ display: 'flex', flexDirection: 'column' }}>
 			{nodes.map((node, index) => {
 				const Icon = roleIcons[node.role];
 				const display = roleDisplayConfig[node.role];
 
 				return (
-					<div key={node.id} className="void-flex void-gap-3">
-						{/* Timeline line */}
-						<div className="void-flex void-flex-col void-items-center">
-							<div
-								className={`void-w-6 void-h-6 void-rounded-full void-flex void-items-center void-justify-center void-flex-shrink-0 void-z-10
-									${node.status === 'running' ? 'conductor-pulse' : ''}`}
-								style={{
-									backgroundColor: `${display.color}20`,
-									border: `2px solid ${display.color}`,
-									boxShadow: node.status === 'running' ? `0 0 10px ${display.glowColor}` : undefined,
-								}}
-							>
+					<div key={node.id} style={{ display: 'flex', gap: '12px' }}>
+						{/* Timeline */}
+						<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+							<div style={{
+								width: '24px', height: '24px', borderRadius: '50%',
+								display: 'flex', alignItems: 'center', justifyContent: 'center',
+								flexShrink: 0, zIndex: 1,
+								backgroundColor: `${display.color}20`,
+								border: `2px solid ${display.color}`,
+								boxShadow: node.status === 'running' ? `0 0 10px ${display.glowColor}` : undefined,
+							}}>
 								<Icon size={10} style={{ color: display.color }} />
 							</div>
 							{index < nodes.length - 1 && (
-								<div
-									className="void-w-px void-flex-1 void-min-h-[20px]"
-									style={{
-										backgroundColor: node.status === 'completed' ? display.color : 'var(--void-border-2)',
-										opacity: node.status === 'completed' ? 0.4 : 0.2,
-									}}
-								/>
+								<div style={{
+									width: '1px', flex: 1, minHeight: '16px',
+									backgroundColor: node.status === 'completed' ? display.color : 'var(--void-border-2)',
+									opacity: node.status === 'completed' ? 0.4 : 0.2,
+								}} />
 							)}
 						</div>
 
 						{/* Content */}
-						<div className="void-pb-4 void-flex-1 void-min-w-0">
-							<div className="void-flex void-items-center void-gap-2 void-mb-1">
-								<span className="void-text-xs void-font-semibold" style={{ color: display.color }}>
-									{display.label}
-								</span>
-								<span className="void-text-xs void-text-void-fg-4">
-									{node.status === 'completed' ? 'Completed' :
-										node.status === 'running' ? 'In Progress' :
-											node.status === 'waiting' ? 'Queued' : 'Idle'}
-								</span>
+						<div style={{ paddingBottom: '16px', flex: 1, minWidth: 0 }}>
+							<div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
+								<span style={{ fontSize: '11px', fontWeight: 600, color: display.color }}>{display.label}</span>
+								<span style={{ fontSize: '10px', color: 'var(--void-fg-4)' }}>{statusLabels[node.status]}</span>
 							</div>
-							<div className="void-text-xs void-text-void-fg-2 void-leading-relaxed">
+							<div style={{ fontSize: '11px', color: 'var(--void-fg-2)', lineHeight: 1.4 }}>
 								{node.content}
 							</div>
 						</div>
 					</div>
 				);
 			})}
+		</div>
+	);
+};
+
+export const ThoughtTree: React.FC = () => {
+	const [viewMode, setViewMode] = useState<'tree' | 'timeline'>('tree');
+
+	return (
+		<div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+			{/* Header */}
+			<div style={{
+				display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+				padding: '12px 16px',
+				borderBottom: '1px solid var(--void-border-2)',
+			}}>
+				<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+					<GitBranch size={14} style={{ color: 'var(--void-fg-2)' }} />
+					<span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--void-fg-1)' }}>Thought Process</span>
+					<span style={{
+						fontSize: '10px', padding: '2px 6px', borderRadius: '4px',
+						background: 'rgba(16,185,129,0.1)', color: '#34d399',
+					}}>Preview</span>
+				</div>
+				{/* View mode toggle */}
+				<div style={{
+					display: 'flex', alignItems: 'center', gap: '2px',
+					background: 'var(--void-bg-2)', borderRadius: '6px', padding: '2px',
+				}}>
+					{(['tree', 'timeline'] as const).map(mode => (
+						<button
+							key={mode}
+							onClick={() => setViewMode(mode)}
+							style={{
+								padding: '3px 8px', borderRadius: '4px',
+								background: viewMode === mode ? 'var(--void-bg-1)' : 'none',
+								border: 'none', cursor: 'pointer',
+								fontSize: '10px', fontWeight: viewMode === mode ? 500 : 400,
+								color: viewMode === mode ? 'var(--void-fg-1)' : 'var(--void-fg-3)',
+								transition: 'all 0.15s',
+							}}
+						>
+							{mode.charAt(0).toUpperCase() + mode.slice(1)}
+						</button>
+					))}
+				</div>
+			</div>
+
+			{/* Content */}
+			<div style={{ flex: '1 1 0', minHeight: 0, overflowY: 'auto', padding: '12px 16px' }}>
+				{viewMode === 'tree' ? (
+					<ThoughtNodeComponent node={demoThoughtTree} />
+				) : (
+					<TimelineView tree={demoThoughtTree} />
+				)}
+			</div>
+
+			{/* Legend */}
+			<div style={{
+				display: 'flex', alignItems: 'center', gap: '12px',
+				padding: '8px 16px',
+				borderTop: '1px solid var(--void-border-2)',
+				fontSize: '10px', color: 'var(--void-fg-4)',
+			}}>
+				{[
+					{ label: 'Done', color: '#10b981' },
+					{ label: 'Active', color: '#3b82f6' },
+					{ label: 'Waiting', color: '#f59e0b' },
+				].map(item => (
+					<div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+						<div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: item.color }} />
+						<span>{item.label}</span>
+					</div>
+				))}
+			</div>
 		</div>
 	);
 };

@@ -488,11 +488,11 @@ export type GlobalSettings = {
 
 // Default role assignments for Division API
 export const defaultRoleAssignments: RoleAssignment[] = [
-	{ role: 'leader', provider: 'openAI', model: 'gpt-4o' },
-	{ role: 'coder', provider: 'anthropic', model: 'claude-sonnet-4-20250514' },
-	{ role: 'planner', provider: 'gemini', model: 'gemini-2.0-flash' },
-	{ role: 'search', provider: 'openAI', model: 'gpt-4o' },
-	{ role: 'design', provider: 'gemini', model: 'gemini-2.0-flash' },
+	{ role: 'leader', provider: 'openAI', model: 'gpt-5.2' },
+	{ role: 'coder', provider: 'anthropic', model: 'claude-opus-4-6' },
+	{ role: 'planner', provider: 'gemini', model: 'gemini-3-pro' },
+	{ role: 'search', provider: 'openAI', model: 'gpt-5.2-instant' },
+	{ role: 'design', provider: 'gemini', model: 'gemini-3-flash' },
 ];
 
 export const defaultGlobalSettings: GlobalSettings = {

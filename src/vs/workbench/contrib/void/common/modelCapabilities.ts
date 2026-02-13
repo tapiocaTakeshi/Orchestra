@@ -75,40 +75,44 @@ export const defaultProviderSettings = {
 
 
 export const defaultModelsOfProvider = {
-	openAI: [ // https://platform.openai.com/docs/models/gp
+	openAI: [ // https://platform.openai.com/docs/models — updated Feb 2026
+		'gpt-5.3-codex-spark',
+		'gpt-5.3-codex',
+		'gpt-5.2',
+		'gpt-5.2-instant',
+		'o3',
+		'o4-mini',
 		'gpt-4.1',
 		'gpt-4.1-mini',
 		'gpt-4.1-nano',
-		'o3',
-		'o4-mini',
-		// 'o1',
-		// 'o1-mini',
-		// 'gpt-4o',
-		// 'gpt-4o-mini',
 	],
-	anthropic: [ // https://docs.anthropic.com/en/docs/about-claude/models
+	anthropic: [ // https://docs.anthropic.com/en/docs/about-claude/models — updated Feb 2026
+		'claude-opus-4-6',
+		'claude-sonnet-4-5',
+		'claude-haiku-4-5',
 		'claude-opus-4-0',
 		'claude-sonnet-4-0',
 		'claude-3-7-sonnet-latest',
-		'claude-3-5-sonnet-latest',
-		'claude-3-5-haiku-latest',
-		'claude-3-opus-latest',
 	],
-	xAI: [ // https://docs.x.ai/docs/models?cluster=us-east-1
-		'grok-2',
+	xAI: [ // https://docs.x.ai/docs/models — updated Feb 2026
+		'grok-4.1',
+		'grok-4',
+		'grok-4-fast',
+		'grok-4-mini',
 		'grok-3',
 		'grok-3-mini',
-		'grok-3-fast',
-		'grok-3-mini-fast'
 	],
-	gemini: [ // https://ai.google.dev/gemini-api/docs/models/gemini
+	gemini: [ // https://ai.google.dev/gemini-api/docs/models — updated Feb 2026
+		'gemini-3-deep-think',
+		'gemini-3-pro',
+		'gemini-3-flash',
 		'gemini-2.5-pro-exp-03-25',
-		'gemini-2.5-flash-preview-04-17',
 		'gemini-2.0-flash',
-		'gemini-2.0-flash-lite',
-		'gemini-2.5-pro-preview-05-06',
 	],
-	deepseek: [ // https://api-docs.deepseek.com/quick_start/pricing
+	deepseek: [ // https://api-docs.deepseek.com — updated Feb 2026
+		'deepseek-v4',
+		'deepseek-r1',
+		'deepseek-v3',
 		'deepseek-chat',
 		'deepseek-reasoner',
 	],
@@ -118,24 +122,16 @@ export const defaultModelsOfProvider = {
 	],
 	lmStudio: [], // autodetected
 
-	openRouter: [ // https://openrouter.ai/models
-		// 'anthropic/claude-3.7-sonnet:thinking',
-		'anthropic/claude-opus-4',
-		'anthropic/claude-sonnet-4',
-		'qwen/qwen3-235b-a22b',
-		'anthropic/claude-3.7-sonnet',
-		'anthropic/claude-3.5-sonnet',
+	openRouter: [ // https://openrouter.ai/models — updated Feb 2026
+		'anthropic/claude-opus-4.6',
+		'anthropic/claude-sonnet-4.5',
+		'openai/gpt-5.3-codex',
+		'openai/gpt-5.2',
+		'google/gemini-3-pro',
+		'x-ai/grok-4.1',
+		'deepseek/deepseek-v4',
 		'deepseek/deepseek-r1',
-		'deepseek/deepseek-r1-zero:free',
-		'mistralai/devstral-small:free'
-		// 'openrouter/quasar-alpha',
-		// 'google/gemini-2.5-pro-preview-03-25',
-		// 'mistralai/codestral-2501',
-		// 'qwen/qwen-2.5-coder-32b-instruct',
-		// 'mistralai/mistral-small-3.1-24b-instruct:free',
-		// 'google/gemini-2.0-flash-lite-preview-02-05:free',
-		// 'google/gemini-2.0-pro-exp-02-05:free',
-		// 'google/gemini-2.0-flash-exp:free',
+		'qwen/qwen3-235b-a22b',
 	],
 	groq: [ // https://console.groq.com/docs/models
 		'qwen-qwq-32b',

@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import React, { useState, useCallback } from 'react';
-import { Plus, X, GripVertical, ArrowDown, Save, Trash2, Brain, Code, FileText, Search, Palette, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, X, GripVertical, ArrowDown, Save, Brain, Code, FileText, Search, Palette, ChevronDown, ChevronUp } from 'lucide-react';
 import { useSettingsState, useAccessor } from '../util/services.js';
 import { AgentRole, ProviderName, providerNames, displayInfoOfProviderName } from '../../../../common/voidSettingsTypes.js';
 import { PipelineStep, PipelineTemplate, defaultTemplates, roleDisplayConfig } from './ConductorTypes.js';
@@ -27,54 +27,68 @@ interface PipelineStepCardProps {
 	onRemove: () => void;
 	onMoveUp: () => void;
 	onMoveDown: () => void;
-	onDragStart: (e: React.DragEvent, index: number) => void;
-	onDragOver: (e: React.DragEvent) => void;
-	onDrop: (e: React.DragEvent, index: number) => void;
 }
 
 const PipelineStepCard: React.FC<PipelineStepCardProps> = ({
 	step, index, totalSteps, onUpdate, onRemove, onMoveUp, onMoveDown,
-	onDragStart, onDragOver, onDrop,
 }) => {
 	const settingsState = useSettingsState();
-	const Icon = roleIcons[step.role];
 	const display = roleDisplayConfig[step.role];
 	const availableModels = settingsState.settingsOfProvider[step.provider]?.models || [];
 
 	return (
-		<div
-			draggable
-			onDragStart={(e) => onDragStart(e, index)}
-			onDragOver={onDragOver}
-			onDrop={(e) => onDrop(e, index)}
-			className="void-rounded-lg void-border void-border-void-border-2 void-bg-void-bg-1 void-p-3 void-transition-all void-duration-200 hover:void-border-void-border-1 void-group"
-		>
-			<div className="void-flex void-items-center void-gap-2">
-				{/* Drag handle */}
-				<div className="void-cursor-grab active:void-cursor-grabbing void-text-void-fg-4 hover:void-text-void-fg-2 void-transition-colors">
-					<GripVertical size={14} />
-				</div>
-
-				{/* Step number */}
-				<div
-					className="void-w-5 void-h-5 void-rounded-full void-flex void-items-center void-justify-center void-text-xs void-font-bold void-flex-shrink-0"
-					style={{ backgroundColor: `${display.color}20`, color: display.color }}
-				>
+		<div style={{
+			display: 'flex', flexDirection: 'column', gap: '8px',
+			padding: '10px 12px',
+			borderRadius: '8px',
+			border: '1px solid var(--void-border-2)',
+			background: 'var(--void-bg-1)',
+			transition: 'border-color 0.2s',
+		}}>
+			{/* Top row: number, role, controls */}
+			<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+				<div style={{
+					width: '22px', height: '22px', borderRadius: '50%',
+					display: 'flex', alignItems: 'center', justifyContent: 'center',
+					fontSize: '11px', fontWeight: 700, flexShrink: 0,
+					backgroundColor: `${display.color}20`, color: display.color,
+				}}>
 					{index + 1}
 				</div>
 
-				{/* Role selector */}
 				<select
 					value={step.role}
 					onChange={(e) => onUpdate({ ...step, role: e.target.value as AgentRole })}
-					className="void-px-2 void-py-1 void-bg-void-bg-2 void-border void-border-void-border-2 void-rounded void-text-xs void-text-void-fg-1 void-min-w-[90px]"
+					style={{
+						padding: '4px 8px', background: 'var(--void-bg-2)',
+						border: '1px solid var(--void-border-2)', borderRadius: '4px',
+						fontSize: '11px', color: 'var(--void-fg-1)', flex: 1, minWidth: 0,
+					}}
 				>
 					{allRoles.map(role => (
 						<option key={role} value={role}>{roleDisplayConfig[role].label}</option>
 					))}
 				</select>
 
-				{/* Provider selector */}
+				<div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+					<button onClick={onMoveUp} disabled={index === 0}
+						style={{ background: 'none', border: 'none', cursor: index === 0 ? 'default' : 'pointer', color: 'var(--void-fg-3)', opacity: index === 0 ? 0.3 : 1, padding: '0' }}>
+						<ChevronUp size={12} />
+					</button>
+					<button onClick={onMoveDown} disabled={index === totalSteps - 1}
+						style={{ background: 'none', border: 'none', cursor: index === totalSteps - 1 ? 'default' : 'pointer', color: 'var(--void-fg-3)', opacity: index === totalSteps - 1 ? 0.3 : 1, padding: '0' }}>
+						<ChevronDown size={12} />
+					</button>
+				</div>
+
+				<button onClick={onRemove}
+					style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--void-fg-4)', padding: '2px' }}>
+					<X size={14} />
+				</button>
+			</div>
+
+			{/* Bottom row: provider + model */}
+			<div style={{ display: 'flex', gap: '6px' }}>
 				<select
 					value={step.provider}
 					onChange={(e) => {
@@ -86,18 +100,25 @@ const PipelineStepCard: React.FC<PipelineStepCardProps> = ({
 							model: models[0]?.modelName || '',
 						});
 					}}
-					className="void-px-2 void-py-1 void-bg-void-bg-2 void-border void-border-void-border-2 void-rounded void-text-xs void-text-void-fg-1 void-flex-1 void-min-w-0"
+					style={{
+						padding: '4px 8px', background: 'var(--void-bg-2)',
+						border: '1px solid var(--void-border-2)', borderRadius: '4px',
+						fontSize: '10px', color: 'var(--void-fg-2)', flex: 1, minWidth: 0,
+					}}
 				>
 					{providerNames.map(pn => (
 						<option key={pn} value={pn}>{displayInfoOfProviderName(pn).title}</option>
 					))}
 				</select>
 
-				{/* Model selector */}
 				<select
 					value={step.model}
 					onChange={(e) => onUpdate({ ...step, model: e.target.value })}
-					className="void-px-2 void-py-1 void-bg-void-bg-2 void-border void-border-void-border-2 void-rounded void-text-xs void-text-void-fg-1 void-flex-1 void-min-w-0"
+					style={{
+						padding: '4px 8px', background: 'var(--void-bg-2)',
+						border: '1px solid var(--void-border-2)', borderRadius: '4px',
+						fontSize: '10px', color: 'var(--void-fg-2)', flex: 1, minWidth: 0,
+					}}
 				>
 					{availableModels.length === 0 ? (
 						<option>No models</option>
@@ -107,32 +128,6 @@ const PipelineStepCard: React.FC<PipelineStepCardProps> = ({
 						))
 					)}
 				</select>
-
-				{/* Move buttons */}
-				<div className="void-flex void-flex-col void-opacity-0 group-hover:void-opacity-100 void-transition-opacity">
-					<button
-						onClick={onMoveUp}
-						disabled={index === 0}
-						className="void-text-void-fg-4 hover:void-text-void-fg-1 disabled:void-opacity-30 void-transition-colors"
-					>
-						<ChevronUp size={10} />
-					</button>
-					<button
-						onClick={onMoveDown}
-						disabled={index === totalSteps - 1}
-						className="void-text-void-fg-4 hover:void-text-void-fg-1 disabled:void-opacity-30 void-transition-colors"
-					>
-						<ChevronDown size={10} />
-					</button>
-				</div>
-
-				{/* Remove button */}
-				<button
-					onClick={onRemove}
-					className="void-text-void-fg-4 hover:void-text-red-400 void-transition-colors void-opacity-0 group-hover:void-opacity-100"
-				>
-					<X size={14} />
-				</button>
 			</div>
 		</div>
 	);
@@ -143,7 +138,6 @@ export const PipelineBuilder: React.FC = () => {
 	const accessor = useAccessor();
 	const voidSettingsService = accessor.get('IVoidSettingsService');
 
-	// Initialize from current role assignments
 	const [steps, setSteps] = useState<PipelineStep[]>(() =>
 		settingsState.globalSettings.roleAssignments.map((ra, i) => ({
 			id: `step-${i}`,
@@ -155,7 +149,6 @@ export const PipelineBuilder: React.FC = () => {
 	);
 
 	const [showTemplates, setShowTemplates] = useState(false);
-	const [dragIndex, setDragIndex] = useState<number | null>(null);
 
 	const addStep = () => {
 		const newStep: PipelineStep = {
@@ -183,24 +176,6 @@ export const PipelineBuilder: React.FC = () => {
 		setSteps(newSteps.map((s, i) => ({ ...s, order: i })));
 	};
 
-	const handleDragStart = (e: React.DragEvent, index: number) => {
-		setDragIndex(index);
-		e.dataTransfer.effectAllowed = 'move';
-	};
-
-	const handleDragOver = (e: React.DragEvent) => {
-		e.preventDefault();
-		e.dataTransfer.dropEffect = 'move';
-	};
-
-	const handleDrop = (e: React.DragEvent, dropIndex: number) => {
-		e.preventDefault();
-		if (dragIndex !== null && dragIndex !== dropIndex) {
-			moveStep(dragIndex, dropIndex);
-		}
-		setDragIndex(null);
-	};
-
 	const loadTemplate = (template: PipelineTemplate) => {
 		setSteps(template.steps.map(s => ({ ...s })));
 		setShowTemplates(false);
@@ -216,53 +191,78 @@ export const PipelineBuilder: React.FC = () => {
 	};
 
 	return (
-		<div className="void-flex void-flex-col void-h-full void-overflow-hidden">
+		<div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 			{/* Header */}
-			<div className="void-flex void-items-center void-justify-between void-px-4 void-py-3 void-border-b void-border-void-border-2">
-				<div className="void-text-sm void-text-void-fg-1 void-font-medium">
-					Agent Builder
+			<div style={{
+				display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+				padding: '12px 16px',
+				borderBottom: '1px solid var(--void-border-2)',
+			}}>
+				<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+					<span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--void-fg-1)' }}>Agent Builder</span>
+					<span style={{
+						fontSize: '10px', padding: '2px 6px', borderRadius: '4px',
+						background: 'rgba(168,85,247,0.1)', color: '#c084fc',
+					}}>Preview</span>
 				</div>
-				<div className="void-flex void-items-center void-gap-2">
+				<div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
 					<button
 						onClick={() => setShowTemplates(!showTemplates)}
-						className="void-text-xs void-px-2 void-py-1 void-rounded void-bg-void-bg-2 void-text-void-fg-2 hover:void-text-void-fg-1 void-transition-colors"
+						style={{
+							padding: '4px 8px', borderRadius: '4px', cursor: 'pointer',
+							background: 'var(--void-bg-2)', border: '1px solid var(--void-border-2)',
+							color: 'var(--void-fg-2)', fontSize: '10px',
+						}}
 					>
 						Templates
 					</button>
 					<button
 						onClick={savePipeline}
-						className="void-flex void-items-center void-gap-1 void-text-xs void-px-2 void-py-1 void-rounded void-bg-emerald-500/10 void-text-emerald-400 hover:void-bg-emerald-500/20 void-transition-colors"
+						style={{
+							display: 'flex', alignItems: 'center', gap: '4px',
+							padding: '4px 8px', borderRadius: '4px', cursor: 'pointer',
+							background: 'rgba(16,185,129,0.1)', color: '#34d399',
+							border: 'none', fontSize: '10px', fontWeight: 500,
+						}}
 					>
-						<Save size={10} />
-						Save
+						<Save size={10} /> Save
 					</button>
 				</div>
 			</div>
 
-			{/* Templates panel */}
+			{/* Templates */}
 			{showTemplates && (
-				<div className="void-border-b void-border-void-border-2 void-p-3 void-bg-void-bg-2/50">
-					<div className="void-text-xs void-text-void-fg-3 void-mb-2 void-font-medium">Quick Templates</div>
-					<div className="void-flex void-flex-col void-gap-2">
+				<div style={{
+					padding: '10px 16px',
+					borderBottom: '1px solid var(--void-border-2)',
+					background: 'var(--void-bg-2)',
+				}}>
+					<div style={{ fontSize: '10px', color: 'var(--void-fg-3)', marginBottom: '8px', fontWeight: 500 }}>Quick Templates</div>
+					<div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
 						{defaultTemplates.map(template => (
 							<button
 								key={template.id}
 								onClick={() => loadTemplate(template)}
-								className="void-flex void-items-center void-gap-3 void-p-2 void-rounded-lg void-bg-void-bg-1 void-border void-border-void-border-2 hover:void-border-void-border-1 void-transition-all void-text-left"
+								style={{
+									display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+									padding: '8px 10px', borderRadius: '6px',
+									background: 'var(--void-bg-1)', border: '1px solid var(--void-border-2)',
+									cursor: 'pointer', textAlign: 'left',
+								}}
 							>
-								<div className="void-flex-1 void-min-w-0">
-									<div className="void-text-xs void-font-medium void-text-void-fg-1">{template.name}</div>
-									<div className="void-text-xs void-text-void-fg-3 void-truncate">{template.description}</div>
+								<div style={{ flex: 1, minWidth: 0 }}>
+									<div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--void-fg-1)' }}>{template.name}</div>
+									<div style={{ fontSize: '10px', color: 'var(--void-fg-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{template.description}</div>
 								</div>
-								<div className="void-flex void-items-center void-gap-1">
+								<div style={{ display: 'flex', gap: '3px', marginLeft: '8px' }}>
 									{template.steps.map(s => {
 										const StepIcon = roleIcons[s.role];
 										return (
-											<div
-												key={s.id}
-												className="void-w-5 void-h-5 void-rounded void-flex void-items-center void-justify-center"
-												style={{ backgroundColor: `${roleDisplayConfig[s.role].color}20` }}
-											>
+											<div key={s.id} style={{
+												width: '18px', height: '18px', borderRadius: '4px',
+												display: 'flex', alignItems: 'center', justifyContent: 'center',
+												backgroundColor: `${roleDisplayConfig[s.role].color}20`,
+											}}>
 												<StepIcon size={10} style={{ color: roleDisplayConfig[s.role].color }} />
 											</div>
 										);
@@ -274,22 +274,26 @@ export const PipelineBuilder: React.FC = () => {
 				</div>
 			)}
 
-			{/* Pipeline steps */}
-			<div className="void-flex-1 void-overflow-y-auto void-p-4">
-				{/* Source label */}
-				<div className="void-flex void-items-center void-justify-center void-mb-3">
-					<div className="void-px-3 void-py-1 void-rounded-full void-bg-void-bg-2 void-border void-border-void-border-2 void-text-xs void-text-void-fg-3">
+			{/* Steps */}
+			<div style={{ flex: '1 1 0', minHeight: 0, overflowY: 'auto', padding: '16px' }}>
+				{/* Source */}
+				<div style={{ display: 'flex', justifyContent: 'center', marginBottom: '12px' }}>
+					<div style={{
+						padding: '4px 12px', borderRadius: '12px',
+						background: 'var(--void-bg-2)', border: '1px solid var(--void-border-2)',
+						fontSize: '10px', color: 'var(--void-fg-3)',
+					}}>
 						User Prompt
 					</div>
 				</div>
 
 				{steps.length > 0 && (
-					<div className="void-flex void-justify-center void-mb-2">
-						<ArrowDown size={14} className="void-text-void-fg-4" />
+					<div style={{ display: 'flex', justifyContent: 'center', marginBottom: '8px' }}>
+						<ArrowDown size={14} style={{ color: 'var(--void-fg-4)' }} />
 					</div>
 				)}
 
-				<div className="void-flex void-flex-col void-gap-2">
+				<div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
 					{steps.map((step, index) => (
 						<React.Fragment key={step.id}>
 							<PipelineStepCard
@@ -300,56 +304,44 @@ export const PipelineBuilder: React.FC = () => {
 								onRemove={() => removeStep(index)}
 								onMoveUp={() => index > 0 && moveStep(index, index - 1)}
 								onMoveDown={() => index < steps.length - 1 && moveStep(index, index + 1)}
-								onDragStart={handleDragStart}
-								onDragOver={handleDragOver}
-								onDrop={handleDrop}
 							/>
 							{index < steps.length - 1 && (
-								<div className="void-flex void-justify-center">
-									<ArrowDown size={14} className="void-text-void-fg-4" />
+								<div style={{ display: 'flex', justifyContent: 'center' }}>
+									<ArrowDown size={14} style={{ color: 'var(--void-fg-4)' }} />
 								</div>
 							)}
 						</React.Fragment>
 					))}
 				</div>
 
-				{/* Add step button */}
-				<div className="void-flex void-justify-center void-mt-3">
-					{steps.length > 0 && (
-						<div className="void-flex void-flex-col void-items-center void-gap-2">
-							<ArrowDown size={14} className="void-text-void-fg-4" />
-							<button
-								onClick={addStep}
-								className="void-flex void-items-center void-gap-1.5 void-px-3 void-py-1.5 void-rounded-lg void-border void-border-dashed void-border-void-border-2 void-text-void-fg-3 hover:void-text-void-fg-1 hover:void-border-void-border-1 void-transition-all void-text-xs"
-							>
-								<Plus size={12} />
-								Add Agent
-							</button>
-						</div>
-					)}
-					{steps.length === 0 && (
-						<button
-							onClick={addStep}
-							className="void-flex void-items-center void-gap-1.5 void-px-4 void-py-2 void-rounded-lg void-border void-border-dashed void-border-void-border-2 void-text-void-fg-3 hover:void-text-void-fg-1 hover:void-border-void-border-1 void-transition-all void-text-sm"
-						>
-							<Plus size={14} />
-							Add First Agent
-						</button>
-					)}
+				{/* Add step */}
+				<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '12px', gap: '8px' }}>
+					{steps.length > 0 && <ArrowDown size={14} style={{ color: 'var(--void-fg-4)' }} />}
+					<button
+						onClick={addStep}
+						style={{
+							display: 'flex', alignItems: 'center', gap: '4px',
+							padding: '6px 14px', borderRadius: '6px', cursor: 'pointer',
+							border: '1px dashed var(--void-border-2)', background: 'none',
+							color: 'var(--void-fg-3)', fontSize: '11px',
+						}}
+					>
+						<Plus size={12} /> Add Agent
+					</button>
 				</div>
 
-				{/* Final output label */}
+				{/* Output */}
 				{steps.length > 0 && (
-					<>
-						<div className="void-flex void-justify-center void-mt-3">
-							<ArrowDown size={14} className="void-text-void-fg-4" />
+					<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '12px', gap: '6px' }}>
+						<ArrowDown size={14} style={{ color: 'var(--void-fg-4)' }} />
+						<div style={{
+							padding: '4px 12px', borderRadius: '12px',
+							background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)',
+							fontSize: '10px', color: '#34d399',
+						}}>
+							Final Output
 						</div>
-						<div className="void-flex void-items-center void-justify-center void-mt-2">
-							<div className="void-px-3 void-py-1 void-rounded-full void-bg-emerald-500/10 void-border void-border-emerald-500/30 void-text-xs void-text-emerald-400">
-								Final Output
-							</div>
-						</div>
-					</>
+					</div>
 				)}
 			</div>
 		</div>
