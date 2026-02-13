@@ -7,6 +7,7 @@ import React, { ButtonHTMLAttributes, FormEvent, FormHTMLAttributes, Fragment, K
 
 
 import { useAccessor, useChatThreadsState, useChatThreadsStreamState, useSettingsState, useActiveURI, useCommandBarState, useFullChatThreadsStreamState, useDivisionProjects, useDivisionProjectConfig } from '../util/services.js';
+import { OrchestraLogoButton } from './OrchestraLogoButton.js';
 import { DivisionProjectConfig } from '../../../divisionProjectService.js';
 import { ScrollType } from '../../../../../../../editor/common/editorCommon.js';
 
@@ -3071,7 +3072,7 @@ const SignedOutChatOverlay = ({ onLoginClick }: { onLoginClick: () => void }) =>
 }
 
 
-const SidebarHeader = ({ onLoginClick }: { onLoginClick: () => void }) => {
+const SidebarHeader = ({ onLoginClick, activeTab, onTabChange }: { onLoginClick: () => void; activeTab: import('./OrchestraLogoButton.js').SidebarTab; onTabChange: (tab: import('./OrchestraLogoButton.js').SidebarTab) => void }) => {
 	const accessor = useAccessor()
 	const chatThreadService = accessor.get('IChatThreadService')
 	const settingsService = accessor.get('IVoidSettingsService')
@@ -3080,9 +3081,9 @@ const SidebarHeader = ({ onLoginClick }: { onLoginClick: () => void }) => {
 
 	return (
 		<div className="shrink-0 px-4 pt-3 pb-2">
-			<div className="flex items-center justify-between px-4 py-2 bg-void-bg-2 border border-void-border-3 rounded-lg">
+			<div className="flex items-center justify-between px-3 py-2 bg-void-bg-2 border border-void-border-3 rounded-lg">
 				<div className="flex items-center gap-2">
-					{/* The "New Chat" button is now handled by the VS Code ViewTitle action to avoid redundancy */}
+					<OrchestraLogoButton activeTab={activeTab} onTabChange={onTabChange} />
 				</div>
 
 				<div className="flex items-center gap-3">
@@ -3122,7 +3123,7 @@ const SidebarHeader = ({ onLoginClick }: { onLoginClick: () => void }) => {
 }
 
 
-export const SidebarChat = () => {
+export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTab: import('./OrchestraLogoButton.js').SidebarTab; onTabChange: (tab: import('./OrchestraLogoButton.js').SidebarTab) => void; viewOverride?: React.ReactNode }) => {
 	const textAreaRef = useRef<HTMLTextAreaElement | null>(null)
 	const textAreaFnsRef = useRef<TextAreaFns | null>(null)
 
@@ -3426,13 +3427,17 @@ export const SidebarChat = () => {
 
 	return (
 		<div className="flex flex-col h-full w-full">
-			<SidebarHeader onLoginClick={() => setShowLoginScreen(true)} />
+			<SidebarHeader onLoginClick={() => setShowLoginScreen(true)} activeTab={activeTab} onTabChange={onTabChange} />
 			{showLoginScreen && <LoginScreen onClose={() => setShowLoginScreen(false)} />}
-			<Fragment key={threadId}>
-				{isLandingPage ?
-					landingPageContent
-					: threadPageContent}
-			</Fragment>
+			{viewOverride ? (
+				<div className="flex-1 overflow-auto">{viewOverride}</div>
+			) : (
+				<Fragment key={threadId}>
+					{isLandingPage ?
+						landingPageContent
+						: threadPageContent}
+				</Fragment>
+			)}
 		</div>
 	)
 }
