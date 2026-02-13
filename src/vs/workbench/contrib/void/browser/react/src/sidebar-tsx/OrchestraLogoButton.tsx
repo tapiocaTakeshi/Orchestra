@@ -19,7 +19,7 @@ export const OrchestraLogoButton = ({ activeTab, onTabChange }: { activeTab: Sid
 	const [isOpen, setIsOpen] = useState(false);
 	const menuRef = useRef<HTMLDivElement>(null);
 	const buttonRef = useRef<HTMLButtonElement>(null);
-	const logoPath = new URL('../assets/orchestra_logo.png', import.meta.url).href;
+	const logoPath = new URL('../assets/orchestra_nonbackground.png', import.meta.url).href;
 
 	// Close menu on outside click
 	useEffect(() => {

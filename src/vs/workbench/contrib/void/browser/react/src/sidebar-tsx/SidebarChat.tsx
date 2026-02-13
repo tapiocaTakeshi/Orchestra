@@ -3426,18 +3426,20 @@ export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTa
 
 
 	return (
-		<div className="flex flex-col h-full w-full">
+		<div className="flex flex-col h-full w-full overflow-hidden">
 			<SidebarHeader onLoginClick={() => setShowLoginScreen(true)} activeTab={activeTab} onTabChange={onTabChange} />
 			{showLoginScreen && <LoginScreen onClose={() => setShowLoginScreen(false)} />}
-			{viewOverride ? (
-				<div className="flex-1 overflow-auto">{viewOverride}</div>
-			) : (
-				<Fragment key={threadId}>
-					{isLandingPage ?
-						landingPageContent
-						: threadPageContent}
-				</Fragment>
-			)}
+			<div className="flex-1 min-h-0 overflow-hidden">
+				{viewOverride ? (
+					<div className="h-full overflow-auto">{viewOverride}</div>
+				) : (
+					<Fragment key={threadId}>
+						{isLandingPage ?
+							landingPageContent
+							: threadPageContent}
+					</Fragment>
+				)}
+			</div>
 		</div>
 	)
 }
