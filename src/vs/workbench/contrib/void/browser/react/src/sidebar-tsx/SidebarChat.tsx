@@ -309,7 +309,7 @@ const DivisionProjectDropdown = ({ className }: { className: string }) => {
 		<VoidCustomDropdownBox
 			className={className}
 			options={projects || []}
-			selectedOption={activeConfig}
+			selectedOption={activeConfig ?? undefined}
 			onChangeOption={onChangeOption}
 			getOptionDisplayName={(p) => p.name || p.projectId || 'Unnamed'}
 			getOptionDropdownName={(p) => p.name || p.projectId || 'Unnamed'}
@@ -3079,7 +3079,7 @@ const SidebarHeader = ({ onLoginClick }: { onLoginClick: () => void }) => {
 	const clerkUser = settingsState.globalSettings.clerkUser
 
 	return (
-		<div className="flex items-center justify-between px-4 py-2.5 bg-void-bg-2 border-b border-void-border-3 shrink-0">
+		<div className="flex items-center justify-between mx-4 my-2 px-4 py-2 bg-void-bg-2 border border-void-border-3 rounded-md shrink-0">
 			<div className="flex items-center gap-2">
 				{/* The "New Chat" button is now handled by the VS Code ViewTitle action to avoid redundancy */}
 			</div>
@@ -3423,14 +3423,16 @@ export const SidebarChat = () => {
 
 
 	return (
-		<div className="flex flex-col h-full w-full">
+		<div className="flex flex-col h-full w-full overflow-hidden">
 			<SidebarHeader onLoginClick={() => setShowLoginScreen(true)} />
 			{showLoginScreen && <LoginScreen onClose={() => setShowLoginScreen(false)} />}
-			<Fragment key={threadId}>
-				{isLandingPage ?
-					landingPageContent
-					: threadPageContent}
-			</Fragment>
+			<div className="flex-1 min-h-0 flex flex-col">
+				<Fragment key={threadId}>
+					{isLandingPage ?
+						landingPageContent
+						: threadPageContent}
+				</Fragment>
+			</div>
 		</div>
 	)
 }
