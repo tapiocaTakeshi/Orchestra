@@ -293,17 +293,17 @@ const DivisionProjectDropdown = ({ className }: { className: string }) => {
 	const activeConfig = useDivisionProjectConfig()
 	const settingsState = useSettingsState()
 
-	// Only show when Division API is selected
-	const modelSelection = settingsState.modelSelectionOfFeature['Chat']
-	const isDivision = modelSelection?.providerName === 'divisionAPI'
-
-	if (!isDivision || projects.length <= 1) return null
-
 	const divisionProjectService = accessor.get('IDivisionProjectService')
 
 	const onChangeOption = useCallback((newConfig: DivisionProjectConfig) => {
 		divisionProjectService.setActiveProject(newConfig.id)
 	}, [divisionProjectService])
+
+	// Only show when Division API is selected
+	const modelSelection = settingsState.modelSelectionOfFeature['Chat']
+	const isDivision = modelSelection?.providerName === 'divisionAPI'
+
+	if (!isDivision || projects.length <= 1) return null
 
 	return (
 		<VoidCustomDropdownBox
@@ -3079,8 +3079,8 @@ const SidebarHeader = ({ onLoginClick }: { onLoginClick: () => void }) => {
 	const clerkUser = settingsState.globalSettings.clerkUser
 
 	return (
-		<div className="shrink-0 px-4 pt-2 pb-1">
-			<div className="flex items-center justify-between px-3 py-1.5 bg-void-bg-2 border border-void-border-3 rounded-lg">
+		<div className="shrink-0 px-4 pt-3 pb-2">
+			<div className="flex items-center justify-between px-4 py-2 bg-void-bg-2 border border-void-border-3 rounded-lg">
 				<div className="flex items-center gap-2">
 					{/* The "New Chat" button is now handled by the VS Code ViewTitle action to avoid redundancy */}
 				</div>
