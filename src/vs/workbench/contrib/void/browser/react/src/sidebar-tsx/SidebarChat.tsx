@@ -3079,41 +3079,43 @@ const SidebarHeader = ({ onLoginClick }: { onLoginClick: () => void }) => {
 	const clerkUser = settingsState.globalSettings.clerkUser
 
 	return (
-		<div className="flex items-center justify-between mx-4 my-2 px-4 py-2 bg-void-bg-2 border border-void-border-3 rounded-md shrink-0">
-			<div className="flex items-center gap-2">
-				{/* The "New Chat" button is now handled by the VS Code ViewTitle action to avoid redundancy */}
-			</div>
+		<div className="shrink-0 px-4 pt-2 pb-1">
+			<div className="flex items-center justify-between px-3 py-1.5 bg-void-bg-2 border border-void-border-3 rounded-lg">
+				<div className="flex items-center gap-2">
+					{/* The "New Chat" button is now handled by the VS Code ViewTitle action to avoid redundancy */}
+				</div>
 
-			<div className="flex items-center gap-3">
-				{!clerkUser ? (
-					<button
-						onClick={onLoginClick}
-						className="text-[11px] font-medium px-2 py-0.5 rounded bg-white text-black hover:bg-zinc-200 transition-colors"
-					>
-						Log In
-					</button>
-				) : (
-					<div className="flex items-center gap-2 scale-[0.8] origin-right">
-						<div className="flex items-center gap-1.5">
-							{clerkUser.imageUrl ? (
-								<img src={clerkUser.imageUrl} alt="" className="w-6 h-6 rounded-full" />
-							) : (
-								<div className="w-6 h-6 rounded-full bg-[#0e70c0] flex items-center justify-center text-white text-[10px] font-bold">
-									{(clerkUser.fullName || clerkUser.primaryEmailAddress || '?')[0].toUpperCase()}
-								</div>
-							)}
-							<button
-								onClick={() => {
-									settingsService.setGlobalSetting('clerkUser', null)
-									settingsService.setGlobalSetting('clerkSessionId', null)
-								}}
-								className="text-[10px] text-void-fg-3 hover:text-void-fg-1 transition-colors"
-							>
-								Sign Out
-							</button>
+				<div className="flex items-center gap-3">
+					{!clerkUser ? (
+						<button
+							onClick={onLoginClick}
+							className="text-[11px] font-medium px-2 py-0.5 rounded bg-white text-black hover:bg-zinc-200 transition-colors"
+						>
+							Log In
+						</button>
+					) : (
+						<div className="flex items-center gap-2 scale-[0.8] origin-right">
+							<div className="flex items-center gap-1.5">
+								{clerkUser.imageUrl ? (
+									<img src={clerkUser.imageUrl} alt="" className="w-6 h-6 rounded-full" />
+								) : (
+									<div className="w-6 h-6 rounded-full bg-[#0e70c0] flex items-center justify-center text-white text-[10px] font-bold">
+										{(clerkUser.fullName || clerkUser.primaryEmailAddress || '?')[0].toUpperCase()}
+									</div>
+								)}
+								<button
+									onClick={() => {
+										settingsService.setGlobalSetting('clerkUser', null)
+										settingsService.setGlobalSetting('clerkSessionId', null)
+									}}
+									className="text-[10px] text-void-fg-3 hover:text-void-fg-1 transition-colors"
+								>
+									Sign Out
+								</button>
+							</div>
 						</div>
-					</div>
-				)}
+					)}
+				</div>
 			</div>
 		</div>
 	)
@@ -3375,7 +3377,7 @@ export const SidebarChat = () => {
 
 	const landingPageContent = <div
 		ref={sidebarRef}
-		className='w-full h-full max-h-full flex flex-col overflow-auto px-4'
+		className='w-full flex-1 min-h-0 flex flex-col overflow-auto px-4'
 	>
 		<ErrorBoundary>
 			{landingPageInput}
