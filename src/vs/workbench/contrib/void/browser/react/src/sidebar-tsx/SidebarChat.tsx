@@ -3429,7 +3429,7 @@ export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTa
 
 
 	return (
-		<div className="flex flex-col h-full w-full overflow-hidden">
+		<div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', overflow: 'hidden' }}>
 			<SidebarHeader onLoginClick={() => setShowLoginScreen(true)} activeTab={activeTab} onTabChange={onTabChange} />
 			{showLoginScreen && <LoginScreen onClose={() => setShowLoginScreen(false)} />}
 			<div style={{ flex: '1 1 0', minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>

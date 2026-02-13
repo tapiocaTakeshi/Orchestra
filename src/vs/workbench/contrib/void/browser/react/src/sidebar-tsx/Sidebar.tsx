@@ -33,7 +33,7 @@ export const Sidebar = ({ className }: { className: string }) => {
 			`}
 		>
 			{/* Content - tab switching via Orchestra logo in SidebarHeader */}
-			<div className="void-flex-1 void-overflow-hidden">
+			<div style={{ flex: '1 1 0', minHeight: 0, overflow: 'hidden' }}>
 				<ErrorBoundary>
 					{activeTab === 'chat' && <SidebarChat activeTab={activeTab} onTabChange={setActiveTab} />}
 					{activeTab === 'pipeline' && <SidebarChat activeTab={activeTab} onTabChange={setActiveTab} viewOverride={<ConductorView />} />}
