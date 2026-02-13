@@ -1357,6 +1357,158 @@ max-w-none
 		{children}
 	</div>
 }
+
+// ─── Flow Indicator ──────────────────────────────────────
+// Shows agent workflow phases during streaming
+type FlowPhase = {
+	id: string;
+	label: string;
+	icon: string;
+	status: 'idle' | 'active' | 'done';
+}
+
+const detectFlowPhases = (messages: ChatMessage[], isRunning: IsRunningType, reasoningSoFar?: string): FlowPhase[] => {
+	const phases: FlowPhase[] = [
+		{ id: 'thinking', label: 'Thinking', icon: '🧠', status: 'idle' },
+		{ id: 'searching', label: 'Searching', icon: '🔍', status: 'idle' },
+		{ id: 'reading', label: 'Reading', icon: '📖', status: 'idle' },
+		{ id: 'coding', label: 'Coding', icon: '✏️', status: 'idle' },
+		{ id: 'running', label: 'Running', icon: '▶️', status: 'idle' },
+	];
+
+	const searchTools = ['search_for_files', 'search_pathnames_only'];
+	const readTools = ['read_file', 'ls_dir', 'get_dir_tree'];
+	const codeTools = ['edit_file', 'rewrite_file', 'create_file_or_folder', 'delete_file_or_folder'];
+	const runTools = ['run_command', 'run_persistent_command', 'open_persistent_terminal'];
+
+	let hasReasoning = false;
+	let hasSearch = false;
+	let hasRead = false;
+	let hasCode = false;
+	let hasRun = false;
+
+	// Scan committed messages for completed phases
+	for (const msg of messages) {
+		if (msg.role === 'assistant' && msg.reasoning) hasReasoning = true;
+		if (msg.role === 'tool') {
+			const name = msg.name;
+			if (searchTools.includes(name)) hasSearch = true;
+			if (readTools.includes(name)) hasRead = true;
+			if (codeTools.includes(name)) hasCode = true;
+			if (runTools.includes(name)) hasRun = true;
+		}
+	}
+
+	// Detect currently active phase from streaming state
+	if (reasoningSoFar) hasReasoning = true;
+
+	// Set statuses
+	if (hasReasoning) phases[0].status = 'done';
+	if (hasSearch) phases[1].status = 'done';
+	if (hasRead) phases[2].status = 'done';
+	if (hasCode) phases[3].status = 'done';
+	if (hasRun) phases[4].status = 'done';
+
+	// Mark the currently active phase (the last done phase stays active if still running)
+	if (isRunning) {
+		if (reasoningSoFar && !hasSearch && !hasRead && !hasCode && !hasRun) {
+			phases[0].status = 'active';
+		}
+		// Find last completed tool category and mark it active if still streaming
+		const lastToolMsg = [...messages].reverse().find(m => m.role === 'tool');
+		if (lastToolMsg && lastToolMsg.role === 'tool') {
+			const name = lastToolMsg.name;
+			if (searchTools.includes(name) && lastToolMsg.type === 'tool_request') phases[1].status = 'active';
+			if (readTools.includes(name) && lastToolMsg.type === 'tool_request') phases[2].status = 'active';
+			if (codeTools.includes(name) && lastToolMsg.type === 'tool_request') phases[3].status = 'active';
+			if (runTools.includes(name) && lastToolMsg.type === 'tool_request') phases[4].status = 'active';
+		}
+
+		// If LLM is generating and no tool yet, mark thinking active
+		if (isRunning === 'LLM' && !hasSearch && !hasRead && !hasCode && !hasRun) {
+			phases[0].status = 'active';
+		}
+	}
+
+	// Only return phases that are active or done (plus the next idle one for context)
+	const activatedPhases = phases.filter(p => p.status !== 'idle');
+	if (activatedPhases.length === 0 && isRunning) {
+		// Show thinking as active when first starting
+		phases[0].status = 'active';
+		return [phases[0]];
+	}
+
+	return activatedPhases;
+};
+
+const FlowIndicator = ({ messages, isRunning, reasoningSoFar }: {
+	messages: ChatMessage[],
+	isRunning: IsRunningType,
+	reasoningSoFar?: string,
+}) => {
+	const phases = useMemo(() =>
+		detectFlowPhases(messages, isRunning, reasoningSoFar),
+		[messages, isRunning, reasoningSoFar]
+	);
+
+	if (!isRunning || phases.length === 0) return null;
+
+	return (
+		<div style={{
+			display: 'flex', alignItems: 'center', gap: '2px',
+			padding: '6px 0',
+			flexWrap: 'wrap',
+		}}>
+			{phases.map((phase, i) => (
+				<React.Fragment key={phase.id}>
+					{i > 0 && (
+						<div style={{
+							width: '12px', height: '1px',
+							backgroundColor: 'var(--void-border-2)',
+							flexShrink: 0,
+						}} />
+					)}
+					<div style={{
+						display: 'flex', alignItems: 'center', gap: '4px',
+						padding: '3px 8px',
+						borderRadius: '12px',
+						fontSize: '11px',
+						fontWeight: phase.status === 'active' ? 600 : 400,
+						color: phase.status === 'active' ? 'var(--void-fg-1)' : 'var(--void-fg-3)',
+						backgroundColor: phase.status === 'active' ? 'var(--void-bg-3)' : 'transparent',
+						border: phase.status === 'active'
+							? '1px solid var(--void-border-3)'
+							: '1px solid transparent',
+						transition: 'all 0.2s ease',
+						opacity: phase.status === 'idle' ? 0.4 : 1,
+					}}>
+						<span style={{ fontSize: '10px' }}>{phase.icon}</span>
+						<span>{phase.label}</span>
+						{phase.status === 'active' && (
+							<span style={{
+								display: 'inline-block',
+								width: '4px', height: '4px',
+								borderRadius: '50%',
+								backgroundColor: '#4ade80',
+								animation: 'pulse 1.5s ease-in-out infinite',
+								marginLeft: '2px',
+							}} />
+						)}
+						{phase.status === 'done' && (
+							<span style={{ fontSize: '9px', color: '#4ade80', marginLeft: '1px' }}>✓</span>
+						)}
+					</div>
+				</React.Fragment>
+			))}
+			<style>{`
+				@keyframes pulse {
+					0%, 100% { opacity: 0.4; transform: scale(0.8); }
+					50% { opacity: 1; transform: scale(1.2); }
+				}
+			`}</style>
+		</div>
+	);
+};
 const DivisionOrchestrationComponent = ({ response, chatMessageLocation }: { response: any, chatMessageLocation: ChatMessageLocation }) => {
 	const tasks = response.tasks || [];
 	const status = response.status || 'success';
@@ -3279,6 +3431,13 @@ export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTa
 
 		{/* Generating tool */}
 		{generatingTool}
+
+		{/* Flow indicator - shows agent workflow phases */}
+		<FlowIndicator
+			messages={previousMessages}
+			isRunning={isRunning}
+			reasoningSoFar={reasoningSoFar}
+		/>
 
 		{/* loading indicator */}
 		{isRunning === 'LLM' || isRunning === 'idle' && !toolIsGenerating ? <ProseWrapper>
