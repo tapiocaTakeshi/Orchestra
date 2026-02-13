@@ -3261,7 +3261,7 @@ export const SidebarChat = () => {
 		className={`
 			flex flex-col
 			px-4 py-4 space-y-4
-			w-full h-full
+			w-full flex-1 min-h-0
 			overflow-x-hidden
 			overflow-y-auto
 			${previousMessagesHTML.length === 0 && !displayContentSoFar ? 'hidden' : ''}
@@ -3410,7 +3410,7 @@ export const SidebarChat = () => {
 	// </div>
 	const threadPageContent = <div
 		ref={sidebarRef}
-		className='w-full h-full flex flex-col overflow-hidden'
+		className='w-full flex-1 min-h-0 flex flex-col overflow-hidden'
 	>
 
 		<ErrorBoundary>
