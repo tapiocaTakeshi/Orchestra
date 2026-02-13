@@ -7,6 +7,7 @@ import React, { ButtonHTMLAttributes, FormEvent, FormHTMLAttributes, Fragment, K
 
 
 import { useAccessor, useChatThreadsState, useChatThreadsStreamState, useSettingsState, useActiveURI, useCommandBarState, useFullChatThreadsStreamState, useDivisionProjects, useDivisionProjectConfig } from '../util/services.js';
+import { DivisionProjectConfig } from '../../../divisionProjectService.js';
 import { ScrollType } from '../../../../../../../editor/common/editorCommon.js';
 
 import { ChatMarkdownRender, ChatMessageLocation, getApplyBoxId } from '../markdown/ChatMarkdownRender.js';
@@ -300,24 +301,21 @@ const DivisionProjectDropdown = ({ className }: { className: string }) => {
 
 	const divisionProjectService = accessor.get('IDivisionProjectService')
 
+	const onChangeOption = useCallback((newConfig: DivisionProjectConfig) => {
+		divisionProjectService.setActiveProject(newConfig.id)
+	}, [divisionProjectService])
+
 	return (
-		<select
+		<VoidCustomDropdownBox
 			className={className}
-			value={activeConfig?.id ?? ''}
-			onChange={(e) => {
-				const selectedId = e.target.value
-				if (selectedId) {
-					divisionProjectService.setActiveProject(selectedId)
-				}
-			}}
-			title="Division Project"
-		>
-			{projects.map((p) => (
-				<option key={p.id} value={p.id}>
-					📁 {p.name || p.projectId || 'Unnamed'}
-				</option>
-			))}
-		</select>
+			options={projects || []}
+			selectedOption={activeConfig}
+			onChangeOption={onChangeOption}
+			getOptionDisplayName={(p) => p.name || p.projectId || 'Unnamed'}
+			getOptionDropdownName={(p) => p.name || p.projectId || 'Unnamed'}
+			getOptionDropdownDetail={(p) => p.projectId !== p.name ? p.projectId : ''}
+			getOptionsEqual={(a, b) => a.id === b.id}
+		/>
 	)
 }
 
