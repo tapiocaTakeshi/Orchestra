@@ -1036,8 +1036,10 @@ const MCPServersList = () => {
 const DivisionSettings = () => {
 	const accessor = useAccessor();
 	const divisionProjectService = accessor.get('IDivisionProjectService');
+	const voidSettingsService = accessor.get('IVoidSettingsService');
 	const projects = useDivisionProjects();
 	const activeConfig = useDivisionProjectConfig();
+	const settingsState = useSettingsState();
 
 	const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
 
@@ -1051,64 +1053,162 @@ const DivisionSettings = () => {
 		});
 	};
 
+	// Role assignment management
+	const roleAssignments = settingsState.globalSettings.roleAssignments || [];
+	const allRoles: import('../../../../common/voidSettingsTypes.js').AgentRole[] = ['leader', 'coder', 'planner', 'search', 'design'];
+	const roleLabels: Record<string, string> = {
+		leader: 'Leader',
+		coder: 'Coder',
+		planner: 'Planner',
+		search: 'Search',
+		design: 'Design',
+	};
+
+	const getModelsForProvider = (pn: import('../../../../common/voidSettingsTypes.js').ProviderName) => {
+		const rt = settingsState.settingsOfProvider[pn]?.models || [];
+		if (rt.length > 0) return rt.map(m => m.modelName);
+		const { defaultModelsOfProvider } = require('../../../../common/modelCapabilities.js');
+		return [...(defaultModelsOfProvider[pn] || [])];
+	};
+
+	const updateRole = (role: string, field: 'provider' | 'model', value: string) => {
+		const updated = roleAssignments.map(ra =>
+			ra.role === role ? { ...ra, [field]: value } : ra
+		);
+		// If role doesn't exist yet, add it
+		if (!updated.some(ra => ra.role === role)) {
+			updated.push({ role: role as any, provider: field === 'provider' ? value as any : 'openAI', model: field === 'model' ? value : '' });
+		}
+		// When changing provider, auto-select first model
+		if (field === 'provider') {
+			const models = getModelsForProvider(value as any);
+			const final = updated.map(ra => ra.role === role ? { ...ra, model: models[0] || '' } : ra);
+			voidSettingsService.setGlobalSetting('roleAssignments', final);
+		} else {
+			voidSettingsService.setGlobalSetting('roleAssignments', updated);
+		}
+	};
+
 	return (
-		<div className="flex flex-col gap-4">
-			{projects.map((project) => {
-				const isActive = activeConfig?.id === project.id;
-				return (
-					<div
-						key={project.id}
-						className={`border p-4 rounded-sm flex flex-col gap-3 ${isActive ? 'border-[#0e70c0] bg-[#0e70c0]/5' : 'border-void-border-2 bg-void-bg-2'}`}
-					>
-						<div className="flex items-center justify-between">
-							<div className="flex items-center gap-2 flex-grow">
-								<VoidSimpleInputBox
-									value={project.name}
-									onChangeValue={(val) => divisionProjectService.save({ ...project, name: val })}
-									className="bg-transparent border-none font-medium text-lg focus:ring-0 p-0"
-									placeholder="Project Name"
-								/>
-								{isActive && <span className="text-[10px] bg-[#0e70c0] text-white px-1.5 py-0.5 rounded-full uppercase font-bold">Active</span>}
-							</div>
-							<div className="flex items-center gap-2">
-								{!isActive && (
-									<VoidButtonBgDarken
-										onClick={() => divisionProjectService.setActiveProject(project.id)}
-										className="text-xs px-2 py-1"
-									>
-										Set Active
-									</VoidButtonBgDarken>
-								)}
-								<button
-									onClick={() => divisionProjectService.removeProject(project.id)}
-									className="text-void-fg-3 hover:text-red-500 transition-colors"
-									title="Delete Project"
+		<div className="flex flex-col gap-6">
+			{/* Role Assignments */}
+			<div className="flex flex-col gap-3">
+				<div className="text-xs text-void-fg-3 uppercase font-semibold tracking-wider">
+					Role Assignments
+				</div>
+				<div className="flex flex-col gap-2">
+					{allRoles.map(role => {
+						const assignment = roleAssignments.find(ra => ra.role === role);
+						const currentProvider = assignment?.provider || 'openAI';
+						const models = getModelsForProvider(currentProvider as any);
+						const currentModel = assignment?.model || models[0] || '';
+
+						return (
+							<div key={role} style={{
+								display: 'flex', alignItems: 'center', gap: '8px',
+								padding: '5px 0',
+							}}>
+								<div style={{ width: '70px', flexShrink: 0, fontSize: '12px', fontWeight: 500, color: 'var(--void-fg-2)' }}>
+									{roleLabels[role]}
+								</div>
+
+								{/* Provider dropdown */}
+								<select
+									value={currentProvider}
+									onChange={(e) => updateRole(role, 'provider', e.target.value)}
+									style={{
+										padding: '4px 6px', background: 'var(--void-bg-2)',
+										border: '1px solid var(--void-border-2)', borderRadius: '4px',
+										fontSize: '11px', color: 'var(--void-fg-2)', flex: '0 0 110px',
+									}}
 								>
-									<X size={16} />
-								</button>
+									{providerNames.map(pn => (
+										<option key={pn} value={pn}>{displayInfoOfProviderName(pn).title}</option>
+									))}
+								</select>
+
+								{/* Model dropdown */}
+								<select
+									value={currentModel}
+									onChange={(e) => updateRole(role, 'model', e.target.value)}
+									style={{
+										padding: '4px 6px', background: 'var(--void-bg-2)',
+										border: '1px solid var(--void-border-2)', borderRadius: '4px',
+										fontSize: '11px', color: 'var(--void-fg-2)', flex: 1, minWidth: 0,
+									}}
+								>
+									{models.map(m => (
+										<option key={m} value={m}>{m}</option>
+									))}
+								</select>
+							</div>
+						);
+					})}
+				</div>
+			</div>
+
+			{/* Division Projects */}
+			<div className="flex flex-col gap-3">
+				<div className="text-xs text-void-fg-3 uppercase font-semibold tracking-wider">
+					Division Projects
+				</div>
+				{projects.map((project) => {
+					const isActive = activeConfig?.id === project.id;
+					return (
+						<div
+							key={project.id}
+							className={`border p-4 rounded-sm flex flex-col gap-3 ${isActive ? 'border-[#0e70c0] bg-[#0e70c0]/5' : 'border-void-border-2 bg-void-bg-2'}`}
+						>
+							<div className="flex items-center justify-between">
+								<div className="flex items-center gap-2 flex-grow">
+									<VoidSimpleInputBox
+										value={project.name}
+										onChangeValue={(val) => divisionProjectService.save({ ...project, name: val })}
+										className="bg-transparent border-none font-medium text-lg focus:ring-0 p-0"
+										placeholder="Project Name"
+									/>
+									{isActive && <span className="text-[10px] bg-[#0e70c0] text-white px-1.5 py-0.5 rounded-full uppercase font-bold">Active</span>}
+								</div>
+								<div className="flex items-center gap-2">
+									{!isActive && (
+										<VoidButtonBgDarken
+											onClick={() => divisionProjectService.setActiveProject(project.id)}
+											className="text-xs px-2 py-1"
+										>
+											Set Active
+										</VoidButtonBgDarken>
+									)}
+									<button
+										onClick={() => divisionProjectService.removeProject(project.id)}
+										className="text-void-fg-3 hover:text-red-500 transition-colors"
+										title="Delete Project"
+									>
+										<X size={16} />
+									</button>
+								</div>
+							</div>
+
+							<div className="flex flex-col gap-1">
+								<div className="text-xs text-void-fg-3 uppercase font-semibold">Project ID (from division.he-ro.jp)</div>
+								<VoidSimpleInputBox
+									value={project.projectId}
+									onChangeValue={(val) => divisionProjectService.save({ ...project, projectId: val })}
+									className="text-sm bg-void-bg-1 border-void-border-1"
+									placeholder="Paste your Project ID here"
+								/>
 							</div>
 						</div>
+					);
+				})}
 
-						<div className="flex flex-col gap-1">
-							<div className="text-xs text-void-fg-3 uppercase font-semibold">Project ID (from division.he-ro.jp)</div>
-							<VoidSimpleInputBox
-								value={project.projectId}
-								onChangeValue={(val) => divisionProjectService.save({ ...project, projectId: val })}
-								className="text-sm bg-void-bg-1 border-void-border-1"
-								placeholder="Paste your Project ID here"
-							/>
-						</div>
-					</div>
-				);
-			})}
-
-			<button
-				onClick={handleAddProject}
-				className="flex items-center gap-2 text-void-fg-1 hover:text-[#0e70c0] transition-colors mt-2 w-fit"
-			>
-				<Plus size={18} />
-				<span>Add Division Project</span>
-			</button>
+				<button
+					onClick={handleAddProject}
+					className="flex items-center gap-2 text-void-fg-1 hover:text-[#0e70c0] transition-colors mt-2 w-fit"
+				>
+					<Plus size={18} />
+					<span>Add Division Project</span>
+				</button>
+			</div>
 		</div>
 	);
 };
