@@ -3263,7 +3263,7 @@ export const SidebarChat = () => {
 		className={`
 			flex flex-col
 			px-4 py-4 space-y-4
-			w-full flex-1 min-h-0
+			w-full h-full
 			overflow-x-hidden
 			overflow-y-auto
 			${previousMessagesHTML.length === 0 && !displayContentSoFar ? 'hidden' : ''}
@@ -3377,7 +3377,7 @@ export const SidebarChat = () => {
 
 	const landingPageContent = <div
 		ref={sidebarRef}
-		className='w-full flex-1 min-h-0 flex flex-col overflow-auto px-4'
+		className='w-full h-full max-h-full flex flex-col overflow-auto px-4'
 	>
 		<ErrorBoundary>
 			{landingPageInput}
@@ -3412,7 +3412,7 @@ export const SidebarChat = () => {
 	// </div>
 	const threadPageContent = <div
 		ref={sidebarRef}
-		className='w-full flex-1 min-h-0 flex flex-col overflow-hidden'
+		className='w-full h-full flex flex-col overflow-hidden'
 	>
 
 		<ErrorBoundary>
@@ -3425,16 +3425,14 @@ export const SidebarChat = () => {
 
 
 	return (
-		<div className="flex flex-col h-full w-full overflow-hidden">
+		<div className="flex flex-col h-full w-full">
 			<SidebarHeader onLoginClick={() => setShowLoginScreen(true)} />
 			{showLoginScreen && <LoginScreen onClose={() => setShowLoginScreen(false)} />}
-			<div className="flex-1 min-h-0 flex flex-col">
-				<Fragment key={threadId}>
-					{isLandingPage ?
-						landingPageContent
-						: threadPageContent}
-				</Fragment>
-			</div>
+			<Fragment key={threadId}>
+				{isLandingPage ?
+					landingPageContent
+					: threadPageContent}
+			</Fragment>
 		</div>
 	)
 }
