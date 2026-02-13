@@ -7,6 +7,7 @@ import React, { useState, useCallback } from 'react';
 import { Plus, X, GripVertical, ArrowDown, Save, Brain, Code, FileText, Search, Palette, ChevronDown, ChevronUp } from 'lucide-react';
 import { useSettingsState, useAccessor } from '../util/services.js';
 import { AgentRole, ProviderName, providerNames, displayInfoOfProviderName } from '../../../../common/voidSettingsTypes.js';
+import { defaultModelsOfProvider } from '../../../../common/modelCapabilities.js';
 import { PipelineStep, PipelineTemplate, defaultTemplates, roleDisplayConfig } from './ConductorTypes.js';
 
 const roleIcons: Record<AgentRole, React.ComponentType<{ size?: number; className?: string }>> = {
@@ -34,7 +35,10 @@ const PipelineStepCard: React.FC<PipelineStepCardProps> = ({
 }) => {
 	const settingsState = useSettingsState();
 	const display = roleDisplayConfig[step.role];
-	const availableModels = settingsState.settingsOfProvider[step.provider]?.models || [];
+	const runtimeModels = settingsState.settingsOfProvider[step.provider]?.models || [];
+	// Fallback to defaultModelsOfProvider when runtime models are empty (no API key set)
+	const defaultModels = (defaultModelsOfProvider[step.provider] || []).map(m => ({ modelName: m }));
+	const availableModels = runtimeModels.length > 0 ? runtimeModels : defaultModels;
 
 	return (
 		<div style={{
@@ -93,7 +97,9 @@ const PipelineStepCard: React.FC<PipelineStepCardProps> = ({
 					value={step.provider}
 					onChange={(e) => {
 						const newProvider = e.target.value as ProviderName;
-						const models = settingsState.settingsOfProvider[newProvider]?.models || [];
+						const rtModels = settingsState.settingsOfProvider[newProvider]?.models || [];
+						const defModels = (defaultModelsOfProvider[newProvider] || []).map(m => ({ modelName: m }));
+						const models = rtModels.length > 0 ? rtModels : defModels;
 						onUpdate({
 							...step,
 							provider: newProvider,
@@ -263,7 +269,7 @@ export const PipelineBuilder: React.FC = () => {
 												display: 'flex', alignItems: 'center', justifyContent: 'center',
 												backgroundColor: `${roleDisplayConfig[s.role].color}20`,
 											}}>
-												<StepIcon size={10} style={{ color: roleDisplayConfig[s.role].color }} />
+												<StepIcon size={10} />
 											</div>
 										);
 									})}
