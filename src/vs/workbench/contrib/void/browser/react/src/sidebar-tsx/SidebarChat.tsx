@@ -304,7 +304,7 @@ const DivisionProjectDropdown = ({ className }: { className: string }) => {
 	const modelSelection = settingsState.modelSelectionOfFeature['Chat']
 	const isDivision = modelSelection?.providerName === 'divisionAPI'
 
-	if (!isDivision || projects.length <= 1) return null
+	if (!isDivision || projects.length === 0) return null
 
 	return (
 		<VoidCustomDropdownBox
@@ -3182,51 +3182,94 @@ const SignedOutChatOverlay = ({ onLoginClick }: { onLoginClick: () => void }) =>
 
 const SidebarHeader = ({ onLoginClick, activeTab, onTabChange }: { onLoginClick: () => void; activeTab: import('./OrchestraLogoButton.js').SidebarTab; onTabChange: (tab: import('./OrchestraLogoButton.js').SidebarTab) => void }) => {
 	const accessor = useAccessor()
-	const chatThreadService = accessor.get('IChatThreadService')
 	const settingsService = accessor.get('IVoidSettingsService')
+	const commandService = accessor.get('ICommandService') as ICommandService
 	const settingsState = useSettingsState()
 	const clerkUser = settingsState.globalSettings.clerkUser
 
-	const logoDataUrl = 'data:image/png;base64,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';
+	const [showAccountMenu, setShowAccountMenu] = useState(false)
+	const accountMenuRef = useRef<HTMLDivElement>(null)
+
+	// Close account menu when clicking outside
+	useEffect(() => {
+		const handleClickOutside = (e: MouseEvent) => {
+			if (accountMenuRef.current && !accountMenuRef.current.contains(e.target as Node)) {
+				setShowAccountMenu(false)
+			}
+		}
+		if (showAccountMenu) {
+			document.addEventListener('mousedown', handleClickOutside)
+		}
+		return () => document.removeEventListener('mousedown', handleClickOutside)
+	}, [showAccountMenu])
 
 	return (
-		<div className="shrink-0 px-4 pt-3 pb-2">
-			<div className="flex items-center justify-between px-3 py-2 bg-void-bg-2 border border-void-border-3 rounded-lg">
-				<div className="flex items-center gap-2">
-					<img src={logoDataUrl} alt="Orchestra" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
-				</div>
+		<div className="shrink-0 px-4 pt-2 pb-1">
+			<div className="flex items-center justify-end gap-2">
 
-				<div className="flex items-center gap-3">
-					{!clerkUser ? (
+				{!clerkUser ? (
+					<button
+						onClick={onLoginClick}
+						className="text-[11px] font-medium px-2 py-0.5 rounded bg-white text-black hover:bg-zinc-200 transition-colors"
+					>
+						Log In
+					</button>
+				) : (
+					<div className="relative" ref={accountMenuRef}>
 						<button
-							onClick={onLoginClick}
-							className="text-[11px] font-medium px-2 py-0.5 rounded bg-white text-black hover:bg-zinc-200 transition-colors"
+							onClick={() => setShowAccountMenu(!showAccountMenu)}
+							className="flex items-center justify-center hover:opacity-80 transition-opacity"
+							title={clerkUser.fullName || clerkUser.primaryEmailAddress || 'Account'}
 						>
-							Log In
+							{clerkUser.imageUrl ? (
+								<img src={clerkUser.imageUrl} alt="" className="w-5 h-5 rounded-full" />
+							) : (
+								<div className="w-5 h-5 rounded-full bg-[#0e70c0] flex items-center justify-center text-white text-[9px] font-bold">
+									{(clerkUser.fullName || clerkUser.primaryEmailAddress || '?')[0].toUpperCase()}
+								</div>
+							)}
 						</button>
-					) : (
-						<div className="flex items-center gap-2 scale-[0.8] origin-right">
-							<div className="flex items-center gap-1.5">
-								{clerkUser.imageUrl ? (
-									<img src={clerkUser.imageUrl} alt="" className="w-6 h-6 rounded-full" />
-								) : (
-									<div className="w-6 h-6 rounded-full bg-[#0e70c0] flex items-center justify-center text-white text-[10px] font-bold">
-										{(clerkUser.fullName || clerkUser.primaryEmailAddress || '?')[0].toUpperCase()}
+						{showAccountMenu && (
+							<div className="absolute right-0 top-full mt-1 w-48 bg-void-bg-1 border border-void-border-2 rounded-md shadow-lg z-50 py-1">
+								<div className="px-3 py-2 border-b border-void-border-2">
+									<div className="text-[11px] font-medium text-void-fg-1 truncate">
+										{clerkUser.fullName || 'User'}
 									</div>
-								)}
+									{clerkUser.primaryEmailAddress && (
+										<div className="text-[10px] text-void-fg-3 truncate">
+											{clerkUser.primaryEmailAddress}
+										</div>
+									)}
+								</div>
 								<button
 									onClick={() => {
 										settingsService.setGlobalSetting('clerkUser', null)
 										settingsService.setGlobalSetting('clerkSessionId', null)
+										setShowAccountMenu(false)
 									}}
-									className="text-[10px] text-void-fg-3 hover:text-void-fg-1 transition-colors"
+									className="w-full text-left px-3 py-1.5 text-[11px] text-void-fg-2 hover:bg-void-bg-3 hover:text-void-fg-1 transition-colors flex items-center gap-2"
 								>
+									<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+										<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+										<polyline points="16 17 21 12 16 7" />
+										<line x1="21" y1="12" x2="9" y2="12" />
+									</svg>
 									Sign Out
 								</button>
 							</div>
-						</div>
-					)}
-				</div>
+						)}
+					</div>
+				)}
+				<button
+					onClick={() => commandService.executeCommand(VOID_OPEN_SETTINGS_ACTION_ID)}
+					className="text-void-fg-3 hover:text-void-fg-1 transition-colors"
+					title="Settings"
+				>
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+						<circle cx="12" cy="12" r="3" />
+						<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+					</svg>
+				</button>
 			</div>
 		</div>
 	)

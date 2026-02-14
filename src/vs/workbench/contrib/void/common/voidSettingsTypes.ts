@@ -109,6 +109,9 @@ export const displayInfoOfProviderName = (providerName: ProviderName): DisplayIn
 	else if (providerName === 'awsBedrock') {
 		return { title: 'AWS Bedrock', }
 	}
+	else if (providerName === 'perplexity') {
+		return { title: 'Perplexity', desc: 'Search-augmented AI — real-time web search with citations' }
+	}
 
 	throw new Error(`descOfProviderName: Unknown provider name: "${providerName}"`)
 }
@@ -132,6 +135,7 @@ export const subTextMdOfProviderName = (providerName: ProviderName): string => {
 	if (providerName === 'vLLM') return 'Read more about custom [Endpoints here](https://docs.vllm.ai/en/latest/getting_started/quickstart.html#openai-compatible-server).'
 	if (providerName === 'lmStudio') return 'Read more about custom [Endpoints here](https://lmstudio.ai/docs/app/api/endpoints/openai).'
 	if (providerName === 'liteLLM') return 'Read more about endpoints [here](https://docs.litellm.ai/docs/providers/openai_compatible).'
+	if (providerName === 'perplexity') return 'Get your [API Key here](https://www.perplexity.ai/settings/api). Read about [models here](https://docs.perplexity.ai/guides/model-cards).'
 
 	throw new Error(`subTextMdOfProviderName: Unknown provider name: "${providerName}"`)
 }
@@ -363,6 +367,12 @@ export const defaultSettingsOfProvider: SettingsOfProvider = {
 		...modelInfoOfDefaultModelNames(defaultModelsOfProvider.divisionAPI),
 		_didFillInProviderSettings: true, // pre-configured, no setup needed
 	},
+	perplexity: {
+		...defaultCustomSettings,
+		...defaultProviderSettings.perplexity,
+		...modelInfoOfDefaultModelNames(defaultModelsOfProvider.perplexity),
+		_didFillInProviderSettings: undefined,
+	},
 }
 
 
@@ -450,7 +460,7 @@ export type ChatMode = 'agent' | 'gather' | 'normal'
 
 
 // Division API role assignment types
-export type AgentRole = 'leader' | 'coder' | 'planner' | 'search' | 'design';
+export type AgentRole = 'leader' | 'coder' | 'planner' | 'search' | 'research' | 'design' | 'writing';
 
 export type RoleAssignment = {
 	role: AgentRole;
@@ -492,7 +502,9 @@ export const defaultRoleAssignments: RoleAssignment[] = [
 	{ role: 'coder', provider: 'anthropic', model: 'claude-opus-4-6' },
 	{ role: 'planner', provider: 'gemini', model: 'gemini-3-pro' },
 	{ role: 'search', provider: 'openAI', model: 'gpt-5.2-instant' },
+	{ role: 'research', provider: 'perplexity', model: 'sonar-pro' },
 	{ role: 'design', provider: 'gemini', model: 'gemini-3-flash' },
+	{ role: 'writing', provider: 'openAI', model: 'gpt-5.2' },
 ];
 
 export const defaultGlobalSettings: GlobalSettings = {

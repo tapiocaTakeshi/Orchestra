@@ -68,6 +68,9 @@ export const defaultProviderSettings = {
 	divisionAPI: { // Division API - AI orchestration
 		endpoint: 'https://api.division.he-ro.jp',
 	},
+	perplexity: { // Perplexity AI - search-augmented AI
+		apiKey: '',
+	},
 
 } as const
 
@@ -154,6 +157,13 @@ export const defaultModelsOfProvider = {
 	liteLLM: [],
 	divisionAPI: [ // Division API - multi-agent orchestration
 		'division-orchestrator',
+	],
+	perplexity: [ // https://docs.perplexity.ai/guides/model-cards
+		'sonar-pro',
+		'sonar',
+		'sonar-deep-research',
+		'sonar-reasoning-pro',
+		'sonar-reasoning',
 	],
 
 
@@ -1472,6 +1482,66 @@ const divisionAPISettings: VoidStaticProviderInfo = {
 }
 
 
+// ---------------- PERPLEXITY ----------------
+const perplexityModelOptions = {
+	'sonar-pro': {
+		contextWindow: 200_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 3.00, output: 15.00 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'openai-style' as const,
+		supportsSystemMessage: 'system-role' as const,
+		reasoningCapabilities: false as const,
+	},
+	'sonar': {
+		contextWindow: 128_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 1.00, output: 1.00 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'openai-style' as const,
+		supportsSystemMessage: 'system-role' as const,
+		reasoningCapabilities: false as const,
+	},
+	'sonar-deep-research': {
+		contextWindow: 128_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 2.00, output: 8.00 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'openai-style' as const,
+		supportsSystemMessage: 'system-role' as const,
+		reasoningCapabilities: false as const,
+	},
+	'sonar-reasoning-pro': {
+		contextWindow: 128_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 2.00, output: 8.00 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'openai-style' as const,
+		supportsSystemMessage: 'system-role' as const,
+		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: false } as const,
+	},
+	'sonar-reasoning': {
+		contextWindow: 128_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 1.00, output: 5.00 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'openai-style' as const,
+		supportsSystemMessage: 'system-role' as const,
+		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: false } as const,
+	},
+} satisfies { [s: string]: VoidStaticModelInfo }
+
+const perplexitySettings: VoidStaticProviderInfo = {
+	modelOptions: perplexityModelOptions,
+	modelOptionsFallback: (modelName) => extensiveModelOptionsFallback(modelName),
+}
+
+
 // ---------------- model settings of everything above ----------------
 
 const modelSettingsOfProvider: { [providerName in ProviderName]: VoidStaticProviderInfo } = {
@@ -1481,6 +1551,7 @@ const modelSettingsOfProvider: { [providerName in ProviderName]: VoidStaticProvi
 	anthropic: anthropicSettings,
 	xAI: xAISettings,
 	gemini: geminiSettings,
+	perplexity: perplexitySettings,
 
 	// open source models
 	deepseek: deepseekSettings,

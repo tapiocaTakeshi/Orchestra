@@ -42,7 +42,7 @@ export const OrchestraLogoButton = ({ activeTab, onTabChange }: { activeTab: Sid
 				className="flex items-center justify-center w-7 h-7 rounded-md hover:bg-void-bg-2 transition-colors"
 				title="Switch view"
 			>
-				<img src={logoPath} alt="Orchestra" className="w-5 h-5 object-contain" />
+				<img src={logoPath} alt="Orchestra" className="w-6 h-6 object-contain" />
 			</button>
 
 			{isOpen && (

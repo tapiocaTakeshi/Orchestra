@@ -28,7 +28,7 @@ export type DivisionProjectConfig = {
 
 /** On-disk format for .division/agents.json */
 export type DivisionProjectsFile = {
-	activeProjectId: string;
+	activeProjectIds: string[];
 	projects: DivisionProjectConfig[];
 };
 
@@ -44,7 +44,7 @@ const defaultDivisionProjectConfig = (): DivisionProjectConfig => ({
 const defaultDivisionProjectsFile = (): DivisionProjectsFile => {
 	const project = defaultDivisionProjectConfig();
 	return {
-		activeProjectId: project.id,
+		activeProjectIds: [project.id],
 		projects: [project],
 	};
 };
@@ -58,14 +58,17 @@ export interface IDivisionProjectService {
 	readonly _serviceBrand: undefined;
 	readonly onDidChangeProject: Event<void>;
 
-	/** The currently active project config (null if no workspace) */
+	/** The first active project config (null if no workspace) */
 	readonly projectConfig: DivisionProjectConfig | null;
+
+	/** All active project configs */
+	readonly activeProjects: DivisionProjectConfig[];
 
 	/** All configured division projects */
 	readonly projects: DivisionProjectConfig[];
 
-	/** The ID of the currently active project */
-	readonly activeProjectId: string | null;
+	/** The IDs of the currently active projects */
+	readonly activeProjectIds: string[];
 
 	readonly projectConfigUri: URI | null;
 
@@ -78,8 +81,14 @@ export interface IDivisionProjectService {
 	/** Save a specific project config (updates it in the projects list and persists) */
 	save(config: DivisionProjectConfig): Promise<void>;
 
-	/** Set the active project by ID */
+	/** Toggle a project's active state */
+	toggleActiveProject(id: string): Promise<void>;
+
+	/** Set a project as the only active project (exclusive selection) */
 	setActiveProject(id: string): Promise<void>;
+
+	/** Check if a project is active */
+	isProjectActive(id: string): boolean;
 
 	/** Add a new division project */
 	addProject(config: DivisionProjectConfig): Promise<void>;
@@ -98,15 +107,19 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 	readonly onDidChangeProject: Event<void> = this._onDidChangeProject.event;
 
 	private _projects: DivisionProjectConfig[] = [];
-	private _activeProjectId: string | null = null;
+	private _activeProjectIds: string[] = [];
 	private _projectConfigUri: URI | null = null;
 
 	get projectConfig(): DivisionProjectConfig | null {
-		if (this._activeProjectId === null) return null;
-		return this._projects.find(p => p.id === this._activeProjectId) ?? this._projects[0] ?? null;
+		const firstActiveId = this._activeProjectIds[0];
+		if (!firstActiveId) return null;
+		return this._projects.find(p => p.id === firstActiveId) ?? this._projects[0] ?? null;
+	}
+	get activeProjects(): DivisionProjectConfig[] {
+		return this._projects.filter(p => this._activeProjectIds.includes(p.id));
 	}
 	get projects(): DivisionProjectConfig[] { return this._projects; }
-	get activeProjectId(): string | null { return this._activeProjectId; }
+	get activeProjectIds(): string[] { return this._activeProjectIds; }
 	get projectConfigUri(): URI | null { return this._projectConfigUri; }
 	get hasProject(): boolean { return this._projects.length > 0; }
 
@@ -117,12 +130,14 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 	) {
 		super();
 
-		// Sync active project config to globalSettings when it changes
+		// Sync active projects' config to globalSettings when they change
 		this._register(this._onDidChangeProject.event(() => {
-			const active = this.projectConfig;
-			if (active) {
-				this.voidSettingsService.setGlobalSetting('roleAssignments', active.agents);
-				this.voidSettingsService.setGlobalSetting('divisionProjectId', active.projectId);
+			const actives = this.activeProjects;
+			if (actives.length > 0) {
+				// Merge agents from all active projects (first project's agents take priority)
+				const mergedAgents = actives.flatMap(p => p.agents);
+				this.voidSettingsService.setGlobalSetting('roleAssignments', mergedAgents);
+				this.voidSettingsService.setGlobalSetting('divisionProjectId', actives[0].projectId);
 			}
 		}));
 
@@ -139,7 +154,7 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 		const folders = this.workspaceContextService.getWorkspace().folders;
 		if (folders.length === 0) {
 			this._projects = [];
-			this._activeProjectId = null;
+			this._activeProjectIds = [];
 			this._projectConfigUri = null;
 			this._onDidChangeProject.fire();
 			return;
@@ -161,7 +176,7 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 			console.error('[DivisionProjectService] Error initializing:', e);
 			const file = defaultDivisionProjectsFile();
 			this._projects = file.projects;
-			this._activeProjectId = file.activeProjectId;
+			this._activeProjectIds = file.activeProjectIds;
 			this._onDidChangeProject.fire();
 		}
 
@@ -206,9 +221,15 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 					projects.push(def);
 				}
 				this._projects = projects;
-				this._activeProjectId = parsed.activeProjectId && projects.some((p: DivisionProjectConfig) => p.id === parsed.activeProjectId)
-					? parsed.activeProjectId
-					: projects[0].id;
+				// Support both new activeProjectIds[] and legacy activeProjectId
+				if (Array.isArray(parsed.activeProjectIds)) {
+					this._activeProjectIds = parsed.activeProjectIds.filter((id: string) => projects.some(p => p.id === id));
+					if (this._activeProjectIds.length === 0) this._activeProjectIds = [projects[0].id];
+				} else if (parsed.activeProjectId && projects.some((p: DivisionProjectConfig) => p.id === parsed.activeProjectId)) {
+					this._activeProjectIds = [parsed.activeProjectId];
+				} else {
+					this._activeProjectIds = [projects[0].id];
+				}
 			}
 			// Legacy single-project format: { name, projectId, agents }
 			else if (parsed.name || parsed.agents) {
@@ -219,14 +240,14 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 					agents: this._parseAgents(parsed.agents),
 				};
 				this._projects = [legacyProject];
-				this._activeProjectId = legacyProject.id;
+				this._activeProjectIds = [legacyProject.id];
 				// Migrate: rewrite in new format
 				await this._persistToDisk();
 			}
 			else {
 				const file = defaultDivisionProjectsFile();
 				this._projects = file.projects;
-				this._activeProjectId = file.activeProjectId;
+				this._activeProjectIds = file.activeProjectIds;
 			}
 
 			this._onDidChangeProject.fire();
@@ -234,7 +255,7 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 			console.error('[DivisionProjectService] Error reading config:', e);
 			const file = defaultDivisionProjectsFile();
 			this._projects = file.projects;
-			this._activeProjectId = file.activeProjectId;
+			this._activeProjectIds = file.activeProjectIds;
 			this._onDidChangeProject.fire();
 		}
 	}
@@ -252,12 +273,12 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 
 			await this.fileService.writeFile(agentsJsonUri, VSBuffer.fromString(jsonStr));
 			this._projects = file.projects;
-			this._activeProjectId = file.activeProjectId;
+			this._activeProjectIds = file.activeProjectIds;
 			this._onDidChangeProject.fire();
 		} catch (e) {
 			console.error('[DivisionProjectService] Error creating default config:', e);
 			this._projects = file.projects;
-			this._activeProjectId = file.activeProjectId;
+			this._activeProjectIds = file.activeProjectIds;
 			this._onDidChangeProject.fire();
 		}
 	}
@@ -265,7 +286,7 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 	private async _persistToDisk(): Promise<void> {
 		if (!this._projectConfigUri) return;
 		const file: DivisionProjectsFile = {
-			activeProjectId: this._activeProjectId || '',
+			activeProjectIds: this._activeProjectIds,
 			projects: this._projects,
 		};
 		const jsonStr = JSON.stringify(file, null, 2) + '\n';
@@ -289,9 +310,27 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 		this._onDidChangeProject.fire();
 	}
 
+	async toggleActiveProject(id: string): Promise<void> {
+		if (!this._projects.some(p => p.id === id)) return;
+		if (this._activeProjectIds.includes(id)) {
+			// Don't allow deactivating the last active project
+			if (this._activeProjectIds.length > 1) {
+				this._activeProjectIds = this._activeProjectIds.filter(aid => aid !== id);
+			}
+		} else {
+			this._activeProjectIds = [...this._activeProjectIds, id];
+		}
+		await this._persistToDisk();
+		this._onDidChangeProject.fire();
+	}
+
+	isProjectActive(id: string): boolean {
+		return this._activeProjectIds.includes(id);
+	}
+
 	async setActiveProject(id: string): Promise<void> {
 		if (!this._projects.some(p => p.id === id)) return;
-		this._activeProjectId = id;
+		this._activeProjectIds = [id];
 		await this._persistToDisk();
 		this._onDidChangeProject.fire();
 	}
@@ -305,8 +344,9 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 	async removeProject(id: string): Promise<void> {
 		if (this._projects.length <= 1) return; // Keep at least one project
 		this._projects = this._projects.filter(p => p.id !== id);
-		if (this._activeProjectId === id) {
-			this._activeProjectId = this._projects[0]?.id ?? null;
+		this._activeProjectIds = this._activeProjectIds.filter(aid => aid !== id);
+		if (this._activeProjectIds.length === 0) {
+			this._activeProjectIds = [this._projects[0]?.id ?? ''];
 		}
 		await this._persistToDisk();
 		this._onDidChangeProject.fire();

@@ -4,12 +4,10 @@
  *--------------------------------------------------------------------------------------*/
 
 import React, { useState, useMemo } from 'react';
-import { ArrowDown, Play, Square, RotateCcw } from 'lucide-react';
+import { ArrowDown, Play, Square, RotateCcw, Zap, Clock, CheckCircle } from 'lucide-react';
 import { useSettingsState } from '../util/services.js';
-import { AgentRole } from '../../../../common/voidSettingsTypes.js';
-import { AgentCard } from './AgentCard.js';
-import { MetaPanel } from './MetaPanel.js';
-import { AgentState, AgentStatus, ConductorMetrics, roleDisplayConfig } from './ConductorTypes.js';
+import { AgentRole, displayInfoOfProviderName } from '../../../../common/voidSettingsTypes.js';
+import { AgentState, AgentStatus, roleDisplayConfig } from './ConductorTypes.js';
 
 // Demo data generator for visualization
 const createDemoAgents = (roleAssignments: { role: AgentRole; provider: any; model: string }[]): AgentState[] => {
@@ -34,23 +32,20 @@ const createDemoAgents = (roleAssignments: { role: AgentRole; provider: any; mod
 	}));
 };
 
-const computeMetrics = (agents: AgentState[]): ConductorMetrics => {
-	const completed = agents.filter(a => a.status === 'completed');
-	const totalTokens = agents.reduce((sum, a) => sum + a.tokensUsed, 0);
-	const totalTime = agents.reduce((sum, a) => {
-		if (a.startTime && a.endTime) return sum + (a.endTime - a.startTime);
-		if (a.startTime && a.status === 'running') return sum + (Date.now() - a.startTime);
-		return sum;
-	}, 0);
+const statusColors: Record<AgentStatus, string> = {
+	completed: '#10b981',
+	running: '#3b82f6',
+	waiting: '#f59e0b',
+	idle: 'var(--void-fg-4)',
+	error: '#ef4444',
+};
 
-	return {
-		totalTokens,
-		estimatedCost: totalTokens * 0.000003, // rough estimate
-		totalTime,
-		successRate: agents.length > 0 ? (completed.length / agents.length) * 100 : 0,
-		agentCount: agents.length,
-		completedCount: completed.length,
-	};
+const statusLabels: Record<AgentStatus, string> = {
+	completed: 'Done',
+	running: 'Running',
+	waiting: 'Waiting',
+	idle: 'Idle',
+	error: 'Error',
 };
 
 export const ConductorView: React.FC = () => {
@@ -60,11 +55,11 @@ export const ConductorView: React.FC = () => {
 	const [isRunning, setIsRunning] = useState(false);
 	const [agents, setAgents] = useState<AgentState[]>(() => createDemoAgents(roleAssignments));
 
-	const metrics = useMemo(() => computeMetrics(agents), [agents]);
+	const completedCount = agents.filter(a => a.status === 'completed').length;
+	const totalTokens = agents.reduce((sum, a) => sum + a.tokensUsed, 0);
 
 	const handleStart = () => {
 		setIsRunning(true);
-		// Reset all agents to running state
 		setAgents(prev => prev.map((a, i) => ({
 			...a,
 			status: i === 0 ? 'running' as AgentStatus : 'waiting' as AgentStatus,
@@ -84,33 +79,33 @@ export const ConductorView: React.FC = () => {
 		})));
 	};
 
-	const handleRerun = (role: AgentRole) => {
-		setAgents(prev => prev.map(a =>
-			a.role === role
-				? { ...a, status: 'running' as AgentStatus, startTime: Date.now(), endTime: null, tokensUsed: 0, summary: '', error: null }
-				: a
-		));
-	};
-
 	const handleReset = () => {
 		setIsRunning(false);
 		setAgents(createDemoAgents(roleAssignments));
 	};
 
 	return (
-		<div className="void-flex void-flex-col void-h-full void-overflow-hidden">
-			{/* Meta Panel */}
-			<MetaPanel metrics={metrics} />
-
-			{/* Controls */}
-			<div className="void-flex void-items-center void-justify-between void-px-4 void-py-2 void-border-b void-border-void-border-2">
-				<div className="void-text-sm void-text-void-fg-1 void-font-medium">
-					Pipeline
+		<div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+			{/* Header with controls */}
+			<div style={{
+				display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+				padding: '12px 16px',
+				borderBottom: '1px solid var(--void-border-2)',
+			}}>
+				<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+					<span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--void-fg-1)' }}>Pipeline</span>
+					<span style={{
+						fontSize: '10px', padding: '2px 6px', borderRadius: '4px',
+						background: 'rgba(59,130,246,0.1)', color: '#60a5fa',
+					}}>Preview</span>
 				</div>
-				<div className="void-flex void-items-center void-gap-2">
+				<div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
 					<button
 						onClick={handleReset}
-						className="void-p-1.5 void-rounded void-text-void-fg-3 hover:void-text-void-fg-1 hover:void-bg-void-bg-2 void-transition-colors"
+						style={{
+							padding: '4px', borderRadius: '4px', cursor: 'pointer',
+							background: 'none', border: 'none', color: 'var(--void-fg-3)',
+						}}
 						title="Reset pipeline"
 					>
 						<RotateCcw size={14} />
@@ -118,60 +113,120 @@ export const ConductorView: React.FC = () => {
 					{isRunning ? (
 						<button
 							onClick={handleStop}
-							className="void-flex void-items-center void-gap-1.5 void-px-3 void-py-1.5 void-rounded-lg void-bg-red-500/10 void-text-red-400 hover:void-bg-red-500/20 void-transition-colors void-text-xs void-font-medium"
+							style={{
+								display: 'flex', alignItems: 'center', gap: '4px',
+								padding: '4px 10px', borderRadius: '6px', cursor: 'pointer',
+								background: 'rgba(239,68,68,0.1)', color: '#f87171',
+								border: 'none', fontSize: '11px', fontWeight: 500,
+							}}
 						>
-							<Square size={10} />
-							Stop
+							<Square size={10} /> Stop
 						</button>
 					) : (
 						<button
 							onClick={handleStart}
-							className="void-flex void-items-center void-gap-1.5 void-px-3 void-py-1.5 void-rounded-lg void-bg-emerald-500/10 void-text-emerald-400 hover:void-bg-emerald-500/20 void-transition-colors void-text-xs void-font-medium"
+							style={{
+								display: 'flex', alignItems: 'center', gap: '4px',
+								padding: '4px 10px', borderRadius: '6px', cursor: 'pointer',
+								background: 'rgba(16,185,129,0.1)', color: '#34d399',
+								border: 'none', fontSize: '11px', fontWeight: 500,
+							}}
 						>
-							<Play size={10} />
-							Run
+							<Play size={10} /> Run
 						</button>
 					)}
 				</div>
 			</div>
 
-			{/* Pipeline Flow */}
-			<div className="void-flex-1 void-overflow-y-auto void-p-4">
-				<div className="void-flex void-flex-col void-gap-2">
-					{agents.map((agent, index) => (
-						<React.Fragment key={agent.role}>
-							<AgentCard
-								agent={agent}
-								onRerun={() => handleRerun(agent.role)}
-							/>
+			{/* Quick stats bar */}
+			<div style={{
+				display: 'flex', alignItems: 'center', gap: '12px',
+				padding: '8px 16px',
+				borderBottom: '1px solid var(--void-border-2)',
+				fontSize: '11px', color: 'var(--void-fg-3)',
+			}}>
+				<div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+					<CheckCircle size={11} color="#10b981" />
+					<span>{completedCount}/{agents.length}</span>
+				</div>
+				<div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+					<Zap size={11} color="#f59e0b" />
+					<span>{totalTokens > 1000 ? `${(totalTokens / 1000).toFixed(1)}K` : totalTokens} tokens</span>
+				</div>
+			</div>
 
-							{/* Flow connector arrow */}
-							{index < agents.length - 1 && (
-								<div className="void-flex void-justify-center void-py-1">
-									<div className="void-flex void-flex-col void-items-center">
-										<div
-											className="void-w-px void-h-4"
-											style={{
-												backgroundColor: agent.status === 'completed'
-													? roleDisplayConfig[agent.role].color
-													: 'var(--void-border-2)',
-												opacity: agent.status === 'completed' ? 0.6 : 0.3,
-											}}
-										/>
-										<ArrowDown
-											size={12}
-											style={{
-												color: agent.status === 'completed'
-													? roleDisplayConfig[agent.role].color
-													: 'var(--void-fg-4)',
-												opacity: agent.status === 'completed' ? 0.8 : 0.3,
-											}}
-										/>
+			{/* Pipeline Flow */}
+			<div style={{ flex: '1 1 0', minHeight: 0, overflowY: 'auto', padding: '16px' }}>
+				<div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+					{agents.map((agent, index) => {
+						const display = roleDisplayConfig[agent.role];
+						const providerTitle = displayInfoOfProviderName(agent.provider).title;
+
+						return (
+							<React.Fragment key={agent.role}>
+								{/* Agent Card - clean compact style */}
+								<div style={{
+									display: 'flex', alignItems: 'center', gap: '10px',
+									padding: '10px 12px',
+									borderRadius: '8px',
+									border: `1px solid ${agent.status === 'running' ? display.color : 'var(--void-border-2)'}`,
+									background: agent.status === 'running'
+										? `linear-gradient(135deg, ${display.color}08, ${display.color}04)`
+										: 'var(--void-bg-1)',
+									boxShadow: agent.status === 'running' ? `0 0 12px ${display.glowColor}` : undefined,
+									transition: 'all 0.3s ease',
+								}}>
+									{/* Status dot */}
+									<div style={{
+										width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0,
+										backgroundColor: statusColors[agent.status],
+										boxShadow: agent.status === 'running' ? `0 0 6px ${statusColors[agent.status]}` : undefined,
+									}} />
+
+									{/* Info */}
+									<div style={{ flex: 1, minWidth: 0 }}>
+										<div style={{
+											display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px',
+										}}>
+											<span style={{ fontSize: '12px', fontWeight: 600, color: display.color }}>
+												{display.label}
+											</span>
+											<span style={{ fontSize: '10px', color: 'var(--void-fg-4)' }}>
+												{statusLabels[agent.status]}
+											</span>
+										</div>
+										<div style={{ fontSize: '10px', color: 'var(--void-fg-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+											{providerTitle} · {agent.model}
+										</div>
 									</div>
+
+									{/* Tokens */}
+									{agent.tokensUsed > 0 && (
+										<span style={{ fontSize: '10px', color: 'var(--void-fg-4)', flexShrink: 0 }}>
+											{agent.tokensUsed > 1000 ? `${(agent.tokensUsed / 1000).toFixed(1)}K` : agent.tokensUsed}
+										</span>
+									)}
 								</div>
-							)}
-						</React.Fragment>
-					))}
+
+								{/* Connector */}
+								{index < agents.length - 1 && (
+									<div style={{ display: 'flex', justifyContent: 'center', padding: '2px 0' }}>
+										<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+											<div style={{
+												width: '1px', height: '12px',
+												backgroundColor: agent.status === 'completed' ? display.color : 'var(--void-border-2)',
+												opacity: agent.status === 'completed' ? 0.5 : 0.3,
+											}} />
+											<ArrowDown size={10} style={{
+												color: agent.status === 'completed' ? display.color : 'var(--void-fg-4)',
+												opacity: agent.status === 'completed' ? 0.7 : 0.3,
+											}} />
+										</div>
+									</div>
+								)}
+							</React.Fragment>
+						);
+					})}
 				</div>
 			</div>
 		</div>

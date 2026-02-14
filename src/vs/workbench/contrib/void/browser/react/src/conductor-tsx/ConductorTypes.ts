@@ -86,9 +86,17 @@ export const agentStrengthTags: Record<AgentRole, AgentStrengthTag[]> = {
 		{ label: 'Research', color: '#06b6d4' },
 		{ label: 'Documentation', color: '#84cc16' },
 	],
+	research: [
+		{ label: 'Deep Research', color: '#8b5cf6' },
+		{ label: 'Analysis', color: '#06b6d4' },
+	],
 	design: [
 		{ label: 'UI/UX', color: '#ec4899' },
 		{ label: 'Visual Design', color: '#f97316' },
+	],
+	writing: [
+		{ label: 'Content', color: '#14b8a6' },
+		{ label: 'Documentation', color: '#84cc16' },
 	],
 };
 
@@ -98,7 +106,9 @@ export const roleDisplayConfig: Record<AgentRole, { label: string; color: string
 	coder: { label: 'Coder', color: '#3b82f6', glowColor: 'rgba(59, 130, 246, 0.4)' },
 	planner: { label: 'Planner', color: '#10b981', glowColor: 'rgba(16, 185, 129, 0.4)' },
 	search: { label: 'Search', color: '#06b6d4', glowColor: 'rgba(6, 182, 212, 0.4)' },
+	research: { label: 'Research', color: '#8b5cf6', glowColor: 'rgba(139, 92, 246, 0.4)' },
 	design: { label: 'Design', color: '#ec4899', glowColor: 'rgba(236, 72, 153, 0.4)' },
+	writing: { label: 'Writing', color: '#14b8a6', glowColor: 'rgba(20, 184, 166, 0.4)' },
 };
 
 // Default pipeline templates
