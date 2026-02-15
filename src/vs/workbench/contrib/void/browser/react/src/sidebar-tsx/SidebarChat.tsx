@@ -374,6 +374,7 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 }) => {
 	const accessor = useAccessor()
 	const chatThreadService = accessor.get('IChatThreadService')
+	const languageService = accessor.get('ILanguageService')
 	const fileInputRef = useRef<HTMLInputElement>(null)
 	const [isDragOver, setIsDragOver] = useState(false)
 
@@ -381,27 +382,81 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 		if (!files) return
 		for (let i = 0; i < files.length; i++) {
 			const file = files[i]
-			if (!file.type.startsWith('image/')) continue
-			const reader = new FileReader()
-			reader.onload = () => {
-				const dataUrl = reader.result as string
-				// extract base64 data from data URL (remove "data:image/png;base64," prefix)
-				const base64Data = dataUrl.split(',')[1]
-				if (!base64Data) return
+			if (file.type.startsWith('image/')) {
+				const reader = new FileReader()
+				reader.onload = () => {
+					const dataUrl = reader.result as string
+					// extract base64 data from data URL (remove "data:image/png;base64," prefix)
+					const base64Data = dataUrl.split(',')[1]
+					if (!base64Data) return
+					const newSelection: StagingSelectionItem = {
+						type: 'Image',
+						uri: URI.file(file.name),
+						base64Data,
+						mimeType: file.type,
+						fileName: file.name,
+						language: undefined,
+						state: undefined,
+					}
+					chatThreadService.addNewStagingSelection(newSelection)
+				}
+				reader.readAsDataURL(file)
+			} else {
+				// Handle non-image files as File context
+				const uri = URI.file(file.name)
 				const newSelection: StagingSelectionItem = {
-					type: 'Image',
-					uri: URI.file(file.name),
-					base64Data,
-					mimeType: file.type,
-					fileName: file.name,
-					language: undefined,
-					state: undefined,
+					type: 'File',
+					uri,
+					language: languageService.guessLanguageIdByFilepathOrFirstLine(uri) || 'plaintext',
+					state: { wasAddedAsCurrentFile: false },
 				}
 				chatThreadService.addNewStagingSelection(newSelection)
 			}
-			reader.readAsDataURL(file)
 		}
-	}, [chatThreadService])
+	}, [chatThreadService, languageService])
+
+	// Handle VS Code internal drag data (files dragged from file explorer, editor tabs, etc.)
+	const handleVSCodeDrop = useCallback((dataTransfer: DataTransfer) => {
+		// Try ResourceURLs first (VS Code internal format)
+		const resourcesData = dataTransfer.getData('ResourceURLs')
+		if (resourcesData) {
+			try {
+				const uriStrings: string[] = JSON.parse(resourcesData)
+				for (const uriString of uriStrings) {
+					const uri = URI.parse(uriString)
+					const newSelection: StagingSelectionItem = {
+						type: 'File',
+						uri,
+						language: languageService.guessLanguageIdByFilepathOrFirstLine(uri) || 'plaintext',
+						state: { wasAddedAsCurrentFile: false },
+					}
+					chatThreadService.addNewStagingSelection(newSelection)
+				}
+				return true
+			} catch { /* ignore parse errors */ }
+		}
+
+		// Fallback: try text/uri-list
+		const uriListData = dataTransfer.getData('text/uri-list')
+		if (uriListData) {
+			const uriStrings = uriListData.split(/\r?\n/).filter(line => line && !line.startsWith('#'))
+			for (const uriString of uriStrings) {
+				try {
+					const uri = URI.parse(uriString)
+					const newSelection: StagingSelectionItem = {
+						type: 'File',
+						uri,
+						language: languageService.guessLanguageIdByFilepathOrFirstLine(uri) || 'plaintext',
+						state: { wasAddedAsCurrentFile: false },
+					}
+					chatThreadService.addNewStagingSelection(newSelection)
+				} catch { /* ignore parse errors */ }
+			}
+			return true
+		}
+
+		return false
+	}, [chatThreadService, languageService])
 
 	const onDragOver = useCallback((e: React.DragEvent) => {
 		e.preventDefault()
@@ -419,8 +474,15 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 		e.preventDefault()
 		e.stopPropagation()
 		setIsDragOver(false)
-		handleFiles(e.dataTransfer.files)
-	}, [handleFiles])
+
+		// First try to handle VS Code internal drag data (file explorer, editor tabs, etc.)
+		const handledInternal = handleVSCodeDrop(e.dataTransfer)
+
+		// If not an internal drop, handle as external file drop
+		if (!handledInternal) {
+			handleFiles(e.dataTransfer.files)
+		}
+	}, [handleFiles, handleVSCodeDrop])
 
 	return (
 		<div
@@ -448,8 +510,8 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 			{isDragOver && (
 				<div className='absolute inset-0 z-10 flex items-center justify-center bg-blue-500/10 border-2 border-dashed border-blue-400 rounded-md pointer-events-none'>
 					<div className='flex items-center gap-2 text-blue-300 text-sm font-medium'>
-						<ImageIcon size={16} />
-						Drop image here
+						<Paperclip size={16} />
+						Drop files here
 					</div>
 				</div>
 			)}
