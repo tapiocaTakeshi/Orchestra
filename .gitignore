@@ -22,7 +22,6 @@ product.overrides.json
 *.snap.actual
 .vscode-test
 
-# Void added these:
 .env
 .tmp/
 .tmp2/

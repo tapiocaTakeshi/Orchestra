@@ -637,7 +637,7 @@ const VoidOnboardingContent = () => {
 
 	const openExternalLogin = async () => {
 		try {
-			await nativeHostService.openExternal('https://neat-snake-39.accounts.dev/sign-in');
+			await nativeHostService.openExternal('https://accounts.he-ro.jp/sign-in');
 		} catch (e) {
 			console.error('Failed to open external browser:', e);
 		}

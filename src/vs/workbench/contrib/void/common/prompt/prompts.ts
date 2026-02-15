@@ -610,6 +610,11 @@ export const messageOfSelection = async (
 		const contentStr = [folderStructure, ...strOfFiles].join('\n\n')
 		return contentStr
 	}
+	else if (s.type === 'Image') {
+		// Image data is sent as a separate multimodal content block,
+		// so we just include a text reference here
+		return `[Image: ${s.fileName}]`
+	}
 	else
 		return ''
 

@@ -20,11 +20,11 @@ import { ModelDropdown, } from '../void-settings-tsx/ModelDropdown.js';
 import { PastThreadsList } from './SidebarThreadSelector.js';
 import { VOID_CTRL_L_ACTION_ID } from '../../../actionIDs.js';
 import { VOID_OPEN_SETTINGS_ACTION_ID } from '../../../voidSettingsPane.js';
-import { ChatMode, displayInfoOfProviderName, FeatureName, isFeatureNameDisabled } from '../../../../../../../workbench/contrib/void/common/voidSettingsTypes.js';
+import { AgentRole, ChatMode, displayInfoOfProviderName, FeatureName, isFeatureNameDisabled, RoleAssignment } from '../../../../../../../workbench/contrib/void/common/voidSettingsTypes.js';
 import { ICommandService } from '../../../../../../../platform/commands/common/commands.js';
 import { WarningBox } from '../void-settings-tsx/WarningBox.js';
 import { getModelCapabilities, getIsReasoningEnabledState } from '../../../../common/modelCapabilities.js';
-import { AlertTriangle, File, Ban, Check, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text } from 'lucide-react';
+import { AlertTriangle, File, Ban, Check, ChevronDown, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text, Image as ImageIcon, Paperclip } from 'lucide-react';
 import { ChatMessage, CheckpointEntry, StagingSelectionItem, ToolMessage } from '../../../../common/chatThreadServiceTypes.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, ToolName, LintErrorItem, ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsServiceTypes.js';
 import { CopyButton, EditToolAcceptRejectButtonsHTML, IconShell1, JumpToFileButton, JumpToTerminalButton, StatusIndicator, StatusIndicatorForApplyButton, useApplyStreamState, useEditToolStreamState } from '../markdown/ApplyBlockHoverButtons.js';
@@ -372,6 +372,56 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 	featureName,
 	loadingIcon,
 }) => {
+	const accessor = useAccessor()
+	const chatThreadService = accessor.get('IChatThreadService')
+	const fileInputRef = useRef<HTMLInputElement>(null)
+	const [isDragOver, setIsDragOver] = useState(false)
+
+	const handleFiles = useCallback((files: FileList | null) => {
+		if (!files) return
+		for (let i = 0; i < files.length; i++) {
+			const file = files[i]
+			if (!file.type.startsWith('image/')) continue
+			const reader = new FileReader()
+			reader.onload = () => {
+				const dataUrl = reader.result as string
+				// extract base64 data from data URL (remove "data:image/png;base64," prefix)
+				const base64Data = dataUrl.split(',')[1]
+				if (!base64Data) return
+				const newSelection: StagingSelectionItem = {
+					type: 'Image',
+					uri: URI.file(file.name),
+					base64Data,
+					mimeType: file.type,
+					fileName: file.name,
+					language: undefined,
+					state: undefined,
+				}
+				chatThreadService.addNewStagingSelection(newSelection)
+			}
+			reader.readAsDataURL(file)
+		}
+	}, [chatThreadService])
+
+	const onDragOver = useCallback((e: React.DragEvent) => {
+		e.preventDefault()
+		e.stopPropagation()
+		setIsDragOver(true)
+	}, [])
+
+	const onDragLeave = useCallback((e: React.DragEvent) => {
+		e.preventDefault()
+		e.stopPropagation()
+		setIsDragOver(false)
+	}, [])
+
+	const onDrop = useCallback((e: React.DragEvent) => {
+		e.preventDefault()
+		e.stopPropagation()
+		setIsDragOver(false)
+		handleFiles(e.dataTransfer.files)
+	}, [handleFiles])
+
 	return (
 		<div
 			ref={divRef}
@@ -383,12 +433,27 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 				transition-all duration-200
 				border border-void-border-3 focus-within:border-void-border-1 hover:border-void-border-1
 				max-h-[80vh] overflow-y-auto
+				${isDragOver ? 'border-blue-400 bg-blue-500/10' : ''}
                 ${className}
             `}
 			onClick={(e) => {
 				onClickAnywhere?.()
 			}}
+			onDragOver={onDragOver}
+			onDragEnter={onDragOver}
+			onDragLeave={onDragLeave}
+			onDrop={onDrop}
 		>
+			{/* Drag & drop overlay */}
+			{isDragOver && (
+				<div className='absolute inset-0 z-10 flex items-center justify-center bg-blue-500/10 border-2 border-dashed border-blue-400 rounded-md pointer-events-none'>
+					<div className='flex items-center gap-2 text-blue-300 text-sm font-medium'>
+						<ImageIcon size={16} />
+						Drop image here
+					</div>
+				</div>
+			)}
+
 			{/* Selections section */}
 			{showSelections && selections && setSelections && (
 				<SelectedFiles
@@ -415,8 +480,21 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 				)}
 			</div>
 
+			{/* Hidden file input for attachment */}
+			<input
+				ref={fileInputRef}
+				type='file'
+				accept='image/*'
+				multiple
+				className='hidden'
+				onChange={(e) => {
+					handleFiles(e.target.files)
+					if (fileInputRef.current) fileInputRef.current.value = ''
+				}}
+			/>
+
 			{/* Bottom row */}
-			<div className='flex flex-row justify-between items-end gap-1'>
+			<div className='flex flex-row justify-between items-end gap-1 bg-black/80 p-1 rounded-md -mx-1 mb-[-4px]'>
 				{showModelDropdown && (
 					<div className='flex flex-col gap-y-1'>
 						<ReasoningOptionSlider featureName={featureName} />
@@ -430,6 +508,20 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 				)}
 
 				<div className="flex items-center gap-2">
+
+					{/* Attachment button */}
+					{showSelections && (
+						<button
+							type='button'
+							className='p-1 rounded cursor-pointer text-void-fg-3 hover:text-void-fg-1 hover:bg-void-bg-2 transition-colors duration-150'
+							onClick={() => fileInputRef.current?.click()}
+							data-tooltip-id='void-tooltip'
+							data-tooltip-content='Attach image'
+							data-tooltip-place='top'
+						>
+							<Paperclip size={16} className='stroke-[1.5]' />
+						</button>
+					)}
 
 					{isStreaming && loadingIcon}
 
@@ -497,6 +589,12 @@ const ScrollToBottomContainer = ({ children, className, style, scrollContainerRe
 	const [isAtBottom, setIsAtBottom] = useState(true); // Start at bottom
 
 	const divRef = scrollContainerRef
+	const contentRef = useRef<HTMLDivElement>(null);
+	const isAtBottomRef = useRef(isAtBottom);
+
+	useEffect(() => {
+		isAtBottomRef.current = isAtBottom;
+	}, [isAtBottom]);
 
 	const onScroll = () => {
 		const div = divRef.current;
@@ -504,7 +602,7 @@ const ScrollToBottomContainer = ({ children, className, style, scrollContainerRe
 
 		const isBottom = Math.abs(
 			div.scrollHeight - div.clientHeight - div.scrollTop
-		) < 4;
+		) < 10;
 
 		setIsAtBottom(isBottom);
 	};
@@ -516,19 +614,55 @@ const ScrollToBottomContainer = ({ children, className, style, scrollContainerRe
 		}
 	}, [children, isAtBottom]); // Dependency on children to detect new messages
 
+	// ResizeObserver to detect content height changes (streaming)
+	useEffect(() => {
+		if (!contentRef.current) return;
+		const observer = new ResizeObserver(() => {
+			if (isAtBottomRef.current) {
+				scrollToBottom(divRef);
+			}
+		});
+		observer.observe(contentRef.current);
+		return () => observer.disconnect();
+	}, []);
+
 	// Initial scroll to bottom
 	useEffect(() => {
 		scrollToBottom(divRef);
 	}, []);
 
 	return (
-		<div
-			ref={divRef}
-			onScroll={onScroll}
-			className={className}
-			style={style}
-		>
-			{children}
+		<div className='relative' style={style}>
+			<div
+				ref={divRef}
+				onScroll={onScroll}
+				className={className}
+				style={{ flex: '1 1 0', minHeight: 0, height: '100%' }}
+			>
+				<div ref={contentRef}>
+					{children}
+				</div>
+			</div>
+
+			{/* Floating scroll-to-bottom button */}
+			{!isAtBottom && (
+				<button
+					onClick={() => scrollToBottom(divRef)}
+					className='absolute bottom-3 left-1/2 -translate-x-1/2 z-10
+						w-7 h-7 rounded-full
+						bg-void-bg-1 border border-void-border-1
+						flex items-center justify-center
+						cursor-pointer
+						shadow-md hover:shadow-lg
+						opacity-80 hover:opacity-100
+						transition-all duration-200'
+					data-tooltip-id='void-tooltip'
+					data-tooltip-content='Scroll to bottom'
+					data-tooltip-place='top'
+				>
+					<ChevronDown size={16} className='text-void-fg-2' />
+				</button>
+			)}
 		</div>
 	);
 };
@@ -687,7 +821,48 @@ export const SelectedFiles = (
 				const thisKey = selection.type === 'CodeSelection' ? selection.type + selection.language + selection.range + selection.state.wasAddedAsCurrentFile + selection.uri.fsPath
 					: selection.type === 'File' ? selection.type + selection.language + selection.state.wasAddedAsCurrentFile + selection.uri.fsPath
 						: selection.type === 'Folder' ? selection.type + selection.language + selection.state + selection.uri.fsPath
-							: i
+							: selection.type === 'Image' ? 'Image_' + selection.fileName + '_' + i
+								: i
+
+				// Render image selections as thumbnails
+				if (selection.type === 'Image') {
+					return <div key={thisKey} className='flex flex-col space-y-[1px]'>
+						<div
+							className={`
+								flex items-center gap-1 relative
+								px-1 py-0.5
+								w-fit h-fit
+								select-none
+								text-xs text-nowrap
+								border rounded-sm
+								${isThisSelectionProspective ? 'bg-void-bg-1 text-void-fg-3 opacity-80' : 'bg-void-bg-1 hover:brightness-95 text-void-fg-1'}
+								${isThisSelectionProspective ? 'border-void-border-2' : 'border-void-border-1'}
+								hover:border-void-border-1
+								transition-all duration-150
+							`}
+						>
+							<img
+								src={`data:${selection.mimeType};base64,${selection.base64Data}`}
+								alt={selection.fileName}
+								className='w-6 h-6 object-cover rounded-sm'
+							/>
+							<span className='max-w-[80px] truncate'>{selection.fileName}</span>
+							{type === 'staging' && !isThisSelectionProspective ?
+								<div
+									className='cursor-pointer z-1 self-stretch flex items-center justify-center'
+									onClick={(e) => {
+										e.stopPropagation();
+										if (type !== 'staging') return;
+										setSelections([...selections.slice(0, i), ...selections.slice(i + 1)])
+									}}
+								>
+									<IconX className='stroke-[2]' size={10} />
+								</div>
+								: <></>
+							}
+						</div>
+					</div>
+				}
 
 				const SelectionIcon = (
 					selection.type === 'File' ? File
@@ -835,6 +1010,7 @@ const ToolHeaderWrapper = ({
 }: ToolHeaderParams) => {
 
 	const [isOpen_, setIsOpen] = useState(false);
+	// Default to collapsed (code content hidden) unless explicitly set
 	const isExpanded = isOpen !== undefined ? isOpen : isOpen_
 
 	const isDropdown = children !== undefined // null ALLOWS dropdown
@@ -842,9 +1018,14 @@ const ToolHeaderWrapper = ({
 
 	const isDesc1Clickable = !!desc1OnClick
 
+	// Determine accent color based on status
+	const accentColor = isError ? 'var(--void-warning)'
+		: isRejected ? 'var(--void-fg-4)'
+		: 'var(--vscode-focusBorder)'
+
 	const desc1HTML = <span
-		className={`text-void-fg-4 text-xs italic truncate ml-2
-			${isDesc1Clickable ? 'cursor-pointer hover:brightness-125 transition-all duration-150' : ''}
+		className={`text-void-fg-4 text-[11px] truncate ml-1.5
+			${isDesc1Clickable ? 'cursor-pointer hover:text-void-fg-2 transition-colors duration-150' : ''}
 		`}
 		onClick={desc1OnClick}
 		{...desc1Info ? {
@@ -856,13 +1037,23 @@ const ToolHeaderWrapper = ({
 	>{desc1}</span>
 
 	return (<div className=''>
-		<div className={`w-full border border-void-border-3 rounded px-2 py-1 bg-void-bg-3 overflow-hidden ${className}`}>
+		<div
+			style={{
+				background: 'var(--void-bg-2)',
+				border: '1px solid var(--void-border-1)',
+				borderLeft: `2px solid ${accentColor}`,
+				borderRadius: '6px',
+				overflow: 'hidden',
+				transition: 'border-color 0.2s ease',
+			}}
+			className={className}
+		>
 			{/* header */}
-			<div className={`select-none flex items-center min-h-[24px]`}>
-				<div className={`flex items-center w-full gap-x-2 overflow-hidden justify-between ${isRejected ? 'line-through' : ''}`}>
+			<div className={`select-none flex items-center min-h-[28px] px-2.5 py-1`}>
+				<div className={`flex items-center w-full gap-x-2 overflow-hidden justify-between ${isRejected ? 'line-through opacity-50' : ''}`}>
 					{/* left */}
 					<div // container for if desc1 is clickable
-						className='ml-1 flex items-center overflow-hidden'
+						className='flex items-center overflow-hidden'
 					>
 						{/* title eg "> Edited File" */}
 						<div className={`
@@ -876,11 +1067,11 @@ const ToolHeaderWrapper = ({
 						>
 							{isDropdown && (<ChevronRight
 								className={`
-								text-void-fg-3 mr-0.5 h-4 w-4 flex-shrink-0 transition-transform duration-100 ease-[cubic-bezier(0.4,0,0.2,1)]
+								text-void-fg-4 mr-1 h-3.5 w-3.5 flex-shrink-0 transition-transform duration-100 ease-[cubic-bezier(0.4,0,0.2,1)]
 								${isExpanded ? 'rotate-90' : ''}
 							`}
 							/>)}
-							<span className="text-void-fg-3 flex-shrink-0">{title}</span>
+							<span className="text-void-fg-2 text-[12px] font-medium flex-shrink-0">{title}</span>
 
 							{!isDesc1Clickable && desc1HTML}
 						</div>
@@ -891,8 +1082,8 @@ const ToolHeaderWrapper = ({
 					<div className="flex items-center gap-x-2 flex-shrink-0">
 
 						{info && <CircleEllipsis
-							className='ml-2 text-void-fg-4 opacity-60 flex-shrink-0'
-							size={14}
+							className='text-void-fg-4 opacity-60 flex-shrink-0'
+							size={13}
 							data-tooltip-id='void-tooltip'
 							data-tooltip-content={info}
 							data-tooltip-place='top-end'
@@ -900,35 +1091,34 @@ const ToolHeaderWrapper = ({
 
 						{isError && <AlertTriangle
 							className='text-void-warning opacity-90 flex-shrink-0'
-							size={14}
+							size={13}
 							data-tooltip-id='void-tooltip'
 							data-tooltip-content={'Error running tool'}
 							data-tooltip-place='top'
 						/>}
 						{isRejected && <Ban
 							className='text-void-fg-4 opacity-90 flex-shrink-0'
-							size={14}
+							size={13}
 							data-tooltip-id='void-tooltip'
 							data-tooltip-content={'Canceled'}
 							data-tooltip-place='top'
 						/>}
-						{desc2 && <span className="text-void-fg-4 text-xs" onClick={desc2OnClick}>
+						{desc2 && <span className="text-void-fg-4 text-[11px]" onClick={desc2OnClick}>
 							{desc2}
 						</span>}
 						{numResults !== undefined && (
-							<span className="text-void-fg-4 text-xs ml-auto mr-1">
-								{`${numResults}${hasNextPage ? '+' : ''} result${numResults !== 1 ? 's' : ''}`}
+							<span className="text-void-fg-4 text-[10px] bg-void-bg-3 px-1.5 py-0.5 rounded">
+								{`${numResults}${hasNextPage ? '+' : ''}`}
 							</span>
 						)}
 					</div>
 				</div>
 			</div>
-			{/* children */}
+			{/* children - collapsed by default, code content hidden */}
 			{<div
 				className={`overflow-hidden transition-all duration-200 ease-in-out ${isExpanded ? 'opacity-100 py-1' : 'max-h-0 opacity-0'}
 					text-void-fg-4 rounded-sm overflow-x-auto
 				  `}
-			//    bg-black bg-opacity-10 border border-void-border-4 border-opacity-50
 			>
 				{children}
 			</div>}
@@ -1208,7 +1398,7 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 	const isMsgAfterCheckpoint = currCheckpointIdx !== undefined && currCheckpointIdx === messageIdx - 1
 
 	return <div
-		// align chatbubble accoridng to role
+		// align chatbubble according to role
 		className={`
         relative ml-auto
         ${mode === 'edit' ? 'w-full max-w-full'
@@ -1221,11 +1411,17 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 		onMouseLeave={() => setIsHovered(false)}
 	>
 		<div
-			// style chatbubble according to role
+			// style chatbubble according to role - card style
+			style={mode === 'display' ? {
+				background: 'linear-gradient(135deg, var(--void-bg-1) 0%, color-mix(in srgb, var(--void-bg-1) 90%, var(--vscode-focusBorder) 10%) 100%)',
+				border: '1px solid color-mix(in srgb, var(--void-border-1) 60%, var(--vscode-focusBorder) 40%)',
+				borderRadius: '12px',
+				boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+			} : {}}
 			className={`
-            text-left rounded-lg max-w-full
+            text-left max-w-full
             ${mode === 'edit' ? ''
-					: mode === 'display' ? 'p-2 flex flex-col bg-void-bg-1 text-void-fg-1 overflow-x-auto cursor-pointer' : ''
+					: mode === 'display' ? 'p-3 flex flex-col text-void-fg-1 overflow-x-auto cursor-pointer' : ''
 				}
         `}
 			onClick={() => { if (mode === 'display') { onOpenEdit() } }}
@@ -1237,9 +1433,6 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 
 		<div
 			className="absolute -top-1 -right-1 translate-x-0 -translate-y-0 z-1"
-		// data-tooltip-id='void-tooltip'
-		// data-tooltip-content='Edit message'
-		// data-tooltip-place='left'
 		>
 			<EditSymbol
 				size={18}
@@ -1363,16 +1556,28 @@ type FlowPhase = {
 	id: string;
 	label: string;
 	status: 'idle' | 'active' | 'done';
+	modelName?: string; // model assigned to this phase's role
 }
 
-const detectFlowPhases = (messages: ChatMessage[], isRunning: IsRunningType, reasoningSoFar?: string): FlowPhase[] => {
-	const phases: FlowPhase[] = [
-		{ id: 'thinking', label: 'Thinking', status: 'idle' },
-		{ id: 'searching', label: 'Searching', status: 'idle' },
-		{ id: 'reading', label: 'Reading', status: 'idle' },
-		{ id: 'coding', label: 'Coding', status: 'idle' },
-		{ id: 'running', label: 'Running', status: 'idle' },
+const detectFlowPhases = (messages: ChatMessage[], isRunning: IsRunningType, reasoningSoFar?: string, roleAssignments?: RoleAssignment[]): FlowPhase[] => {
+	// Map phases to roles
+	const phaseRoleMap: { id: string; label: string; role: AgentRole }[] = [
+		{ id: 'thinking', label: 'Thinking', role: 'leader' },
+		{ id: 'searching', label: 'Searching', role: 'search' },
+		{ id: 'reading', label: 'Reading', role: 'research' },
+		{ id: 'coding', label: 'Coding', role: 'coder' },
+		{ id: 'running', label: 'Running', role: 'leader' },
 	];
+
+	const phases: FlowPhase[] = phaseRoleMap.map(p => {
+		const assignment = roleAssignments?.find(r => r.role === p.role);
+		return {
+			id: p.id,
+			label: p.label,
+			status: 'idle' as const,
+			modelName: assignment?.model,
+		};
+	});
 
 	const searchTools = ['search_for_files', 'search_pathnames_only'];
 	const readTools = ['read_file', 'ls_dir', 'get_dir_tree'];
@@ -1435,30 +1640,65 @@ const FlowIndicator = ({ messages, isRunning, reasoningSoFar }: {
 	isRunning: IsRunningType,
 	reasoningSoFar?: string,
 }) => {
+	const settingsState = useSettingsState()
+	const modelSelection = settingsState.modelSelectionOfFeature['Chat']
+	const roleAssignments = settingsState.globalSettings.roleAssignments
+	const isDivision = modelSelection?.providerName === 'divisionAPI'
+
 	const phases = useMemo(() =>
-		detectFlowPhases(messages, isRunning, reasoningSoFar),
-		[messages, isRunning, reasoningSoFar]
+		detectFlowPhases(messages, isRunning, reasoningSoFar, isDivision ? roleAssignments : undefined),
+		[messages, isRunning, reasoningSoFar, isDivision, roleAssignments]
 	);
 
 	if (!isRunning || phases.length === 0) return null;
 
+	// For non-Division providers, show single model name
+	const singleModelLabel = !isDivision && modelSelection
+		? modelSelection.modelName
+		: null;
+
 	return (
 		<div style={{
-			display: 'flex', alignItems: 'center', gap: '4px',
+			display: 'flex', alignItems: 'center', gap: '6px',
 			padding: '4px 0',
+			flexWrap: 'wrap',
 		}}>
+			{singleModelLabel && (
+				<span style={{
+					fontSize: '10px',
+					color: 'var(--void-fg-3)',
+					background: 'var(--void-bg-2)',
+					border: '1px solid var(--void-border-1)',
+					borderRadius: '3px',
+					padding: '1px 5px',
+					marginRight: '2px',
+					whiteSpace: 'nowrap',
+				}}>{singleModelLabel}</span>
+			)}
 			{phases.map((phase, i) => (
 				<React.Fragment key={phase.id}>
 					{i > 0 && (
 						<span style={{ color: 'var(--void-fg-4)', fontSize: '10px' }}>→</span>
 					)}
 					<span style={{
-						fontSize: '11px',
-						color: phase.status === 'active' ? 'var(--void-fg-1)' : 'var(--void-fg-3)',
-						fontWeight: phase.status === 'active' ? 600 : 400,
-						opacity: phase.status === 'done' ? 0.5 : 1,
+						display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '1px',
 					}}>
-						{phase.label}{phase.status === 'active' ? '...' : ''}
+						<span style={{
+							fontSize: '11px',
+							color: phase.status === 'active' ? 'var(--void-fg-1)' : 'var(--void-fg-3)',
+							fontWeight: phase.status === 'active' ? 600 : 400,
+							opacity: phase.status === 'done' ? 0.5 : 1,
+						}}>
+							{phase.label}{phase.status === 'active' ? '...' : ''}
+						</span>
+						{phase.modelName && (
+							<span style={{
+								fontSize: '9px',
+								color: 'var(--void-fg-4)',
+								opacity: phase.status === 'done' ? 0.4 : 0.7,
+								whiteSpace: 'nowrap',
+							}}>{phase.modelName}</span>
+						)}
 					</span>
 				</React.Fragment>
 			))}
@@ -1472,115 +1712,131 @@ const DivisionOrchestrationComponent = ({ response, chatMessageLocation }: { res
 	const [showInput, setShowInput] = useState(false);
 
 	return (
-		<div className="flex flex-col gap-2 my-2">
-			<div className="flex items-center gap-2 mb-1">
-				<div className={`w-2 h-2 rounded-full ${status === 'error' ? 'bg-red-500' : 'bg-green-500'}`} />
-				<span className="text-[12px] font-bold text-void-fg-3 uppercase tracking-wider">
-					Division Orchestration {status === 'error' ? '(Error)' : ''}
-				</span>
-				{totalDuration !== undefined && (
-					<span className="text-[11px] text-void-fg-4 ml-auto">
-						{totalDuration}ms
-					</span>
-				)}
-			</div>
+		<div className="flex flex-col gap-4 my-2">
 
-			{response.input && (
-				<div className="mb-2">
-					<button
-						onClick={() => setShowInput(!showInput)}
-						className="text-[11px] text-void-fg-4 hover:text-void-fg-2 transition-colors flex items-center gap-1"
-					>
-						<ChevronRight size={10} className={`transform transition-transform ${showInput ? 'rotate-90' : ''}`} />
-						{showInput ? 'Hide' : 'Show'} Context Input
-					</button>
-					{showInput && (
-						<div className="mt-1 p-2 bg-void-bg-2 rounded text-[11px] text-void-fg-4 font-mono overflow-auto max-h-[200px] whitespace-pre-wrap border border-void-border-1">
-							{response.input}
-						</div>
+			{/* Task Generation Flow Card */}
+			<div style={{
+				background: 'var(--void-bg-1)',
+				border: '1px solid var(--void-border-1)',
+				borderRadius: '8px',
+				padding: '12px',
+				boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+			}}>
+				<div className="flex items-center gap-2 mb-3 pb-2 border-b border-void-border-1">
+					<div className={`w-2 h-2 rounded-full ${status === 'error' ? 'bg-red-500' : 'bg-green-500'}`} />
+					<span className="text-[11px] font-bold text-void-fg-2 uppercase tracking-wide">
+						Task Generation Flow
+					</span>
+					{totalDuration !== undefined && (
+						<span className="text-[10px] text-void-fg-4 ml-auto">
+							{totalDuration}ms
+						</span>
 					)}
 				</div>
-			)}
 
-			<div className="flex flex-col gap-2 border-l border-void-border-2 ml-1 pl-3 py-1">
-				{tasks.map((task: any, i: number) => (
-					<ToolHeaderWrapper
-						key={i}
-						title={task.role ? (task.role.charAt(0).toUpperCase() + task.role.slice(1)) : 'Task'}
-						desc1={
-							<div className="flex items-center gap-1.5 text-[11px] text-void-fg-4">
-								<span>{task.provider || 'AI'}</span>
-								<span>•</span>
-								<span>{task.model || 'Model'}</span>
-								{task.durationMs !== undefined && (
-									<>
-										<span>•</span>
-										<span>{task.durationMs}ms</span>
-									</>
-								)}
+				{response.input && (
+					<div className="mb-1">
+						<button
+							onClick={() => setShowInput(!showInput)}
+							className="text-[11px] text-void-fg-4 hover:text-void-fg-2 transition-colors flex items-center gap-1"
+						>
+							<ChevronRight size={10} className={`transform transition-transform ${showInput ? 'rotate-90' : ''}`} />
+							{showInput ? 'Hide' : 'Show'} Context Input
+						</button>
+						{showInput && (
+							<div className="mt-2 p-2 bg-void-bg-2 rounded text-[11px] text-void-fg-4 font-mono overflow-auto max-h-[200px] whitespace-pre-wrap border border-void-border-1">
+								{response.input}
 							</div>
-						}
-						isOpen={task.status === 'error' || tasks.length === 1}
-					>
-						<ToolChildrenWrapper>
-							<div className="flex flex-col gap-2 py-1">
-								{task.reason && (
-									<div className="text-[12px] italic text-void-fg-3">
-										{task.reason}
-									</div>
-								)}
-								{task.output && (
-									<div className="text-[13px] leading-snug">
-										<ChatMarkdownRender
-											string={task.output}
-											chatMessageLocation={chatMessageLocation}
-											isApplyEnabled={true}
-											isLinkDetectionEnabled={true}
-										/>
-									</div>
-								)}
-								{task.status === 'error' && (
-									<div className="text-[12px] text-red-500 font-medium flex items-center gap-1">
-										<AlertTriangle size={12} />
-										Failed to execute this step.
-									</div>
-								)}
-							</div>
-						</ToolChildrenWrapper>
-					</ToolHeaderWrapper>
-				))}
-
-				{status === 'error' && (
-					<div className="text-[13px] text-red-500 p-2 bg-red-500/10 rounded border border-red-500/20 mt-2">
-						<div className="font-bold flex items-center gap-1 mb-1">
-							<AlertTriangle size={14} />
-							Orchestration Error
-						</div>
-						<div className="text-[12px]">
-							{response.error || 'The Division API encountered an error during orchestration.'}
-						</div>
-					</div>
-				)}
-
-				{tasks.length === 0 && status === 'success' && (
-					<div className="text-[12px] text-void-fg-4 italic">
-						No tasks data available in response.
+						)}
 					</div>
 				)}
 			</div>
+
+			{/* Task Execution Cards */}
+			{tasks.map((task: any, i: number) => (
+				<div key={i} style={{
+					background: 'var(--void-bg-1)',
+					border: '1px solid var(--void-border-1)',
+					borderRadius: '8px',
+					padding: '12px',
+					boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+					position: 'relative',
+					overflow: 'hidden',
+				}}>
+					{/* Left accent strip */}
+					<div style={{
+						position: 'absolute', top: 0, bottom: 0, left: 0, width: '3px',
+						background: 'var(--vscode-focusBorder)', opacity: 0.7,
+					}} />
+
+					<div className="flex items-center gap-2 mb-3 pb-2 border-b border-void-border-1 pl-2">
+						<span className="text-[11px] font-bold text-void-fg-2 uppercase tracking-wide">
+							Task Execution Flow {i + 1}
+						</span>
+					</div>
+
+					<div className="pl-2">
+						<ToolHeaderWrapper
+							title={task.role ? (task.role.charAt(0).toUpperCase() + task.role.slice(1)) : 'Task'}
+							desc1={
+								<div className="flex items-center gap-1.5 text-[11px] text-void-fg-4">
+									<span>{task.provider || 'AI'}</span>
+									<span>•</span>
+									<span>{task.model || 'Model'}</span>
+									{task.durationMs !== undefined && (
+										<>
+											<span>•</span>
+											<span>{task.durationMs}ms</span>
+										</>
+									)}
+								</div>
+							}
+							isOpen={task.status === 'error' || tasks.length === 1}
+						>
+							<ToolChildrenWrapper>
+								<div className="flex flex-col gap-2 py-1">
+									{task.reason && (
+										<div className="text-[12px] italic text-void-fg-3">
+											{task.reason}
+										</div>
+									)}
+									{task.output && (
+										<div className="text-[13px] leading-snug">
+											<ChatMarkdownRender
+												string={task.output}
+												chatMessageLocation={chatMessageLocation}
+												isApplyEnabled={true}
+												isLinkDetectionEnabled={true}
+											/>
+										</div>
+									)}
+									{!task.output && !task.reason && <div className="text-[12px] text-void-fg-4 italic">No output</div>}
+								</div>
+							</ToolChildrenWrapper>
+						</ToolHeaderWrapper>
+					</div>
+				</div>
+			))}
 		</div>
 	);
 };
+
+
 
 const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted, messageIdx }: { chatMessage: ChatMessage & { role: 'assistant' }, isCheckpointGhost: boolean, messageIdx: number, isCommitted: boolean }) => {
 
 	const accessor = useAccessor()
 	const chatThreadsService = accessor.get('IChatThreadService')
+	const settingsState = useSettingsState()
 
 	const reasoningStr = chatMessage.reasoning?.trim() || null
 	const hasReasoning = !!reasoningStr
 	const isDoneReasoning = !!chatMessage.displayContent
 	const thread = chatThreadsService.getCurrentThread()
+
+	// Get model info from current settings
+	const modelSelection = settingsState.modelSelectionOfFeature['Chat']
+	const modelLabel = modelSelection ? modelSelection.modelName : null
 
 
 	const chatMessageLocation: ChatMessageLocation = {
@@ -1623,7 +1879,29 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 	const isEmpty = !chatMessage.displayContent && !chatMessage.reasoning
 	if (isEmpty) return null
 
-	return <>
+	return <div style={{
+		background: 'linear-gradient(135deg, var(--void-bg-2) 0%, color-mix(in srgb, var(--void-bg-2) 95%, var(--vscode-focusBorder) 5%) 100%)',
+		border: '1px solid var(--void-border-1)',
+		borderLeft: '3px solid var(--vscode-focusBorder)',
+		borderRadius: '8px',
+		padding: '12px 14px',
+		boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+	}}>
+		{/* model label header */}
+		{modelLabel && (
+			<div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', paddingBottom: '6px', borderBottom: '1px solid var(--void-border-1)' }}>
+				<div style={{
+					width: '6px', height: '6px', borderRadius: '50%',
+					background: 'var(--vscode-focusBorder)',
+				}} />
+				<span style={{
+					fontSize: '11px',
+					color: 'var(--void-fg-3)',
+					fontWeight: 500,
+					letterSpacing: '0.3px',
+				}}>{modelLabel}</span>
+			</div>
+		)}
 		{/* reasoning token */}
 		{hasReasoning &&
 			<div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
@@ -1657,7 +1935,7 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 				</div>
 			)
 		)}
-	</>
+	</div>
 
 }
 

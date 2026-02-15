@@ -43,7 +43,7 @@ function code() {
 	export ELECTRON_ENABLE_LOGGING=1
 
 	DISABLE_TEST_EXTENSION="--disable-extension=vscode.vscode-api-tests"
-	if [[ "$@" == *"--extensionTestsPath"* ]]; then
+	if [[ "$*" == *"--extensionTestsPath"* ]]; then
 		DISABLE_TEST_EXTENSION=""
 	fi
 

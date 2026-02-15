@@ -5,10 +5,11 @@
 
 import React, { useState } from 'react';
 import { useAccessor, useSettingsState, useIsDark } from '../util/services.js';
-import { X, ExternalLink, CheckCircle2, Mail } from 'lucide-react';
+import { X, ExternalLink, CheckCircle2, Mail, LogIn, UserPlus } from 'lucide-react';
+import { useUser } from '@clerk/clerk-react';
 
-const CLERK_SIGN_IN_URL = 'https://neat-snake-39.accounts.dev/sign-in';
-const CLERK_SIGN_UP_URL = 'https://neat-snake-39.accounts.dev/sign-up';
+const CLERK_SIGN_IN_URL = 'https://accounts.he-ro.jp/sign-in';
+const CLERK_SIGN_UP_URL = 'https://accounts.he-ro.jp/sign-up';
 
 export const LoginScreen = ({ onClose }: { onClose: () => void }) => {
 	const isDark = useIsDark();
@@ -16,15 +17,27 @@ export const LoginScreen = ({ onClose }: { onClose: () => void }) => {
 	const nativeHostService = accessor.get('INativeHostService');
 	const settingsService = accessor.get('IVoidSettingsService');
 	const settingsState = useSettingsState();
+	const { isSignedIn, user } = useUser();
 
 	const clerkUser = settingsState.globalSettings.clerkUser;
 
-	// If already signed in, close the screen
+	// If signed in via Clerk SDK or already has clerkUser, close
 	React.useEffect(() => {
-		if (clerkUser) {
+		if (isSignedIn && user) {
+			// Sync from Clerk SDK
+			settingsService.setGlobalSetting('clerkUser', {
+				id: user.id,
+				fullName: user.fullName,
+				primaryEmailAddress: user.primaryEmailAddress?.emailAddress || null,
+				imageUrl: user.imageUrl,
+				username: user.username,
+			});
+			settingsService.setGlobalSetting('clerkSessionId', null);
+			onClose();
+		} else if (clerkUser) {
 			onClose();
 		}
-	}, [clerkUser, onClose]);
+	}, [isSignedIn, user, clerkUser, onClose]);
 
 	const [emailInput, setEmailInput] = useState('');
 	const [nameInput, setNameInput] = useState('');
@@ -57,7 +70,6 @@ export const LoginScreen = ({ onClose }: { onClose: () => void }) => {
 			return;
 		}
 
-		// Basic email validation
 		const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 		if (!emailRegex.test(emailInput.trim())) {
 			setError('Please enter a valid email address.');
@@ -66,7 +78,6 @@ export const LoginScreen = ({ onClose }: { onClose: () => void }) => {
 
 		setError('');
 
-		// Store the user info from manual entry
 		await settingsService.setGlobalSetting('clerkUser', {
 			id: 'user_' + Date.now(),
 			fullName: nameInput.trim() || null,
@@ -113,17 +124,18 @@ export const LoginScreen = ({ onClose }: { onClose: () => void }) => {
 								onClick={openExternalLogin}
 								className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[#dc2626] hover:bg-[#b91c1c] text-white text-sm font-semibold transition-all shadow-md"
 							>
-								<ExternalLink size={16} />
+								<LogIn size={16} />
 								Sign In with Browser
 							</button>
 							<button
 								onClick={openExternalSignUp}
 								className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-void-bg-2 border border-void-border-2 text-void-fg-1 text-sm hover:bg-void-bg-3 transition-all"
 							>
+								<UserPlus size={16} />
 								Create an Account
 							</button>
 							<div className="text-[10px] text-void-fg-3 text-center mt-1">
-								Opens in your default browser for secure authentication
+								Opens accounts.he-ro.jp in your default browser
 							</div>
 						</div>
 					) : (

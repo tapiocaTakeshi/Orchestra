@@ -86,6 +86,14 @@ export type StagingSelectionItem = {
 	uri: URI;
 	language?: undefined;
 	state?: undefined;
+} | {
+	type: 'Image';
+	uri: URI;
+	base64Data: string;     // base64-encoded image data (without data URL prefix)
+	mimeType: string;       // e.g. 'image/png', 'image/jpeg', 'image/webp'
+	fileName: string;       // display name of the image file
+	language?: undefined;
+	state?: undefined;
 }
 
 

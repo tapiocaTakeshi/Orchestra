@@ -1095,9 +1095,35 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		appendText(`## 📋 Phase 1: Task Generation\n`);
 		appendText(`**Division API** \`/api/tasks/create\` にリクエスト送信中...\n\n`);
 
+
+
+		// Extract chat history and current input
+		const extractContent = (msg: LLMChatMessage): string => {
+			if ('content' in msg) {
+				if (typeof msg.content === 'string') return msg.content;
+				if (Array.isArray(msg.content)) {
+					return msg.content.map(part => {
+						if (typeof part === 'string') return part;
+						if (part && typeof part === 'object' && 'text' in part && (part as any).type === 'text') return (part as { text: string }).text;
+						return '';
+					}).join('');
+				}
+			} else if ('parts' in msg) {
+				return (msg as any).parts.map((part: any) => part.text || '').join('');
+			}
+			return '';
+		};
+
+		const chatHistory = messages.slice(0, -1).map(msg => ({
+			role: msg.role === 'model' ? 'assistant' : msg.role,
+			content: extractContent(msg)
+		}));
+		const lastMsg = messages[messages.length - 1];
+		const currentInput = lastMsg ? extractContent(lastMsg) : prompt;
+
 		const createResponse = await divisionFetch(endpointBase, '/api/tasks/create', {
 			method: 'POST',
-			body: JSON.stringify({ projectId, input: prompt }),
+			body: JSON.stringify({ projectId, input: currentInput, chatHistory }),
 			signal: controller.signal,
 		});
 

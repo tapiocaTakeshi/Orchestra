@@ -702,6 +702,80 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 			reservedOutputTokenSpace,
 			providerName,
 		})
+
+		// --- Inject image content blocks into user messages ---
+		// Collect image selections from original chat messages
+		const imageSelectionsByUserIdx: Map<number, { base64Data: string; mimeType: string; }[]> = new Map()
+		let userIdx = 0
+		for (const m of chatMessages) {
+			if (m.role === 'checkpoint' || m.role === 'interrupted_streaming_tool') continue
+			if (m.role === 'user') {
+				const images = (m.selections ?? []).filter(s => s.type === 'Image').map(s => ({
+					base64Data: (s as any).base64Data as string,
+					mimeType: (s as any).mimeType as string,
+				}))
+				if (images.length > 0) {
+					imageSelectionsByUserIdx.set(userIdx, images)
+				}
+				userIdx++
+			} else {
+				// tool and assistant both advance their respective indices but we only track user
+			}
+		}
+
+		// If there are images, inject them into the prepared messages
+		if (imageSelectionsByUserIdx.size > 0) {
+			// Build mapping: find which prepared messages correspond to user messages
+			let preparedUserIdx = 0
+			for (const msg of messages) {
+				if (msg.role !== 'user') continue
+
+				const images = imageSelectionsByUserIdx.get(preparedUserIdx)
+				preparedUserIdx++
+				if (!images || images.length === 0) continue
+
+				const isGemini = providerName === 'gemini' || specialToolFormat === 'gemini-style'
+
+				if (isGemini) {
+					// Gemini messages use parts array
+					const geminiMsg = msg as GeminiLLMChatMessage & { role: 'user' }
+					for (const img of images) {
+						geminiMsg.parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64Data } })
+					}
+				} else {
+					// Anthropic / OpenAI messages
+					const aoMsg = msg as AnthropicLLMChatMessage & { role: 'user' }
+					if (typeof aoMsg.content === 'string') {
+						const textContent = aoMsg.content
+						const contentArray: any[] = [{ type: 'text', text: textContent }]
+
+						if (providerName === 'anthropic') {
+							for (const img of images) {
+								contentArray.push({ type: 'image', source: { type: 'base64', media_type: img.mimeType, data: img.base64Data } })
+							}
+						} else {
+							// OpenAI style
+							for (const img of images) {
+								contentArray.push({ type: 'image_url', image_url: { url: `data:${img.mimeType};base64,${img.base64Data}` } })
+							}
+						}
+						aoMsg.content = contentArray
+					} else {
+						// Already an array, append image blocks
+						if (providerName === 'anthropic') {
+							for (const img of images) {
+								(aoMsg.content as any[]).push({ type: 'image', source: { type: 'base64', media_type: img.mimeType, data: img.base64Data } })
+							}
+						} else {
+							for (const img of images) {
+								(aoMsg.content as any[]).push({ type: 'image_url', image_url: { url: `data:${img.mimeType};base64,${img.base64Data}` } })
+							}
+						}
+					}
+				}
+			}
+		}
+
 		return { messages, separateSystemMessage };
 	}
 
