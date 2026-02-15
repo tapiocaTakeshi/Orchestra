@@ -31,7 +31,7 @@
 	"licenseFileName": "LICENSE.txt",
 	"reportIssueUrl": "https://github.com/voideditor/void/issues/new",
 	"nodejsRepository": "https://nodejs.org",
-	"urlProtocol": "orchestra",
+	"urlProtocol": "orchestra.he-ro.jp",
 	"extensionsGallery": {
 		"serviceUrl": "https://marketplace.visualstudio.com/_apis/public/gallery",
 		"itemUrl": "https://marketplace.visualstudio.com/items"
