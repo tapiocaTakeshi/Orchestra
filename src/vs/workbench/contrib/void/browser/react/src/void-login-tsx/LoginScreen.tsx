@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { useAccessor, useSettingsState, useIsDark } from '../util/services.js';
-import { X, ExternalLink, CheckCircle2, Mail, LogIn, UserPlus } from 'lucide-react';
+import { X, LogIn, UserPlus, CheckCircle2, Loader2 } from 'lucide-react';
 import { useUser } from '@clerk/clerk-react';
 
 const CLERK_SIGN_IN_URL = 'https://accounts.he-ro.jp/sign-in';
@@ -15,7 +15,7 @@ export const LoginScreen = ({ onClose }: { onClose: () => void }) => {
 	const isDark = useIsDark();
 	const accessor = useAccessor();
 	const nativeHostService = accessor.get('INativeHostService');
-	const settingsService = accessor.get('IVoidSettingsService');
+	const clerkService = accessor.get('IClerkService');
 	const settingsState = useSettingsState();
 	const { isSignedIn, user } = useUser();
 
@@ -24,69 +24,68 @@ export const LoginScreen = ({ onClose }: { onClose: () => void }) => {
 	// If signed in via Clerk SDK or already has clerkUser, close
 	React.useEffect(() => {
 		if (isSignedIn && user) {
-			// Sync from Clerk SDK
-			settingsService.setGlobalSetting('clerkUser', {
+			clerkService.setAuthState({
 				id: user.id,
 				fullName: user.fullName,
 				primaryEmailAddress: user.primaryEmailAddress?.emailAddress || null,
 				imageUrl: user.imageUrl,
 				username: user.username,
-			});
-			settingsService.setGlobalSetting('clerkSessionId', null);
+			}, null);
 			onClose();
 		} else if (clerkUser) {
 			onClose();
 		}
 	}, [isSignedIn, user, clerkUser, onClose]);
 
-	const [emailInput, setEmailInput] = useState('');
-	const [nameInput, setNameInput] = useState('');
+	const [browserOpened, setBrowserOpened] = useState(false);
+	const [isChecking, setIsChecking] = useState(false);
 	const [error, setError] = useState('');
-	const [step, setStep] = useState<'initial' | 'confirm'>('initial');
 
 	const openExternalLogin = async () => {
 		try {
 			await nativeHostService.openExternal(CLERK_SIGN_IN_URL);
-			setStep('confirm');
+			setBrowserOpened(true);
+			setError('');
 		} catch (e) {
 			console.error('Failed to open external browser:', e);
-			setError('Failed to open browser. Please copy the URL and open it manually.');
+			setError('ブラウザを開けませんでした。');
 		}
 	};
 
 	const openExternalSignUp = async () => {
 		try {
 			await nativeHostService.openExternal(CLERK_SIGN_UP_URL);
-			setStep('confirm');
+			setBrowserOpened(true);
+			setError('');
 		} catch (e) {
 			console.error('Failed to open external browser:', e);
-			setError('Failed to open browser. Please copy the URL and open it manually.');
+			setError('ブラウザを開けませんでした。');
 		}
 	};
 
-	const confirmSignIn = async () => {
-		if (!emailInput.trim()) {
-			setError('Please enter the email address you used to sign in.');
-			return;
-		}
-
-		const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-		if (!emailRegex.test(emailInput.trim())) {
-			setError('Please enter a valid email address.');
-			return;
-		}
-
+	const confirmLogin = async () => {
+		setIsChecking(true);
 		setError('');
 
-		await settingsService.setGlobalSetting('clerkUser', {
-			id: 'user_' + Date.now(),
-			fullName: nameInput.trim() || null,
-			primaryEmailAddress: emailInput.trim(),
-			imageUrl: null,
-			username: emailInput.trim().split('@')[0],
-		});
-		await settingsService.setGlobalSetting('clerkSessionId', 'external_' + Date.now());
-		onClose();
+		try {
+			// Use ClerkService to fetch user info via Clerk Backend API (Node.js https, no CORS)
+			const result = await clerkService.fetchLatestUser();
+
+			if (!result) {
+				setError('アクティブなセッションが見つかりません。ブラウザでログインしてから再度お試しください。');
+				setIsChecking(false);
+				return;
+			}
+
+			console.log('[Auth] Successfully authenticated:', result.user);
+			setIsChecking(false);
+			onClose();
+
+		} catch (e: any) {
+			console.error('[Auth] Error:', e);
+			setError(`認証に失敗しました: ${e.message}`);
+			setIsChecking(false);
+		}
 	};
 
 	return (
@@ -111,80 +110,60 @@ export const LoginScreen = ({ onClose }: { onClose: () => void }) => {
 							Welcome to Orchestra
 						</h1>
 						<p className="text-sm text-void-fg-3">
-							{step === 'initial'
-								? 'Sign in to sync your projects and access shared AI configurations.'
-								: 'After signing in on the browser, confirm your account below.'
+							{!browserOpened
+								? 'ブラウザでログインして、プロジェクトを同期しましょう。'
+								: 'ブラウザでログインが完了したら、下のボタンを押してください。'
 							}
 						</p>
 					</div>
 
-					{step === 'initial' ? (
+					{!browserOpened ? (
 						<div className="w-full flex flex-col gap-3">
 							<button
 								onClick={openExternalLogin}
 								className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[#dc2626] hover:bg-[#b91c1c] text-white text-sm font-semibold transition-all shadow-md"
 							>
 								<LogIn size={16} />
-								Sign In with Browser
+								ブラウザでログイン
 							</button>
 							<button
 								onClick={openExternalSignUp}
 								className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-void-bg-2 border border-void-border-2 text-void-fg-1 text-sm hover:bg-void-bg-3 transition-all"
 							>
 								<UserPlus size={16} />
-								Create an Account
+								アカウントを作成
 							</button>
 							<div className="text-[10px] text-void-fg-3 text-center mt-1">
-								Opens accounts.he-ro.jp in your default browser
+								accounts.he-ro.jp がブラウザで開きます
 							</div>
 						</div>
 					) : (
 						<div className="w-full flex flex-col gap-3">
 							<div className="text-xs text-void-fg-3 bg-void-bg-2 rounded-lg p-3 border border-void-border-2">
-								✅ A sign-in page has been opened in your browser. After completing sign-in, enter your details below to connect.
+								✅ ブラウザでサインインページを開きました。ログインが完了したら、下のボタンを押してください。
 							</div>
-							<div className="flex flex-col gap-1.5">
-								<label className="text-xs font-medium text-void-fg-2 flex items-center gap-1.5">
-									<Mail size={12} />
-									Email Address
-								</label>
-								<input
-									type="email"
-									value={emailInput}
-									onChange={(e) => { setEmailInput(e.target.value); setError(''); }}
-									onKeyDown={(e) => { if (e.key === 'Enter') confirmSignIn(); }}
-									placeholder="Enter the email you signed in with..."
-									className="w-full px-3 py-2 rounded-lg bg-void-bg-2 border border-void-border-2 text-void-fg-1 text-sm placeholder:text-void-fg-3 focus:outline-none focus:border-[#dc2626] transition-colors"
-									autoFocus
-								/>
-							</div>
-							<div className="flex flex-col gap-1.5">
-								<label className="text-xs font-medium text-void-fg-2">
-									Name (optional)
-								</label>
-								<input
-									type="text"
-									value={nameInput}
-									onChange={(e) => setNameInput(e.target.value)}
-									onKeyDown={(e) => { if (e.key === 'Enter') confirmSignIn(); }}
-									placeholder="Your display name..."
-									className="w-full px-3 py-2 rounded-lg bg-void-bg-2 border border-void-border-2 text-void-fg-1 text-sm placeholder:text-void-fg-3 focus:outline-none focus:border-[#dc2626] transition-colors"
-								/>
-							</div>
+
 							{error && (
 								<div className="text-[11px] text-red-400">{error}</div>
 							)}
+
 							<button
-								onClick={confirmSignIn}
-								className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#dc2626] hover:bg-[#b91c1c] text-white text-sm font-semibold transition-all shadow-md"
+								onClick={confirmLogin}
+								disabled={isChecking}
+								className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[#dc2626] hover:bg-[#b91c1c] text-white text-sm font-semibold transition-all shadow-md disabled:opacity-50"
 							>
-								<CheckCircle2 size={16} /> Connect Account
+								{isChecking ? (
+									<><Loader2 size={16} className="animate-spin" /> 認証中...</>
+								) : (
+									<><CheckCircle2 size={16} /> ログイン完了</>
+								)}
 							</button>
+
 							<button
-								onClick={() => setStep('initial')}
+								onClick={() => { setBrowserOpened(false); setError(''); }}
 								className="text-xs text-void-fg-3 hover:text-void-fg-1 transition-colors"
 							>
-								← Back
+								← 戻る
 							</button>
 						</div>
 					)}

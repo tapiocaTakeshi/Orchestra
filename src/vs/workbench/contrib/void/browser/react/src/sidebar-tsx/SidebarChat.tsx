@@ -381,31 +381,70 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 		if (!files) return
 		for (let i = 0; i < files.length; i++) {
 			const file = files[i]
-			if (!file.type.startsWith('image/')) continue
-			const reader = new FileReader()
-			reader.onload = () => {
-				const dataUrl = reader.result as string
-				// extract base64 data from data URL (remove "data:image/png;base64," prefix)
-				const base64Data = dataUrl.split(',')[1]
-				if (!base64Data) return
-				const newSelection: StagingSelectionItem = {
-					type: 'Image',
-					uri: URI.file(file.name),
-					base64Data,
-					mimeType: file.type,
-					fileName: file.name,
-					language: undefined,
-					state: undefined,
+			if (file.type.startsWith('image/')) {
+				// Handle image files as Image selections (base64)
+				const reader = new FileReader()
+				reader.onload = () => {
+					const dataUrl = reader.result as string
+					const base64Data = dataUrl.split(',')[1]
+					if (!base64Data) return
+					const newSelection: StagingSelectionItem = {
+						type: 'Image',
+						uri: URI.file(file.name),
+						base64Data,
+						mimeType: file.type,
+						fileName: file.name,
+						language: undefined,
+						state: undefined,
+					}
+					chatThreadService.addNewStagingSelection(newSelection)
 				}
-				chatThreadService.addNewStagingSelection(newSelection)
+				reader.readAsDataURL(file)
+			} else {
+				// Handle non-image files as File context selections
+				// Use Electron's getPathForFile for native file path resolution
+				const nativePath = (typeof (globalThis as any).vscode?.webUtils?.getPathForFile === 'function')
+					? (globalThis as any).vscode.webUtils.getPathForFile(file) as string | undefined
+					: undefined
+				if (nativePath) {
+					const fileUri = URI.file(nativePath)
+					chatThreadService.addNewStagingSelection({
+						type: 'File',
+						uri: fileUri,
+						language: 'plaintext',
+						state: { wasAddedAsCurrentFile: false },
+					})
+				}
 			}
-			reader.readAsDataURL(file)
+		}
+	}, [chatThreadService])
+
+	// Handle URIs extracted from VS Code's internal drag data formats
+	const handleDroppedURIs = useCallback((uris: URI[]) => {
+		for (const uri of uris) {
+			if (!uri) continue
+			// Check if it looks like a directory (ends with /)
+			const fsPath = uri.fsPath
+			if (fsPath.endsWith('/') || fsPath.endsWith('\\')) {
+				chatThreadService.addNewStagingSelection({
+					type: 'Folder',
+					uri,
+				})
+			} else {
+				chatThreadService.addNewStagingSelection({
+					type: 'File',
+					uri,
+					language: 'plaintext',
+					state: { wasAddedAsCurrentFile: false },
+				})
+			}
 		}
 	}, [chatThreadService])
 
 	const onDragOver = useCallback((e: React.DragEvent) => {
 		e.preventDefault()
 		e.stopPropagation()
+		console.log('[DnD] onDragOver fired, types:', Array.from(e.dataTransfer?.types || []))
 		setIsDragOver(true)
 	}, [])
 
@@ -419,8 +458,85 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 		e.preventDefault()
 		e.stopPropagation()
 		setIsDragOver(false)
-		handleFiles(e.dataTransfer.files)
-	}, [handleFiles])
+
+		const dt = e.dataTransfer
+		console.log('[DnD] onDrop fired')
+		console.log('[DnD] types:', Array.from(dt.types || []))
+		console.log('[DnD] files count:', dt.files?.length)
+		for (const type of Array.from(dt.types || [])) {
+			try {
+				const data = dt.getData(type)
+				console.log(`[DnD] data for '${type}':`, data?.substring(0, 200))
+			} catch (e) {
+				console.log(`[DnD] error reading '${type}':`, e)
+			}
+		}
+		if (dt.files) {
+			for (let i = 0; i < dt.files.length; i++) {
+				const f = dt.files[i]
+				const nativePath = (typeof (globalThis as any).vscode?.webUtils?.getPathForFile === 'function')
+					? (globalThis as any).vscode.webUtils.getPathForFile(f)
+					: undefined
+				console.log(`[DnD] file[${i}]:`, f.name, 'type:', f.type, 'size:', f.size, 'nativePath:', nativePath)
+			}
+		}
+		let handled = false
+
+		// 1. Try VS Code internal CodeEditors format (files dragged from editor tabs)
+		// Note: CodeEditors data is serialized with marshalling's stringify(),
+		// which stores URIs as UriComponents objects (not strings), so we need URI.revive()
+		try {
+			const rawEditors = dt.getData('CodeEditors')
+			if (rawEditors) {
+				const editors = JSON.parse(rawEditors) as { resource?: any }[]
+				const uris = editors.map(e => {
+					if (!e.resource) return null
+					if (typeof e.resource === 'string') return URI.parse(e.resource)
+					// UriComponents object from marshalling's stringify()
+					return URI.revive(e.resource)
+				}).filter((u): u is URI => !!u)
+				if (uris.length > 0) {
+					handleDroppedURIs(uris)
+					handled = true
+				}
+			}
+		} catch { /* invalid transfer */ }
+
+		// 2. Try VS Code internal Resources format (files dragged from explorer)
+		if (!handled) {
+			try {
+				const rawResources = dt.getData('ResourceURLs')
+				if (rawResources) {
+					const resources: string[] = JSON.parse(rawResources)
+					const uris = resources.map(r => URI.parse(r)).filter((u): u is URI => !!u)
+					if (uris.length > 0) {
+						handleDroppedURIs(uris)
+						handled = true
+					}
+				}
+			} catch { /* invalid transfer */ }
+		}
+
+		// 3. Try VS Code internal CodeFiles format
+		if (!handled) {
+			try {
+				const rawCodeFiles = dt.getData('CodeFiles')
+				if (rawCodeFiles) {
+					const codeFiles: string[] = JSON.parse(rawCodeFiles)
+					const uris = codeFiles.map(f => URI.file(f))
+					if (uris.length > 0) {
+						handleDroppedURIs(uris)
+						handled = true
+					}
+				}
+			} catch { /* invalid transfer */ }
+		}
+
+		// 4. Fallback to native file transfer (e.g. from OS file manager)
+		if (!handled && dt.files && dt.files.length > 0) {
+			handleFiles(dt.files)
+		}
+	}, [handleFiles, handleDroppedURIs])
 
 	return (
 		<div
@@ -448,8 +564,8 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 			{isDragOver && (
 				<div className='absolute inset-0 z-10 flex items-center justify-center bg-blue-500/10 border-2 border-dashed border-blue-400 rounded-md pointer-events-none'>
 					<div className='flex items-center gap-2 text-blue-300 text-sm font-medium'>
-						<ImageIcon size={16} />
-						Drop image here
+						<Paperclip size={16} />
+						Drop files here
 					</div>
 				</div>
 			)}
@@ -3761,9 +3877,10 @@ export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTa
 		setSelections={setSelections}
 		onClickAnywhere={() => { textAreaRef.current?.focus() }}
 	>
-		{!settingsState.globalSettings.clerkUser && (
+		{/* Temporarily disabled — allow usage without login while Clerk auth is being fixed */}
+		{/* {!settingsState.globalSettings.clerkUser && (
 			<SignedOutChatOverlay onLoginClick={() => setShowLoginScreen(true)} />
-		)}
+		)} */}
 		<VoidInputBox2
 			enableAtToMention
 			className={`min-h-[81px] px-0.5 py-0.5`}

@@ -7,10 +7,12 @@ import { Disposable } from '../../../../base/common/lifecycle.js';
 import { IEnvironmentMainService } from '../../../../platform/environment/electron-main/environmentMainService.js';
 import { IProductService } from '../../../../platform/product/common/productService.js';
 import { IUpdateService, StateType } from '../../../../platform/update/common/update.js';
-import { IVoidUpdateService } from '../common/voidUpdateService.js';
+import { IVoidUpdateService, ClerkUserIPC } from '../common/voidUpdateService.js';
 import { VoidCheckUpdateRespose } from '../common/voidUpdateServiceTypes.js';
 
-
+// Clerk Backend API (runs in main process — no CORS)
+const CLERK_API_BASE = 'https://api.clerk.com/v1';
+const CLERK_SECRET_KEY = process.env.CLERK_SECRET_KEY || '';
 
 export class VoidMainUpdateService extends Disposable implements IVoidUpdateService {
 	_serviceBrand: undefined;
@@ -146,6 +148,78 @@ export class VoidMainUpdateService extends Disposable implements IVoidUpdateServ
 			else {
 				return { message: null } as const
 			}
+		}
+	}
+
+
+	// ---- Clerk Auth (main process fetches bypass CORS) ----
+
+	async fetchClerkActiveSession(): Promise<{ userId: string; sessionId: string } | null> {
+		try {
+			// Fetch the most recently signed-in user (we don't have a session token,
+			// so we look up the user who most recently signed in via the Backend API)
+			const response = await fetch(
+				`${CLERK_API_BASE}/users?order_by=-last_sign_in_at&limit=1`,
+				{
+					headers: {
+						'Authorization': `Bearer ${CLERK_SECRET_KEY}`,
+						'Content-Type': 'application/json',
+					},
+				}
+			);
+
+			if (!response.ok) {
+				throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+			}
+
+			const users = await response.json();
+			if (!Array.isArray(users) || users.length === 0) {
+				return null;
+			}
+
+			return {
+				userId: users[0].id,
+				sessionId: 'latest', // placeholder — we identify the user, not a specific session
+			};
+		} catch (e: any) {
+			console.error('[ClerkMainService] fetchClerkActiveSession error:', e);
+			throw e;
+		}
+	}
+
+	async fetchClerkUserById(userId: string): Promise<ClerkUserIPC | null> {
+		try {
+			const response = await fetch(
+				`${CLERK_API_BASE}/users/${userId}`,
+				{
+					headers: {
+						'Authorization': `Bearer ${CLERK_SECRET_KEY}`,
+						'Content-Type': 'application/json',
+					},
+				}
+			);
+
+			if (!response.ok) {
+				throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+			}
+
+			const userData = await response.json();
+
+			const primaryEmail = userData.email_addresses?.find(
+				(e: any) => e.id === userData.primary_email_address_id
+			);
+
+			return {
+				id: userData.id,
+				firstName: userData.first_name || null,
+				lastName: userData.last_name || null,
+				emailAddress: primaryEmail?.email_address || null,
+				imageUrl: userData.image_url || null,
+				username: userData.username || null,
+			};
+		} catch (e: any) {
+			console.error('[ClerkMainService] fetchClerkUserById error:', e);
+			throw e;
 		}
 	}
 }
