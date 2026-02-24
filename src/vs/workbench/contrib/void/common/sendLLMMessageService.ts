@@ -3,7 +3,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { EventLLMMessageOnTextParams, EventLLMMessageOnErrorParams, EventLLMMessageOnFinalMessageParams, ServiceSendLLMMessageParams, MainSendLLMMessageParams, MainLLMMessageAbortParams, ServiceModelListParams, EventModelListOnSuccessParams, EventModelListOnErrorParams, MainModelListParams, OllamaModelResponse, OpenaiCompatibleModelResponse, } from './sendLLMMessageTypes.js';
+import { EventLLMMessageOnTextParams, EventLLMMessageOnErrorParams, EventLLMMessageOnFinalMessageParams, EventLLMMessageOnFileOperationParams, FileOperationItem, ServiceSendLLMMessageParams, MainSendLLMMessageParams, MainLLMMessageAbortParams, ServiceModelListParams, EventModelListOnSuccessParams, EventModelListOnErrorParams, MainModelListParams, OllamaModelResponse, OpenaiCompatibleModelResponse, } from './sendLLMMessageTypes.js';
 
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
@@ -26,6 +26,7 @@ export interface ILLMMessageService {
 	abort: (requestId: string) => void;
 	ollamaList: (params: ServiceModelListParams<OllamaModelResponse>) => void;
 	openAICompatibleList: (params: ServiceModelListParams<OpenaiCompatibleModelResponse>) => void;
+	registerFileOperationHandler: (handler: (operations: FileOperationItem[]) => Promise<void>) => void;
 }
 
 
@@ -42,6 +43,9 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 		onError: {} as { [eventId: string]: ((params: EventLLMMessageOnErrorParams) => void) },
 		onAbort: {} as { [eventId: string]: (() => void) }, // NOT sent over the channel, result is instant when we call .abort()
 	}
+
+	// File operation handler (registered by chatThreadService or similar)
+	private _fileOperationHandler: ((operations: FileOperationItem[]) => Promise<void>) | null = null;
 
 	// list hooks
 	private readonly listHooks = {
@@ -86,6 +90,14 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 			this.llmMessageHooks.onError[e.requestId]?.(e);
 			this._clearChannelHooks(e.requestId);
 			console.error('Error in LLMMessageService:', JSON.stringify(e))
+		}))
+		// file operations from Division API
+		this._register((this.channel.listen('onFileOperation_sendLLMMessage') satisfies Event<EventLLMMessageOnFileOperationParams>)(e => {
+			if (this._fileOperationHandler) {
+				this._fileOperationHandler(e.operations).catch(err => {
+					console.error('[LLMMessageService] File operation handler error:', err);
+				});
+			}
 		}))
 		// .list()
 		this._register((this.channel.listen('onSuccess_list_ollama') satisfies Event<EventModelListOnSuccessParams<OllamaModelResponse>>)(e => {
@@ -224,6 +236,10 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 
 		delete this.listHooks.openAICompat.success[requestId]
 		delete this.listHooks.openAICompat.error[requestId]
+	}
+
+	registerFileOperationHandler(handler: (operations: FileOperationItem[]) => Promise<void>) {
+		this._fileOperationHandler = handler;
 	}
 }
 

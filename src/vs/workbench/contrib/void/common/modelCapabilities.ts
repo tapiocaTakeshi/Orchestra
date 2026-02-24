@@ -157,6 +157,17 @@ export const defaultModelsOfProvider = {
 	liteLLM: [],
 	divisionAPI: [ // Division API - multi-agent orchestration
 		'division-orchestrator',
+		'gpt-5.3-codex-spark',
+		'gpt-5.2',
+		'gpt-4.1',
+		'claude-opus-4.6',
+		'claude-sonnet-4.5',
+		'gemini-3-pro',
+		'gemini-3-flash',
+		'deepseek-v4',
+		'deepseek-r1',
+		'grok-4.1',
+		'sonar-pro',
 	],
 	perplexity: [ // https://docs.perplexity.ai/guides/model-cards
 		'sonar-pro',
@@ -1471,13 +1482,130 @@ const divisionAPIModelOptions = {
 		supportsSystemMessage: 'system-role' as const,
 		reasoningCapabilities: false as const,
 	},
+	'gpt-5.3-codex-spark': {
+		contextWindow: 1_047_576,
+		reservedOutputTokenSpace: 32_768,
+		cost: { input: 0, output: 0 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'openai-style' as const,
+		supportsSystemMessage: 'developer-role' as const,
+		reasoningCapabilities: false as const,
+	},
+	'gpt-5.2': {
+		contextWindow: 1_047_576,
+		reservedOutputTokenSpace: 32_768,
+		cost: { input: 0, output: 0 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'openai-style' as const,
+		supportsSystemMessage: 'developer-role' as const,
+		reasoningCapabilities: false as const,
+	},
+	'gpt-4.1': {
+		contextWindow: 1_047_576,
+		reservedOutputTokenSpace: 32_768,
+		cost: { input: 0, output: 0 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'openai-style' as const,
+		supportsSystemMessage: 'developer-role' as const,
+		reasoningCapabilities: false as const,
+	},
+	'claude-opus-4.6': {
+		contextWindow: 200_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0, output: 0 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'openai-style' as const,
+		supportsSystemMessage: 'system-role' as const,
+		reasoningCapabilities: false as const,
+	},
+	'claude-sonnet-4.5': {
+		contextWindow: 200_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0, output: 0 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'openai-style' as const,
+		supportsSystemMessage: 'system-role' as const,
+		reasoningCapabilities: false as const,
+	},
+	'gemini-3-pro': {
+		contextWindow: 1_000_000,
+		reservedOutputTokenSpace: 32_768,
+		cost: { input: 0, output: 0 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'openai-style' as const,
+		supportsSystemMessage: 'system-role' as const,
+		reasoningCapabilities: false as const,
+	},
+	'gemini-3-flash': {
+		contextWindow: 1_000_000,
+		reservedOutputTokenSpace: 32_768,
+		cost: { input: 0, output: 0 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'openai-style' as const,
+		supportsSystemMessage: 'system-role' as const,
+		reasoningCapabilities: false as const,
+	},
+	'deepseek-v4': {
+		contextWindow: 128_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0, output: 0 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'openai-style' as const,
+		supportsSystemMessage: 'system-role' as const,
+		reasoningCapabilities: false as const,
+	},
+	'deepseek-r1': {
+		contextWindow: 128_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0, output: 0 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'openai-style' as const,
+		supportsSystemMessage: 'system-role' as const,
+		reasoningCapabilities: false as const,
+	},
+	'grok-4.1': {
+		contextWindow: 131_072,
+		reservedOutputTokenSpace: 32_768,
+		cost: { input: 0, output: 0 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'openai-style' as const,
+		supportsSystemMessage: 'system-role' as const,
+		reasoningCapabilities: false as const,
+	},
+	'sonar-pro': {
+		contextWindow: 200_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0, output: 0 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'openai-style' as const,
+		supportsSystemMessage: 'system-role' as const,
+		reasoningCapabilities: false as const,
+	},
 } satisfies { [s: string]: VoidStaticModelInfo }
 
 const divisionAPISettings: VoidStaticProviderInfo = {
 	modelOptions: divisionAPIModelOptions,
-	modelOptionsFallback: (_modelName) => {
-		// Division API handles model selection internally via orchestration
-		return { modelName: 'division-orchestrator', recognizedModelName: 'division-orchestrator', ...divisionAPIModelOptions['division-orchestrator'] }
+	modelOptionsFallback: (modelName) => {
+		// If the model is known, use its settings
+		const lower = modelName.toLowerCase()
+		for (const [key, value] of Object.entries(divisionAPIModelOptions)) {
+			if (lower === key.toLowerCase()) {
+				return { modelName: key, recognizedModelName: key, ...value }
+			}
+		}
+		// Fallback: route through orchestrator
+		return { modelName, recognizedModelName: 'division-orchestrator', ...divisionAPIModelOptions['division-orchestrator'] }
 	},
 }
 

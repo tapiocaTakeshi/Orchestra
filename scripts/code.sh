@@ -35,6 +35,13 @@ function code() {
 		return
 	fi
 
+	# Load .env file if it exists
+	if [ -f "$ROOT/.env" ]; then
+		set -a
+		source "$ROOT/.env"
+		set +a
+	fi
+
 	# Configuration
 	export NODE_ENV=development
 	export VSCODE_DEV=1

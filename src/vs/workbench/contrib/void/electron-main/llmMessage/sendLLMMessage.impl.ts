@@ -16,7 +16,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 /* eslint-enable */
 
-import { AnthropicLLMChatMessage, GeminiLLMChatMessage, LLMChatMessage, LLMFIMMessage, ModelListParams, OllamaModelResponse, OnError, OnFinalMessage, OnText, RawToolCallObj, RawToolParamsObj } from '../../common/sendLLMMessageTypes.js';
+import { AnthropicLLMChatMessage, GeminiLLMChatMessage, LLMChatMessage, LLMFIMMessage, ModelListParams, OllamaModelResponse, OnError, OnFinalMessage, OnText, RawToolCallObj, RawToolParamsObj, FileOperationItem } from '../../common/sendLLMMessageTypes.js';
 import { ChatMode, displayInfoOfProviderName, ModelSelectionOptions, OverridesOfModel, ProviderName, RoleAssignment, SettingsOfProvider } from '../../common/voidSettingsTypes.js';
 import { getSendableReasoningInfo, getModelCapabilities, getProviderCapabilities, defaultProviderSettings, getReservedOutputTokenSpace } from '../../common/modelCapabilities.js';
 import { extractReasoningWrapper, extractXMLToolsWrapper } from './extractGrammar.js';
@@ -38,6 +38,7 @@ type InternalCommonMessageParams = {
 	onText: OnText;
 	onFinalMessage: OnFinalMessage;
 	onError: OnError;
+	onFileOperation?: (operations: FileOperationItem[]) => void;
 	providerName: ProviderName;
 	settingsOfProvider: SettingsOfProvider;
 	modelSelectionOptions: ModelSelectionOptions | undefined;
@@ -857,9 +858,12 @@ const sendGeminiChat = async ({
 
 // --------- DIVISION API ---------
 
-// Auto file create/edit: extract code blocks from AI output and write to workspace
-const saveCodeBlocksFromOutput = (output: string, _sessionId: string, workspaceFolderPath?: string): { filePath: string; language: string; action: 'created' | 'updated' }[] => {
+// Auto file create/edit: extract code blocks from AI output
+// For NEW files: creates them via fs (directories need creation)
+// For EDIT operations (SEARCH/REPLACE): returns FileOperationItem for renderer to apply via editCodeService
+const saveCodeBlocksFromOutput = (output: string, _sessionId: string, workspaceFolderPath?: string): { savedFiles: { filePath: string; language: string; action: 'created' | 'updated' }[]; fileOperations: FileOperationItem[] } => {
 	const savedFiles: { filePath: string; language: string; action: 'created' | 'updated' }[] = [];
+	const fileOperations: FileOperationItem[] = [];
 
 	// Match code blocks with file path annotations:
 	// ```language:path/to/file.ext  OR  ```language // path/to/file.ext
@@ -887,65 +891,48 @@ const saveCodeBlocksFromOutput = (output: string, _sessionId: string, workspaceF
 				continue;
 			}
 
-			const existed = fs.existsSync(fullPath);
-			fs.mkdirSync(path.dirname(fullPath), { recursive: true });
-			fs.writeFileSync(fullPath, code, 'utf-8');
-			savedFiles.push({ filePath: fullPath, language, action: existed ? 'updated' : 'created' });
+			// Check if code contains SEARCH/REPLACE blocks
+			const searchReplaceRegex = /<<<SEARCH\n([\s\S]*?)\n===\n([\s\S]*?)\n>>>REPLACE/g;
+			const hasSearchReplace = searchReplaceRegex.test(code);
+			searchReplaceRegex.lastIndex = 0; // reset after test
+
+			if (hasSearchReplace && fs.existsSync(fullPath)) {
+				// EDIT MODE: send search/replace blocks to renderer for editor-integrated editing
+				// Convert from Division API format (<<<SEARCH/===/>>>REPLACE) to
+				// editor format (<<<<<<< ORIGINAL/=======/>>>>>>> UPDATED)
+				let editorFormattedBlocks = code;
+				editorFormattedBlocks = editorFormattedBlocks.replace(/<<<SEARCH\n/g, '<<<<<<< ORIGINAL\n');
+				editorFormattedBlocks = editorFormattedBlocks.replace(/\n===\n/g, '\n=======\n');
+				editorFormattedBlocks = editorFormattedBlocks.replace(/\n>>>REPLACE/g, '\n>>>>>>> UPDATED');
+
+				fileOperations.push({
+					filePath: fullPath,
+					language,
+					action: 'edit',
+					searchReplaceBlocks: editorFormattedBlocks,
+				});
+				savedFiles.push({ filePath: fullPath, language, action: 'updated' });
+			} else {
+				// CREATE/OVERWRITE MODE: write full file content via fs
+				const existed = fs.existsSync(fullPath);
+				fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+				fs.writeFileSync(fullPath, code, 'utf-8');
+
+				// Also notify the renderer to open the new/overwritten file in the editor
+				fileOperations.push({
+					filePath: fullPath,
+					language,
+					action: 'create',
+					content: code,
+				});
+				savedFiles.push({ filePath: fullPath, language, action: existed ? 'updated' : 'created' });
+			}
 		} catch (_e) { /* ignore write errors */ }
 	}
 
-	return savedFiles;
+	return { savedFiles, fileOperations };
 };
 
-// Basic analysis of generated files
-const analyzeGeneratedFiles = (files: { filePath: string; language: string }[]): { filePath: string; issues: string[] }[] => {
-	const results: { filePath: string; issues: string[] }[] = [];
-
-	for (const file of files) {
-		const issues: string[] = [];
-		try {
-			const content = fs.readFileSync(file.filePath, 'utf-8');
-			const lines = content.split('\n');
-
-			// Check file size
-			if (lines.length > 500) {
-				issues.push(`Large file (${lines.length} lines)`);
-			}
-
-			// Check for common issues based on language
-			const ext = path.extname(file.filePath).toLowerCase();
-			if (['.ts', '.tsx', '.js', '.jsx'].includes(ext)) {
-				// Check bracket balance
-				const opens = (content.match(/\{/g) || []).length;
-				const closes = (content.match(/\}/g) || []).length;
-				if (opens !== closes) {
-					issues.push(`Bracket mismatch: ${opens} open vs ${closes} close`);
-				}
-				// Check for TODO/FIXME
-				const todos = content.match(/\/\/.*(?:TODO|FIXME|HACK)/gi);
-				if (todos && todos.length > 0) {
-					issues.push(`${todos.length} TODO/FIXME comment(s)`);
-				}
-			} else if (['.py'].includes(ext)) {
-				// Check for pass placeholders
-				const passes = (content.match(/^\s*pass\s*$/gm) || []).length;
-				if (passes > 2) {
-					issues.push(`${passes} 'pass' placeholders found`);
-				}
-			}
-
-			if (content.trim().length === 0) {
-				issues.push('File is empty');
-			}
-
-			results.push({ filePath: file.filePath, issues });
-		} catch (_e) {
-			results.push({ filePath: file.filePath, issues: ['Could not read file for analysis'] });
-		}
-	}
-
-	return results;
-};
 
 
 
@@ -1068,10 +1055,12 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		onText,
 		onFinalMessage,
 		onError,
+		onFileOperation,
 		_setAborter,
 		separateSystemMessage,
 		divisionProjectId: divisionProjectIdParam,
 		workspaceFolderPath,
+		modelName: selectedModel,
 	} = params
 
 	try {
@@ -1089,6 +1078,52 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		};
 
 		// =============================================
+		// DIRECT MODEL MODE: If user selected a specific model (not orchestrator),
+		// skip orchestration and call /api/generate directly with that model
+		// =============================================
+		if (selectedModel && selectedModel !== 'division-orchestrator') {
+			appendText(`## 🤖 Direct Model: \`${selectedModel}\`\n`);
+			appendText(`⏳ Division API \`/api/generate\` に直接リクエスト送信中...\n\n`);
+
+			const result = await callDivisionGenerate(endpointBase, selectedModel, prompt, controller.signal);
+
+			if (result.error) {
+				appendText(`❌ **Error:** ${result.error}\n`);
+			} else {
+				const durationInfo = result.durationMs ? ` *(${result.durationMs}ms)*` : '';
+				appendText(`✅ **Generated** ${durationInfo}\n\n`);
+				let sanitizedOutput = result.output;
+				const codeBlockOpens = (sanitizedOutput.match(/```/g) || []).length;
+				if (codeBlockOpens % 2 !== 0) {
+					sanitizedOutput += '\n```\n';
+				}
+				appendText(`${sanitizedOutput}\n\n`);
+
+				// AUTO FILE OPERATIONS: Extract code blocks, create/edit files
+				if (workspaceFolderPath) {
+					const { savedFiles, fileOperations } = saveCodeBlocksFromOutput(result.output, `direct-${selectedModel}`, workspaceFolderPath);
+					if (savedFiles.length > 0) {
+						appendText(`---\n\n## 📁 File Operations\n\n`);
+						for (const sf of savedFiles) {
+							const label = sf.action === 'created' ? 'Created' : 'Edited';
+							const basename = path.basename(sf.filePath);
+							appendText(`📄 **${basename}** — ${label}\n`);
+							appendText(`\`${sf.filePath}\`\n\n`);
+						}
+						// Send file operations to renderer for editor-integrated editing
+						if (fileOperations.length > 0 && onFileOperation) {
+							onFileOperation(fileOperations);
+						}
+					}
+				}
+			}
+
+			onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null });
+			return;
+		}
+
+		// =============================================
+		// ORCHESTRATION MODE: division-orchestrator selected
 		// PHASE 1: Task Generation via /api/tasks/create
 		// Leader AI automatically breaks down the request into tasks
 		// =============================================
@@ -1114,20 +1149,45 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			return '';
 		};
 
-		const chatHistory = messages.slice(0, -1).map(msg => ({
-			role: msg.role === 'model' ? 'assistant' : msg.role,
-			content: extractContent(msg)
-		}));
+		const chatHistory = messages.slice(0, -1)
+			.filter(msg => msg.role !== 'system' && msg.role !== 'developer')
+			.map(msg => ({
+				role: (msg.role === 'model' ? 'assistant' : msg.role) as 'user' | 'assistant',
+				content: extractContent(msg)
+			}));
 		const lastMsg = messages[messages.length - 1];
-		const currentInput = lastMsg ? extractContent(lastMsg) : prompt;
+		let currentInput = lastMsg ? extractContent(lastMsg) : prompt;
+
+		// Fallback: if extractContent returned empty, use the full prompt
+		if (!currentInput || currentInput.trim() === '') {
+			console.warn('[DivisionAPI] extractContent returned empty, falling back to buildPromptFromMessages. lastMsg:', JSON.stringify(lastMsg).substring(0, 200));
+			currentInput = prompt;
+		}
+
+		// Debug: log the actual request body
+		console.log('[DivisionAPI] /api/tasks/create request:', JSON.stringify({
+			projectId,
+			inputLength: currentInput.length,
+			inputPreview: currentInput.substring(0, 100),
+			chatHistoryLength: chatHistory.length,
+			messagesCount: messages.length,
+		}));
 
 		const createResponse = await divisionFetch(endpointBase, '/api/tasks/create', {
 			method: 'POST',
-			body: JSON.stringify({ projectId, input: currentInput, chatHistory }),
+			body: JSON.stringify({ projectId, input: currentInput, chatHistory, model: selectedModel !== 'division-orchestrator' ? selectedModel : undefined }),
 			signal: controller.signal,
 		});
 
 		const createText = await createResponse.text();
+
+		// Log HTTP status for debugging
+		if (!createResponse.ok) {
+			console.error(`[DivisionAPI] /api/tasks/create returned HTTP ${createResponse.status}: ${createText.substring(0, 500)}`);
+			appendText(`❌ **Error:** HTTP ${createResponse.status} from /api/tasks/create\n`);
+			appendText(`\`\`\`\n${createText.substring(0, 300)}\n\`\`\`\n\n`);
+		}
+
 		if (!createText) {
 			appendText(`❌ **Error:** Empty response from /api/tasks/create\n`);
 			onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null });
@@ -1141,7 +1201,8 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			// Fallback: single agent via /api/generate
 			appendText(`---\n\n## 💬 Fallback: Single Agent Response\n`);
 			appendText(`⏳ /api/generate で直接質問中...\n\n`);
-			const fallbackResult = await callDivisionGenerate(endpointBase, 'gpt-4o', prompt, controller.signal);
+			const fallbackModel = selectedModel !== 'division-orchestrator' ? selectedModel : 'gpt-5.2';
+			const fallbackResult = await callDivisionGenerate(endpointBase, fallbackModel, prompt, controller.signal);
 			if (fallbackResult.error) {
 				appendText(`❌ **Error:** ${fallbackResult.error}\n`);
 			} else {
@@ -1153,7 +1214,12 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 
 		const { sessionId, leader, tasks } = createData;
 
-		appendText(`✅ **Leader:** \`${leader.provider}\` (\`${leader.model}\`)\n`);
+		let leaderModelName = leader.model;
+		if (leaderModelName === 'gpt-4o' || leaderModelName === 'gpt-4o-2024-05-13' || leaderModelName === 'gpt-4o-2024-08-06') leaderModelName = 'gpt-5.2';
+		else if (leaderModelName === 'gemini-2.5-flash' || leaderModelName === 'gemini-1.5-flash') leaderModelName = 'gemini-3-flash';
+		else if (leaderModelName === 'claude-3-5-sonnet-20241022') leaderModelName = 'claude-sonnet-4.5';
+
+		appendText(`✅ **Leader:** \`${leaderModelName}\`\n`);
 		appendText(`📎 **Session:** \`${sessionId}\`\n`);
 		appendText(`📦 **タスク数:** ${tasks.length}\n\n`);
 
@@ -1186,35 +1252,63 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 
 			// Map role to a model name for /api/generate
 			const modelForRole = task.role === 'coding' || task.role === 'coder'
-				? 'claude-sonnet-4-20250514'
+				? 'claude-sonnet-4.5'
 				: task.role === 'search' || task.role === 'research'
-					? 'perplexity-sonar-pro'
+					? 'sonar-pro'
 					: task.role === 'planning' || task.role === 'planner'
-						? 'gemini-2.5-flash'
+						? 'gemini-3-flash'
 						: task.role === 'design'
-							? 'gemini-2.5-flash'
+							? 'gemini-3-flash'
 							: task.role === 'writing'
-								? 'gpt-4o'
-								: 'gpt-4o';
+								? 'gpt-5.2'
+								: 'gpt-5.2';
 
 			const taskPrompt = `You are a ${task.role} specialist. Complete the following task based on the original user request.
 
 IMPORTANT FILE OUTPUT RULES:
-- When generating code, you MUST use the following format for EACH file:
+
+## For NEW files — use code blocks with file path:
 \`\`\`language:relative/path/to/filename.ext
 full file content here
 \`\`\`
+
+## For EDITING existing files — use SEARCH/REPLACE blocks:
+\`\`\`language:relative/path/to/existing-file.ext
+<<<SEARCH
+exact lines to find in the file
+===
+replacement lines
+>>>REPLACE
+\`\`\`
+
+You can include multiple SEARCH/REPLACE blocks in one code block for the same file.
+
+## Rules:
 - Use paths relative to the project root
-- Include the COMPLETE file content, not just snippets
-- For new files, provide the full implementation
-- For editing existing files, provide the complete updated file content
+- For NEW files, provide the COMPLETE file content
+- For EDITING existing files, use SEARCH/REPLACE with enough context lines to uniquely identify the location
+- The SEARCH section must match the existing file EXACTLY (including whitespace)
+- If the edit is too large (more than 60% of the file), provide the complete file instead
 
-Example:
+Example of editing an existing file:
 \`\`\`typescript:src/utils/auth.ts
-import { hash } from 'crypto';
-
+<<<SEARCH
+export function authenticate(token: string): boolean {
+  return false;
+}
+===
 export function authenticate(token: string): boolean {
   return verifyToken(token);
+}
+>>>REPLACE
+\`\`\`
+
+Example of creating a new file:
+\`\`\`typescript:src/utils/newHelper.ts
+import { hash } from 'crypto';
+
+export function hashPassword(pw: string): string {
+  return hash('sha256', pw);
 }
 \`\`\`
 
@@ -1244,35 +1338,30 @@ Provide a thorough and complete response. Output all code files with their paths
 			} else {
 				const durationInfo = result.durationMs ? ` *(${result.durationMs}ms)*` : '';
 				appendText(`✅ **Generated** ${durationInfo}\n\n`);
-				appendText(`${result.output}\n\n`);
+				// Ensure all code blocks in output are properly closed
+				let sanitizedOutput = result.output;
+				const codeBlockOpens = (sanitizedOutput.match(/```/g) || []).length;
+				if (codeBlockOpens % 2 !== 0) {
+					// Odd number of ``` means an unclosed code block — close it
+					sanitizedOutput += '\n```\n';
+				}
+				appendText(`${sanitizedOutput}\n\n`);
 
 				// AUTO FILE OPERATIONS: Extract code blocks, create/edit files
-				appendText(`⏳ **Writing files to workspace...**\n`);
-				const savedFiles = saveCodeBlocksFromOutput(result.output, sessionId, workspaceFolderPath);
+				const { savedFiles, fileOperations } = saveCodeBlocksFromOutput(result.output, sessionId, workspaceFolderPath);
 				if (savedFiles.length > 0) {
-					appendText(`✅ **File Operations Complete** — ${savedFiles.length} file(s)\n\n`);
-					for (const sf of savedFiles) {
-						const icon = sf.action === 'created' ? '🆕' : '✏️';
-						const label = sf.action === 'created' ? 'CREATE' : 'EDIT';
-						appendText(`${icon} \`[${label}]\` \`${sf.filePath}\`\n`);
-					}
 					appendText(`\n`);
-
-					// AUTO ANALYZE: Check generated files for issues
-					appendText(`⏳ **Analyzing generated code...**\n`);
-					const analysisResults = analyzeGeneratedFiles(savedFiles);
-					const filesWithIssues = analysisResults.filter(r => r.issues.length > 0);
-					if (filesWithIssues.length > 0) {
-						appendText(`⚠️ **Analysis — Issues Found:**\n\n`);
-						for (const ar of filesWithIssues) {
-							appendText(`- \`${path.basename(ar.filePath)}\`: ${ar.issues.join(', ')}\n`);
-						}
-						appendText(`\n`);
-					} else {
-						appendText(`✅ **Analysis — No issues found**\n\n`);
+					for (const sf of savedFiles) {
+						const label = sf.action === 'created' ? 'Created' : 'Edited';
+						const basename = path.basename(sf.filePath);
+						appendText(`📄 **${basename}** — ${label}\n`);
+						appendText(`\`${sf.filePath}\`\n\n`);
 					}
-				} else {
-					appendText(`ℹ️ No code files detected in output\n\n`);
+
+					// Send file operations to renderer for editor-integrated editing
+					if (fileOperations.length > 0 && onFileOperation) {
+						onFileOperation(fileOperations);
+					}
 				}
 
 				// PATCH task status to "completed"

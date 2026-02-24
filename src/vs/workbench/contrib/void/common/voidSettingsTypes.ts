@@ -253,12 +253,12 @@ const defaultCustomSettings: Record<CustomSettingName, undefined> = {
 }
 
 
-const modelInfoOfDefaultModelNames = (defaultModelNames: string[]): { models: VoidStatefulModelInfo[] } => {
+const modelInfoOfDefaultModelNames = (defaultModelNames: string[], providerName?: string): { models: VoidStatefulModelInfo[] } => {
 	return {
 		models: defaultModelNames.map((modelName, i) => ({
 			modelName,
 			type: 'default',
-			isHidden: defaultModelNames.length >= 10, // hide all models if there are a ton of them, and make user enable them individually
+			isHidden: providerName === 'divisionAPI' ? false : defaultModelNames.length >= 10, // Division API models always visible
 		}))
 	}
 }
@@ -364,7 +364,7 @@ export const defaultSettingsOfProvider: SettingsOfProvider = {
 	divisionAPI: { // Division API - AI orchestration
 		...defaultCustomSettings,
 		...defaultProviderSettings.divisionAPI,
-		...modelInfoOfDefaultModelNames(defaultModelsOfProvider.divisionAPI),
+		...modelInfoOfDefaultModelNames(defaultModelsOfProvider.divisionAPI, 'divisionAPI'),
 		_didFillInProviderSettings: true, // pre-configured, no setup needed
 	},
 	perplexity: {

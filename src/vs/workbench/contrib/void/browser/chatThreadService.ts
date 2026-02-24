@@ -342,6 +342,32 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		// always be in a thread
 		this.openNewThread()
 
+		// Register file operation handler for Division API
+		// When the main process sends file operations via IPC, apply them through the editor
+		this._llmMessageService.registerFileOperationHandler(async (operations) => {
+			for (const op of operations) {
+				try {
+					const uri = URI.file(op.filePath);
+
+					if (op.action === 'edit' && op.searchReplaceBlocks) {
+						// EDIT: Apply search/replace blocks through editCodeService for diff highlighting
+						await this._voidModelService.initializeModel(uri);
+						await this._editCodeService.callBeforeApplyOrEdit(uri);
+						this._editCodeService.instantlyApplySearchReplaceBlocks({
+							uri,
+							searchReplaceBlocks: op.searchReplaceBlocks,
+						});
+						console.log(`[FileOperation] Applied editor edit: ${op.filePath}`);
+					} else if (op.action === 'create') {
+						// CREATE: File already written by fs in main process, just open it
+						await this._voidModelService.initializeModel(uri);
+						console.log(`[FileOperation] Opened created file: ${op.filePath}`);
+					}
+				} catch (err) {
+					console.error(`[FileOperation] Error processing ${op.action} for ${op.filePath}:`, err);
+				}
+			}
+		});
 
 		// keep track of user-modified files
 		// const disposablesOfModelId: { [modelId: string]: IDisposable[] } = {}

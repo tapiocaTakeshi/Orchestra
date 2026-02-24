@@ -128,7 +128,13 @@ const _stateWithMergedDefaultModels = (state: VoidSettingsState): VoidSettingsSt
 		const defaultModels = defaultSettingsOfProvider[providerName]?.models ?? []
 		const currentModels = newSettingsOfProvider[providerName]?.models ?? []
 		const defaultModelNames = defaultModels.map(m => m.modelName)
-		const newModels = _modelsWithSwappedInNewModels({ existingModels: currentModels, models: defaultModelNames, type: 'default' })
+		let newModels = _modelsWithSwappedInNewModels({ existingModels: currentModels, models: defaultModelNames, type: 'default' })
+
+		// Division API models are always visible (auth-based, no API key needed)
+		if (providerName === 'divisionAPI') {
+			newModels = newModels.map(m => ({ ...m, isHidden: false }))
+		}
+
 		newSettingsOfProvider = {
 			...newSettingsOfProvider,
 			[providerName]: {
@@ -214,7 +220,13 @@ const _validatedModelState = (state: Omit<VoidSettingsState, '_modelOptions'>): 
 const defaultState = () => {
 	const d: VoidSettingsState = {
 		settingsOfProvider: deepClone(defaultSettingsOfProvider),
-		modelSelectionOfFeature: { 'Chat': null, 'Ctrl+K': null, 'Autocomplete': null, 'Apply': null, 'SCM': null },
+		modelSelectionOfFeature: {
+			'Chat': { providerName: 'divisionAPI', modelName: 'division-orchestrator' },
+			'Ctrl+K': { providerName: 'divisionAPI', modelName: 'division-orchestrator' },
+			'Autocomplete': null,
+			'Apply': { providerName: 'divisionAPI', modelName: 'division-orchestrator' },
+			'SCM': { providerName: 'divisionAPI', modelName: 'division-orchestrator' },
+		},
 		globalSettings: deepClone(defaultGlobalSettings),
 		optionsOfModelSelection: { 'Chat': {}, 'Ctrl+K': {}, 'Autocomplete': {}, 'Apply': {}, 'SCM': {} },
 		overridesOfModel: deepClone(defaultOverridesOfModel),

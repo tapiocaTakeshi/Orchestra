@@ -15,6 +15,7 @@ export const sendLLMMessage = async ({
 	onText: onText_,
 	onFinalMessage: onFinalMessage_,
 	onError: onError_,
+	onFileOperation,
 	abortRef: abortRef_,
 	logging: { loggingName, loggingExtras },
 	settingsOfProvider,
@@ -112,12 +113,12 @@ export const sendLLMMessage = async ({
 		}
 		const { sendFIM, sendChat } = implementation
 		if (messagesType === 'chatMessages') {
-			await sendChat({ messages: messages_, onText, onFinalMessage, onError, settingsOfProvider, modelSelectionOptions, overridesOfModel, modelName, _setAborter, providerName, separateSystemMessage, chatMode, mcpTools, isLoggedIn, divisionRoleAssignments, divisionProjectId, workspaceFolderPath })
+			await sendChat({ messages: messages_, onText, onFinalMessage, onError, onFileOperation, settingsOfProvider, modelSelectionOptions, overridesOfModel, modelName, _setAborter, providerName, separateSystemMessage, chatMode, mcpTools, isLoggedIn: !!isLoggedIn, divisionRoleAssignments, divisionProjectId, workspaceFolderPath })
 			return
 		}
 		if (messagesType === 'FIMMessage') {
 			if (sendFIM) {
-				await sendFIM({ messages: messages_, onText, onFinalMessage, onError, settingsOfProvider, modelSelectionOptions, overridesOfModel, modelName, _setAborter, providerName, separateSystemMessage, isLoggedIn })
+				await sendFIM({ messages: messages_, onText, onFinalMessage, onError, settingsOfProvider, modelSelectionOptions, overridesOfModel, modelName, _setAborter, providerName, separateSystemMessage, isLoggedIn: !!isLoggedIn })
 				return
 			}
 			onError({ message: `Error running Autocomplete with ${providerName} - ${modelName}.`, fullError: null })

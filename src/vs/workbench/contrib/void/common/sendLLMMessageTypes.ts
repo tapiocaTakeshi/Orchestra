@@ -132,6 +132,7 @@ export type SendLLMMessageParams = {
 	onText: OnText;
 	onFinalMessage: OnFinalMessage;
 	onError: OnError;
+	onFileOperation?: (operations: FileOperationItem[]) => void;
 	logging: { loggingName: string, loggingExtras?: { [k: string]: any } };
 	abortRef: AbortRef;
 
@@ -150,7 +151,7 @@ export type SendLLMMessageParams = {
 
 
 // can't send functions across a proxy, use listeners instead
-export type BlockedMainLLMMessageParams = 'onText' | 'onFinalMessage' | 'onError' | 'abortRef'
+export type BlockedMainLLMMessageParams = 'onText' | 'onFinalMessage' | 'onError' | 'onFileOperation' | 'abortRef'
 export type MainSendLLMMessageParams = Omit<SendLLMMessageParams, BlockedMainLLMMessageParams> & { requestId: string; isLoggedIn?: boolean } & SendLLMType
 
 export type MainLLMMessageAbortParams = { requestId: string }
@@ -158,6 +159,16 @@ export type MainLLMMessageAbortParams = { requestId: string }
 export type EventLLMMessageOnTextParams = Parameters<OnText>[0] & { requestId: string }
 export type EventLLMMessageOnFinalMessageParams = Parameters<OnFinalMessage>[0] & { requestId: string }
 export type EventLLMMessageOnErrorParams = Parameters<OnError>[0] & { requestId: string }
+
+// File operation events from main process (Division API) to renderer (editor)
+export type FileOperationItem = {
+	filePath: string;
+	language: string;
+	action: 'create' | 'edit';
+	content?: string; // full content for create
+	searchReplaceBlocks?: string; // for edit
+}
+export type EventLLMMessageOnFileOperationParams = { requestId: string; operations: FileOperationItem[] }
 
 // service -> main -> internal -> event (back to main)
 // (browser)
