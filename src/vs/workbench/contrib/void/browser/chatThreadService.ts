@@ -174,6 +174,8 @@ export type ThreadStreamState = {
 			displayContentSoFar: string;
 			reasoningSoFar: string;
 			toolCallSoFar: RawToolCallObj | null;
+			reasoningStartMs?: number;
+			reasoningEndMs?: number;
 		};
 		toolInfo?: undefined;
 		interrupt: Promise<() => void>; // calling this should have no effect on state - would be too confusing. it just cancels the tool
@@ -586,8 +588,14 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 		// add assistant message
 		if (this.streamState[threadId]?.isRunning === 'LLM') {
-			const { displayContentSoFar, reasoningSoFar, toolCallSoFar } = this.streamState[threadId].llmInfo
-			this._addMessageToThread(threadId, { role: 'assistant', displayContent: displayContentSoFar, reasoning: reasoningSoFar, anthropicReasoning: null })
+			const { displayContentSoFar, reasoningSoFar, toolCallSoFar, reasoningStartMs, reasoningEndMs } = this.streamState[threadId].llmInfo
+			let reasoningDuration: number | undefined = undefined;
+			if (reasoningStartMs && !reasoningEndMs) {
+				reasoningDuration = (Date.now() - reasoningStartMs) / 1000;
+			} else if (reasoningStartMs && reasoningEndMs) {
+				reasoningDuration = (reasoningEndMs - reasoningStartMs) / 1000;
+			}
+			this._addMessageToThread(threadId, { role: 'assistant', displayContent: displayContentSoFar, reasoning: reasoningSoFar, anthropicReasoning: null, reasoningDuration })
 			if (toolCallSoFar) this._addMessageToThread(threadId, { role: 'interrupted_streaming_tool', name: toolCallSoFar.name, mcpServerName: this._computeMCPServerOfToolName(toolCallSoFar.name) })
 		}
 		// add tool that's running
@@ -821,7 +829,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				nAttempts += 1
 
 				type ResTypes =
-					| { type: 'llmDone', toolCall?: RawToolCallObj, info: { fullText: string, fullReasoning: string, anthropicReasoning: AnthropicReasoning[] | null } }
+					| { type: 'llmDone', toolCall?: RawToolCallObj, info: { fullText: string, fullReasoning: string, anthropicReasoning: AnthropicReasoning[] | null, reasoningDuration?: number } }
 					| { type: 'llmError', error?: { message: string; fullError: Error | null; } }
 					| { type: 'llmAborted' }
 
@@ -838,10 +846,25 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 					logging: { loggingName: `Chat - ${chatMode}`, loggingExtras: { threadId, nMessagesSent, chatMode } },
 					separateSystemMessage: separateSystemMessage,
 					onText: ({ fullText, fullReasoning, toolCall }) => {
-						this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: fullText, reasoningSoFar: fullReasoning, toolCallSoFar: toolCall ?? null }, interrupt: Promise.resolve(() => { if (llmCancelToken) this._llmMessageService.abort(llmCancelToken) }) })
+						if (!reasoningStartMs && fullReasoning) {
+							reasoningStartMs = Date.now()
+						}
+						// If fullText starts accumulating after reasoning started, we found the end
+						if (reasoningStartMs && !reasoningEndMs && fullText) {
+							reasoningEndMs = Date.now()
+						}
+						this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: fullText, reasoningSoFar: fullReasoning, toolCallSoFar: toolCall ?? null, reasoningStartMs, reasoningEndMs }, interrupt: Promise.resolve(() => { if (llmCancelToken) this._llmMessageService.abort(llmCancelToken) }) })
 					},
 					onFinalMessage: async ({ fullText, fullReasoning, toolCall, anthropicReasoning, }) => {
-						resMessageIsDonePromise({ type: 'llmDone', toolCall, info: { fullText, fullReasoning, anthropicReasoning } }) // resolve with tool calls
+						// Fallback if we have reasoning but never hit fullText
+						if (reasoningStartMs && !reasoningEndMs) {
+							reasoningEndMs = Date.now()
+						}
+						let reasoningDuration: number | undefined = undefined;
+						if (reasoningStartMs && reasoningEndMs) {
+							reasoningDuration = (reasoningEndMs - reasoningStartMs) / 1000;
+						}
+						resMessageIsDonePromise({ type: 'llmDone', toolCall, info: { fullText, fullReasoning, anthropicReasoning, reasoningDuration } }) // resolve with tool calls
 					},
 					onError: async (error) => {
 						resMessageIsDonePromise({ type: 'llmError', error: error })
@@ -858,6 +881,9 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 					this._setStreamState(threadId, { isRunning: undefined, error: { message: 'There was an unexpected error when sending your chat message.', fullError: null } })
 					break
 				}
+
+				let reasoningStartMs: number | undefined = undefined;
+				let reasoningEndMs: number | undefined = undefined;
 
 				this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasoningSoFar: '', toolCallSoFar: null }, interrupt: Promise.resolve(() => this._llmMessageService.abort(llmCancelToken)) })
 				const llmRes = await messageIsDonePromise // wait for message to complete
@@ -890,8 +916,14 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 					// error, but too many attempts
 					else {
 						const { error } = llmRes
-						const { displayContentSoFar, reasoningSoFar, toolCallSoFar } = this.streamState[threadId].llmInfo
-						this._addMessageToThread(threadId, { role: 'assistant', displayContent: displayContentSoFar, reasoning: reasoningSoFar, anthropicReasoning: null })
+						const { displayContentSoFar, reasoningSoFar, toolCallSoFar, reasoningStartMs, reasoningEndMs } = this.streamState[threadId].llmInfo
+						let reasoningDuration: number | undefined = undefined;
+						if (reasoningStartMs && !reasoningEndMs) {
+							reasoningDuration = (Date.now() - reasoningStartMs) / 1000;
+						} else if (reasoningStartMs && reasoningEndMs) {
+							reasoningDuration = (reasoningEndMs - reasoningStartMs) / 1000;
+						}
+						this._addMessageToThread(threadId, { role: 'assistant', displayContent: displayContentSoFar, reasoning: reasoningSoFar, anthropicReasoning: null, reasoningDuration })
 						if (toolCallSoFar) this._addMessageToThread(threadId, { role: 'interrupted_streaming_tool', name: toolCallSoFar.name, mcpServerName: this._computeMCPServerOfToolName(toolCallSoFar.name) })
 
 						this._setStreamState(threadId, { isRunning: undefined, error })
@@ -903,7 +935,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				// llm res success
 				const { toolCall, info } = llmRes
 
-				this._addMessageToThread(threadId, { role: 'assistant', displayContent: info.fullText, reasoning: info.fullReasoning, anthropicReasoning: info.anthropicReasoning })
+				this._addMessageToThread(threadId, { role: 'assistant', displayContent: info.fullText, reasoning: info.fullReasoning, anthropicReasoning: info.anthropicReasoning, reasoningDuration: info.reasoningDuration })
 
 				this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' }) // just decorative for clarity
 

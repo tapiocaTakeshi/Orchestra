@@ -2021,7 +2021,11 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 		{/* reasoning token */}
 		{hasReasoning &&
 			<div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
-				<ReasoningWrapper isDoneReasoning={isDoneReasoning} isStreaming={!isCommitted}>
+				<ReasoningWrapper
+					isDoneReasoning={isDoneReasoning}
+					isStreaming={!isCommitted}
+					reasoningDuration={chatMessage.reasoningDuration}
+				>
 					<SmallProseWrapper>
 						<ChatMarkdownRender
 							string={reasoningStr}
@@ -2055,14 +2059,22 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 
 }
 
-const ReasoningWrapper = ({ isDoneReasoning, isStreaming, children }: { isDoneReasoning: boolean, isStreaming: boolean, children: React.ReactNode }) => {
+const ReasoningWrapper = ({ isDoneReasoning, isStreaming, reasoningDuration, children }: { isDoneReasoning: boolean, isStreaming: boolean, reasoningDuration?: number, children: React.ReactNode }) => {
 	const isDone = isDoneReasoning || !isStreaming
 	const isWriting = !isDone
 	const [isOpen, setIsOpen] = useState(isWriting)
+
+	let title = 'Thought'
+	if (isWriting) {
+		title = 'Thinking'
+	} else if (reasoningDuration !== undefined) {
+		title = `Thought for ${reasoningDuration.toFixed(1)} seconds`
+	}
+
 	useEffect(() => {
 		if (!isWriting) setIsOpen(false) // if just finished reasoning, close
 	}, [isWriting])
-	return <ToolHeaderWrapper title='Reasoning' desc1={isWriting ? <IconLoading /> : ''} isOpen={isOpen} onClick={() => setIsOpen(v => !v)}>
+	return <ToolHeaderWrapper title={title} desc1={isWriting ? <IconLoading /> : ''} isOpen={isOpen} onClick={() => setIsOpen(v => !v)}>
 		<ToolChildrenWrapper>
 			<div className='!select-text cursor-auto'>
 				{children}

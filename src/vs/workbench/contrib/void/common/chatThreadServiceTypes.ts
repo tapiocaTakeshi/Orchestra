@@ -61,6 +61,7 @@ export type ChatMessage =
 		role: 'assistant';
 		displayContent: string; // content received from LLM  - allowed to be '', will be replaced with (empty)
 		reasoning: string; // reasoning from the LLM, used for step-by-step thinking
+		reasoningDuration?: number; // duration of reasoning phase in seconds
 
 		anthropicReasoning: AnthropicReasoning[] | null; // anthropic reasoning
 	}
