@@ -173,7 +173,7 @@ const ReasoningOptionSlider = ({ featureName }: { featureName: FeatureName }) =>
 
 	if (canTurnOffReasoning && !reasoningBudgetSlider) { // if it's just a on/off toggle without a power slider
 		return <div className='flex items-center gap-x-2'>
-			<span className='text-void-fg-3 text-xs pointer-events-none inline-block w-10 pr-1'>Thinking</span>
+			<span className='text-void-fg-3 text-xs pointer-events-none inline-block w-10 pr-1'>思考中</span>
 			<VoidSwitch
 				size='xxs'
 				value={isReasoningEnabled}
@@ -197,7 +197,7 @@ const ReasoningOptionSlider = ({ featureName }: { featureName: FeatureName }) =>
 			: valueIfOff
 
 		return <div className='flex items-center gap-x-2'>
-			<span className='text-void-fg-3 text-xs pointer-events-none inline-block w-10 pr-1'>Thinking</span>
+			<span className='text-void-fg-3 text-xs pointer-events-none inline-block w-10 pr-1'>思考中</span>
 			<VoidSlider
 				width={50}
 				size='xs'
@@ -210,7 +210,7 @@ const ReasoningOptionSlider = ({ featureName }: { featureName: FeatureName }) =>
 					voidSettingsService.setOptionsOfModelSelection(featureName, modelSelection.providerName, modelSelection.modelName, { reasoningEnabled: !isOff, reasoningBudget: newVal })
 				}}
 			/>
-			<span className='text-void-fg-3 text-xs pointer-events-none'>{isReasoningEnabled ? `${value} tokens` : 'Thinking disabled'}</span>
+			<span className='text-void-fg-3 text-xs pointer-events-none'>{isReasoningEnabled ? `${value} トークン` : '思考機能が無効'}</span>
 		</div>
 	}
 
@@ -228,7 +228,7 @@ const ReasoningOptionSlider = ({ featureName }: { featureName: FeatureName }) =>
 		const currentEffortCapitalized = currentEffort.charAt(0).toUpperCase() + currentEffort.slice(1, Infinity)
 
 		return <div className='flex items-center gap-x-2'>
-			<span className='text-void-fg-3 text-xs pointer-events-none inline-block w-10 pr-1'>Thinking</span>
+			<span className='text-void-fg-3 text-xs pointer-events-none inline-block w-10 pr-1'>思考中</span>
 			<VoidSlider
 				width={30}
 				size='xs'
@@ -241,7 +241,7 @@ const ReasoningOptionSlider = ({ featureName }: { featureName: FeatureName }) =>
 					voidSettingsService.setOptionsOfModelSelection(featureName, modelSelection.providerName, modelSelection.modelName, { reasoningEnabled: !isOff, reasoningEffort: values[newVal] ?? undefined })
 				}}
 			/>
-			<span className='text-void-fg-3 text-xs pointer-events-none'>{isReasoningEnabled ? `${currentEffortCapitalized}` : 'Thinking disabled'}</span>
+			<span className='text-void-fg-3 text-xs pointer-events-none'>{isReasoningEnabled ? `${currentEffortCapitalized}` : '思考機能が無効です'}</span>
 		</div>
 	}
 
@@ -251,15 +251,15 @@ const ReasoningOptionSlider = ({ featureName }: { featureName: FeatureName }) =>
 
 
 const nameOfChatMode = {
-	'normal': 'Chat',
-	'gather': 'Gather',
-	'agent': 'Agent',
+	'normal': 'チャット',
+	'gather': 'ギャザー',
+	'agent': 'エージェント',
 }
 
 const detailOfChatMode = {
-	'normal': 'Normal chat',
-	'gather': 'Reads files, but can\'t edit',
-	'agent': 'Edits files and uses tools',
+	'normal': '通常のチャット',
+	'gather': 'ファイルを読み取りますが、編集は行いません',
+	'agent': 'ファイルを編集し、ツールを使用します',
 }
 
 
@@ -565,7 +565,7 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 				<div className='absolute inset-0 z-10 flex items-center justify-center bg-blue-500/10 border-2 border-dashed border-blue-400 rounded-md pointer-events-none'>
 					<div className='flex items-center gap-2 text-blue-300 text-sm font-medium'>
 						<Paperclip size={16} />
-						Drop files here
+						ここにファイルをドロップ
 					</div>
 				</div>
 			)}
@@ -1678,11 +1678,11 @@ type FlowPhase = {
 const detectFlowPhases = (messages: ChatMessage[], isRunning: IsRunningType, reasoningSoFar?: string, roleAssignments?: RoleAssignment[]): FlowPhase[] => {
 	// Map phases to roles
 	const phaseRoleMap: { id: string; label: string; role: AgentRole }[] = [
-		{ id: 'thinking', label: 'Thinking', role: 'leader' },
-		{ id: 'searching', label: 'Searching', role: 'search' },
-		{ id: 'reading', label: 'Reading', role: 'research' },
-		{ id: 'coding', label: 'Coding', role: 'coder' },
-		{ id: 'running', label: 'Running', role: 'leader' },
+		{ id: 'thinking', label: '思考中', role: 'leader' },
+		{ id: 'searching', label: '検索中', role: 'search' },
+		{ id: 'reading', label: '読み込み', role: 'research' },
+		{ id: 'coding', label: '実装中', role: 'coder' },
+		{ id: 'running', label: '実行中', role: 'leader' },
 	];
 
 	const phases: FlowPhase[] = phaseRoleMap.map(p => {
@@ -2064,11 +2064,11 @@ const ReasoningWrapper = ({ isDoneReasoning, isStreaming, reasoningDuration, chi
 	const isWriting = !isDone
 	const [isOpen, setIsOpen] = useState(isWriting)
 
-	let title = 'Thought'
+	let title = '思考'
 	if (isWriting) {
-		title = 'Thinking'
+		title = '思考中'
 	} else if (reasoningDuration !== undefined) {
-		title = `Thought for ${reasoningDuration.toFixed(1)} seconds`
+		title = `${reasoningDuration.toFixed(1)} 秒間思考しました`
 	}
 
 	useEffect(() => {
@@ -2096,23 +2096,23 @@ const loadingTitleWrapper = (item: React.ReactNode): React.ReactNode => {
 }
 
 const titleOfBuiltinToolName = {
-	'read_file': { done: 'Read file', proposed: 'Read file', running: loadingTitleWrapper('Reading file') },
-	'ls_dir': { done: 'Inspected folder', proposed: 'Inspect folder', running: loadingTitleWrapper('Inspecting folder') },
-	'get_dir_tree': { done: 'Inspected folder tree', proposed: 'Inspect folder tree', running: loadingTitleWrapper('Inspecting folder tree') },
-	'search_pathnames_only': { done: 'Searched by file name', proposed: 'Search by file name', running: loadingTitleWrapper('Searching by file name') },
-	'search_for_files': { done: 'Searched', proposed: 'Search', running: loadingTitleWrapper('Searching') },
-	'create_file_or_folder': { done: `Created`, proposed: `Create`, running: loadingTitleWrapper(`Creating`) },
-	'delete_file_or_folder': { done: `Deleted`, proposed: `Delete`, running: loadingTitleWrapper(`Deleting`) },
-	'edit_file': { done: `Edited file`, proposed: 'Edit file', running: loadingTitleWrapper('Editing file') },
-	'rewrite_file': { done: `Wrote file`, proposed: 'Write file', running: loadingTitleWrapper('Writing file') },
-	'run_command': { done: `Ran terminal`, proposed: 'Run terminal', running: loadingTitleWrapper('Running terminal') },
-	'run_persistent_command': { done: `Ran terminal`, proposed: 'Run terminal', running: loadingTitleWrapper('Running terminal') },
+	'read_file': { done: 'ファイルを読み込みました', proposed: 'ファイルの読み込み', running: loadingTitleWrapper('ファイルを読み込み中') },
+	'ls_dir': { done: 'フォルダを確認しました', proposed: 'フォルダの確認', running: loadingTitleWrapper('フォルダを確認中') },
+	'get_dir_tree': { done: 'フォルダツリーを確認しました', proposed: 'フォルダツリーの確認', running: loadingTitleWrapper('フォルダツリーを確認中') },
+	'search_pathnames_only': { done: 'ファイル名で検索しました', proposed: 'ファイル名で検索', running: loadingTitleWrapper('ファイル名で検索中') },
+	'search_for_files': { done: '検索しました', proposed: '検索', running: loadingTitleWrapper('検索中') },
+	'create_file_or_folder': { done: `作成しました`, proposed: `作成`, running: loadingTitleWrapper(`作成中`) },
+	'delete_file_or_folder': { done: `削除しました`, proposed: `削除`, running: loadingTitleWrapper(`削除中`) },
+	'edit_file': { done: `ファイルを編集しました`, proposed: 'ファイルの編集', running: loadingTitleWrapper('ファイルを編集中') },
+	'rewrite_file': { done: `ファイルを書き換えました`, proposed: 'ファイルの書き換え', running: loadingTitleWrapper('ファイルを書き換え中') },
+	'run_command': { done: `ターミナルを実行しました`, proposed: 'ターミナルを実行', running: loadingTitleWrapper('ターミナルを実行中') },
+	'run_persistent_command': { done: `ターミナルを実行しました`, proposed: 'ターミナルを実行', running: loadingTitleWrapper('ターミナルを実行中') },
 
-	'open_persistent_terminal': { done: `Opened terminal`, proposed: 'Open terminal', running: loadingTitleWrapper('Opening terminal') },
-	'kill_persistent_terminal': { done: `Killed terminal`, proposed: 'Kill terminal', running: loadingTitleWrapper('Killing terminal') },
+	'open_persistent_terminal': { done: `ターミナルを開きました`, proposed: 'ターミナルを開く', running: loadingTitleWrapper('ターミナルを開いています') },
+	'kill_persistent_terminal': { done: `ターミナルを終了しました`, proposed: 'ターミナルを終了', running: loadingTitleWrapper('ターミナルを終了しています') },
 
-	'read_lint_errors': { done: `Read lint errors`, proposed: 'Read lint errors', running: loadingTitleWrapper('Reading lint errors') },
-	'search_in_file': { done: 'Searched in file', proposed: 'Search in file', running: loadingTitleWrapper('Searching in file') },
+	'read_lint_errors': { done: `リンターエラーを読み込みました`, proposed: 'リンターエラーの読み込み', running: loadingTitleWrapper('リンターエラーを読み込み中') },
+	'search_in_file': { done: 'ファイル内を検索しました', proposed: 'ファイル内を検索', running: loadingTitleWrapper('ファイル内を検索中') },
 } as const satisfies Record<BuiltinToolName, { done: any, proposed: any, running: any }>
 
 
@@ -2426,7 +2426,7 @@ const EditToolHeaderButtons = ({ applyBoxId, uri, codeStr, toolName, threadId }:
 const InvalidTool = ({ toolName, message, mcpServerName }: { toolName: ToolName, message: string, mcpServerName: string | undefined }) => {
 	const accessor = useAccessor()
 	const title = getTitle({ name: toolName, type: 'invalid_params', mcpServerName })
-	const desc1 = 'Invalid parameters'
+	const desc1 = 'パラメータが無効です'
 	const icon = null
 	const isError = true
 	const componentParams: ToolHeaderParams = { title, desc1, isError, icon }
@@ -2535,7 +2535,7 @@ const CommandTool = ({ toolMessage, type, threadId }: { threadId: string } & ({
 	}
 	else if (toolMessage.type === 'tool_error') {
 		const { result } = toolMessage
-		componentParams.bottomChildren = <BottomChildren title='Error'>
+		componentParams.bottomChildren = <BottomChildren title='エラー'>
 			<CodeChildren>
 				{result}
 			</CodeChildren>
@@ -2594,7 +2594,7 @@ const MCPToolWrapper = ({ toolMessage }: WrapperProps<string>) => {
 	}
 	else if (toolMessage.type === 'tool_error') {
 		const { result } = toolMessage
-		componentParams.bottomChildren = <BottomChildren title='Error'>
+		componentParams.bottomChildren = <BottomChildren title='エラー'>
 			<CodeChildren>
 				{result}
 			</CodeChildren>
@@ -3325,9 +3325,9 @@ const CommandBarInChat = () => {
 	// dark = Done
 
 	const threadStatus = (
-		chatThreadsStreamState?.isRunning === 'awaiting_user' ? { title: 'Needs Approval', color: 'yellow', } as const
-			: chatThreadsStreamState?.isRunning ? { title: 'Running', color: 'orange', } as const
-				: { title: 'Done', color: 'dark', } as const
+		chatThreadsStreamState?.isRunning === 'awaiting_user' ? { title: '承認待ち', color: 'yellow', } as const
+			: chatThreadsStreamState?.isRunning ? { title: '実行中', color: 'orange', } as const
+				: { title: '完了', color: 'dark', } as const
 	)
 
 
@@ -3339,8 +3339,8 @@ const CommandBarInChat = () => {
 	// acceptall + rejectall
 	// popup info about each change (each with num changes + acceptall + rejectall of their own)
 
-	const numFilesChangedStr = numFilesChanged === 0 ? 'No files with changes'
-		: `${sortedCommandBarURIs.length} file${numFilesChanged === 1 ? '' : 's'} with changes`
+	const numFilesChangedStr = numFilesChanged === 0 ? '変更されたファイルはありません'
+		: `${sortedCommandBarURIs.length}件の変更されたファイル`
 
 
 
@@ -3367,7 +3367,7 @@ const CommandBarInChat = () => {
 			}}
 			data-tooltip-id='void-tooltip'
 			data-tooltip-place='top'
-			data-tooltip-content='Reject all'
+			data-tooltip-content='すべて拒否'
 		/>
 
 		<IconShell1 // AcceptAllButtonWrapper
@@ -3386,7 +3386,7 @@ const CommandBarInChat = () => {
 			}}
 			data-tooltip-id='void-tooltip'
 			data-tooltip-place='top'
-			data-tooltip-content='Accept all'
+			data-tooltip-content='すべて承認'
 		/>
 
 
@@ -3405,8 +3405,8 @@ const CommandBarInChat = () => {
 			const numDiffs = sortedDiffIds?.length || 0
 
 			const fileStatus = (isFinishedMakingFileChanges
-				? { title: 'Done', color: 'dark', } as const
-				: { title: 'Running', color: 'orange', } as const
+				? { title: '完了', color: 'dark', } as const
+				: { title: '実行中', color: 'orange', } as const
 			)
 
 			const fileNameHTML = <div
@@ -3441,7 +3441,7 @@ const CommandBarInChat = () => {
 					onClick={() => { editCodeService.acceptOrRejectAllDiffAreas({ uri, removeCtrlKs: true, behavior: "reject", _addToHistory: true, }); }}
 					data-tooltip-id='void-tooltip'
 					data-tooltip-place='top'
-					data-tooltip-content='Reject file'
+					data-tooltip-content='ファイルを拒否'
 
 				/>
 				<IconShell1 // AcceptAllButtonWrapper
@@ -3449,7 +3449,7 @@ const CommandBarInChat = () => {
 					onClick={() => { editCodeService.acceptOrRejectAllDiffAreas({ uri, removeCtrlKs: true, behavior: "accept", _addToHistory: true, }); }}
 					data-tooltip-id='void-tooltip'
 					data-tooltip-place='top'
-					data-tooltip-content='Accept file'
+					data-tooltip-content='ファイルを承認'
 				/>
 
 			</div>
@@ -3574,12 +3574,12 @@ const EditToolSoFar = ({ toolCallSoFar, }: { toolCallSoFar: RawToolCallObj }) =>
 const SignedOutChatOverlay = ({ onLoginClick }: { onLoginClick: () => void }) => {
 	return (
 		<div className="absolute inset-0 bg-void-bg-1/40 backdrop-blur-[1px] z-10 flex flex-col items-center justify-center p-4 text-center rounded-md border border-void-border-3 gap-3">
-			<div className="text-xs font-medium text-void-fg-1">Sign in to start chatting</div>
+			<div className="text-xs font-medium text-void-fg-1">チャットを開始するにはログインしてください</div>
 			<button
 				onClick={(e) => { e.stopPropagation(); onLoginClick(); }}
 				className="px-4 py-1.5 rounded bg-white text-black text-[11px] font-bold hover:bg-zinc-200 transition-all shadow-md"
 			>
-				Log In
+				ログイン
 			</button>
 		</div>
 	)
@@ -3618,7 +3618,7 @@ const SidebarHeader = ({ onLoginClick, activeTab, onTabChange }: { onLoginClick:
 						onClick={onLoginClick}
 						className="text-[11px] font-medium px-2 py-0.5 rounded bg-white text-black hover:bg-zinc-200 transition-colors"
 					>
-						Log In
+						ログイン
 					</button>
 				) : (
 					<div className="relative" ref={accountMenuRef}>
@@ -3660,7 +3660,7 @@ const SidebarHeader = ({ onLoginClick, activeTab, onTabChange }: { onLoginClick:
 										<polyline points="16 17 21 12 16 7" />
 										<line x1="21" y1="12" x2="9" y2="12" />
 									</svg>
-									Sign Out
+									サインアウト
 								</button>
 							</div>
 						)}
@@ -3955,12 +3955,12 @@ export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTa
 
 		{Object.keys(chatThreadsState.allThreads).length > 1 ? // show if there are threads
 			<ErrorBoundary>
-				<div className='pt-8 mb-2 text-void-fg-3 text-root select-none pointer-events-none'>Previous Threads</div>
+				<div className='pt-8 mb-2 text-void-fg-3 text-root select-none pointer-events-none'>過去のチャット</div>
 				<PastThreadsList />
 			</ErrorBoundary>
 			:
 			<ErrorBoundary>
-				<div className='pt-8 mb-2 text-void-fg-3 text-root select-none pointer-events-none'>Suggestions</div>
+				<div className='pt-8 mb-2 text-void-fg-3 text-root select-none pointer-events-none'>おすすめの質問</div>
 				{initiallySuggestedPromptsHTML}
 			</ErrorBoundary>
 		}

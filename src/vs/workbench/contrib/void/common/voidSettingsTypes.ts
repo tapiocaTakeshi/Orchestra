@@ -392,15 +392,15 @@ export const displayInfoOfFeatureName = (featureName: FeatureName) => {
 	if (featureName === 'Autocomplete')
 		return 'Autocomplete'
 	else if (featureName === 'Ctrl+K')
-		return 'Quick Edit'
+		return 'クイックエディット'
 	// sidebar:
 	else if (featureName === 'Chat')
-		return 'Chat'
+		return 'チャット'
 	else if (featureName === 'Apply')
-		return 'Apply'
+		return '適用する'
 	// source control:
 	else if (featureName === 'SCM')
-		return 'Commit Message Generator'
+		return 'コミットメッセージ作成'
 	else
 		throw new Error(`Feature Name ${featureName} not allowed`)
 }

@@ -936,12 +936,12 @@ const saveCodeBlocksFromOutput = (output: string, _sessionId: string, workspaceF
 
 
 
-// Call Division API /api/generate endpoint
 const callDivisionGenerate = async (
 	endpointBase: string,
 	divisionModelName: string,
 	input: string,
-	signal: AbortSignal
+	signal: AbortSignal,
+	mode?: string
 ): Promise<{ output: string; error?: string; provider?: string; durationMs?: number }> => {
 	try {
 		const apiKey = process.env.DIVISION_API_KEY || '';
@@ -958,6 +958,7 @@ const callDivisionGenerate = async (
 				input,
 				provider: divisionModelName,
 				model: divisionModelName,
+				...(mode ? { mode } : {})
 			}),
 			signal,
 		});
@@ -1061,6 +1062,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		divisionProjectId: divisionProjectIdParam,
 		workspaceFolderPath,
 		modelName: selectedModel,
+		chatMode,
 	} = params
 
 	try {
@@ -1085,7 +1087,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			appendText(`## 🤖 Direct Model: \`${selectedModel}\`\n`);
 			appendText(`⏳ Division API \`/api/generate\` に直接リクエスト送信中...\n\n`);
 
-			const result = await callDivisionGenerate(endpointBase, selectedModel, prompt, controller.signal);
+			const result = await callDivisionGenerate(endpointBase, selectedModel, prompt, controller.signal, chatMode === 'agent' ? 'function_calling' : chatMode === 'gather' ? 'search' : 'chat');
 
 			if (result.error) {
 				appendText(`❌ **Error:** ${result.error}\n`);
@@ -1164,18 +1166,29 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			currentInput = prompt;
 		}
 
+		const chatHistoryLength = chatHistory.length
+		const messagesCount = messages.length
+
+		let divisionMode = 'chat';
+		if (chatMode === 'agent') {
+			divisionMode = 'function_calling';
+		} else if (chatMode === 'gather') {
+			divisionMode = 'search';
+		}
+
 		// Debug: log the actual request body
 		console.log('[DivisionAPI] /api/tasks/create request:', JSON.stringify({
 			projectId,
+			mode: divisionMode,
 			inputLength: currentInput.length,
 			inputPreview: currentInput.substring(0, 100),
-			chatHistoryLength: chatHistory.length,
-			messagesCount: messages.length,
+			chatHistoryLength,
+			messagesCount,
 		}));
 
 		const createResponse = await divisionFetch(endpointBase, '/api/tasks/create', {
 			method: 'POST',
-			body: JSON.stringify({ projectId, input: currentInput, chatHistory, model: selectedModel !== 'division-orchestrator' ? selectedModel : undefined }),
+			body: JSON.stringify({ projectId, mode: divisionMode, input: currentInput, chatHistory, model: selectedModel !== 'division-orchestrator' ? selectedModel : undefined }),
 			signal: controller.signal,
 		});
 
@@ -1202,7 +1215,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			appendText(`---\n\n## 💬 Fallback: Single Agent Response\n`);
 			appendText(`⏳ /api/generate で直接質問中...\n\n`);
 			const fallbackModel = selectedModel !== 'division-orchestrator' ? selectedModel : 'gpt-5.2';
-			const fallbackResult = await callDivisionGenerate(endpointBase, fallbackModel, prompt, controller.signal);
+			const fallbackResult = await callDivisionGenerate(endpointBase, fallbackModel, prompt, controller.signal, divisionMode);
 			if (fallbackResult.error) {
 				appendText(`❌ **Error:** ${fallbackResult.error}\n`);
 			} else {
@@ -1323,7 +1336,14 @@ ${task.description}
 
 Provide a thorough and complete response. Output all code files with their paths.`;
 
-			const result = await callDivisionGenerate(endpointBase, modelForRole, taskPrompt, controller.signal);
+			let subTaskMode = 'chat';
+			if (task.role === 'coding' || task.role === 'coder') {
+				subTaskMode = 'function_calling';
+			} else if (task.role === 'search' || task.role === 'research') {
+				subTaskMode = 'search';
+			}
+
+			const result = await callDivisionGenerate(endpointBase, modelForRole, taskPrompt, controller.signal, subTaskMode);
 
 			if (result.error) {
 				appendText(`❌ **Error:** ${result.error}\n\n`);
