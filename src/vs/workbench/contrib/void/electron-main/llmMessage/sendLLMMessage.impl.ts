@@ -1239,14 +1239,18 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		// =============================================
 		// PHASE 2: Task Classification (display tasks from API)
 		// =============================================
-		appendText(`---\n\n## 🗂️ Phase 2: Task Classification\n\n`);
-		appendText(`| # | Role | Title | Description |\n`);
-		appendText(`|---|------|-------|-------------|\n`);
+		appendText(`---\n\n## 🗂️ Phase 2: Task Classification (Mind Map)\n\n`);
+		appendText(`**Tasks**\n`);
 		for (let i = 0; i < tasks.length; i++) {
 			const t = tasks[i];
-			appendText(`| ${i + 1} | ${t.role} | ${t.title} | ${t.description} |\n`);
+			const isLast = i === tasks.length - 1;
+			const branch = isLast ? ' └──' : ' ├──';
+			const subBranch = isLast ? '      └──' : ' │    └──';
+			appendText(`${branch} **${i + 1}. \`${t.role}\`** — ${t.title}\n`);
+			appendText(`${subBranch} 📝 *${t.description}*\n`);
 		}
 		appendText(`\n`);
+
 
 		// =============================================
 		// PHASE 3: Task Execution via /api/generate + PATCH status

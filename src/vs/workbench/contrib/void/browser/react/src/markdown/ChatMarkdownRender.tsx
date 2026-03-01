@@ -348,7 +348,7 @@ const RenderToken = ({ token, inPTag, codeURI, chatMessageLocation, tokenIdx, ..
 	if (t.type === 'table') {
 
 		return (
-			<div>
+			<div className='w-full overflow-x-auto'>
 				<table>
 					<thead>
 						<tr>
