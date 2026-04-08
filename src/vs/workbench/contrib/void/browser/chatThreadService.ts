@@ -288,6 +288,10 @@ export interface IChatThreadService {
 	approveLatestToolRequest(threadId: string): void;
 	rejectLatestToolRequest(threadId: string): void;
 
+	// flow review approve/reject
+	approveFlowReview(threadId: string): void;
+	rejectFlowReview(threadId: string): void;
+
 	// jump to history
 	jumpToCheckpointBeforeMessageIdx(opts: { threadId: string, messageIdx: number, jumpToUserModified: boolean }): void;
 
@@ -367,6 +371,30 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 					}
 				} catch (err) {
 					console.error(`[FileOperation] Error processing ${op.action} for ${op.filePath}:`, err);
+				}
+			}
+		});
+
+		this._llmMessageService.registerCommandOperationHandler(async (commands) => {
+			const threadId = this.state.currentThreadId;
+			if (!threadId) return;
+
+			for (const cmd of commands) {
+				try {
+					const toolId = generateUuid();
+					const toolName = 'run_command';
+					const unvalidatedToolParams = { command: cmd.command }; // the AI might not output cwd/terminalId, so unvalidated
+
+					// Instead of generating a single 'tool_request' via `_addMessageToThread`, we use `_runToolCall`
+					// `_runToolCall` handles the "Auto-approve terminal" logic internally
+					// and creates the `tool_request` if approval is required.
+					this._runToolCall(threadId, toolName, toolId, undefined, {
+						preapproved: false,
+						unvalidatedToolParams,
+					});
+
+				} catch (err) {
+					console.error(`[CommandOperation] Error starting command ${cmd.command}:`, err);
 				}
 			}
 		});
@@ -475,6 +503,10 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			if (lastMessage && lastMessage.role === 'tool' && lastMessage.type === 'tool_request')
 				this._setStreamState(threadId, { isRunning: 'awaiting_user', })
 
+			// if flow_review pending but stream state doesn't indicate it (happens if restart Void)
+			if (lastMessage && lastMessage.role === 'flow_review' && lastMessage.status === 'pending')
+				this._setStreamState(threadId, { isRunning: 'awaiting_user', })
+
 			// if running now but stream state doesn't indicate it (happens if restart Void), cancel that last tool
 			if (lastMessage && lastMessage.role === 'tool' && lastMessage.type === 'running_now') {
 
@@ -576,6 +608,38 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		const errorMessage = this.toolErrMsgs.rejected
 		this._updateLatestTool(threadId, { role: 'tool', type: 'rejected', params: params, name: name, content: errorMessage, result: null, id, rawParams, mcpServerName })
 		this._setStreamState(threadId, undefined)
+	}
+
+	approveFlowReview(threadId: string) {
+		const thread = this.state.allThreads[threadId]
+		if (!thread) return
+
+		const lastMsg = thread.messages[thread.messages.length - 1]
+		if (!(lastMsg.role === 'flow_review' && lastMsg.status === 'pending')) return
+
+		// Update the flow_review message status to 'approved'
+		this._editMessageInThread(threadId, thread.messages.length - 1, { ...lastMsg, status: 'approved' })
+
+		// Send a continuation message to resume orchestration
+		const resumeMessage = `[FLOW_REVIEW_APPROVED] セッション ${lastMsg.sessionId} のタスク ${lastMsg.completedTaskIndex + 1}/${lastMsg.totalTasks} を承認しました。次のタスクに進みます。`
+
+		// Trigger a new message that will be picked up by the Division API resume logic
+		this.addUserMessageAndStreamResponse({ userMessage: resumeMessage, threadId })
+	}
+
+	rejectFlowReview(threadId: string) {
+		const thread = this.state.allThreads[threadId]
+		if (!thread) return
+
+		const lastMsg = thread.messages[thread.messages.length - 1]
+		if (!(lastMsg.role === 'flow_review' && lastMsg.status === 'pending')) return
+
+		// Update the flow_review message status to 'rejected'
+		this._editMessageInThread(threadId, thread.messages.length - 1, { ...lastMsg, status: 'rejected' })
+
+		// Clear the orchestration state file
+		this._setStreamState(threadId, undefined)
+		this._addUserCheckpoint({ threadId })
 	}
 
 	private _computeMCPServerOfToolName = (toolName: string) => {
@@ -829,7 +893,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				nAttempts += 1
 
 				type ResTypes =
-					| { type: 'llmDone', toolCall?: RawToolCallObj, info: { fullText: string, fullReasoning: string, anthropicReasoning: AnthropicReasoning[] | null, reasoningDuration?: number } }
+					| { type: 'llmDone', toolCall?: RawToolCallObj, info: { fullText: string, fullReasoning: string, anthropicReasoning: AnthropicReasoning[] | null, reasoningDuration?: number }, flowReview?: import('../common/sendLLMMessageTypes.js').FlowReviewData }
 					| { type: 'llmError', error?: { message: string; fullError: Error | null; } }
 					| { type: 'llmAborted' }
 
@@ -855,7 +919,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 						}
 						this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: fullText, reasoningSoFar: fullReasoning, toolCallSoFar: toolCall ?? null, reasoningStartMs, reasoningEndMs }, interrupt: Promise.resolve(() => { if (llmCancelToken) this._llmMessageService.abort(llmCancelToken) }) })
 					},
-					onFinalMessage: async ({ fullText, fullReasoning, toolCall, anthropicReasoning, }) => {
+					onFinalMessage: async ({ fullText, fullReasoning, toolCall, anthropicReasoning, flowReview, }) => {
 						// Fallback if we have reasoning but never hit fullText
 						if (reasoningStartMs && !reasoningEndMs) {
 							reasoningEndMs = Date.now()
@@ -864,7 +928,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 						if (reasoningStartMs && reasoningEndMs) {
 							reasoningDuration = (reasoningEndMs - reasoningStartMs) / 1000;
 						}
-						resMessageIsDonePromise({ type: 'llmDone', toolCall, info: { fullText, fullReasoning, anthropicReasoning, reasoningDuration } }) // resolve with tool calls
+						resMessageIsDonePromise({ type: 'llmDone', toolCall, info: { fullText, fullReasoning, anthropicReasoning, reasoningDuration }, flowReview }) // resolve with tool calls
 					},
 					onError: async (error) => {
 						resMessageIsDonePromise({ type: 'llmError', error: error })
@@ -936,6 +1000,25 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				const { toolCall, info } = llmRes
 
 				this._addMessageToThread(threadId, { role: 'assistant', displayContent: info.fullText, reasoning: info.fullReasoning, anthropicReasoning: info.anthropicReasoning, reasoningDuration: info.reasoningDuration })
+
+				// Flow review: if Division API sent flowReview data, add a flow_review message and pause for user approval
+				if (llmRes.flowReview) {
+					const fr = llmRes.flowReview;
+					this._addMessageToThread(threadId, {
+						role: 'flow_review',
+						flowRole: fr.flowRole,
+						mdFileName: fr.mdFileName,
+						mdFilePath: fr.mdFilePath,
+						mdContent: fr.mdContent,
+						sessionId: fr.sessionId,
+						completedTaskIndex: fr.completedTaskIndex,
+						totalTasks: fr.totalTasks,
+						status: 'pending',
+					})
+					isRunningWhenEnd = 'awaiting_user'
+					// Do not continue the tool call loop — wait for user review
+					break
+				}
 
 				this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' }) // just decorative for clarity
 

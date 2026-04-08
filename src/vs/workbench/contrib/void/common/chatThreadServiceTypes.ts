@@ -68,6 +68,17 @@ export type ChatMessage =
 	| ToolMessage<ToolName>
 	| DecorativeCanceledTool
 	| CheckpointEntry
+	| {
+		role: 'flow_review';
+		flowRole: string; // e.g. 'design', 'search', 'writing', 'planning'
+		mdFileName: string; // e.g. 'DESIGN.md'
+		mdFilePath: string; // full path to the saved MD
+		mdContent: string; // content of the MD file for preview
+		sessionId: string; // orchestration session ID
+		completedTaskIndex: number; // index of the task that just completed
+		totalTasks: number; // total number of tasks
+		status: 'pending' | 'approved' | 'rejected'; // review status
+	}
 
 
 // one of the square items that indicates a selection in a chat bubble

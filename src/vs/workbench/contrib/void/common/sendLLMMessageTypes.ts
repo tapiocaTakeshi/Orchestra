@@ -98,7 +98,18 @@ export type RawToolCallObj = {
 export type AnthropicReasoning = ({ type: 'thinking'; thinking: any; signature: string; } | { type: 'redacted_thinking', data: any })
 
 export type OnText = (p: { fullText: string; fullReasoning: string; toolCall?: RawToolCallObj }) => void
-export type OnFinalMessage = (p: { fullText: string; fullReasoning: string; toolCall?: RawToolCallObj; anthropicReasoning: AnthropicReasoning[] | null }) => void // id is tool_use_id
+export type OnFinalMessage = (p: { fullText: string; fullReasoning: string; toolCall?: RawToolCallObj; anthropicReasoning: AnthropicReasoning[] | null; flowReview?: FlowReviewData }) => void // id is tool_use_id
+
+// Flow review data sent from Division API when a flow MD is generated and needs human review
+export type FlowReviewData = {
+	flowRole: string; // e.g. 'design', 'search', 'writing', 'planning'
+	mdFileName: string; // e.g. 'DESIGN.md'
+	mdFilePath: string; // full absolute path to the saved MD file
+	mdContent: string; // content of the generated MD
+	sessionId: string; // orchestration session ID
+	completedTaskIndex: number; // index of the completed task
+	totalTasks: number; // total number of tasks in the session
+}
 export type OnError = (p: { message: string; fullError: Error | null }) => void
 export type OnAbort = () => void
 export type AbortRef = { current: (() => void) | null }
@@ -133,6 +144,7 @@ export type SendLLMMessageParams = {
 	onFinalMessage: OnFinalMessage;
 	onError: OnError;
 	onFileOperation?: (operations: FileOperationItem[]) => void;
+	onCommandRun?: (commands: CommandOperationItem[]) => void;
 	logging: { loggingName: string, loggingExtras?: { [k: string]: any } };
 	abortRef: AbortRef;
 
@@ -151,7 +163,7 @@ export type SendLLMMessageParams = {
 
 
 // can't send functions across a proxy, use listeners instead
-export type BlockedMainLLMMessageParams = 'onText' | 'onFinalMessage' | 'onError' | 'onFileOperation' | 'abortRef'
+export type BlockedMainLLMMessageParams = 'onText' | 'onFinalMessage' | 'onError' | 'onFileOperation' | 'onCommandRun' | 'abortRef'
 export type MainSendLLMMessageParams = Omit<SendLLMMessageParams, BlockedMainLLMMessageParams> & { requestId: string; isLoggedIn?: boolean } & SendLLMType
 
 export type MainLLMMessageAbortParams = { requestId: string }
@@ -169,6 +181,12 @@ export type FileOperationItem = {
 	searchReplaceBlocks?: string; // for edit
 }
 export type EventLLMMessageOnFileOperationParams = { requestId: string; operations: FileOperationItem[] }
+
+// Command operation events from main process to renderer
+export type CommandOperationItem = {
+	command: string;
+}
+export type EventLLMMessageOnCommandRunParams = { requestId: string; commands: CommandOperationItem[] }
 
 // service -> main -> internal -> event (back to main)
 // (browser)
