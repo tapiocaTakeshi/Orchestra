@@ -1072,7 +1072,6 @@ const callDivisionGenerate = async (
 			body: JSON.stringify({
 				input,
 				provider: divisionModelName,
-				model: divisionModelName,
 				...(mode ? { mode } : {})
 			}),
 			signal,
