@@ -468,14 +468,6 @@ export type RoleAssignment = {
 	model: string;
 };
 
-export type ClerkUser = {
-	id: string;
-	fullName: string | null;
-	primaryEmailAddress: string | null;
-	imageUrl: string | null;
-	username: string | null;
-}
-
 export type GlobalSettings = {
 	autoRefreshModels: boolean;
 	aiInstructions: string;
@@ -492,8 +484,8 @@ export type GlobalSettings = {
 	autoAcceptLLMChanges: boolean;
 	roleAssignments: RoleAssignment[];
 	divisionProjectId: string;
-	clerkUser: ClerkUser | null;
-	clerkSessionId: string | null;
+	divisionApiKey: string;
+	isLoggedIn: boolean;
 }
 
 // Default role assignments for Division API
@@ -523,8 +515,8 @@ export const defaultGlobalSettings: GlobalSettings = {
 	autoAcceptLLMChanges: false,
 	roleAssignments: defaultRoleAssignments,
 	divisionProjectId: '',
-	clerkUser: null,
-	clerkSessionId: null,
+	divisionApiKey: '',
+	isLoggedIn: false,
 }
 
 export type GlobalSettingName = keyof GlobalSettings

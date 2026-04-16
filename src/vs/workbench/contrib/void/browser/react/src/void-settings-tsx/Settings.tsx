@@ -1059,12 +1059,10 @@ const DivisionSettings = () => {
 	};
 
 	const handleAddProject = () => {
-		const newId = `project-${Date.now()}`;
 		divisionProjectService.addProject({
-			id: newId,
+			projectId: '',
 			name: 'New Division Project',
-			projectId: '', // User will fill this in
-			agents: [], // defaultRoleAssignments will be used as fallback in service if needed
+			agents: [],
 		});
 	};
 
@@ -1122,12 +1120,12 @@ const DivisionSettings = () => {
 			</div>
 
 			{projects.map((project) => {
-				const isActive = divisionProjectService.isProjectActive(project.id);
+				const isActive = divisionProjectService.isProjectActive(project.projectId);
 				const agents = project.agents || [];
 				const pStatus = projectUpdateStatus[project.id] || 'idle';
 				return (
 					<div
-						key={project.id}
+						key={project.projectId}
 						className={`border p-4 rounded-sm flex flex-col gap-3 ${isActive ? 'border-[#0e70c0] bg-[#0e70c0]/5' : 'border-void-border-2 bg-void-bg-2'}`}
 					>
 						<div className="flex items-center justify-between">
@@ -1142,7 +1140,7 @@ const DivisionSettings = () => {
 							</div>
 							<div className="flex items-center gap-2">
 								<button
-									onClick={() => handleUpdateProject(project.id)}
+									onClick={() => handleUpdateProject(project.projectId)}
 									disabled={pStatus === 'loading'}
 									className="flex items-center gap-1 text-xs text-void-fg-3 hover:text-void-fg-1 transition-colors disabled:opacity-50"
 									title="Update this project from Division API"
@@ -1154,13 +1152,13 @@ const DivisionSettings = () => {
 									<span>Update</span>
 								</button>
 								<button
-									onClick={() => divisionProjectService.toggleActiveProject(project.id)}
+									onClick={() => divisionProjectService.toggleActiveProject(project.projectId)}
 									className={`text-xs px-2 py-1 rounded transition-colors ${isActive ? 'bg-[#0e70c0] text-white hover:bg-[#0e70c0]/80' : 'bg-void-bg-3 text-void-fg-2 hover:bg-void-bg-1'}`}
 								>
 									{isActive ? 'On' : 'Off'}
 								</button>
 								<button
-									onClick={() => divisionProjectService.removeProject(project.id)}
+									onClick={() => divisionProjectService.removeProject(project.projectId)}
 									className="text-void-fg-3 hover:text-red-500 transition-colors"
 									title="Delete Project"
 								>
@@ -1271,10 +1269,7 @@ export const Settings = () => {
 	const mcpService = accessor.get('IMCPService')
 	const storageService = accessor.get('IStorageService')
 	const metricsService = accessor.get('IMetricsService')
-	const clerkService = accessor.get('IClerkService')
-
 	const [showLoginScreen, setShowLoginScreen] = useState(false)
-	const clerkUser = settingsState.globalSettings.clerkUser
 	const isOptedOut = useIsOptedOut()
 
 	const onDownload = (t: 'Chats' | 'Settings') => {
@@ -1618,44 +1613,39 @@ export const Settings = () => {
 										<h2 className='text-3xl mb-2'>Account</h2>
 										<h4 className='text-void-fg-3 mb-4'>{`Manage your Orchestra account.`}</h4>
 
-										{clerkUser ? (
-											<div className="flex flex-col gap-4 max-w-md">
-												<div className="flex items-center justify-between p-4 bg-void-bg-1 rounded-lg border border-void-border-2">
-													<div className="flex items-center gap-3">
-														{clerkUser.imageUrl ? (
-															<img src={clerkUser.imageUrl} alt="" className="w-8 h-8 rounded-full" />
-														) : (
-															<div className="w-8 h-8 rounded-full bg-[#0e70c0] flex items-center justify-center text-white text-sm font-bold">
-																{(clerkUser.fullName || clerkUser.primaryEmailAddress || '?')[0].toUpperCase()}
-															</div>
-														)}
-														<div>
-															<div className="font-medium text-void-fg-1">{clerkUser.fullName || clerkUser.username || 'Orchestra User'}</div>
-															<div className="text-xs text-void-fg-3 opacity-70">Authenticated</div>
-														</div>
+									{settingsState.globalSettings.isLoggedIn ? (
+										<div className="flex flex-col gap-4 max-w-md">
+											<div className="flex items-center justify-between p-4 bg-void-bg-1 rounded-lg border border-void-border-2">
+												<div className="flex items-center gap-3">
+													<div className="w-8 h-8 rounded-full bg-[#0e70c0] flex items-center justify-center text-white text-sm font-bold">
+														O
 													</div>
-													<button
-														onClick={() => {
-															voidSettingsService.setGlobalSetting('clerkUser', null)
-															voidSettingsService.setGlobalSetting('clerkSessionId', null)
-														}}
-														className="text-xs text-void-fg-3 hover:text-void-fg-1 transition-colors"
-													>
-														Sign Out
-													</button>
+													<div>
+														<div className="font-medium text-void-fg-1">Orchestra User</div>
+														<div className="text-xs text-void-fg-3 opacity-70">ログイン済み</div>
+													</div>
 												</div>
-											</div>
-										) : (
-											<div className="max-w-48 w-full">
-												<VoidButtonBgDarken
-													onClick={() => setShowLoginScreen(true)}
-													className="px-4 py-2 bg-[#0e70c0] text-white w-full flex items-center justify-center gap-2"
+												<button
+													onClick={() => {
+														voidSettingsService.setGlobalSetting('isLoggedIn', false)
+													}}
+													className="text-xs text-void-fg-3 hover:text-void-fg-1 transition-colors"
 												>
-													<Lock className="w-4 h-4" />
-													Log In
-												</VoidButtonBgDarken>
+													Sign Out
+												</button>
 											</div>
-										)}
+										</div>
+									) : (
+										<div className="max-w-48 w-full">
+											<VoidButtonBgDarken
+												onClick={() => setShowLoginScreen(true)}
+												className="px-4 py-2 bg-[#0e70c0] text-white w-full flex items-center justify-center gap-2"
+											>
+												<Lock className="w-4 h-4" />
+												Log In
+											</VoidButtonBgDarken>
+										</div>
+									)}
 									</ErrorBoundary>
 								</div>
 

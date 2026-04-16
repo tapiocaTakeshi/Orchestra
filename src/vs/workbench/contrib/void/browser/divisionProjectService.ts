@@ -2,6 +2,7 @@
  *  Division Project Service
  *  Manages .division/agents.json per workspace for project-local agent role assignments.
  *  Supports multiple division projects with an active project selection.
+ *  Auto-syncs project data to Supabase when projects change.
  *--------------------------------------------------------------------------------------*/
 
 import { Disposable } from '../../../../base/common/lifecycle.js';
@@ -12,17 +13,21 @@ import { IFileService } from '../../../../platform/files/common/files.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
-import { AgentRole, defaultRoleAssignments, ProviderName, RoleAssignment } from '../common/voidSettingsTypes.js';
+import { AgentRole, defaultRoleAssignments, displayInfoOfProviderName, ProviderName, RoleAssignment } from '../common/voidSettingsTypes.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
-import { generateUuid } from '../../../../base/common/uuid.js';
+
+
+// --- Supabase configuration ---
+
+const SUPABASE_URL = 'https://wmhrbhcnxglvqwvnbxlt.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndtaHJiaGNueGdsdnF3dm5ieGx0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3OTg1MDAsImV4cCI6MjA5MTM3NDUwMH0.4qjCIOjFwm4XnmtqZN_N0zcZlhjGc2GQ4-x7ygMa3hM';
 
 
 // --- Division Project types ---
 
 export type DivisionProjectConfig = {
-	id: string;
-	name: string;
 	projectId: string;
+	name: string;
 	agents: RoleAssignment[];
 };
 
@@ -32,19 +37,16 @@ export type DivisionProjectsFile = {
 	projects: DivisionProjectConfig[];
 };
 
-const generateProjectId = (): string => generateUuid();
-
 const defaultDivisionProjectConfig = (): DivisionProjectConfig => ({
-	id: generateProjectId(),
-	name: 'Default Division Project',
 	projectId: '',
+	name: 'Default Division Project',
 	agents: [...defaultRoleAssignments],
 });
 
 const defaultDivisionProjectsFile = (): DivisionProjectsFile => {
 	const project = defaultDivisionProjectConfig();
 	return {
-		activeProjectIds: [project.id],
+		activeProjectIds: [project.projectId],
 		projects: [project],
 	};
 };
@@ -82,25 +84,19 @@ export interface IDivisionProjectService {
 	save(config: DivisionProjectConfig): Promise<void>;
 
 	/** Toggle a project's active state */
-	toggleActiveProject(id: string): Promise<void>;
+	toggleActiveProject(projectId: string): Promise<void>;
 
 	/** Set a project as the only active project (exclusive selection) */
-	setActiveProject(id: string): Promise<void>;
+	setActiveProject(projectId: string): Promise<void>;
 
 	/** Check if a project is active */
-	isProjectActive(id: string): boolean;
+	isProjectActive(projectId: string): boolean;
 
 	/** Add a new division project */
 	addProject(config: DivisionProjectConfig): Promise<void>;
 
 	/** Remove a division project by ID */
 	removeProject(id: string): Promise<void>;
-
-	/** Fetch latest project config from the Division API and update agents.json */
-	fetchAndUpdateFromAPI(localProjectId: string): Promise<{ success: boolean; message: string }>;
-
-	/** Fetch latest config for all projects from the Division API and update agents.json */
-	fetchAndUpdateAllFromAPI(): Promise<{ success: boolean; message: string }>;
 }
 
 
@@ -119,10 +115,10 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 	get projectConfig(): DivisionProjectConfig | null {
 		const firstActiveId = this._activeProjectIds[0];
 		if (!firstActiveId) return null;
-		return this._projects.find(p => p.id === firstActiveId) ?? this._projects[0] ?? null;
+		return this._projects.find(p => p.projectId === firstActiveId) ?? this._projects[0] ?? null;
 	}
 	get activeProjects(): DivisionProjectConfig[] {
-		return this._projects.filter(p => this._activeProjectIds.includes(p.id));
+		return this._projects.filter(p => this._activeProjectIds.includes(p.projectId));
 	}
 	get projects(): DivisionProjectConfig[] { return this._projects; }
 	get activeProjectIds(): string[] { return this._activeProjectIds; }
@@ -136,15 +132,15 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 	) {
 		super();
 
-		// Sync active projects' config to globalSettings when they change
+		// Sync active projects' config to globalSettings and Supabase when they change
 		this._register(this._onDidChangeProject.event(() => {
 			const actives = this.activeProjects;
 			if (actives.length > 0) {
-				// Merge agents from all active projects (first project's agents take priority)
 				const mergedAgents = actives.flatMap(p => p.agents);
 				this.voidSettingsService.setGlobalSetting('roleAssignments', mergedAgents);
 				this.voidSettingsService.setGlobalSetting('divisionProjectId', actives[0].projectId);
 			}
+			this._syncToSupabase();
 		}));
 
 		// Initialize for existing workspace folders
@@ -154,6 +150,9 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 		this._register(this.workspaceContextService.onDidChangeWorkspaceFolders(() => {
 			this._initForWorkspace();
 		}));
+
+		// Eagerly fetch the Division API key at startup (independent of sync)
+		this._fetchAndStoreDivisionApiKey();
 	}
 
 	private async _initForWorkspace(): Promise<void> {
@@ -214,12 +213,10 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 			const content = await this.fileService.readFile(uri);
 			const parsed = JSON.parse(content.value.toString());
 
-			// New multi-project format: { activeProjectId, projects: [...] }
 			if (Array.isArray(parsed.projects)) {
 				const projects: DivisionProjectConfig[] = parsed.projects.map((p: any) => ({
-					id: p.id || generateProjectId(),
-					name: p.name || 'Division Project',
 					projectId: typeof p.projectId === 'string' ? p.projectId : '',
+					name: p.name || 'Division Project',
 					agents: this._parseAgents(p.agents),
 				}));
 				if (projects.length === 0) {
@@ -227,27 +224,22 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 					projects.push(def);
 				}
 				this._projects = projects;
-				// Support both new activeProjectIds[] and legacy activeProjectId
 				if (Array.isArray(parsed.activeProjectIds)) {
-					this._activeProjectIds = parsed.activeProjectIds.filter((id: string) => projects.some(p => p.id === id));
-					if (this._activeProjectIds.length === 0) this._activeProjectIds = [projects[0].id];
-				} else if (parsed.activeProjectId && projects.some((p: DivisionProjectConfig) => p.id === parsed.activeProjectId)) {
-					this._activeProjectIds = [parsed.activeProjectId];
+					this._activeProjectIds = parsed.activeProjectIds.filter((pid: string) => projects.some(p => p.projectId === pid));
+					if (this._activeProjectIds.length === 0) this._activeProjectIds = [projects[0].projectId];
 				} else {
-					this._activeProjectIds = [projects[0].id];
+					this._activeProjectIds = [projects[0].projectId];
 				}
 			}
-			// Legacy single-project format: { name, projectId, agents }
+			// Legacy format: { name, projectId, agents }
 			else if (parsed.name || parsed.agents) {
 				const legacyProject: DivisionProjectConfig = {
-					id: generateProjectId(),
-					name: parsed.name || 'Division Project',
 					projectId: typeof parsed.projectId === 'string' ? parsed.projectId : '',
+					name: parsed.name || 'Division Project',
 					agents: this._parseAgents(parsed.agents),
 				};
 				this._projects = [legacyProject];
-				this._activeProjectIds = [legacyProject.id];
-				// Migrate: rewrite in new format
+				this._activeProjectIds = [legacyProject.projectId];
 				await this._persistToDisk();
 			}
 			else {
@@ -299,6 +291,158 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 		await this.fileService.writeFile(this._projectConfigUri, VSBuffer.fromString(jsonStr));
 	}
 
+	// --- Supabase sync ---
+
+	private async _supabaseUpsert(table: string, rows: Record<string, unknown>[]): Promise<void> {
+		if (rows.length === 0) return;
+		const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				'apikey': SUPABASE_ANON_KEY,
+				'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+				'Prefer': 'resolution=merge-duplicates',
+			},
+			body: JSON.stringify(rows),
+		});
+		if (!res.ok) {
+			const body = await res.text();
+			console.error(`[DivisionProjectService] Supabase upsert ${table} failed (${res.status}):`, body);
+		}
+	}
+
+	private async _supabaseRpc<T = unknown>(fnName: string, params: Record<string, unknown> = {}): Promise<T | null> {
+		try {
+			const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fnName}`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'apikey': SUPABASE_ANON_KEY,
+					'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+				},
+				body: JSON.stringify(params),
+			});
+			if (!res.ok) {
+				const body = await res.text();
+				console.error(`[DivisionProjectService] Supabase RPC ${fnName} failed (${res.status}):`, body);
+				return null;
+			}
+			return await res.json() as T;
+		} catch (e) {
+			console.error(`[DivisionProjectService] Supabase RPC ${fnName} error:`, e);
+			return null;
+		}
+	}
+
+	private async _fetchAndStoreDivisionApiKey(): Promise<void> {
+		// Wait for settings service to be ready
+		await this.voidSettingsService.waitForInitState;
+
+		const projectId = this.voidSettingsService.state.globalSettings.divisionProjectId
+			|| this.projectConfig?.projectId;
+		if (!projectId) {
+			console.log('[DivisionProjectService] No project ID available for API key fetch');
+			return;
+		}
+
+		try {
+			const apiKey = await this._supabaseRpc<string>('get_api_key_for_project', { p_project_id: projectId });
+			if (apiKey && typeof apiKey === 'string') {
+				this.voidSettingsService.setGlobalSetting('divisionApiKey', apiKey);
+				console.log('[DivisionProjectService] Division API key fetched and stored successfully');
+			} else {
+				console.warn('[DivisionProjectService] No API key returned from RPC for project:', projectId, 'response:', apiKey);
+			}
+		} catch (e) {
+			console.error('[DivisionProjectService] Failed to fetch Division API key:', e);
+		}
+	}
+
+	private async _syncToSupabase(): Promise<void> {
+		const projects = this._projects.filter(p => p.projectId);
+		if (projects.length === 0) return;
+
+		try {
+			const now = new Date().toISOString();
+
+			// Fetch ownerId from Supabase profiles
+			const ownerId = await this._supabaseRpc<string>('get_default_owner_id');
+
+			// 1) Upsert Projects (with ownerId if available)
+			await this._supabaseUpsert('Project', projects.map(p => ({
+				id: p.projectId,
+				name: p.name,
+				updatedAt: now,
+				...(ownerId ? { ownerId } : {}),
+			})));
+
+			// Collect unique roles and providers across all projects
+			const roleSet = new Map<string, { slug: string; name: string }>();
+			const providerSet = new Map<string, { name: string; displayName: string }>();
+			const roleAssignmentRows: Record<string, unknown>[] = [];
+
+			for (const project of projects) {
+				for (let i = 0; i < project.agents.length; i++) {
+					const agent = project.agents[i];
+					const roleId = agent.role;
+					const providerId = agent.provider;
+
+					if (!roleSet.has(roleId)) {
+						roleSet.set(roleId, {
+							slug: roleId,
+							name: roleId.charAt(0).toUpperCase() + roleId.slice(1),
+						});
+					}
+
+					if (!providerSet.has(providerId)) {
+						let displayName: string = providerId;
+						try { displayName = displayInfoOfProviderName(providerId).title; } catch { /* keep raw name */ }
+						providerSet.set(providerId, { name: providerId, displayName });
+					}
+
+					roleAssignmentRows.push({
+						id: `${project.projectId}-${roleId}-${providerId}`,
+						projectId: project.projectId,
+						roleId,
+						providerId,
+						priority: i,
+						config: JSON.stringify({ model: agent.model }),
+						updatedAt: now,
+					});
+				}
+			}
+
+			// 2) Upsert Roles
+			await this._supabaseUpsert('Role', [...roleSet.entries()].map(([id, r]) => ({
+				id,
+				slug: r.slug,
+				name: r.name,
+				updatedAt: now,
+			})));
+
+			// 3) Upsert Providers
+			await this._supabaseUpsert('Provider', [...providerSet.entries()].map(([id, p]) => ({
+				id,
+				name: p.name,
+				displayName: p.displayName,
+				apiBaseUrl: '',
+				apiType: 'openai',
+				modelId: '',
+				updatedAt: now,
+			})));
+
+			// 4) Upsert RoleAssignments
+			await this._supabaseUpsert('RoleAssignment', roleAssignmentRows);
+
+			console.log(`[DivisionProjectService] Supabase sync OK — ${projects.length} project(s), ${roleAssignmentRows.length} assignment(s)`);
+
+			// 5) Fetch and store the Division API key for the active project
+			await this._fetchAndStoreDivisionApiKey();
+		} catch (e) {
+			console.error('[DivisionProjectService] Supabase sync error:', e);
+		}
+	}
+
 	async reload(): Promise<void> {
 		if (this._projectConfigUri) {
 			await this._readConfig(this._projectConfigUri);
@@ -306,7 +450,7 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 	}
 
 	async save(config: DivisionProjectConfig): Promise<void> {
-		const idx = this._projects.findIndex(p => p.id === config.id);
+		const idx = this._projects.findIndex(p => p.projectId === config.projectId);
 		if (idx >= 0) {
 			this._projects[idx] = config;
 		} else {
@@ -316,27 +460,26 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 		this._onDidChangeProject.fire();
 	}
 
-	async toggleActiveProject(id: string): Promise<void> {
-		if (!this._projects.some(p => p.id === id)) return;
-		if (this._activeProjectIds.includes(id)) {
-			// Don't allow deactivating the last active project
+	async toggleActiveProject(projectId: string): Promise<void> {
+		if (!this._projects.some(p => p.projectId === projectId)) return;
+		if (this._activeProjectIds.includes(projectId)) {
 			if (this._activeProjectIds.length > 1) {
-				this._activeProjectIds = this._activeProjectIds.filter(aid => aid !== id);
+				this._activeProjectIds = this._activeProjectIds.filter(aid => aid !== projectId);
 			}
 		} else {
-			this._activeProjectIds = [...this._activeProjectIds, id];
+			this._activeProjectIds = [...this._activeProjectIds, projectId];
 		}
 		await this._persistToDisk();
 		this._onDidChangeProject.fire();
 	}
 
-	isProjectActive(id: string): boolean {
-		return this._activeProjectIds.includes(id);
+	isProjectActive(projectId: string): boolean {
+		return this._activeProjectIds.includes(projectId);
 	}
 
-	async setActiveProject(id: string): Promise<void> {
-		if (!this._projects.some(p => p.id === id)) return;
-		this._activeProjectIds = [id];
+	async setActiveProject(projectId: string): Promise<void> {
+		if (!this._projects.some(p => p.projectId === projectId)) return;
+		this._activeProjectIds = [projectId];
 		await this._persistToDisk();
 		this._onDidChangeProject.fire();
 	}
@@ -347,19 +490,19 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 		this._onDidChangeProject.fire();
 	}
 
-	async removeProject(id: string): Promise<void> {
-		if (this._projects.length <= 1) return; // Keep at least one project
-		this._projects = this._projects.filter(p => p.id !== id);
-		this._activeProjectIds = this._activeProjectIds.filter(aid => aid !== id);
+	async removeProject(projectId: string): Promise<void> {
+		if (this._projects.length <= 1) return;
+		this._projects = this._projects.filter(p => p.projectId !== projectId);
+		this._activeProjectIds = this._activeProjectIds.filter(aid => aid !== projectId);
 		if (this._activeProjectIds.length === 0) {
-			this._activeProjectIds = [this._projects[0]?.id ?? ''];
+			this._activeProjectIds = [this._projects[0]?.projectId ?? ''];
 		}
 		await this._persistToDisk();
 		this._onDidChangeProject.fire();
 	}
 
 	async fetchAndUpdateFromAPI(localProjectId: string): Promise<{ success: boolean; message: string }> {
-		const project = this._projects.find(p => p.id === localProjectId);
+		const project = this._projects.find(p => p.projectId === localProjectId);
 		if (!project) {
 			return { success: false, message: 'Project not found' };
 		}
@@ -395,7 +538,7 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 		}
 
 		const results = await Promise.all(
-			projectsWithId.map(p => this.fetchAndUpdateFromAPI(p.id))
+			projectsWithId.map(p => this.fetchAndUpdateFromAPI(p.projectId))
 		);
 
 		const errors = results.filter(r => !r.success).map(r => r.message);

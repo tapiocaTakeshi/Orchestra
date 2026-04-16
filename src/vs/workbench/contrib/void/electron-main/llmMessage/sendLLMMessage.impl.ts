@@ -46,7 +46,6 @@ type InternalCommonMessageParams = {
 	overridesOfModel: OverridesOfModel | undefined;
 	modelName: string;
 	_setAborter: (aborter: () => void) => void;
-	isLoggedIn?: boolean;
 }
 
 type SendChatParams_Internal = InternalCommonMessageParams & {
@@ -56,17 +55,17 @@ type SendChatParams_Internal = InternalCommonMessageParams & {
 	mcpTools: InternalToolInfo[] | undefined;
 	divisionRoleAssignments?: RoleAssignment[];
 	divisionProjectId?: string;
+	divisionApiKey?: string;
 	workspaceFolderPath?: string;
 }
 type SendFIMParams_Internal = InternalCommonMessageParams & { messages: LLMFIMMessage; separateSystemMessage: string | undefined; }
-export type ListParams_Internal<ModelResponse> = ModelListParams<ModelResponse> & { isLoggedIn?: boolean }
+export type ListParams_Internal<ModelResponse> = ModelListParams<ModelResponse>
 
 
 const invalidApiKeyMessage = (providerName: ProviderName) => `Invalid ${displayInfoOfProviderName(providerName).title} API key.`
 
-const getApiKey = (providerName: ProviderName, providedKey: string | undefined, isLoggedIn: boolean | undefined): string | undefined => {
+const getApiKey = (providerName: ProviderName, providedKey: string | undefined): string | undefined => {
 	if (providedKey) return providedKey;
-	if (!isLoggedIn) return undefined;
 
 	switch (providerName) {
 		case 'anthropic': return process.env.ANTHROPIC_API_KEY;
@@ -89,14 +88,14 @@ const parseHeadersJSON = (s: string | undefined): Record<string, string | null |
 	}
 }
 
-const newOpenAICompatibleSDK = async ({ settingsOfProvider, providerName, includeInPayload, isLoggedIn }: { settingsOfProvider: SettingsOfProvider, providerName: ProviderName, includeInPayload?: { [s: string]: any }, isLoggedIn: boolean | undefined }) => {
+const newOpenAICompatibleSDK = async ({ settingsOfProvider, providerName, includeInPayload }: { settingsOfProvider: SettingsOfProvider, providerName: ProviderName, includeInPayload?: { [s: string]: any } }) => {
 	const commonPayloadOpts: ClientOptions = {
 		dangerouslyAllowBrowser: true,
 		...includeInPayload,
 	}
 	if (providerName === 'openAI') {
 		const thisConfig = settingsOfProvider[providerName]
-		return new OpenAI({ apiKey: getApiKey(providerName, thisConfig.apiKey, isLoggedIn), ...commonPayloadOpts })
+		return new OpenAI({ apiKey: getApiKey(providerName, thisConfig.apiKey), ...commonPayloadOpts })
 	}
 	else if (providerName === 'ollama') {
 		const thisConfig = settingsOfProvider[providerName]
@@ -118,7 +117,7 @@ const newOpenAICompatibleSDK = async ({ settingsOfProvider, providerName, includ
 		const thisConfig = settingsOfProvider[providerName]
 		return new OpenAI({
 			baseURL: 'https://openrouter.ai/api/v1',
-			apiKey: getApiKey(providerName, thisConfig.apiKey, isLoggedIn),
+			apiKey: getApiKey(providerName, thisConfig.apiKey),
 			defaultHeaders: {
 				'HTTP-Referer': 'https://voideditor.com', // Optional, for including your app on openrouter.ai rankings.
 				'X-Title': 'Void', // Optional. Shows in rankings on openrouter.ai.
@@ -139,7 +138,7 @@ const newOpenAICompatibleSDK = async ({ settingsOfProvider, providerName, includ
 		const thisConfig = settingsOfProvider[providerName]
 		const endpoint = `https://${thisConfig.project}.openai.azure.com/`;
 		const apiVersion = thisConfig.azureApiVersion ?? '2024-04-01-preview';
-		const options = { endpoint, apiKey: getApiKey(providerName, thisConfig.apiKey, isLoggedIn), apiVersion };
+		const options = { endpoint, apiKey: getApiKey(providerName, thisConfig.apiKey), apiVersion };
 		return new AzureOpenAI({ ...options, ...commonPayloadOpts });
 	}
 	else if (providerName === 'awsBedrock') {
@@ -148,41 +147,41 @@ const newOpenAICompatibleSDK = async ({ settingsOfProvider, providerName, includ
 		if (!baseURL.endsWith('/v1'))
 			baseURL = baseURL.replace(/\/+$/, '') + '/v1'
 
-		return new OpenAI({ baseURL, apiKey: getApiKey(providerName, apiKey, isLoggedIn), ...commonPayloadOpts })
+		return new OpenAI({ baseURL, apiKey: getApiKey(providerName, apiKey), ...commonPayloadOpts })
 	}
 
 
 	else if (providerName === 'deepseek') {
 		const thisConfig = settingsOfProvider[providerName]
-		return new OpenAI({ baseURL: 'https://api.deepseek.com/v1', apiKey: getApiKey(providerName, thisConfig.apiKey, isLoggedIn), ...commonPayloadOpts })
+		return new OpenAI({ baseURL: 'https://api.deepseek.com/v1', apiKey: getApiKey(providerName, thisConfig.apiKey), ...commonPayloadOpts })
 	}
 	else if (providerName === 'openAICompatible') {
 		const thisConfig = settingsOfProvider[providerName]
 		const headers = parseHeadersJSON(thisConfig.headersJSON)
-		return new OpenAI({ baseURL: thisConfig.endpoint, apiKey: getApiKey(providerName, thisConfig.apiKey, isLoggedIn), defaultHeaders: headers, ...commonPayloadOpts })
+		return new OpenAI({ baseURL: thisConfig.endpoint, apiKey: getApiKey(providerName, thisConfig.apiKey), defaultHeaders: headers, ...commonPayloadOpts })
 	}
 	else if (providerName === 'groq') {
 		const thisConfig = settingsOfProvider[providerName]
-		return new OpenAI({ baseURL: 'https://api.groq.com/openai/v1', apiKey: getApiKey(providerName, thisConfig.apiKey, isLoggedIn), ...commonPayloadOpts })
+		return new OpenAI({ baseURL: 'https://api.groq.com/openai/v1', apiKey: getApiKey(providerName, thisConfig.apiKey), ...commonPayloadOpts })
 	}
 	else if (providerName === 'xAI') {
 		const thisConfig = settingsOfProvider[providerName]
-		return new OpenAI({ baseURL: 'https://api.x.ai/v1', apiKey: getApiKey(providerName, thisConfig.apiKey, isLoggedIn), ...commonPayloadOpts })
+		return new OpenAI({ baseURL: 'https://api.x.ai/v1', apiKey: getApiKey(providerName, thisConfig.apiKey), ...commonPayloadOpts })
 	}
 	else if (providerName === 'mistral') {
 		const thisConfig = settingsOfProvider[providerName]
-		return new OpenAI({ baseURL: 'https://api.mistral.ai/v1', apiKey: getApiKey(providerName, thisConfig.apiKey, isLoggedIn), ...commonPayloadOpts })
+		return new OpenAI({ baseURL: 'https://api.mistral.ai/v1', apiKey: getApiKey(providerName, thisConfig.apiKey), ...commonPayloadOpts })
 	}
 	else if (providerName === 'perplexity') {
 		const thisConfig = settingsOfProvider[providerName]
-		return new OpenAI({ baseURL: 'https://api.perplexity.ai', apiKey: getApiKey(providerName, thisConfig.apiKey, isLoggedIn), ...commonPayloadOpts })
+		return new OpenAI({ baseURL: 'https://api.perplexity.ai', apiKey: getApiKey(providerName, thisConfig.apiKey), ...commonPayloadOpts })
 	}
 
 	else throw new Error(`Void providerName was invalid: ${providerName}.`)
 }
 
 
-const _sendOpenAICompatibleFIM = async ({ messages: { prefix, suffix, stopTokens }, onFinalMessage, onError, settingsOfProvider, modelName: modelName_, _setAborter, providerName, overridesOfModel, isLoggedIn }: SendFIMParams_Internal) => {
+const _sendOpenAICompatibleFIM = async ({ messages: { prefix, suffix, stopTokens }, onFinalMessage, onError, settingsOfProvider, modelName: modelName_, _setAborter, providerName, overridesOfModel }: SendFIMParams_Internal) => {
 
 	const {
 		modelName,
@@ -198,7 +197,7 @@ const _sendOpenAICompatibleFIM = async ({ messages: { prefix, suffix, stopTokens
 		return
 	}
 
-	const openai = await newOpenAICompatibleSDK({ providerName, settingsOfProvider, includeInPayload: additionalOpenAIPayload, isLoggedIn })
+	const openai = await newOpenAICompatibleSDK({ providerName, settingsOfProvider, includeInPayload: additionalOpenAIPayload })
 	openai.completions
 		.create({
 			model: modelName,
@@ -280,7 +279,7 @@ const rawToolCallObjOfAnthropicParams = (toolBlock: Anthropic.Messages.ToolUseBl
 // ------------ OPENAI-COMPATIBLE ------------
 
 
-const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onError, settingsOfProvider, modelSelectionOptions, modelName: modelName_, _setAborter, providerName, chatMode, separateSystemMessage, overridesOfModel, mcpTools, isLoggedIn }: SendChatParams_Internal) => {
+const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onError, settingsOfProvider, modelSelectionOptions, modelName: modelName_, _setAborter, providerName, chatMode, separateSystemMessage, overridesOfModel, mcpTools }: SendChatParams_Internal) => {
 	const {
 		modelName,
 		specialToolFormat,
@@ -306,7 +305,7 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 		: {}
 
 	// instance
-	const openai: OpenAI = await newOpenAICompatibleSDK({ providerName, settingsOfProvider, includeInPayload, isLoggedIn })
+	const openai: OpenAI = await newOpenAICompatibleSDK({ providerName, settingsOfProvider, includeInPayload })
 	if (providerName === 'microsoftAzure') {
 		// Required to select the model
 		(openai as AzureOpenAI).deploymentName = modelName;
@@ -405,7 +404,7 @@ type OpenAIModel = {
 	object: 'model';
 	owned_by: string;
 }
-const _openaiCompatibleList = async ({ onSuccess: onSuccess_, onError: onError_, settingsOfProvider, providerName, isLoggedIn }: ListParams_Internal<OpenAIModel>) => {
+const _openaiCompatibleList = async ({ onSuccess: onSuccess_, onError: onError_, settingsOfProvider, providerName }: ListParams_Internal<OpenAIModel>) => {
 	const onSuccess = ({ models }: { models: OpenAIModel[] }) => {
 		onSuccess_({ models })
 	}
@@ -413,7 +412,7 @@ const _openaiCompatibleList = async ({ onSuccess: onSuccess_, onError: onError_,
 		onError_({ error })
 	}
 	try {
-		const openai = await newOpenAICompatibleSDK({ providerName, settingsOfProvider, isLoggedIn })
+		const openai = await newOpenAICompatibleSDK({ providerName, settingsOfProvider })
 		openai.models.list()
 			.then(async (response) => {
 				const models: OpenAIModel[] = []
@@ -465,7 +464,7 @@ const anthropicTools = (chatMode: ChatMode | null, mcpTools: InternalToolInfo[] 
 
 
 // ------------ ANTHROPIC ------------
-const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessage, onError, settingsOfProvider, modelSelectionOptions, overridesOfModel, modelName: modelName_, _setAborter, separateSystemMessage, chatMode, mcpTools, isLoggedIn }: SendChatParams_Internal) => {
+const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessage, onError, settingsOfProvider, modelSelectionOptions, overridesOfModel, modelName: modelName_, _setAborter, separateSystemMessage, chatMode, mcpTools }: SendChatParams_Internal) => {
 	const {
 		modelName,
 		specialToolFormat,
@@ -490,7 +489,7 @@ const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessag
 
 	// instance
 	const anthropic = new Anthropic({
-		apiKey: getApiKey(providerName, thisConfig.apiKey, isLoggedIn),
+		apiKey: getApiKey(providerName, thisConfig.apiKey),
 		dangerouslyAllowBrowser: true
 	});
 
@@ -592,7 +591,7 @@ const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessag
 
 // ------------ MISTRAL ------------
 // https://docs.mistral.ai/api/#tag/fim
-const sendMistralFIM = ({ messages, onFinalMessage, onError, settingsOfProvider, overridesOfModel, modelName: modelName_, _setAborter, providerName, isLoggedIn }: SendFIMParams_Internal) => {
+const sendMistralFIM = ({ messages, onFinalMessage, onError, settingsOfProvider, overridesOfModel, modelName: modelName_, _setAborter, providerName }: SendFIMParams_Internal) => {
 	const { modelName, supportsFIM } = getModelCapabilities(providerName, modelName_, overridesOfModel)
 	if (!supportsFIM) {
 		if (modelName === modelName_)
@@ -602,7 +601,7 @@ const sendMistralFIM = ({ messages, onFinalMessage, onError, settingsOfProvider,
 		return
 	}
 
-	const mistral = new MistralCore({ apiKey: getApiKey(providerName, settingsOfProvider.mistral.apiKey, isLoggedIn) })
+	const mistral = new MistralCore({ apiKey: getApiKey(providerName, settingsOfProvider.mistral.apiKey) })
 	fimComplete(mistral,
 		{
 			model: modelName,
@@ -738,7 +737,6 @@ const sendGeminiChat = async ({
 	modelSelectionOptions,
 	chatMode,
 	mcpTools,
-	isLoggedIn,
 }: SendChatParams_Internal) => {
 
 	if (providerName !== 'gemini') throw new Error(`Sending Gemini chat, but provider was ${providerName}`)
@@ -770,7 +768,7 @@ const sendGeminiChat = async ({
 		: undefined
 
 	// instance
-	const genAI = new GoogleGenAI({ apiKey: getApiKey(providerName, thisConfig.apiKey, isLoggedIn) || '' });
+	const genAI = new GoogleGenAI({ apiKey: getApiKey(providerName, thisConfig.apiKey) || '' });
 
 
 	// manually parse out tool results if XML
@@ -1056,10 +1054,11 @@ const callDivisionGenerate = async (
 	divisionModelName: string,
 	input: string,
 	signal: AbortSignal,
-	mode?: string
+	mode?: string,
+	divisionApiKey?: string
 ): Promise<{ output: string; error?: string; provider?: string; durationMs?: number }> => {
 	try {
-		const apiKey = process.env.DIVISION_API_KEY || '';
+		const apiKey = divisionApiKey || process.env.DIVISION_API_KEY || '';
 		const headers: Record<string, string> = {
 			'Content-Type': 'application/json',
 		};
@@ -1150,10 +1149,11 @@ interface DivisionTasksCreateResponse {
 // Helper: make authenticated Division API requests
 const divisionFetch = async (
 	endpointBase: string,
-	path: string,
-	options: RequestInit = {}
+	apiPath: string,
+	options: RequestInit = {},
+	divisionApiKey?: string
 ): Promise<Response> => {
-	const apiKey = process.env.DIVISION_API_KEY || '';
+	const apiKey = divisionApiKey || process.env.DIVISION_API_KEY || '';
 	const headers: Record<string, string> = {
 		'Content-Type': 'application/json',
 		...(options.headers as Record<string, string> || {}),
@@ -1161,7 +1161,7 @@ const divisionFetch = async (
 	if (apiKey) {
 		headers['Authorization'] = `Bearer ${apiKey}`;
 	}
-	return fetch(`${endpointBase}${path}`, { ...options, headers });
+	return fetch(`${endpointBase}${apiPath}`, { ...options, headers });
 };
 
 const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<void> => {
@@ -1175,6 +1175,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		_setAborter,
 		separateSystemMessage,
 		divisionProjectId: divisionProjectIdParam,
+		divisionApiKey,
 		workspaceFolderPath,
 		modelName: selectedModel,
 		chatMode,
@@ -1183,7 +1184,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 
 	try {
 		const endpointBase = settingsOfProvider.divisionAPI.endpoint || 'https://api.division.he-ro.jp';
-		const projectId = divisionProjectIdParam || 'demo-project-001';
+		const projectId = divisionProjectIdParam || '';
 		const prompt = buildPromptFromMessages(messages, separateSystemMessage);
 
 		const controller = new AbortController()
@@ -1257,7 +1258,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 							subTaskMode = 'search';
 						}
 
-						const result = await callDivisionGenerate(pendingState.endpointBase, modelForRole, taskPrompt, controller.signal, subTaskMode);
+						const result = await callDivisionGenerate(pendingState.endpointBase, modelForRole, taskPrompt, controller.signal, subTaskMode, divisionApiKey);
 
 						if (result.error) {
 							appendText(`❌ **Error:** ${result.error}\n\n`);
@@ -1341,7 +1342,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			appendText(`## 🤖 Direct Model: \`${selectedModel}\`\n`);
 			appendText(`⏳ Division API \`/api/generate\` に直接リクエスト送信中...\n\n`);
 
-			const result = await callDivisionGenerate(endpointBase, selectedModel, prompt, controller.signal, chatMode === 'agent' ? 'function_calling' : chatMode === 'gather' ? 'search' : 'chat');
+			const result = await callDivisionGenerate(endpointBase, selectedModel, prompt, controller.signal, chatMode === 'agent' ? 'function_calling' : chatMode === 'gather' ? 'search' : 'chat', divisionApiKey);
 
 			if (result.error) {
 				appendText(`❌ **Error:** ${result.error}\n`);
@@ -1448,7 +1449,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			method: 'POST',
 			body: JSON.stringify({ projectId, mode: divisionMode, input: currentInput, chatHistory, model: selectedModel !== 'division-orchestrator' ? selectedModel : undefined }),
 			signal: controller.signal,
-		});
+		}, divisionApiKey);
 
 		const createText = await createResponse.text();
 
@@ -1473,7 +1474,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			appendText(`---\n\n## 💬 Fallback: Single Agent Response\n`);
 			appendText(`⏳ /api/generate で直接質問中...\n\n`);
 			const fallbackModel = selectedModel !== 'division-orchestrator' ? selectedModel : 'gpt-5.2';
-			const fallbackResult = await callDivisionGenerate(endpointBase, fallbackModel, prompt, controller.signal, divisionMode);
+			const fallbackResult = await callDivisionGenerate(endpointBase, fallbackModel, prompt, controller.signal, divisionMode, divisionApiKey);
 			if (fallbackResult.error) {
 				appendText(`❌ **Error:** ${fallbackResult.error}\n`);
 			} else {
@@ -1615,7 +1616,7 @@ Provide a thorough and complete response. Output all code files with their paths
 				subTaskMode = 'search';
 			}
 
-			const result = await callDivisionGenerate(endpointBase, modelForRole, taskPrompt, controller.signal, subTaskMode);
+			const result = await callDivisionGenerate(endpointBase, modelForRole, taskPrompt, controller.signal, subTaskMode, divisionApiKey);
 
 			if (result.error) {
 				appendText(`❌ **Error:** ${result.error}\n\n`);
@@ -1625,7 +1626,7 @@ Provide a thorough and complete response. Output all code files with their paths
 						method: 'PATCH',
 						body: JSON.stringify({ status: 'failed', output: result.error }),
 						signal: controller.signal,
-					});
+					}, divisionApiKey);
 				} catch (_patchErr) { /* ignore patch errors */ }
 			} else {
 				const durationInfo = result.durationMs ? ` *(${result.durationMs}ms)*` : '';
@@ -1701,7 +1702,7 @@ Provide a thorough and complete response. Output all code files with their paths
 						method: 'PATCH',
 						body: JSON.stringify({ status: 'completed', output: result.output }),
 						signal: controller.signal,
-					});
+					}, divisionApiKey);
 				} catch (_patchErr) { /* ignore patch errors */ }
 			}
 		}

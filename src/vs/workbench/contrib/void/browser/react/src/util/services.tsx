@@ -22,7 +22,7 @@ import { ILLMMessageService } from '../../../../common/sendLLMMessageService.js'
 import { IRefreshModelService } from '../../../../../../../workbench/contrib/void/common/refreshModelService.js';
 import { IVoidSettingsService } from '../../../../../../../workbench/contrib/void/common/voidSettingsService.js';
 import { IExtensionTransferService } from '../../../../../../../workbench/contrib/void/browser/extensionTransferService.js'
-import { IClerkService } from '../../../../common/clerkService.js';
+
 
 import { IInstantiationService } from '../../../../../../../platform/instantiation/common/instantiation.js'
 import { ICodeEditorService } from '../../../../../../../editor/browser/services/codeEditorService.js'
@@ -248,7 +248,6 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IMCPService: accessor.get(IMCPService),
 
 		IStorageService: accessor.get(IStorageService),
-		IClerkService: accessor.get(IClerkService),
 		IDivisionProjectService: accessor.get(IDivisionProjectService),
 
 	} as const

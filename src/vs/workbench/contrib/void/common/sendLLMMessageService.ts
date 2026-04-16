@@ -130,12 +130,8 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 		const { onText, onFinalMessage, onError, onAbort, modelSelection, ...proxyParams } = params;
 
 		const { settingsOfProvider, globalSettings } = this.voidSettingsService.state
-		const { clerkSessionId } = globalSettings
 
-		// fallback for divisionProjectId
-		if (!globalSettings.divisionProjectId) {
-			globalSettings.divisionProjectId = 'demo-project-001';
-		}
+		
 
 		// throw an error if no model/provider selected (this should usually never be reached, the UI should check this first, but might happen in cases like Apply where we haven't built much UI/checks yet, good practice to have check logic on backend)
 		if (modelSelection === null) {
@@ -150,7 +146,6 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 			return null
 		}
 
-		const isLoggedIn = !!clerkSessionId
 		const mcpTools = this.mcpService.getMCPTools()
 
 		// add state for request id
@@ -167,6 +162,12 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 		const divisionProjectId = modelSelection.providerName === 'divisionAPI'
 			? globalSettings.divisionProjectId
 			: undefined;
+		const divisionApiKey = modelSelection.providerName === 'divisionAPI'
+			? globalSettings.divisionApiKey
+			: undefined;
+		if (modelSelection.providerName === 'divisionAPI') {
+			console.log(`[LLMMessageService] Division API key present: ${!!divisionApiKey}, length: ${divisionApiKey?.length ?? 0}`);
+		}
 
 		// Get workspace folder path for file operations
 		const workspaceFolders = this.workspaceContextService.getWorkspace().folders;
@@ -179,9 +180,9 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 			settingsOfProvider,
 			modelSelection,
 			mcpTools,
-			isLoggedIn: isLoggedIn ?? false,
 			divisionRoleAssignments,
 			divisionProjectId,
+			divisionApiKey,
 			workspaceFolderPath,
 		} satisfies MainSendLLMMessageParams);
 
@@ -198,9 +199,7 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 	ollamaList = (params: ServiceModelListParams<OllamaModelResponse>) => {
 		const { onSuccess, onError, ...proxyParams } = params
 
-		const { settingsOfProvider, globalSettings } = this.voidSettingsService.state
-		const { clerkSessionId } = globalSettings
-		const isLoggedIn = !!clerkSessionId
+		const { settingsOfProvider } = this.voidSettingsService.state
 
 		// add state for request id
 		const requestId_ = generateUuid();
@@ -212,7 +211,6 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 			settingsOfProvider,
 			providerName: 'ollama',
 			requestId: requestId_,
-			isLoggedIn: isLoggedIn ?? false,
 		} satisfies MainModelListParams<OllamaModelResponse>)
 	}
 
@@ -220,9 +218,7 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 	openAICompatibleList = (params: ServiceModelListParams<OpenaiCompatibleModelResponse>) => {
 		const { onSuccess, onError, ...proxyParams } = params
 
-		const { settingsOfProvider, globalSettings } = this.voidSettingsService.state
-		const { clerkSessionId } = globalSettings
-		const isLoggedIn = !!clerkSessionId
+		const { settingsOfProvider } = this.voidSettingsService.state
 
 		// add state for request id
 		const requestId_ = generateUuid();
@@ -233,7 +229,6 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 			...proxyParams,
 			settingsOfProvider,
 			requestId: requestId_,
-			isLoggedIn: isLoggedIn ?? false
 		} satisfies MainModelListParams<OpenaiCompatibleModelResponse>)
 	}
 

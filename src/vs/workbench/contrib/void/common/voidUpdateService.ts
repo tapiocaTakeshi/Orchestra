@@ -9,22 +9,9 @@ import { createDecorator } from '../../../../platform/instantiation/common/insta
 import { IMainProcessService } from '../../../../platform/ipc/common/mainProcessService.js';
 import { VoidCheckUpdateRespose } from './voidUpdateServiceTypes.js';
 
-// Clerk user data returned over IPC (must be serializable)
-export interface ClerkUserIPC {
-	id: string;
-	firstName: string | null;
-	lastName: string | null;
-	emailAddress: string | null;
-	imageUrl: string | null;
-	username: string | null;
-}
-
 export interface IVoidUpdateService {
 	readonly _serviceBrand: undefined;
 	check: (explicit: boolean) => Promise<VoidCheckUpdateRespose>;
-	// Clerk auth methods (proxied to main process, bypass CORS)
-	fetchClerkActiveSession: () => Promise<{ userId: string; sessionId: string } | null>;
-	fetchClerkUserById: (userId: string) => Promise<ClerkUserIPC | null>;
 }
 
 
@@ -40,7 +27,6 @@ export class VoidUpdateService implements IVoidUpdateService {
 	constructor(
 		@IMainProcessService mainProcessService: IMainProcessService, // (only usable on client side)
 	) {
-		// creates an IPC proxy to use metricsMainService.ts
 		this.voidUpdateService = ProxyChannel.toService<IVoidUpdateService>(mainProcessService.getChannel('void-channel-update'));
 	}
 
@@ -49,14 +35,6 @@ export class VoidUpdateService implements IVoidUpdateService {
 	check: IVoidUpdateService['check'] = async (explicit) => {
 		const res = await this.voidUpdateService.check(explicit)
 		return res
-	}
-
-	fetchClerkActiveSession: IVoidUpdateService['fetchClerkActiveSession'] = async () => {
-		return this.voidUpdateService.fetchClerkActiveSession();
-	}
-
-	fetchClerkUserById: IVoidUpdateService['fetchClerkUserById'] = async (userId) => {
-		return this.voidUpdateService.fetchClerkUserById(userId);
 	}
 }
 

@@ -305,13 +305,11 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 			// add autoAcceptLLMChanges feature
 			if (readS.globalSettings.autoAcceptLLMChanges === undefined) readS.globalSettings.autoAcceptLLMChanges = false;
 
-			// Initialize Clerk state if missing
-			if (readS.globalSettings.clerkUser === undefined) readS.globalSettings.clerkUser = null;
-			if (readS.globalSettings.clerkSessionId === undefined) readS.globalSettings.clerkSessionId = null;
-
-			// Cleanup legacy Auth0 state
+			// Cleanup legacy auth state
 			if ((readS.globalSettings as any).auth0Token !== undefined) delete (readS.globalSettings as any).auth0Token;
 			if ((readS.globalSettings as any).auth0User !== undefined) delete (readS.globalSettings as any).auth0User;
+			if ((readS.globalSettings as any).clerkUser !== undefined) delete (readS.globalSettings as any).clerkUser;
+			if ((readS.globalSettings as any).clerkSessionId !== undefined) delete (readS.globalSettings as any).clerkSessionId;
 		}
 		catch (e) {
 			readS = defaultState()

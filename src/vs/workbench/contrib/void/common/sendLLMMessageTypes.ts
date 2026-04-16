@@ -154,9 +154,9 @@ export type SendLLMMessageParams = {
 
 	settingsOfProvider: SettingsOfProvider;
 	mcpTools: InternalToolInfo[] | undefined;
-	isLoggedIn?: boolean;
 	divisionRoleAssignments?: RoleAssignment[];
 	divisionProjectId?: string;
+	divisionApiKey?: string;
 	workspaceFolderPath?: string;
 } & SendLLMType
 
@@ -164,7 +164,7 @@ export type SendLLMMessageParams = {
 
 // can't send functions across a proxy, use listeners instead
 export type BlockedMainLLMMessageParams = 'onText' | 'onFinalMessage' | 'onError' | 'onFileOperation' | 'onCommandRun' | 'abortRef'
-export type MainSendLLMMessageParams = Omit<SendLLMMessageParams, BlockedMainLLMMessageParams> & { requestId: string; isLoggedIn?: boolean } & SendLLMType
+export type MainSendLLMMessageParams = Omit<SendLLMMessageParams, BlockedMainLLMMessageParams> & { requestId: string } & SendLLMType
 
 export type MainLLMMessageAbortParams = { requestId: string }
 
@@ -234,7 +234,6 @@ export type ModelListParams<ModelResponse> = {
 	settingsOfProvider: SettingsOfProvider;
 	onSuccess: (param: { models: ModelResponse[] }) => void;
 	onError: (param: { error: string }) => void;
-	isLoggedIn?: boolean;
 }
 
 // params to the service
@@ -245,7 +244,7 @@ export type ServiceModelListParams<modelResponse> = {
 }
 
 type BlockedMainModelListParams = 'onSuccess' | 'onError'
-export type MainModelListParams<modelResponse> = Omit<ModelListParams<modelResponse>, BlockedMainModelListParams> & { providerName: RefreshableProviderName, requestId: string; isLoggedIn?: boolean }
+export type MainModelListParams<modelResponse> = Omit<ModelListParams<modelResponse>, BlockedMainModelListParams> & { providerName: RefreshableProviderName, requestId: string }
 
 export type EventModelListOnSuccessParams<modelResponse> = Parameters<ModelListParams<modelResponse>['onSuccess']>[0] & { requestId: string }
 export type EventModelListOnErrorParams<modelResponse> = Parameters<ModelListParams<modelResponse>['onError']>[0] & { requestId: string }

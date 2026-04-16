@@ -629,15 +629,11 @@ const VoidOnboardingContent = () => {
 	const accessor = useAccessor()
 	const voidSettingsService = accessor.get('IVoidSettingsService')
 	const voidMetricsService = accessor.get('IMetricsService')
-	const clerkService = accessor.get('IClerkService')
-
-	const settingsState_ = useSettingsState()
-	const clerkUser = settingsState_.globalSettings.clerkUser
 	const nativeHostService = accessor.get('INativeHostService')
 
 	const openExternalLogin = async () => {
 		try {
-			await nativeHostService.openExternal('https://accounts.he-ro.jp/sign-in');
+			await nativeHostService.openExternal('https://division.he-ro.jp/login');
 		} catch (e) {
 			console.error('Failed to open external browser:', e);
 		}
@@ -783,14 +779,11 @@ const VoidOnboardingContent = () => {
 							Get Started
 						</PrimaryActionButton>
 
-						{clerkUser ? (
+						{voidSettingsState.globalSettings.isLoggedIn ? (
 							<div className="mt-4 flex flex-col items-center gap-2">
 								<div className="text-emerald-500 font-medium flex items-center gap-2 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20">
 									<Check className="w-4 h-4" />
-									Signed in as {clerkUser.fullName || clerkUser.username || 'Orchestra User'}
-								</div>
-								<div className="text-xs text-void-fg-3 opacity-70 text-center">
-									You have access to built-in Orchestra API keys.
+									ログイン済み
 								</div>
 							</div>
 						) : (
@@ -832,26 +825,10 @@ const VoidOnboardingContent = () => {
 
 						<div className="mt-8 pt-8 border-t border-void-border-4 w-full text-left">
 							<h4 className="text-void-fg-3 mb-4">Account</h4>
-							{clerkUser ? (
-								<div className="flex flex-col gap-4">
-									<div className="flex items-center justify-between p-4 bg-void-bg-2 rounded-lg border border-void-border-2">
-										<div className="flex items-center gap-3">
-											{clerkUser.imageUrl ? (
-												<img src={clerkUser.imageUrl} alt="" className="w-8 h-8 rounded-full" />
-											) : (
-												<div className="w-8 h-8 rounded-full bg-[#0e70c0] flex items-center justify-center text-white text-sm font-bold">
-													{(clerkUser.fullName || clerkUser.primaryEmailAddress || '?')[0].toUpperCase()}
-												</div>
-											)}
-											<div>
-												<div className="font-medium text-void-fg-1">{clerkUser.fullName || clerkUser.username || 'Orchestra User'}</div>
-												<div className="text-xs text-void-fg-3 opacity-70">Authenticated</div>
-											</div>
-										</div>
-									</div>
-									<div className="text-xs text-emerald-500 px-1 italic">
-										* You have access to built-in Orchestra API keys.
-									</div>
+							{voidSettingsState.globalSettings.isLoggedIn ? (
+								<div className="text-emerald-500 font-medium flex items-center gap-2 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20 w-fit">
+									<Check className="w-4 h-4" />
+									ログイン済み
 								</div>
 							) : (
 								<button

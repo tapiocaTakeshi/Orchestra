@@ -297,7 +297,7 @@ const DivisionProjectDropdown = ({ className }: { className: string }) => {
 	const divisionProjectService = accessor.get('IDivisionProjectService')
 
 	const onChangeOption = useCallback((newConfig: DivisionProjectConfig) => {
-		divisionProjectService.setActiveProject(newConfig.id)
+		divisionProjectService.setActiveProject(newConfig.projectId)
 	}, [divisionProjectService])
 
 	// Only show when Division API is selected
@@ -315,7 +315,7 @@ const DivisionProjectDropdown = ({ className }: { className: string }) => {
 			getOptionDisplayName={(p) => p.name || p.projectId || 'Unnamed'}
 			getOptionDropdownName={(p) => p.name || p.projectId || 'Unnamed'}
 			getOptionDropdownDetail={(p) => p.projectId !== p.name ? p.projectId : ''}
-			getOptionsEqual={(a, b) => a.id === b.id}
+			getOptionsEqual={(a, b) => a.projectId === b.projectId}
 		/>
 	)
 }
@@ -3833,32 +3833,16 @@ const SignedOutChatOverlay = ({ onLoginClick }: { onLoginClick: () => void }) =>
 
 const SidebarHeader = ({ onLoginClick, activeTab, onTabChange }: { onLoginClick: () => void; activeTab: import('./OrchestraLogoButton.js').SidebarTab; onTabChange: (tab: import('./OrchestraLogoButton.js').SidebarTab) => void }) => {
 	const accessor = useAccessor()
-	const settingsService = accessor.get('IVoidSettingsService')
 	const commandService = accessor.get('ICommandService') as ICommandService
+	const settingsService = accessor.get('IVoidSettingsService')
 	const settingsState = useSettingsState()
-	const clerkUser = settingsState.globalSettings.clerkUser
-
-	const [showAccountMenu, setShowAccountMenu] = useState(false)
-	const accountMenuRef = useRef<HTMLDivElement>(null)
-
-	// Close account menu when clicking outside
-	useEffect(() => {
-		const handleClickOutside = (e: MouseEvent) => {
-			if (accountMenuRef.current && !accountMenuRef.current.contains(e.target as Node)) {
-				setShowAccountMenu(false)
-			}
-		}
-		if (showAccountMenu) {
-			document.addEventListener('mousedown', handleClickOutside)
-		}
-		return () => document.removeEventListener('mousedown', handleClickOutside)
-	}, [showAccountMenu])
+	const isLoggedIn = settingsState.globalSettings.isLoggedIn
 
 	return (
 		<div className="shrink-0 px-4 pt-2 pb-1">
 			<div className="flex items-center justify-end gap-2">
 
-				{!clerkUser ? (
+				{!isLoggedIn ? (
 					<button
 						onClick={onLoginClick}
 						className="text-[11px] font-medium px-2 py-0.5 rounded bg-white text-black hover:bg-zinc-200 transition-colors"
@@ -3866,51 +3850,16 @@ const SidebarHeader = ({ onLoginClick, activeTab, onTabChange }: { onLoginClick:
 						ログイン
 					</button>
 				) : (
-					<div className="relative" ref={accountMenuRef}>
-						<button
-							onClick={() => setShowAccountMenu(!showAccountMenu)}
-							className="flex items-center justify-center hover:opacity-80 transition-opacity"
-							title={clerkUser.fullName || clerkUser.primaryEmailAddress || 'Account'}
-						>
-							{clerkUser.imageUrl ? (
-								<img src={clerkUser.imageUrl} alt="" className="w-5 h-5 rounded-full" />
-							) : (
-								<div className="w-5 h-5 rounded-full bg-[#0e70c0] flex items-center justify-center text-white text-[9px] font-bold">
-									{(clerkUser.fullName || clerkUser.primaryEmailAddress || '?')[0].toUpperCase()}
-								</div>
-							)}
-						</button>
-						{showAccountMenu && (
-							<div className="absolute right-0 top-full mt-1 w-48 bg-void-bg-1 border border-void-border-2 rounded-md shadow-lg z-50 py-1">
-								<div className="px-3 py-2 border-b border-void-border-2">
-									<div className="text-[11px] font-medium text-void-fg-1 truncate">
-										{clerkUser.fullName || 'User'}
-									</div>
-									{clerkUser.primaryEmailAddress && (
-										<div className="text-[10px] text-void-fg-3 truncate">
-											{clerkUser.primaryEmailAddress}
-										</div>
-									)}
-								</div>
-								<button
-									onClick={() => {
-										settingsService.setGlobalSetting('clerkUser', null)
-										settingsService.setGlobalSetting('clerkSessionId', null)
-										setShowAccountMenu(false)
-									}}
-									className="w-full text-left px-3 py-1.5 text-[11px] text-void-fg-2 hover:bg-void-bg-3 hover:text-void-fg-1 transition-colors flex items-center gap-2"
-								>
-									<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-										<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-										<polyline points="16 17 21 12 16 7" />
-										<line x1="21" y1="12" x2="9" y2="12" />
-									</svg>
-									サインアウト
-								</button>
-							</div>
-						)}
-					</div>
+					<button
+						onClick={() => {
+							settingsService.setGlobalSetting('isLoggedIn', false)
+						}}
+						className="text-[11px] font-medium px-2 py-0.5 rounded text-void-fg-3 hover:text-void-fg-1 transition-colors"
+					>
+						サインアウト
+					</button>
 				)}
+
 				<button
 					onClick={() => commandService.executeCommand(VOID_OPEN_SETTINGS_ACTION_ID)}
 					className="text-void-fg-3 hover:text-void-fg-1 transition-colors"
@@ -4134,10 +4083,6 @@ export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTa
 		setSelections={setSelections}
 		onClickAnywhere={() => { textAreaRef.current?.focus() }}
 	>
-		{/* Temporarily disabled — allow usage without login while Clerk auth is being fixed */}
-		{/* {!settingsState.globalSettings.clerkUser && (
-			<SignedOutChatOverlay onLoginClick={() => setShowLoginScreen(true)} />
-		)} */}
 		<VoidInputBox2
 			enableAtToMention
 			className={`min-h-[81px] px-0.5 py-0.5`}
