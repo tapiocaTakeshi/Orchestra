@@ -95,6 +95,12 @@ export interface IDivisionProjectService {
 
 	/** Remove a division project by ID */
 	removeProject(id: string): Promise<void>;
+
+	/** Fetch latest project config from the Division API and update agents.json */
+	fetchAndUpdateFromAPI(localProjectId: string): Promise<{ success: boolean; message: string }>;
+
+	/** Fetch latest config for all projects from the Division API and update agents.json */
+	fetchAndUpdateAllFromAPI(): Promise<{ success: boolean; message: string }>;
 }
 
 
@@ -350,6 +356,56 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 		}
 		await this._persistToDisk();
 		this._onDidChangeProject.fire();
+	}
+
+	async fetchAndUpdateFromAPI(localProjectId: string): Promise<{ success: boolean; message: string }> {
+		const project = this._projects.find(p => p.id === localProjectId);
+		if (!project) {
+			return { success: false, message: 'Project not found' };
+		}
+		if (!project.projectId) {
+			return { success: false, message: 'No Project ID configured' };
+		}
+
+		try {
+			const endpoint = (this.voidSettingsService.state.settingsOfProvider as any).divisionAPI?.endpoint || 'https://api.division.he-ro.jp';
+			const response = await fetch(`${endpoint}/api/projects/${encodeURIComponent(project.projectId)}`);
+			if (!response.ok) {
+				return { success: false, message: `API error: ${response.status}` };
+			}
+			const data = await response.json();
+
+			const updatedProject: DivisionProjectConfig = {
+				...project,
+				name: typeof data.name === 'string' ? data.name : project.name,
+				agents: Array.isArray(data.agents) ? this._parseAgents(data.agents) : project.agents,
+			};
+
+			await this.save(updatedProject);
+			return { success: true, message: 'Project updated successfully' };
+		} catch (e) {
+			return { success: false, message: `Error: ${e}` };
+		}
+	}
+
+	async fetchAndUpdateAllFromAPI(): Promise<{ success: boolean; message: string }> {
+		const projectsWithId = this._projects.filter(p => p.projectId);
+		if (projectsWithId.length === 0) {
+			return { success: false, message: 'No projects with Project ID configured' };
+		}
+
+		const results = await Promise.all(
+			projectsWithId.map(p => this.fetchAndUpdateFromAPI(p.id))
+		);
+
+		const errors = results.filter(r => !r.success).map(r => r.message);
+		if (errors.length === results.length) {
+			return { success: false, message: errors[0] || 'All updates failed' };
+		}
+		if (errors.length > 0) {
+			return { success: true, message: `Updated with some errors: ${errors.join(', ')}` };
+		}
+		return { success: true, message: `Updated ${results.length} project(s) successfully` };
 	}
 }
 
