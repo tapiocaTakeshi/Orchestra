@@ -1041,6 +1041,22 @@ const DivisionSettings = () => {
 	const settingsState = useSettingsState();
 
 	const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+	const [allUpdateStatus, setAllUpdateStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+	const [projectUpdateStatus, setProjectUpdateStatus] = useState<Record<string, 'idle' | 'loading' | 'success' | 'error'>>({});
+
+	const handleUpdateAll = async () => {
+		setAllUpdateStatus('loading');
+		const result = await divisionProjectService.fetchAndUpdateAllFromAPI();
+		setAllUpdateStatus(result.success ? 'success' : 'error');
+		setTimeout(() => setAllUpdateStatus('idle'), 2000);
+	};
+
+	const handleUpdateProject = async (projectId: string) => {
+		setProjectUpdateStatus(prev => ({ ...prev, [projectId]: 'loading' }));
+		const result = await divisionProjectService.fetchAndUpdateFromAPI(projectId);
+		setProjectUpdateStatus(prev => ({ ...prev, [projectId]: result.success ? 'success' : 'error' }));
+		setTimeout(() => setProjectUpdateStatus(prev => ({ ...prev, [projectId]: 'idle' })), 2000);
+	};
 
 	const handleAddProject = () => {
 		const newId = `project-${Date.now()}`;
@@ -1088,9 +1104,27 @@ const DivisionSettings = () => {
 
 	return (
 		<div className="flex flex-col gap-4">
+			{/* agents.json section header with Update All button */}
+			<div className="flex items-center justify-between">
+				<span className="text-xs text-void-fg-3 uppercase font-semibold tracking-wide">Configured Projects</span>
+				<button
+					onClick={handleUpdateAll}
+					disabled={allUpdateStatus === 'loading'}
+					className="flex items-center gap-1 text-xs text-void-fg-3 hover:text-void-fg-1 transition-colors disabled:opacity-50"
+					title="Update all projects from Division API"
+				>
+					{allUpdateStatus === 'success' ? <Check className='stroke-green-500 size-3' />
+						: allUpdateStatus === 'error' ? <X className='stroke-red-500 size-3' />
+							: allUpdateStatus === 'loading' ? <Loader2 className='size-3 animate-spin' />
+								: <RefreshCw className='size-3' />}
+					<span>Update</span>
+				</button>
+			</div>
+
 			{projects.map((project) => {
 				const isActive = divisionProjectService.isProjectActive(project.id);
 				const agents = project.agents || [];
+				const pStatus = projectUpdateStatus[project.id] || 'idle';
 				return (
 					<div
 						key={project.id}
@@ -1107,6 +1141,18 @@ const DivisionSettings = () => {
 								{isActive && <span className="text-[10px] bg-[#0e70c0] text-white px-1.5 py-0.5 rounded-full uppercase font-bold">Active</span>}
 							</div>
 							<div className="flex items-center gap-2">
+								<button
+									onClick={() => handleUpdateProject(project.id)}
+									disabled={pStatus === 'loading'}
+									className="flex items-center gap-1 text-xs text-void-fg-3 hover:text-void-fg-1 transition-colors disabled:opacity-50"
+									title="Update this project from Division API"
+								>
+									{pStatus === 'success' ? <Check className='stroke-green-500 size-3' />
+										: pStatus === 'error' ? <X className='stroke-red-500 size-3' />
+											: pStatus === 'loading' ? <Loader2 className='size-3 animate-spin' />
+												: <RefreshCw className='size-3' />}
+									<span>Update</span>
+								</button>
 								<button
 									onClick={() => divisionProjectService.toggleActiveProject(project.id)}
 									className={`text-xs px-2 py-1 rounded transition-colors ${isActive ? 'bg-[#0e70c0] text-white hover:bg-[#0e70c0]/80' : 'bg-void-bg-3 text-void-fg-2 hover:bg-void-bg-1'}`}
