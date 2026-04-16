@@ -23,6 +23,7 @@ const statusColors: Record<AgentStatus, string> = {
 	waiting: '#f59e0b',
 	idle: 'var(--void-fg-4)',
 	error: '#ef4444',
+	awaiting_approval: '#a855f7',
 };
 
 const statusLabels: Record<AgentStatus, string> = {
@@ -31,6 +32,7 @@ const statusLabels: Record<AgentStatus, string> = {
 	waiting: 'Queue',
 	idle: 'Idle',
 	error: 'Error',
+	awaiting_approval: 'Review',
 };
 
 // Circular layout positions
@@ -63,6 +65,7 @@ export const ConductorMode: React.FC = () => {
 				tokensUsed: statuses[i] === 'completed' ? 1500 + i * 600 : statuses[i] === 'running' ? 320 : 0,
 				summary: '',
 				error: null,
+				output: '',
 			};
 		}),
 		[roleAssignments]

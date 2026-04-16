@@ -22,6 +22,7 @@ const statusColors: Record<string, string> = {
 	waiting: '#f59e0b',
 	error: '#ef4444',
 	idle: 'var(--void-fg-4)',
+	awaiting_approval: '#a855f7',
 };
 
 const statusLabels: Record<string, string> = {
@@ -30,6 +31,7 @@ const statusLabels: Record<string, string> = {
 	waiting: 'Queued',
 	error: 'Error',
 	idle: 'Idle',
+	awaiting_approval: 'Review',
 };
 
 // Demo thought tree

@@ -22,6 +22,7 @@ const statusConfig: Record<AgentStatus, { label: string; dotClass: string }> = {
 	running: { label: 'Running', dotClass: 'void-bg-blue-400' },
 	completed: { label: 'Done', dotClass: 'void-bg-emerald-400' },
 	error: { label: 'Error', dotClass: 'void-bg-red-400' },
+	awaiting_approval: { label: 'Review', dotClass: 'void-bg-purple-400' },
 };
 
 const formatDuration = (ms: number): string => {
