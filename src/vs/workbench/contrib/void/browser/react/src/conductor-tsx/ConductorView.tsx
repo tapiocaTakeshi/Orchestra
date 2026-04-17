@@ -323,147 +323,241 @@ export const ConductorView: React.FC = () => {
 		}, 2000);
 	}, []);
 
+	const progress = agents.length > 0 ? completedCount / agents.length : 0;
+
 	return (
-		<div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+		<div style={{
+			display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden',
+			background: 'radial-gradient(1200px 600px at 50% -200px, color-mix(in srgb, var(--void-fg-1) 4%, transparent), transparent 60%)',
+		}}>
 			{/* Header with controls */}
-			<div style={{
-				display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-				padding: '12px 16px',
-				borderBottom: '1px solid var(--void-border-2)',
-			}}>
-				<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-					<span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--void-fg-1)' }}>Pipeline</span>
-					<span style={{
-						fontSize: '10px', padding: '2px 6px', borderRadius: '4px',
-						background: 'rgba(59,130,246,0.1)', color: '#60a5fa',
-					}}>Preview</span>
+			<div
+				className="conductor-glass"
+				style={{
+					position: 'sticky', top: 0, zIndex: 2,
+					display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+					padding: '12px 16px',
+					borderBottom: '1px solid color-mix(in srgb, var(--void-border-2) 70%, transparent)',
+				}}
+			>
+				<div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+					<div style={{
+						width: '22px', height: '22px', borderRadius: '7px',
+						display: 'flex', alignItems: 'center', justifyContent: 'center',
+						background: 'linear-gradient(135deg, rgba(59,130,246,0.22), rgba(139,92,246,0.18))',
+						border: '1px solid rgba(139,92,246,0.35)',
+						boxShadow: '0 0 12px -4px rgba(139,92,246,0.5)',
+					}}>
+						<Zap size={11} color="#c4b5fd" />
+					</div>
+					<div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
+						<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+							<span style={{
+								fontSize: '13px', fontWeight: 600,
+								color: 'var(--void-fg-1)', letterSpacing: '0.01em',
+							}}>Pipeline</span>
+							<span className="conductor-pill" style={{
+								background: 'linear-gradient(135deg, rgba(59,130,246,0.18), rgba(139,92,246,0.12))',
+								color: '#93c5fd',
+								border: '1px solid rgba(59,130,246,0.25)',
+							}}>Preview</span>
+						</div>
+						<span className="conductor-eyebrow" style={{ marginTop: '2px' }}>
+							{agents.length} agents · {completedCount} done
+						</span>
+					</div>
 				</div>
 				<div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
 					<button
 						onClick={handleReset}
-						style={{
-							padding: '4px', borderRadius: '4px', cursor: 'pointer',
-							background: 'none', border: 'none', color: 'var(--void-fg-3)',
-						}}
+						className="conductor-icon-btn"
 						title="Reset pipeline"
+						aria-label="Reset pipeline"
 					>
-						<RotateCcw size={14} />
+						<RotateCcw size={13} />
 					</button>
 					{isRunning ? (
-						<button
-							onClick={handleStop}
-							style={{
-								display: 'flex', alignItems: 'center', gap: '4px',
-								padding: '4px 10px', borderRadius: '6px', cursor: 'pointer',
-								background: 'rgba(239,68,68,0.1)', color: '#f87171',
-								border: 'none', fontSize: '11px', fontWeight: 500,
-							}}
-						>
+						<button onClick={handleStop} className="conductor-btn conductor-btn-stop">
 							<Square size={10} /> Stop
 						</button>
 					) : (
-						<button
-							onClick={handleStart}
-							style={{
-								display: 'flex', alignItems: 'center', gap: '4px',
-								padding: '4px 10px', borderRadius: '6px', cursor: 'pointer',
-								background: 'rgba(16,185,129,0.1)', color: '#34d399',
-								border: 'none', fontSize: '11px', fontWeight: 500,
-							}}
-						>
+						<button onClick={handleStart} className="conductor-btn conductor-btn-run">
 							<Play size={10} /> Run
 						</button>
 					)}
 				</div>
 			</div>
 
+			{/* Progress track */}
+			<div style={{
+				height: '2px', width: '100%',
+				background: 'color-mix(in srgb, var(--void-border-2) 60%, transparent)',
+				position: 'relative', overflow: 'hidden',
+			}}>
+				<div style={{
+					height: '100%', width: `${progress * 100}%`,
+					background: 'linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899)',
+					boxShadow: '0 0 10px rgba(139,92,246,0.6)',
+					transition: 'width 500ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+				}} />
+			</div>
+
 			{/* Quick stats bar */}
 			<div style={{
-				display: 'flex', alignItems: 'center', gap: '12px',
-				padding: '8px 16px',
-				borderBottom: '1px solid var(--void-border-2)',
+				display: 'flex', alignItems: 'center', gap: '14px',
+				padding: '9px 16px',
+				borderBottom: '1px solid color-mix(in srgb, var(--void-border-2) 60%, transparent)',
 				fontSize: '11px', color: 'var(--void-fg-3)',
 			}}>
-				<div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+				<div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
 					<CheckCircle size={11} color="#10b981" />
-					<span>{completedCount}/{agents.length}</span>
+					<span style={{ fontVariantNumeric: 'tabular-nums' }}>
+						<span style={{ color: 'var(--void-fg-1)', fontWeight: 600 }}>{completedCount}</span>
+						<span style={{ opacity: 0.5 }}> / {agents.length}</span>
+					</span>
 				</div>
-				<div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+				<span style={{ width: 1, height: 10, background: 'var(--void-border-2)', opacity: 0.6 }} />
+				<div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
 					<Zap size={11} color="#f59e0b" />
-					<span>{totalTokens > 1000 ? `${(totalTokens / 1000).toFixed(1)}K` : totalTokens} tokens</span>
+					<span style={{ fontVariantNumeric: 'tabular-nums' }}>
+						<span style={{ color: 'var(--void-fg-1)', fontWeight: 600 }}>
+							{totalTokens > 1000 ? `${(totalTokens / 1000).toFixed(1)}K` : totalTokens}
+						</span>
+						<span style={{ opacity: 0.7 }}> tokens</span>
+					</span>
 				</div>
 				{hasAwaitingApproval && (
-					<div style={{
-						display: 'flex', alignItems: 'center', gap: '4px',
+					<div className="conductor-pill" style={{
 						marginLeft: 'auto',
-						padding: '2px 7px', borderRadius: '3px',
-						background: 'rgba(168,85,247,0.12)', color: '#c084fc',
-						fontSize: '10px',
+						background: 'linear-gradient(135deg, rgba(168,85,247,0.18), rgba(168,85,247,0.08))',
+						color: '#d8b4fe',
+						border: '1px solid rgba(168,85,247,0.35)',
+						boxShadow: '0 0 12px -4px rgba(168,85,247,0.55)',
 					}}>
+						<span style={{
+							width: 5, height: 5, borderRadius: '50%', background: '#c084fc',
+							boxShadow: '0 0 6px #c084fc',
+						}} />
 						承認待ち
 					</div>
 				)}
 			</div>
 
 			{/* Pipeline Flow */}
-			<div style={{ flex: '1 1 0', minHeight: 0, overflowY: 'auto', padding: '16px' }}>
-				<div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+			<div className="conductor-scroll" style={{ flex: '1 1 0', minHeight: 0, overflowY: 'auto', padding: '18px 16px 24px' }}>
+				<div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
 					{agents.map((agent, index) => {
 						const display = roleDisplayConfig[agent.role];
 						const providerTitle = displayInfoOfProviderName(agent.provider).title;
 						const isAwaitingApproval = agent.status === 'awaiting_approval';
+						const isRunningAgent = agent.status === 'running';
+						const isCompleted = agent.status === 'completed';
+
+						const cardClass = [
+							'conductor-surface',
+							isRunningAgent ? 'conductor-card-active' : '',
+							isAwaitingApproval ? 'conductor-approval-border' : '',
+						].filter(Boolean).join(' ');
+
+						const dotClass = [
+							'conductor-dot',
+							(isRunningAgent || isAwaitingApproval) ? 'is-live' : '',
+						].filter(Boolean).join(' ');
 
 						return (
 							<React.Fragment key={agent.role}>
 								{/* Agent Card */}
-								<div style={{
-									display: 'flex', alignItems: 'center', gap: '10px',
-									padding: '10px 12px',
-									borderRadius: '8px',
-									border: `1px solid ${
-										isAwaitingApproval ? '#a855f780'
-										: agent.status === 'running' ? display.color
-										: 'var(--void-border-2)'
-									}`,
-									background: isAwaitingApproval
-										? 'linear-gradient(135deg, rgba(168,85,247,0.06), rgba(168,85,247,0.03))'
-										: agent.status === 'running'
-											? `linear-gradient(135deg, ${display.color}08, ${display.color}04)`
-											: 'var(--void-bg-1)',
-									boxShadow: isAwaitingApproval
-										? '0 0 12px rgba(168,85,247,0.2)'
-										: agent.status === 'running'
-											? `0 0 12px ${display.glowColor}`
-											: undefined,
-									transition: 'all 0.3s ease',
-								}}>
+								<div
+									className={cardClass}
+									style={{
+										display: 'flex', alignItems: 'center', gap: '11px',
+										padding: '11px 13px',
+										borderRadius: '10px',
+										// CSS custom properties drive the running animation accent color
+										['--conductor-accent' as any]: display.color,
+										['--conductor-accent-glow' as any]: display.glowColor,
+										// Subtle tint when running/approval for better feedback
+										backgroundImage: isAwaitingApproval
+											? `linear-gradient(180deg, rgba(168,85,247,0.07), transparent 70%)`
+											: isRunningAgent
+												? `linear-gradient(180deg, ${display.color}14, transparent 70%)`
+												: undefined,
+									}}
+								>
 									{/* Status dot */}
+									<div
+										className={dotClass}
+										style={{
+											backgroundColor: statusColors[agent.status],
+											color: statusColors[agent.status],
+										}}
+									/>
+
+									{/* Role glyph — small color chip */}
 									<div style={{
-										width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0,
-										backgroundColor: statusColors[agent.status],
-										boxShadow: (agent.status === 'running' || isAwaitingApproval)
-											? `0 0 6px ${statusColors[agent.status]}`
-											: undefined,
-									}} />
+										width: '24px', height: '24px', borderRadius: '7px',
+										display: 'flex', alignItems: 'center', justifyContent: 'center',
+										background: `linear-gradient(135deg, ${display.color}22, ${display.color}0a)`,
+										border: `1px solid ${display.color}33`,
+										color: display.color,
+										fontSize: '10px', fontWeight: 700, letterSpacing: '0.02em',
+										flexShrink: 0,
+									}}>
+										{display.label.charAt(0)}
+									</div>
 
 									{/* Info */}
 									<div style={{ flex: 1, minWidth: 0 }}>
-										<div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
-											<span style={{ fontSize: '12px', fontWeight: 600, color: display.color }}>
+										<div style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '2px' }}>
+											<span style={{
+												fontSize: '12px', fontWeight: 600,
+												color: 'var(--void-fg-1)', letterSpacing: '0.005em',
+											}}>
 												{display.label}
 											</span>
-											<span style={{ fontSize: '10px', color: isAwaitingApproval ? '#c084fc' : 'var(--void-fg-4)' }}>
+											<span
+												className="conductor-pill"
+												style={{
+													background: isAwaitingApproval
+														? 'rgba(168,85,247,0.14)'
+														: isRunningAgent
+															? `${display.color}1f`
+															: isCompleted
+																? 'rgba(16,185,129,0.12)'
+																: 'color-mix(in srgb, var(--void-fg-4) 14%, transparent)',
+													color: isAwaitingApproval
+														? '#d8b4fe'
+														: isRunningAgent
+															? display.color
+															: isCompleted
+																? '#34d399'
+																: 'var(--void-fg-3)',
+													padding: '1px 6px',
+													fontSize: '9.5px',
+													textTransform: 'uppercase',
+													letterSpacing: '0.06em',
+													fontWeight: 600,
+												}}
+											>
 												{statusLabels[agent.status]}
 											</span>
 										</div>
-										<div style={{ fontSize: '10px', color: 'var(--void-fg-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-											{providerTitle} · {agent.model}
+										<div style={{
+											fontSize: '10.5px', color: 'var(--void-fg-3)',
+											overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+										}}>
+											{providerTitle} <span style={{ opacity: 0.5 }}>·</span> <span style={{ fontFamily: 'var(--monaco-monospace-font, monospace)' }}>{agent.model}</span>
 										</div>
 									</div>
 
 									{/* Tokens */}
 									{agent.tokensUsed > 0 && (
-										<span style={{ fontSize: '10px', color: 'var(--void-fg-4)', flexShrink: 0 }}>
+										<span style={{
+											fontSize: '10px', color: 'var(--void-fg-4)', flexShrink: 0,
+											fontVariantNumeric: 'tabular-nums',
+											padding: '2px 6px', borderRadius: '4px',
+											background: 'color-mix(in srgb, var(--void-fg-1) 4%, transparent)',
+										}}>
 											{agent.tokensUsed > 1000 ? `${(agent.tokensUsed / 1000).toFixed(1)}K` : agent.tokensUsed}
 										</span>
 									)}
@@ -471,27 +565,38 @@ export const ConductorView: React.FC = () => {
 
 								{/* Approval Panel — shown when this agent is awaiting user review */}
 								{isAwaitingApproval && (
-									<ApprovalPanel
-										role={agent.role}
-										content={agent.output}
-										onApprove={(editedContent) => handleApprove(index, editedContent)}
-										onRegenerate={() => handleRegenerate(index)}
-									/>
+									<div className="conductor-enter" style={{ marginTop: '6px' }}>
+										<ApprovalPanel
+											role={agent.role}
+											content={agent.output}
+											onApprove={(editedContent) => handleApprove(index, editedContent)}
+											onRegenerate={() => handleRegenerate(index)}
+										/>
+									</div>
 								)}
 
 								{/* Connector to next agent */}
 								{index < agents.length - 1 && (
-									<div style={{ display: 'flex', justifyContent: 'center', padding: '2px 0' }}>
-										<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-											<div style={{
-												width: '1px', height: '12px',
-												backgroundColor: agent.status === 'completed' ? display.color : 'var(--void-border-2)',
-												opacity: agent.status === 'completed' ? 0.5 : 0.3,
-											}} />
-											<ArrowDown size={10} style={{
-												color: agent.status === 'completed' ? display.color : 'var(--void-fg-4)',
-												opacity: agent.status === 'completed' ? 0.7 : 0.3,
-											}} />
+									<div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0' }}>
+										<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+											<div
+												className={`conductor-connector ${isCompleted || isRunningAgent ? 'is-active' : ''}`}
+												style={{
+													['--conductor-flow-color' as any]: isCompleted
+														? display.color
+														: isRunningAgent
+															? display.color
+															: 'var(--void-border-2)',
+												}}
+											/>
+											<ArrowDown
+												size={10}
+												style={{
+													color: isCompleted ? display.color : 'var(--void-fg-4)',
+													opacity: isCompleted ? 0.85 : 0.35,
+													transition: 'color 220ms ease, opacity 220ms ease',
+												}}
+											/>
 										</div>
 									</div>
 								)}
