@@ -29,32 +29,47 @@ export const ApprovalPanel: React.FC<ApprovalPanelProps> = ({
 
 	return (
 		<div style={{
-			borderRadius: '8px',
-			border: `1px solid ${display.color}40`,
-			background: `${display.color}06`,
+			borderRadius: '10px',
+			border: `1px solid ${display.color}33`,
+			background: `
+				linear-gradient(180deg, ${display.color}10, transparent 55%),
+				color-mix(in srgb, var(--void-bg-1) 92%, ${display.color} 8%)
+			`,
 			overflow: 'hidden',
-			marginTop: '4px',
+			marginTop: '2px',
+			boxShadow: `0 4px 18px -10px ${display.color}66, 0 0 0 1px ${display.color}11 inset`,
 		}}>
 			{/* Header */}
 			<div style={{
 				display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-				padding: '8px 12px',
-				borderBottom: `1px solid ${display.color}20`,
-				background: `${display.color}08`,
+				padding: '9px 12px',
+				borderBottom: `1px solid ${display.color}1f`,
+				background: `linear-gradient(90deg, ${display.color}10, transparent 70%)`,
 			}}>
-				<div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-					<div style={{
-						width: '6px', height: '6px', borderRadius: '50%',
-						backgroundColor: '#a855f7',
-						boxShadow: '0 0 6px #a855f7',
-						animation: 'conductor-pulse 1.5s infinite',
-					}} />
-					<span style={{ fontSize: '11px', fontWeight: 600, color: display.color }}>
+				<div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+					<div
+						className="conductor-dot is-live"
+						style={{
+							width: '7px', height: '7px',
+							backgroundColor: '#a855f7',
+							color: '#a855f7',
+							boxShadow: '0 0 6px #a855f7',
+						}}
+					/>
+					<span style={{
+						fontSize: '11px', fontWeight: 600,
+						color: display.color, letterSpacing: '0.005em',
+					}}>
 						{display.label} の出力
 					</span>
-					<span style={{
-						fontSize: '10px', padding: '1px 5px', borderRadius: '3px',
-						background: 'rgba(168,85,247,0.12)', color: '#c084fc',
+					<span className="conductor-pill" style={{
+						background: 'linear-gradient(135deg, rgba(168,85,247,0.18), rgba(168,85,247,0.08))',
+						color: '#d8b4fe',
+						border: '1px solid rgba(168,85,247,0.3)',
+						fontSize: '9.5px',
+						textTransform: 'uppercase',
+						letterSpacing: '0.06em',
+						fontWeight: 600,
 					}}>
 						承認待ち
 					</span>
@@ -62,12 +77,12 @@ export const ApprovalPanel: React.FC<ApprovalPanelProps> = ({
 				<button
 					onClick={() => setIsEditing(!isEditing)}
 					title={isEditing ? 'プレビューに切り替え' : '内容を編集'}
+					className="conductor-btn"
 					style={{
-						display: 'flex', alignItems: 'center', gap: '3px',
-						padding: '3px 7px', borderRadius: '4px', cursor: 'pointer',
-						background: isEditing ? `${display.color}20` : 'none',
-						border: `1px solid ${isEditing ? display.color + '50' : 'var(--void-border-2)'}`,
+						padding: '3px 9px',
 						fontSize: '10px',
+						background: isEditing ? `${display.color}22` : 'transparent',
+						border: `1px solid ${isEditing ? display.color + '55' : 'color-mix(in srgb, var(--void-border-2) 70%, transparent)'}`,
 						color: isEditing ? display.color : 'var(--void-fg-3)',
 					}}
 				>
@@ -77,7 +92,7 @@ export const ApprovalPanel: React.FC<ApprovalPanelProps> = ({
 			</div>
 
 			{/* Content: editable textarea or read-only preview */}
-			<div style={{ padding: '10px 12px' }}>
+			<div style={{ padding: '11px 12px' }}>
 				{isEditing ? (
 					<textarea
 						value={editedContent}
@@ -86,22 +101,33 @@ export const ApprovalPanel: React.FC<ApprovalPanelProps> = ({
 						autoFocus
 						style={{
 							width: '100%', minHeight: '140px',
-							padding: '8px', borderRadius: '4px',
-							border: '1px solid var(--void-border-2)',
-							background: 'var(--void-bg-2)',
+							padding: '10px', borderRadius: '7px',
+							border: '1px solid color-mix(in srgb, var(--void-border-2) 80%, transparent)',
+							background: 'color-mix(in srgb, var(--void-bg-2) 60%, transparent)',
 							color: 'var(--void-fg-1)',
-							fontSize: '11px', fontFamily: 'var(--monaco-monospace-font, monospace)',
-							lineHeight: 1.6, resize: 'vertical',
+							fontSize: '11.5px', fontFamily: 'var(--monaco-monospace-font, monospace)',
+							lineHeight: 1.65, resize: 'vertical',
 							outline: 'none', boxSizing: 'border-box',
+							transition: 'border-color 180ms ease, background-color 180ms ease',
+						}}
+						onFocus={(e) => {
+							e.currentTarget.style.borderColor = `${display.color}66`;
+							e.currentTarget.style.background = 'var(--void-bg-2)';
+						}}
+						onBlur={(e) => {
+							e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--void-border-2) 80%, transparent)';
+							e.currentTarget.style.background = 'color-mix(in srgb, var(--void-bg-2) 60%, transparent)';
 						}}
 					/>
 				) : (
 					<div
+						className="conductor-scroll"
 						style={{
-							fontSize: '11px', color: 'var(--void-fg-2)',
-							lineHeight: 1.65, whiteSpace: 'pre-wrap',
-							maxHeight: '200px', overflowY: 'auto',
+							fontSize: '11.5px', color: 'var(--void-fg-2)',
+							lineHeight: 1.7, whiteSpace: 'pre-wrap',
+							maxHeight: '220px', overflowY: 'auto',
 							wordBreak: 'break-word',
+							paddingRight: '4px',
 						}}
 					>
 						{editedContent}
@@ -112,8 +138,9 @@ export const ApprovalPanel: React.FC<ApprovalPanelProps> = ({
 			{/* Action buttons */}
 			<div style={{
 				display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px',
-				padding: '8px 12px',
-				borderTop: `1px solid ${display.color}20`,
+				padding: '9px 12px',
+				borderTop: `1px solid ${display.color}1f`,
+				background: 'color-mix(in srgb, var(--void-bg-1) 70%, transparent)',
 			}}>
 				{onRegenerate && (
 					<button
@@ -122,13 +149,8 @@ export const ApprovalPanel: React.FC<ApprovalPanelProps> = ({
 							onRegenerate();
 						}}
 						title="このエージェントを再実行"
-						style={{
-							display: 'flex', alignItems: 'center', gap: '4px',
-							padding: '5px 10px', borderRadius: '5px', cursor: 'pointer',
-							background: 'none',
-							border: '1px solid var(--void-border-2)',
-							color: 'var(--void-fg-3)', fontSize: '10px',
-						}}
+						className="conductor-btn conductor-btn-ghost"
+						style={{ fontSize: '10.5px' }}
 					>
 						<RefreshCw size={10} />
 						再生成
@@ -137,13 +159,8 @@ export const ApprovalPanel: React.FC<ApprovalPanelProps> = ({
 				<button
 					onClick={() => onApprove(editedContent)}
 					title="内容を承認して次のステップへ進む"
-					style={{
-						display: 'flex', alignItems: 'center', gap: '4px',
-						padding: '5px 14px', borderRadius: '5px', cursor: 'pointer',
-						background: 'rgba(16,185,129,0.15)', color: '#34d399',
-						border: '1px solid rgba(16,185,129,0.35)',
-						fontSize: '11px', fontWeight: 600,
-					}}
+					className="conductor-btn conductor-btn-approve"
+					style={{ padding: '5px 14px' }}
 				>
 					<Check size={11} />
 					承認して続行
