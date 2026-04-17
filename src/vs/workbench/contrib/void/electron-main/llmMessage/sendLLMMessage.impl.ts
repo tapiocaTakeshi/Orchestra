@@ -861,22 +861,27 @@ const sendGeminiChat = async ({
 const FLOW_ROLE_TO_FILENAME: Record<string, string> = {
 	'leader': 'LEADER.md',
 	'coder': 'CODER.md',
+	'coding': 'CODER.md',
 	'design': 'DESIGN.md',
 	'search': 'SEARCH.md',
+	'file-search': 'FILE-SEARCH.md',
 	'research': 'RESEARCH.md',
+	'deep-research': 'RESEARCH.md',
+	'review': 'REVIEW.md',
 	'writing': 'WRITING.md',
 	'planning': 'PLANNING.md',
 	'planner': 'PLANNING.md',
+	'ideaman': 'IDEAMAN.md',
+	'image': 'IMAGE.md',
 };
-
-const FINAL_FLOW_ROLES = new Set(['coding', 'coder']);
 
 const saveFlowResultAsMd = (
 	workspaceFolderPath: string,
 	role: string,
-	title: string,
+	_title: string,
 	content: string,
-	_sessionId: string
+	_sessionId: string,
+	append: boolean = false,
 ): string | null => {
 	const filename = FLOW_ROLE_TO_FILENAME[role.toLowerCase()];
 	if (!filename || !workspaceFolderPath) return null;
@@ -884,81 +889,20 @@ const saveFlowResultAsMd = (
 	const divisionDir = path.join(workspaceFolderPath, '.division');
 	const filePath = path.join(divisionDir, filename);
 
-	const mdContent = content;
-
 	try {
 		fs.mkdirSync(divisionDir, { recursive: true });
-		fs.writeFileSync(filePath, mdContent, 'utf-8');
+		if (append && fs.existsSync(filePath)) {
+			const existing = fs.readFileSync(filePath, 'utf-8');
+			fs.writeFileSync(filePath, existing + '\n\n---\n\n' + content, 'utf-8');
+		} else {
+			fs.writeFileSync(filePath, content, 'utf-8');
+		}
 		return filePath;
 	} catch (_e) {
 		return null;
 	}
 };
 
-// Load all flow MD files from .division/ directory for coding context
-const loadFlowMdFiles = (workspaceFolderPath: string): string => {
-	const mdFiles = ['DESIGN.md', 'SEARCH.md', 'WRITING.md', 'PLANNING.md'];
-	const divisionDir = path.join(workspaceFolderPath, '.division');
-	let context = '';
-
-	for (const file of mdFiles) {
-		const filePath = path.join(divisionDir, file);
-		try {
-			if (fs.existsSync(filePath)) {
-				const content = fs.readFileSync(filePath, 'utf-8');
-				context += `\n\n--- ${file} ---\n\n${content}`;
-			}
-		} catch (_e) { /* skip unreadable files */ }
-	}
-
-	return context;
-};
-
-
-// Orchestration state management for human-in-the-loop review
-interface OrchestrationState {
-	sessionId: string;
-	projectId: string;
-	prompt: string;
-	tasks: DivisionTaskResponse[];
-	completedTaskIndex: number;
-	endpointBase: string;
-	leaderModelName: string;
-	divisionMode: string;
-	selectedModel: string;
-}
-
-const ORCHESTRATION_STATE_FILE = '.orchestration-state.json';
-
-const saveOrchestrationState = (workspaceFolderPath: string, state: OrchestrationState): void => {
-	const divisionDir = path.join(workspaceFolderPath, '.division');
-	const filePath = path.join(divisionDir, ORCHESTRATION_STATE_FILE);
-	try {
-		fs.mkdirSync(divisionDir, { recursive: true });
-		fs.writeFileSync(filePath, JSON.stringify(state, null, 2), 'utf-8');
-	} catch (_e) { /* ignore */ }
-};
-
-const loadOrchestrationState = (workspaceFolderPath: string): OrchestrationState | null => {
-	const divisionDir = path.join(workspaceFolderPath, '.division');
-	const filePath = path.join(divisionDir, ORCHESTRATION_STATE_FILE);
-	try {
-		if (fs.existsSync(filePath)) {
-			return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-		}
-	} catch (_e) { /* ignore */ }
-	return null;
-};
-
-const clearOrchestrationState = (workspaceFolderPath: string): void => {
-	const divisionDir = path.join(workspaceFolderPath, '.division');
-	const filePath = path.join(divisionDir, ORCHESTRATION_STATE_FILE);
-	try {
-		if (fs.existsSync(filePath)) {
-			fs.unlinkSync(filePath);
-		}
-	} catch (_e) { /* ignore */ }
-};
 
 
 // Auto file create/edit: extract code blocks from AI output
@@ -1125,47 +1069,7 @@ const buildPromptFromMessages = (messages: any[], separateSystemMessage?: string
 	return prompt.trim();
 };
 
-// Division Tasks API response types
-interface DivisionTaskResponse {
-	id: string;
-	projectId: string;
-	sessionId: string;
-	role: string;
-	title: string;
-	description: string;
-	reason: string;
-	dependsOn: string[];
-	orderIndex: number;
-	status: string;
-	output: string | null;
-}
 
-interface DivisionTasksCreateResponse {
-	sessionId: string;
-	projectId: string;
-	input: string;
-	leader: { provider: string; model: string };
-	taskCount: number;
-	tasks: DivisionTaskResponse[];
-}
-
-// Helper: make authenticated Division API requests
-const divisionFetch = async (
-	endpointBase: string,
-	apiPath: string,
-	options: RequestInit = {},
-	divisionApiKey?: string
-): Promise<Response> => {
-	const apiKey = divisionApiKey || process.env.DIVISION_API_KEY || '';
-	const headers: Record<string, string> = {
-		'Content-Type': 'application/json',
-		...(options.headers as Record<string, string> || {}),
-	};
-	if (apiKey) {
-		headers['Authorization'] = `Bearer ${apiKey}`;
-	}
-	return fetch(`${endpointBase}${apiPath}`, { ...options, headers });
-};
 
 const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<void> => {
 	const {
@@ -1198,90 +1102,6 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			fullText += text;
 			onText({ fullText, fullReasoning: '' });
 		};
-
-		// =============================================
-		// CHECK FOR PENDING ORCHESTRATION REVIEW (resume after user approval)
-		// =============================================
-		if (workspaceFolderPath) {
-			const pendingState = loadOrchestrationState(workspaceFolderPath);
-			if (pendingState) {
-				// Check if the user message is a flow review approval
-				const lastMsgContent = prompt || '';
-				if (lastMsgContent.includes('[FLOW_REVIEW_APPROVED]')) {
-					clearOrchestrationState(workspaceFolderPath);
-
-					const { sessionId, tasks, prompt: originalPrompt, completedTaskIndex } = pendingState;
-					const startIndex = completedTaskIndex + 1;
-
-					// Extract edited MD contents from the approval message and overwrite .division/ files
-					try {
-						const jsonMatch = lastMsgContent.match(/\[FLOW_EDITED_OUTPUTS\]([\s\S]+)$/);
-						if (jsonMatch) {
-							const editedOutputs: Array<{ mdFileName: string; mdContent: string }> = JSON.parse(jsonMatch[1]);
-							const divisionDir = path.join(workspaceFolderPath, '.division');
-							fs.mkdirSync(divisionDir, { recursive: true });
-							for (const entry of editedOutputs) {
-								const filePath = path.join(divisionDir, entry.mdFileName);
-								fs.writeFileSync(filePath, entry.mdContent, 'utf-8');
-							}
-						}
-					} catch (_e) { /* ignore parse errors */ }
-
-					// Execute only the final flows (coding/writing)
-					for (let i = startIndex; i < tasks.length; i++) {
-						const task = tasks[i];
-						const modelForRole = task.role === 'coding' || task.role === 'coder'
-							? 'claude-sonnet-4.5'
-							: task.role === 'search' || task.role === 'research'
-								? 'sonar-pro'
-								: task.role === 'planning' || task.role === 'planner'
-									? 'gemini-3-flash'
-									: 'gpt-5.2';
-
-						let flowContextBlock = '';
-						if (FINAL_FLOW_ROLES.has(task.role.toLowerCase()) && workspaceFolderPath) {
-							const flowMdContent = loadFlowMdFiles(workspaceFolderPath);
-							if (flowMdContent) {
-								flowContextBlock = `\n\n## Prior Analysis & Design Documents\n\n${flowMdContent}\n\n---\n`;
-							}
-						}
-
-						const taskPrompt = `You are a ${task.role} specialist. Complete the following task based on the original user request.${flowContextBlock}\n\nIMPORTANT FILE OUTPUT RULES:\n\n## For NEW files — use code blocks with file path:\n\`\`\`language:relative/path/to/filename.ext\nfull file content here\n\`\`\`\n\n## For EDITING existing files — use SEARCH/REPLACE blocks:\n\`\`\`language:relative/path/to/existing-file.ext\n<<<SEARCH\nexact lines to find in the file\n===\nreplacement lines\n>>>REPLACE\n\`\`\`\n\nOriginal user request:\n${originalPrompt}\n\nYour specific task:\n${task.title}\n\nDetailed instructions:\n${task.description}\n\nProvide a thorough and complete response. Output all code files with their paths.`;
-
-						const subTaskMode = task.role === 'coding' || task.role === 'coder' ? 'function_calling'
-							: task.role === 'search' || task.role === 'research' ? 'search' : 'chat';
-
-						const result = await callDivisionGenerate(pendingState.endpointBase, modelForRole, taskPrompt, controller.signal, subTaskMode, divisionApiKey);
-
-						if (result.error) {
-							appendText(`Error: ${result.error}\n\n`);
-						} else {
-							let sanitizedOutput = result.output;
-							const codeBlockOpens = (sanitizedOutput.match(/```/g) || []).length;
-							if (codeBlockOpens % 2 !== 0) sanitizedOutput += '\n```\n';
-							appendText(`${sanitizedOutput}\n\n`);
-
-							const { savedFiles, fileOperations, commands } = saveCodeBlocksFromOutput(result.output, sessionId, workspaceFolderPath);
-							if (savedFiles.length > 0) {
-								for (const sf of savedFiles) {
-									appendText(`${path.basename(sf.filePath)} — \`${sf.filePath}\`\n`);
-								}
-								appendText(`\n`);
-								if (fileOperations.length > 0 && onFileOperation) onFileOperation(fileOperations);
-							}
-							if (commands.length > 0 && onCommandRun) onCommandRun(commands);
-
-							if (FLOW_ROLE_TO_FILENAME[task.role.toLowerCase()]) {
-								saveFlowResultAsMd(workspaceFolderPath, task.role, task.title, result.output, sessionId);
-							}
-						}
-					}
-
-					onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null });
-					return;
-				}
-			}
-		}
 
 		// =============================================
 		// DIRECT MODEL MODE: If user selected a specific model (not orchestrator),
@@ -1324,15 +1144,11 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		}
 
 		// =============================================
-		// ORCHESTRATION MODE: division-orchestrator selected
-		// PHASE 1: Task Generation via /api/tasks/create
-		// Leader AI automatically breaks down the request into tasks
+		// ORCHESTRATION MODE: /api/agent/stream SSE
+		// Server handles Leader AI decomposition, wave-based parallel execution,
+		// and synthesis step (Coder/Writer) automatically
 		// =============================================
-		
 
-
-
-		// Extract chat history and current input
 		const extractContent = (msg: LLMChatMessage): string => {
 			if ('content' in msg) {
 				if (typeof msg.content === 'string') return msg.content;
@@ -1349,72 +1165,52 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			return '';
 		};
 
+		const lastMsg = messages[messages.length - 1];
+		let currentInput = lastMsg ? extractContent(lastMsg) : prompt;
+		if (!currentInput || currentInput.trim() === '') {
+			currentInput = prompt;
+		}
+
 		const chatHistory = messages.slice(0, -1)
 			.filter(msg => msg.role !== 'system' && msg.role !== 'developer')
 			.map(msg => ({
 				role: (msg.role === 'model' ? 'assistant' : msg.role) as 'user' | 'assistant',
 				content: extractContent(msg)
 			}));
-		const lastMsg = messages[messages.length - 1];
-		let currentInput = lastMsg ? extractContent(lastMsg) : prompt;
 
-		// Fallback: if extractContent returned empty, use the full prompt
-		if (!currentInput || currentInput.trim() === '') {
-			console.warn('[DivisionAPI] extractContent returned empty, falling back to buildPromptFromMessages. lastMsg:', JSON.stringify(lastMsg).substring(0, 200));
-			currentInput = prompt;
-		}
-
-		const chatHistoryLength = chatHistory.length
-		const messagesCount = messages.length
-
-		let divisionMode = 'chat';
-		if (chatMode === 'agent') {
-			divisionMode = 'function_calling';
-		} else if (chatMode === 'gather') {
-			divisionMode = 'search';
-		}
-
-		// Debug: log the actual request body
-		console.log('[DivisionAPI] /api/tasks/create request:', JSON.stringify({
+		console.log('[DivisionAPI] /api/agent/stream request:', JSON.stringify({
 			projectId,
-			mode: divisionMode,
 			inputLength: currentInput.length,
 			inputPreview: currentInput.substring(0, 100),
-			chatHistoryLength,
-			messagesCount,
+			chatHistoryLength: chatHistory.length,
 		}));
 
-		const createResponse = await divisionFetch(endpointBase, '/api/tasks/create', {
+		const apiKey = divisionApiKey || process.env.DIVISION_API_KEY || '';
+		const sseHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+		if (apiKey) sseHeaders['Authorization'] = `Bearer ${apiKey}`;
+
+		const sseResponse = await fetch(`${endpointBase}/api/agent/stream`, {
 			method: 'POST',
-			body: JSON.stringify({ projectId, mode: divisionMode, input: currentInput, chatHistory, model: selectedModel !== 'division-orchestrator' ? selectedModel : undefined }),
+			headers: sseHeaders,
+			body: JSON.stringify({
+				projectId,
+				input: currentInput,
+				format: 'sse',
+				...(chatHistory.length > 0 ? { chatHistory } : {}),
+			}),
 			signal: controller.signal,
-		}, divisionApiKey);
+		});
 
-		const createText = await createResponse.text();
+		if (!sseResponse.ok) {
+			const errorText = await sseResponse.text();
+			console.error(`[DivisionAPI] /api/agent/stream returned HTTP ${sseResponse.status}: ${errorText.substring(0, 500)}`);
+			appendText(`❌ **Error:** HTTP ${sseResponse.status} from /api/agent/stream\n`);
+			appendText(`\`\`\`\n${errorText.substring(0, 300)}\n\`\`\`\n\n`);
 
-		// Log HTTP status for debugging
-		if (!createResponse.ok) {
-			console.error(`[DivisionAPI] /api/tasks/create returned HTTP ${createResponse.status}: ${createText.substring(0, 500)}`);
-			appendText(`❌ **Error:** HTTP ${createResponse.status} from /api/tasks/create\n`);
-			appendText(`\`\`\`\n${createText.substring(0, 300)}\n\`\`\`\n\n`);
-		}
-
-		if (!createText) {
-			appendText(`❌ **Error:** Empty response from /api/tasks/create\n`);
-			onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null });
-			return;
-		}
-
-		const createData: DivisionTasksCreateResponse = JSON.parse(createText);
-
-		if ((createData as any).error) {
-			appendText(`❌ **Error:** ${(createData as any).error}\n\n`);
 			// Fallback: single agent via /api/generate
-			
-			const fallbackModel = selectedModel !== 'division-orchestrator' ? selectedModel : 'gpt-5.2';
-			const fallbackResult = await callDivisionGenerate(endpointBase, fallbackModel, prompt, controller.signal, divisionMode, divisionApiKey);
+			const fallbackResult = await callDivisionGenerate(endpointBase, 'gpt-5.2', prompt, controller.signal, 'chat', divisionApiKey);
 			if (fallbackResult.error) {
-				appendText(`❌ **Error:** ${fallbackResult.error}\n`);
+				appendText(`❌ **Fallback Error:** ${fallbackResult.error}\n`);
 			} else {
 				appendText(fallbackResult.output + '\n');
 			}
@@ -1422,200 +1218,174 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			return;
 		}
 
-		const { sessionId, leader, tasks } = createData;
+		// SSE stream consumption
+		const reader = sseResponse.body!.getReader();
+		const decoder = new TextDecoder();
+		let sseBuffer = '';
+		let currentSSEEvent = '';
+		let sessionId = '';
+		const taskOutputs = new Map<string, string>();
+		let synthesisText = '';
 
-		let leaderModelName = leader.model;
-		if (leaderModelName === 'gpt-4o' || leaderModelName === 'gpt-4o-2024-05-13' || leaderModelName === 'gpt-4o-2024-08-06') leaderModelName = 'gpt-5.2';
-		else if (leaderModelName === 'gemini-2.5-flash' || leaderModelName === 'gemini-1.5-flash') leaderModelName = 'gemini-3-flash';
-		else if (leaderModelName === 'claude-3-5-sonnet-20241022') leaderModelName = 'claude-sonnet-4.5';
+		const processSSEEvent = (eventName: string, data: any) => {
+			switch (eventName) {
+				case 'session_start':
+					sessionId = data.sessionId || '';
+					break;
 
-		
+				case 'leader_start':
+					appendText(`**Leader AI** がタスクを分析中...\n\n`);
+					break;
 
-		// Task list
-		for (let i = 0; i < tasks.length; i++) {
-			const t = tasks[i];
-			appendText(`${i + 1}. **${t.role}** — ${t.title}\n`);
-		}
-		appendText(`\n`);
+				case 'leader_chunk':
+					break;
 
-		// Split tasks into intermediate flows and final flows
-		const lastFinalIdx = (() => {
-			for (let i = tasks.length - 1; i >= 0; i--) {
-				if (FINAL_FLOW_ROLES.has(tasks[i].role.toLowerCase())) return i;
-			}
-			return tasks.length - 1;
-		})();
-		const intermediateTasks = tasks.slice(0, lastFinalIdx);
-		const finalTasks = tasks.slice(lastFinalIdx);
-
-		// Helper to build task prompt
-		const buildTaskPrompt = (task: any, flowContextBlock: string) => `You are a ${task.role} specialist. Complete the following task based on the original user request.${flowContextBlock}
-
-IMPORTANT FILE OUTPUT RULES:
-
-## For NEW files — use code blocks with file path:
-\`\`\`language:relative/path/to/filename.ext
-full file content here
-\`\`\`
-
-## For EDITING existing files — use SEARCH/REPLACE blocks:
-\`\`\`language:relative/path/to/existing-file.ext
-<<<SEARCH
-exact lines to find in the file
-===
-replacement lines
->>>REPLACE
-\`\`\`
-
-## Rules:
-- Use paths relative to the project root
-- For NEW files, provide the COMPLETE file content
-- For EDITING existing files, use SEARCH/REPLACE with enough context lines to uniquely identify the location
-- The SEARCH section must match the existing file EXACTLY (including whitespace)
-- If the edit is too large (more than 60% of the file), provide the complete file instead
-
-Original user request:
-${prompt}
-
-Your specific task:
-${task.title}
-
-Detailed instructions:
-${task.description}
-
-Provide a thorough and complete response. Output all code files with their paths.`;
-
-		const getModelForRole = (role: string) =>
-			role === 'coding' || role === 'coder' ? 'claude-sonnet-4.5'
-			: role === 'search' || role === 'research' ? 'sonar-pro'
-			: role === 'planning' || role === 'planner' ? 'gemini-3-flash'
-			: role === 'design' ? 'gemini-3-flash'
-			: 'gpt-5.2';
-
-		const getSubTaskMode = (role: string) =>
-			role === 'coding' || role === 'coder' ? 'function_calling'
-			: role === 'search' || role === 'research' ? 'search'
-			: 'chat';
-
-		// Phase A: Execute all intermediate flows (no review pause)
-		const collectedFlowOutputs: Array<{ role: string; mdFileName: string; mdFilePath: string; mdContent: string }> = [];
-
-		for (let i = 0; i < intermediateTasks.length; i++) {
-			const task = intermediateTasks[i];
-			const modelForRole = getModelForRole(task.role);
-			const taskPrompt = buildTaskPrompt(task, '');
-			const subTaskMode = getSubTaskMode(task.role);
-
-			const result = await callDivisionGenerate(endpointBase, modelForRole, taskPrompt, controller.signal, subTaskMode, divisionApiKey);
-
-			if (result.error) {
-				appendText(`Error: ${result.error}\n\n`);
-				try {
-					await divisionFetch(endpointBase, `/api/tasks/${task.id}`, {
-						method: 'PATCH',
-						body: JSON.stringify({ status: 'failed', output: result.error }),
-						signal: controller.signal,
-					}, divisionApiKey);
-				} catch (_patchErr) { /* ignore */ }
-			} else {
-				let sanitizedOutput = result.output;
-				const codeBlockOpens = (sanitizedOutput.match(/```/g) || []).length;
-				if (codeBlockOpens % 2 !== 0) sanitizedOutput += '\n```\n';
-				appendText(`${sanitizedOutput}\n\n`);
-
-				// Save MD file
-				if (workspaceFolderPath && FLOW_ROLE_TO_FILENAME[task.role.toLowerCase()]) {
-					const mdPath = saveFlowResultAsMd(workspaceFolderPath, task.role, task.title, result.output, sessionId);
-					if (mdPath) {
-						const mdFilename = FLOW_ROLE_TO_FILENAME[task.role.toLowerCase()];
-						collectedFlowOutputs.push({ role: task.role, mdFileName: mdFilename, mdFilePath: mdPath, mdContent: result.output });
+				case 'leader_done': {
+					if (data.tasks && Array.isArray(data.tasks)) {
+						for (let i = 0; i < data.tasks.length; i++) {
+							const t = data.tasks[i];
+							appendText(`${i + 1}. **${t.role}** — ${t.title}\n`);
+						}
+						appendText(`\n`);
 					}
-				}
-
-				try {
-					await divisionFetch(endpointBase, `/api/tasks/${task.id}`, {
-						method: 'PATCH',
-						body: JSON.stringify({ status: 'completed', output: result.output }),
-						signal: controller.signal,
-					}, divisionApiKey);
-				} catch (_patchErr) { /* ignore */ }
-			}
-		}
-
-		// Phase B: If there are collected intermediate outputs, pause for consolidated review
-		if (collectedFlowOutputs.length > 0 && finalTasks.length > 0 && workspaceFolderPath) {
-			const lastIntermediateIdx = intermediateTasks.length - 1;
-
-			saveOrchestrationState(workspaceFolderPath, {
-				sessionId, projectId, prompt,
-				tasks, completedTaskIndex: lastIntermediateIdx,
-				endpointBase, leaderModelName,
-				divisionMode, selectedModel: selectedModel || 'division-orchestrator',
-			});
-
-			onFinalMessage({
-				fullText, fullReasoning: '', anthropicReasoning: null,
-				flowReview: {
-					flowRole: 'all',
-					mdFileName: collectedFlowOutputs[0].mdFileName,
-					mdFilePath: collectedFlowOutputs[0].mdFilePath,
-					mdContent: collectedFlowOutputs.map(o => o.mdContent).join('\n\n---\n\n'),
-					sessionId,
-					completedTaskIndex: lastIntermediateIdx,
-					totalTasks: tasks.length,
-					allFlowOutputs: collectedFlowOutputs,
-				},
-			});
-			return;
-		}
-
-		// Phase C: Execute final flows (coding/writing) — reached when no intermediate flows exist
-		for (let i = lastFinalIdx; i < tasks.length; i++) {
-			const task = tasks[i];
-			const modelForRole = getModelForRole(task.role);
-
-			let flowContextBlock = '';
-			if (FINAL_FLOW_ROLES.has(task.role.toLowerCase()) && workspaceFolderPath) {
-				const flowMdContent = loadFlowMdFiles(workspaceFolderPath);
-				if (flowMdContent) {
-					flowContextBlock = `\n\n## Prior Analysis & Design Documents\n\n${flowMdContent}\n\n---\n`;
-				}
-			}
-
-			const taskPrompt = buildTaskPrompt(task, flowContextBlock);
-			const subTaskMode = getSubTaskMode(task.role);
-
-			const result = await callDivisionGenerate(endpointBase, modelForRole, taskPrompt, controller.signal, subTaskMode, divisionApiKey);
-
-			if (result.error) {
-				appendText(`Error: ${result.error}\n\n`);
-			} else {
-				let sanitizedOutput = result.output;
-				const codeBlockOpens = (sanitizedOutput.match(/```/g) || []).length;
-				if (codeBlockOpens % 2 !== 0) sanitizedOutput += '\n```\n';
-				appendText(`${sanitizedOutput}\n\n`);
-
-				const { savedFiles, fileOperations, commands } = saveCodeBlocksFromOutput(result.output, sessionId, workspaceFolderPath);
-				if (savedFiles.length > 0) {
-					for (const sf of savedFiles) {
-						appendText(`${path.basename(sf.filePath)} — \`${sf.filePath}\`\n`);
+					if (data.finalRole) {
+						appendText(`合成ロール: **${data.finalRole}**\n\n`);
 					}
-					appendText(`\n`);
-					if (fileOperations.length > 0 && onFileOperation) onFileOperation(fileOperations);
-				}
-				if (commands.length > 0 && onCommandRun) onCommandRun(commands);
-
-				if (workspaceFolderPath && FLOW_ROLE_TO_FILENAME[task.role.toLowerCase()]) {
-					saveFlowResultAsMd(workspaceFolderPath, task.role, task.title, result.output, sessionId);
+					break;
 				}
 
-				try {
-					await divisionFetch(endpointBase, `/api/tasks/${task.id}`, {
-						method: 'PATCH',
-						body: JSON.stringify({ status: 'completed', output: result.output }),
-						signal: controller.signal,
-					}, divisionApiKey);
-				} catch (_patchErr) { /* ignore */ }
+				case 'leader_error':
+					appendText(`❌ **Leader Error:** ${data.error || 'Unknown error'}\n\n`);
+					break;
+
+				case 'wave_start':
+					appendText(`---\n\n**Wave ${(data.waveIndex ?? 0) + 1}** 開始\n\n`);
+					break;
+
+				case 'task_start':
+					appendText(`▶ **${data.role}** (${data.provider || ''}) 実行中...\n`);
+					break;
+
+				case 'task_chunk':
+					break;
+
+				case 'task_thinking_chunk':
+					break;
+
+				case 'task_done': {
+					const taskRole = data.role || '';
+					const taskOutput = data.output || '';
+					if (taskOutput) {
+						let sanitized = taskOutput;
+						const opens = (sanitized.match(/```/g) || []).length;
+						if (opens % 2 !== 0) sanitized += '\n```\n';
+						appendText(`## ${taskRole}\n\n${sanitized}\n\n`);
+
+						taskOutputs.set(data.taskId || taskRole, sanitized);
+
+						if (workspaceFolderPath && sanitized.trim() && FLOW_ROLE_TO_FILENAME[taskRole.toLowerCase()]) {
+							saveFlowResultAsMd(workspaceFolderPath, taskRole, data.title || '', sanitized, sessionId);
+						}
+					}
+					break;
+				}
+
+				case 'task_error':
+					appendText(`❌ **${data.role || 'Task'}**: ${data.error || 'Unknown error'}\n\n`);
+					break;
+
+				case 'wave_done':
+					break;
+
+				case 'synthesis_start':
+					appendText(`---\n\n**合成ステップ** (${data.finalRole || 'coder'}) 開始...\n\n`);
+					break;
+
+				case 'synthesis_chunk':
+					if (data.text) {
+						synthesisText += data.text;
+						appendText(data.text);
+					}
+					break;
+
+				case 'synthesis_done': {
+					const output = data.output || synthesisText;
+					if (output && workspaceFolderPath) {
+						const { savedFiles, fileOperations, commands } = saveCodeBlocksFromOutput(output, sessionId || 'synthesis', workspaceFolderPath);
+						if (savedFiles.length > 0) {
+							appendText(`\n`);
+							for (const sf of savedFiles) {
+								appendText(`${path.basename(sf.filePath)} — \`${sf.filePath}\`\n`);
+							}
+							appendText(`\n`);
+							if (fileOperations.length > 0 && onFileOperation) onFileOperation(fileOperations);
+						}
+						if (commands.length > 0 && onCommandRun) onCommandRun(commands);
+
+						const finalRole = data.finalRole || 'coding';
+						if (FLOW_ROLE_TO_FILENAME[finalRole.toLowerCase()]) {
+							saveFlowResultAsMd(workspaceFolderPath, finalRole, '', output, sessionId);
+						}
+					}
+					break;
+				}
+
+				case 'session_done':
+					break;
+
+				case 'heartbeat':
+					break;
+
+				default:
+					break;
+			}
+		};
+
+		// Read SSE stream
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
+
+			sseBuffer += decoder.decode(value, { stream: true });
+			const lines = sseBuffer.split('\n');
+			sseBuffer = lines.pop() || '';
+
+			for (const line of lines) {
+				if (line.startsWith('event: ')) {
+					currentSSEEvent = line.slice(7).trim();
+				} else if (line.startsWith('data: ')) {
+					const rawData = line.slice(6);
+					if (currentSSEEvent && rawData) {
+						try {
+							const data = JSON.parse(rawData);
+							processSSEEvent(currentSSEEvent, data);
+						} catch (_e) {
+							console.warn('[DivisionAPI] SSE JSON parse error:', rawData.substring(0, 100));
+						}
+					}
+					currentSSEEvent = '';
+				} else if (line.trim() === '') {
+					currentSSEEvent = '';
+				}
+			}
+		}
+
+		// Process remaining buffer
+		if (sseBuffer.trim()) {
+			const remainingLines = sseBuffer.split('\n');
+			for (const line of remainingLines) {
+				if (line.startsWith('event: ')) {
+					currentSSEEvent = line.slice(7).trim();
+				} else if (line.startsWith('data: ')) {
+					const rawData = line.slice(6);
+					if (currentSSEEvent && rawData) {
+						try {
+							const data = JSON.parse(rawData);
+							processSSEEvent(currentSSEEvent, data);
+						} catch (_e) { /* skip */ }
+					}
+					currentSSEEvent = '';
+				}
 			}
 		}
 

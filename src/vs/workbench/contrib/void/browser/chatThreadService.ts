@@ -289,7 +289,7 @@ export interface IChatThreadService {
 	rejectLatestToolRequest(threadId: string): void;
 
 	// flow review approve/reject
-	approveFlowReview(threadId: string, editedOutputs?: Array<{ mdFileName: string; mdContent: string }>): void;
+	approveFlowReview(threadId: string, editedOutputs?: Array<{ mdFileName: string; mdContent: string }>): Promise<void>;
 	rejectFlowReview(threadId: string): void;
 
 	// jump to history
@@ -610,7 +610,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		this._setStreamState(threadId, undefined)
 	}
 
-	approveFlowReview(threadId: string, editedOutputs?: Array<{ mdFileName: string; mdContent: string }>) {
+	async approveFlowReview(threadId: string, editedOutputs?: Array<{ mdFileName: string; mdContent: string }>) {
 		const thread = this.state.allThreads[threadId]
 		if (!thread) return
 
@@ -619,12 +619,15 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 		this._editMessageInThread(threadId, thread.messages.length - 1, { ...lastMsg, status: 'approved' })
 
-		let resumeMessage = `[FLOW_REVIEW_APPROVED]`
-		if (editedOutputs && editedOutputs.length > 0) {
-			resumeMessage += `[FLOW_EDITED_OUTPUTS]${JSON.stringify(editedOutputs)}`
-		}
+		// Update orchestration state file via IPC — must complete before resuming
+		await this._llmMessageService.approveOrchestration(editedOutputs)
 
-		this.addUserMessageAndStreamResponse({ userMessage: resumeMessage, threadId })
+		// Resume the stream directly without adding a visible user message
+		this._setThreadState(threadId, { currCheckpointIdx: null })
+		this._wrapRunAgentToNotify(
+			this._runChatAgent({ threadId, ...this._currentModelSelectionProps() }),
+			threadId,
+		)
 	}
 
 	rejectFlowReview(threadId: string) {
@@ -1014,6 +1017,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 						completedTaskIndex: fr.completedTaskIndex,
 						totalTasks: fr.totalTasks,
 						status: 'pending',
+						allFlowOutputs: fr.allFlowOutputs,
 					})
 					isRunningWhenEnd = 'awaiting_user'
 					// Do not continue the tool call loop — wait for user review

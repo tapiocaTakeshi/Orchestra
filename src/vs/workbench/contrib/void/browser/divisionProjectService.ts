@@ -97,6 +97,9 @@ export interface IDivisionProjectService {
 
 	/** Remove a division project by ID */
 	removeProject(id: string): Promise<void>;
+
+	/** Fetch project data from Supabase and update agents.json */
+	fetchFromSupabase(projectId?: string): Promise<{ success: boolean; message: string }>;
 }
 
 
@@ -499,6 +502,97 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 		}
 		await this._persistToDisk();
 		this._onDidChangeProject.fire();
+	}
+
+	async fetchFromSupabase(projectId?: string): Promise<{ success: boolean; message: string }> {
+		try {
+			const targetProjects = projectId
+				? this._projects.filter(p => p.projectId === projectId)
+				: this._projects.filter(p => p.projectId);
+
+			if (targetProjects.length === 0) {
+				return { success: false, message: 'No projects with Project ID configured' };
+			}
+
+			const supaHeaders = {
+				'apikey': SUPABASE_ANON_KEY,
+				'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+			};
+
+			// Fetch Role and Provider tables to resolve IDs → slug/name
+			const [rolesRes, providersRes] = await Promise.all([
+				fetch(`${SUPABASE_URL}/rest/v1/Role?select=id,slug,name`, { headers: supaHeaders }),
+				fetch(`${SUPABASE_URL}/rest/v1/Provider?select=id,name,displayName`, { headers: supaHeaders }),
+			]);
+
+			const roleIdToSlug = new Map<string, string>();
+			if (rolesRes.ok) {
+				const roles: Array<{ id: string; slug: string; name: string }> = await rolesRes.json();
+				for (const r of roles) {
+					roleIdToSlug.set(r.id, r.slug || r.name || r.id);
+				}
+			}
+
+			const providerIdToName = new Map<string, string>();
+			if (providersRes.ok) {
+				const providers: Array<{ id: string; name: string; displayName: string }> = await providersRes.json();
+				for (const p of providers) {
+					providerIdToName.set(p.id, p.name || p.id);
+				}
+			}
+
+			let totalUpdated = 0;
+
+			for (const project of targetProjects) {
+				const projectRes = await fetch(
+					`${SUPABASE_URL}/rest/v1/Project?id=eq.${encodeURIComponent(project.projectId)}&select=*`,
+					{ headers: supaHeaders }
+				);
+				if (!projectRes.ok) continue;
+				const projectRows = await projectRes.json();
+				const projectData = projectRows[0];
+
+				const assignRes = await fetch(
+					`${SUPABASE_URL}/rest/v1/RoleAssignment?projectId=eq.${encodeURIComponent(project.projectId)}&select=*&order=priority.asc`,
+					{ headers: supaHeaders }
+				);
+				if (!assignRes.ok) continue;
+				const assignments: Array<{ roleId: string; providerId: string; config: string }> = await assignRes.json();
+
+				const agents: RoleAssignment[] = assignments.map(a => {
+					let model = '';
+					try {
+						const cfg = JSON.parse(a.config || '{}');
+						model = cfg.model || '';
+					} catch { /* ignore */ }
+
+					const roleSlug = roleIdToSlug.get(a.roleId) || a.roleId;
+					const providerName = providerIdToName.get(a.providerId) || a.providerId;
+
+					return {
+						role: roleSlug as AgentRole,
+						provider: providerName as ProviderName,
+						model,
+					};
+				});
+
+				const updatedProject: DivisionProjectConfig = {
+					...project,
+					name: projectData?.name || project.name,
+					agents: agents.length > 0 ? agents : project.agents,
+				};
+
+				await this.save(updatedProject);
+				totalUpdated++;
+			}
+
+			if (totalUpdated === 0) {
+				return { success: false, message: 'No projects found in Supabase' };
+			}
+			return { success: true, message: `${totalUpdated} project(s) synced from Supabase` };
+		} catch (e) {
+			return { success: false, message: `Supabase fetch error: ${e}` };
+		}
 	}
 
 	async fetchAndUpdateFromAPI(localProjectId: string): Promise<{ success: boolean; message: string }> {

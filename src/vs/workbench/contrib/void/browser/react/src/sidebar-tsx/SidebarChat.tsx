@@ -3077,10 +3077,17 @@ const FlowReviewComponent = ({ chatMessage, isCheckpointGhost }: {
 	const onApprove = useCallback(() => {
 		try {
 			const threadId = chatThreadsService.state.currentThreadId
-			const editedOutputs = flowOutputs.map(o => ({
-				mdFileName: o.mdFileName,
-				mdContent: editedContents[o.mdFileName] ?? o.mdContent,
-			}))
+			// Only send editedOutputs if user actually edited content
+			const hasEdits = flowOutputs.some(o => {
+				const edited = editedContents[o.mdFileName]
+				return edited !== undefined && edited !== o.mdContent
+			})
+			const editedOutputs = hasEdits
+				? flowOutputs.map(o => ({
+					mdFileName: o.mdFileName,
+					mdContent: editedContents[o.mdFileName] ?? o.mdContent,
+				})).filter(o => o.mdContent && o.mdContent.trim())
+				: undefined
 			chatThreadsService.approveFlowReview(threadId, editedOutputs)
 		} catch (e) { console.error('Error approving flow review:', e) }
 	}, [chatThreadsService, flowOutputs, editedContents])

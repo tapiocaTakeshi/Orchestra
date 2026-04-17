@@ -12,6 +12,8 @@ import { EventLLMMessageOnTextParams, EventLLMMessageOnErrorParams, EventLLMMess
 import { sendLLMMessage } from './llmMessage/sendLLMMessage.js'
 import { IMetricsService } from '../common/metricsService.js';
 import { sendLLMMessageToProviderImplementation } from './llmMessage/sendLLMMessage.impl.js';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // NODE IMPLEMENTATION - calls actual sendLLMMessage() and returns listeners to it
 
@@ -83,6 +85,9 @@ export class LLMMessageChannel implements IServerChannel {
 			}
 			else if (command === 'openAICompatibleList') {
 				this._callOpenAICompatibleList(params)
+			}
+			else if (command === 'approveOrchestration') {
+				this._callApproveOrchestration(params)
 			}
 			else {
 				throw new Error(`Void sendLLM: command "${command}" not recognized.`)
@@ -159,8 +164,20 @@ export class LLMMessageChannel implements IServerChannel {
 		sendLLMMessageToProviderImplementation[providerName].list(mainThreadParams as any)
 	}
 
+	private _callApproveOrchestration(params: { editedOutputs?: Array<{ mdFileName: string; mdContent: string }>; workspaceFolderPath?: string }) {
+		const { editedOutputs, workspaceFolderPath } = params;
+		if (!workspaceFolderPath) return;
 
-
+		const stateFile = path.join(workspaceFolderPath, '.division', '.orchestration-state.json');
+		try {
+			if (!fs.existsSync(stateFile)) return;
+			const raw = fs.readFileSync(stateFile, 'utf-8');
+			const state = JSON.parse(raw);
+			state.approved = true;
+			if (editedOutputs) state.editedOutputs = editedOutputs;
+			fs.writeFileSync(stateFile, JSON.stringify(state, null, 2), 'utf-8');
+		} catch (_e) { /* ignore */ }
+	}
 
 
 }

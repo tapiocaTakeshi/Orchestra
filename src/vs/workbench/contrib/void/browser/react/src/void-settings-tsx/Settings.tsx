@@ -8,7 +8,7 @@ import { ProviderName, SettingName, displayInfoOfSettingName, providerNames, Voi
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
 import { VoidButtonBgDarken, VoidCustomDropdownBox, VoidInputBox2, VoidSimpleInputBox, VoidSwitch } from '../util/inputs.js'
 import { useAccessor, useDivisionProjects, useIsDark, useIsOptedOut, useRefreshModelListener, useRefreshModelState, useSettingsState } from '../util/services.js'
-import { X, RefreshCw, Loader2, Check, Asterisk, Plus } from 'lucide-react'
+import { X, RefreshCw, Loader2, Check, Asterisk, Plus, CloudDownload } from 'lucide-react'
 import { URI } from '../../../../../../../base/common/uri.js'
 import { ModelDropdown } from './ModelDropdown.js'
 import { ChatMarkdownRender } from '../markdown/ChatMarkdownRender.js'
@@ -1042,6 +1042,7 @@ const DivisionSettings = () => {
 
 	const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
 	const [allUpdateStatus, setAllUpdateStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+	const [supabaseSyncStatus, setSupabaseSyncStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
 	const [projectUpdateStatus, setProjectUpdateStatus] = useState<Record<string, 'idle' | 'loading' | 'success' | 'error'>>({});
 
 	const handleUpdateAll = async () => {
@@ -1049,6 +1050,13 @@ const DivisionSettings = () => {
 		const result = await divisionProjectService.fetchAndUpdateAllFromAPI();
 		setAllUpdateStatus(result.success ? 'success' : 'error');
 		setTimeout(() => setAllUpdateStatus('idle'), 2000);
+	};
+
+	const handleSupabaseSync = async () => {
+		setSupabaseSyncStatus('loading');
+		const result = await divisionProjectService.fetchFromSupabase();
+		setSupabaseSyncStatus(result.success ? 'success' : 'error');
+		setTimeout(() => setSupabaseSyncStatus('idle'), 2000);
 	};
 
 	const handleUpdateProject = async (projectId: string) => {
@@ -1102,21 +1110,35 @@ const DivisionSettings = () => {
 
 	return (
 		<div className="flex flex-col gap-4">
-			{/* agents.json section header with Update All button */}
+			{/* agents.json section header with Update All + Supabase Sync buttons */}
 			<div className="flex items-center justify-between">
 				<span className="text-xs text-void-fg-3 uppercase font-semibold tracking-wide">Configured Projects</span>
-				<button
-					onClick={handleUpdateAll}
-					disabled={allUpdateStatus === 'loading'}
-					className="flex items-center gap-1 text-xs text-void-fg-3 hover:text-void-fg-1 transition-colors disabled:opacity-50"
-					title="Update all projects from Division API"
-				>
-					{allUpdateStatus === 'success' ? <Check className='stroke-green-500 size-3' />
-						: allUpdateStatus === 'error' ? <X className='stroke-red-500 size-3' />
-							: allUpdateStatus === 'loading' ? <Loader2 className='size-3 animate-spin' />
-								: <RefreshCw className='size-3' />}
-					<span>Update</span>
-				</button>
+				<div className="flex items-center gap-3">
+					<button
+						onClick={handleSupabaseSync}
+						disabled={supabaseSyncStatus === 'loading'}
+						className="flex items-center gap-1 text-xs text-void-fg-3 hover:text-void-fg-1 transition-colors disabled:opacity-50"
+						title="Sync all projects from Supabase"
+					>
+						{supabaseSyncStatus === 'success' ? <Check className='stroke-green-500 size-3' />
+							: supabaseSyncStatus === 'error' ? <X className='stroke-red-500 size-3' />
+								: supabaseSyncStatus === 'loading' ? <Loader2 className='size-3 animate-spin' />
+									: <CloudDownload className='size-3' />}
+						<span>Supabase Sync</span>
+					</button>
+					<button
+						onClick={handleUpdateAll}
+						disabled={allUpdateStatus === 'loading'}
+						className="flex items-center gap-1 text-xs text-void-fg-3 hover:text-void-fg-1 transition-colors disabled:opacity-50"
+						title="Update all projects from Division API"
+					>
+						{allUpdateStatus === 'success' ? <Check className='stroke-green-500 size-3' />
+							: allUpdateStatus === 'error' ? <X className='stroke-red-500 size-3' />
+								: allUpdateStatus === 'loading' ? <Loader2 className='size-3 animate-spin' />
+									: <RefreshCw className='size-3' />}
+						<span>Update</span>
+					</button>
+				</div>
 			</div>
 
 			{projects.map((project) => {

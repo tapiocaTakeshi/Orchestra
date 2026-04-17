@@ -67,6 +67,9 @@ import './fileService.js'
 // register division project service (.division/agents.json)
 import './divisionProjectService.js'
 
+// register division editor actions (Supabase sync button on agents.json)
+import './divisionEditorActions.js'
+
 // register source control management
 import './voidSCMService.js'
 

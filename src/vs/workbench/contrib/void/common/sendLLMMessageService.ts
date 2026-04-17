@@ -28,6 +28,7 @@ export interface ILLMMessageService {
 	openAICompatibleList: (params: ServiceModelListParams<OpenaiCompatibleModelResponse>) => void;
 	registerFileOperationHandler: (handler: (operations: FileOperationItem[]) => Promise<void>) => void;
 	registerCommandOperationHandler: (handler: (commands: CommandOperationItem[]) => Promise<void>) => void;
+	approveOrchestration: (editedOutputs?: Array<{ mdFileName: string; mdContent: string }>) => Promise<void>;
 }
 
 
@@ -250,6 +251,12 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 
 	registerCommandOperationHandler(handler: (commands: CommandOperationItem[]) => Promise<void>) {
 		this._commandOperationHandler = handler;
+	}
+
+	async approveOrchestration(editedOutputs?: Array<{ mdFileName: string; mdContent: string }>) {
+		const workspaceFolders = this.workspaceContextService.getWorkspace().folders;
+		const workspaceFolderPath = workspaceFolders.length > 0 ? workspaceFolders[0].uri.fsPath : undefined;
+		await this.channel.call('approveOrchestration', { editedOutputs, workspaceFolderPath });
 	}
 }
 
