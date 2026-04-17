@@ -289,7 +289,7 @@ export interface IChatThreadService {
 	rejectLatestToolRequest(threadId: string): void;
 
 	// flow review approve/reject
-	approveFlowReview(threadId: string): void;
+	approveFlowReview(threadId: string, editedOutputs?: Array<{ mdFileName: string; mdContent: string }>): void;
 	rejectFlowReview(threadId: string): void;
 
 	// jump to history
@@ -610,20 +610,20 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		this._setStreamState(threadId, undefined)
 	}
 
-	approveFlowReview(threadId: string) {
+	approveFlowReview(threadId: string, editedOutputs?: Array<{ mdFileName: string; mdContent: string }>) {
 		const thread = this.state.allThreads[threadId]
 		if (!thread) return
 
 		const lastMsg = thread.messages[thread.messages.length - 1]
 		if (!(lastMsg.role === 'flow_review' && lastMsg.status === 'pending')) return
 
-		// Update the flow_review message status to 'approved'
 		this._editMessageInThread(threadId, thread.messages.length - 1, { ...lastMsg, status: 'approved' })
 
-		// Send a continuation message to resume orchestration
-		const resumeMessage = `[FLOW_REVIEW_APPROVED] セッション ${lastMsg.sessionId} のタスク ${lastMsg.completedTaskIndex + 1}/${lastMsg.totalTasks} を承認しました。次のタスクに進みます。`
+		let resumeMessage = `[FLOW_REVIEW_APPROVED]`
+		if (editedOutputs && editedOutputs.length > 0) {
+			resumeMessage += `[FLOW_EDITED_OUTPUTS]${JSON.stringify(editedOutputs)}`
+		}
 
-		// Trigger a new message that will be picked up by the Division API resume logic
 		this.addUserMessageAndStreamResponse({ userMessage: resumeMessage, threadId })
 	}
 

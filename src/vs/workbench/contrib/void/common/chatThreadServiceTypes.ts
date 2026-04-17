@@ -5,7 +5,7 @@
 
 import { URI } from '../../../../base/common/uri.js';
 import { VoidFileSnapshot } from './editCodeServiceTypes.js';
-import { AnthropicReasoning, RawToolParamsObj } from './sendLLMMessageTypes.js';
+import { AnthropicReasoning, FlowOutputEntry, RawToolParamsObj } from './sendLLMMessageTypes.js';
 import { ToolCallParams, ToolName, ToolResult } from './toolsServiceTypes.js';
 
 export type ToolMessage<T extends ToolName> = {
@@ -70,14 +70,15 @@ export type ChatMessage =
 	| CheckpointEntry
 	| {
 		role: 'flow_review';
-		flowRole: string; // e.g. 'design', 'search', 'writing', 'planning'
-		mdFileName: string; // e.g. 'DESIGN.md'
-		mdFilePath: string; // full path to the saved MD
-		mdContent: string; // content of the MD file for preview
-		sessionId: string; // orchestration session ID
-		completedTaskIndex: number; // index of the task that just completed
-		totalTasks: number; // total number of tasks
-		status: 'pending' | 'approved' | 'rejected'; // review status
+		flowRole: string;
+		mdFileName: string;
+		mdFilePath: string;
+		mdContent: string;
+		sessionId: string;
+		completedTaskIndex: number;
+		totalTasks: number;
+		status: 'pending' | 'approved' | 'rejected';
+		allFlowOutputs?: FlowOutputEntry[];
 	}
 
 

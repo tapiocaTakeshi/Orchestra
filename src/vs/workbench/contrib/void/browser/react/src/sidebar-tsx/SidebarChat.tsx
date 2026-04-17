@@ -20,6 +20,7 @@ import { ModelDropdown, } from '../void-settings-tsx/ModelDropdown.js';
 import { PastThreadsList } from './SidebarThreadSelector.js';
 import { VOID_CTRL_L_ACTION_ID } from '../../../actionIDs.js';
 import { VOID_OPEN_SETTINGS_ACTION_ID } from '../../../voidSettingsPane.js';
+// import { VOID_OPEN_ROLE_OUTPUT_ACTION_ID } from '../../../roleOutputPane.js';
 import { AgentRole, ChatMode, displayInfoOfProviderName, FeatureName, isFeatureNameDisabled, RoleAssignment } from '../../../../../../../workbench/contrib/void/common/voidSettingsTypes.js';
 import { ICommandService } from '../../../../../../../platform/commands/common/commands.js';
 import { WarningBox } from '../void-settings-tsx/WarningBox.js';
@@ -1126,22 +1127,16 @@ const ToolHeaderWrapper = ({
 }: ToolHeaderParams) => {
 
 	const [isOpen_, setIsOpen] = useState(false);
-	// Default to collapsed (code content hidden) unless explicitly set
 	const isExpanded = isOpen !== undefined ? isOpen : isOpen_
 
-	const isDropdown = children !== undefined // null ALLOWS dropdown
+	const isDropdown = children !== undefined
 	const isClickable = !!(isDropdown || onClick)
 
 	const isDesc1Clickable = !!desc1OnClick
 
-	// Determine accent color based on status
-	const accentColor = isError ? 'var(--void-warning)'
-		: isRejected ? 'var(--void-fg-4)'
-		: 'var(--vscode-focusBorder)'
-
 	const desc1HTML = <span
 		className={`text-void-fg-4 text-[11px] truncate ml-1.5
-			${isDesc1Clickable ? 'cursor-pointer hover:text-void-fg-2 transition-colors duration-150' : ''}
+			${isDesc1Clickable ? 'cursor-pointer hover:text-void-fg-2' : ''}
 		`}
 		onClick={desc1OnClick}
 		{...desc1Info ? {
@@ -1152,93 +1147,38 @@ const ToolHeaderWrapper = ({
 		} : {}}
 	>{desc1}</span>
 
-	return (<div className=''>
-		<div
-			style={{
-				background: 'var(--void-bg-2)',
-				border: '1px solid var(--void-border-1)',
-				borderLeft: `2px solid ${accentColor}`,
-				borderRadius: '6px',
-				overflow: 'hidden',
-				transition: 'border-color 0.2s ease',
-			}}
-			className={className}
-		>
-			{/* header */}
-			<div className={`select-none flex items-center min-h-[28px] px-2.5 py-1`}>
-				<div className={`flex items-center w-full gap-x-2 overflow-hidden justify-between ${isRejected ? 'line-through opacity-50' : ''}`}>
-					{/* left */}
-					<div // container for if desc1 is clickable
-						className='flex items-center overflow-hidden'
+	return (<div className={className}>
+		<div className={`select-none flex items-center min-h-[24px] py-0.5`}>
+			<div className={`flex items-center w-full gap-x-2 overflow-hidden justify-between ${isRejected ? 'line-through opacity-50' : ''}`}>
+				<div className='flex items-center overflow-hidden'>
+					<div className={`flex items-center min-w-0 overflow-hidden grow ${isClickable ? 'cursor-pointer hover:text-void-fg-1' : ''}`}
+						onClick={() => {
+							if (isDropdown) { setIsOpen(v => !v); }
+							if (onClick) { onClick(); }
+						}}
 					>
-						{/* title eg "> Edited File" */}
-						<div className={`
-							flex items-center min-w-0 overflow-hidden grow
-							${isClickable ? 'cursor-pointer hover:brightness-125 transition-all duration-150' : ''}
-						`}
-							onClick={() => {
-								if (isDropdown) { setIsOpen(v => !v); }
-								if (onClick) { onClick(); }
-							}}
-						>
-							{isDropdown && (<ChevronRight
-								className={`
-								text-void-fg-4 mr-1 h-3.5 w-3.5 flex-shrink-0 transition-transform duration-100 ease-[cubic-bezier(0.4,0,0.2,1)]
-								${isExpanded ? 'rotate-90' : ''}
-							`}
-							/>)}
-							<span className="text-void-fg-2 text-[12px] font-medium flex-shrink-0">{title}</span>
-
-							{!isDesc1Clickable && desc1HTML}
-						</div>
-						{isDesc1Clickable && desc1HTML}
+						{isDropdown && (<ChevronRight
+							className={`text-void-fg-4 mr-1 h-3 w-3 flex-shrink-0 transition-transform duration-100 ${isExpanded ? 'rotate-90' : ''}`}
+						/>)}
+						<span className="text-void-fg-3 text-[12px] flex-shrink-0">{title}</span>
+						{!isDesc1Clickable && desc1HTML}
 					</div>
+					{isDesc1Clickable && desc1HTML}
+				</div>
 
-					{/* right */}
-					<div className="flex items-center gap-x-2 flex-shrink-0">
-
-						{info && <CircleEllipsis
-							className='text-void-fg-4 opacity-60 flex-shrink-0'
-							size={13}
-							data-tooltip-id='void-tooltip'
-							data-tooltip-content={info}
-							data-tooltip-place='top-end'
-						/>}
-
-						{isError && <AlertTriangle
-							className='text-void-warning opacity-90 flex-shrink-0'
-							size={13}
-							data-tooltip-id='void-tooltip'
-							data-tooltip-content={'Error running tool'}
-							data-tooltip-place='top'
-						/>}
-						{isRejected && <Ban
-							className='text-void-fg-4 opacity-90 flex-shrink-0'
-							size={13}
-							data-tooltip-id='void-tooltip'
-							data-tooltip-content={'Canceled'}
-							data-tooltip-place='top'
-						/>}
-						{desc2 && <span className="text-void-fg-4 text-[11px]" onClick={desc2OnClick}>
-							{desc2}
-						</span>}
-						{numResults !== undefined && (
-							<span className="text-void-fg-4 text-[10px] bg-void-bg-3 px-1.5 py-0.5 rounded">
-								{`${numResults}${hasNextPage ? '+' : ''}`}
-							</span>
-						)}
-					</div>
+				<div className="flex items-center gap-x-1.5 flex-shrink-0">
+					{isError && <AlertTriangle className='text-void-warning flex-shrink-0' size={12} />}
+					{isRejected && <Ban className='text-void-fg-4 flex-shrink-0' size={12} />}
+					{desc2 && <span className="text-void-fg-4 text-[11px]" onClick={desc2OnClick}>{desc2}</span>}
+					{numResults !== undefined && (
+						<span className="text-void-fg-4 text-[10px]">{`${numResults}${hasNextPage ? '+' : ''}`}</span>
+					)}
 				</div>
 			</div>
-			{/* children - collapsed by default, code content hidden */}
-			{<div
-				className={`overflow-hidden transition-all duration-200 ease-in-out ${isExpanded ? 'opacity-100 py-1' : 'max-h-0 opacity-0'}
-					text-void-fg-4 rounded-sm overflow-x-auto
-				  `}
-			>
-				{children}
-			</div>}
 		</div>
+		{<div className={`overflow-hidden ${isExpanded ? 'py-0.5' : 'max-h-0 opacity-0'} text-void-fg-4 overflow-x-auto`}>
+			{children}
+		</div>}
 		{bottomChildren}
 	</div>);
 };
@@ -1514,11 +1454,10 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 	const isMsgAfterCheckpoint = currCheckpointIdx !== undefined && currCheckpointIdx === messageIdx - 1
 
 	return <div
-		// align chatbubble according to role
 		className={`
-        relative ml-auto
+        relative
         ${mode === 'edit' ? 'w-full max-w-full'
-				: mode === 'display' ? `self-end w-fit max-w-full whitespace-pre-wrap` : '' // user words should be pre
+				: mode === 'display' ? `w-full max-w-full whitespace-pre-wrap` : ''
 			}
 
         ${isCheckpointGhost && !isMsgAfterCheckpoint ? 'opacity-50 pointer-events-none' : ''}
@@ -1527,17 +1466,10 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 		onMouseLeave={() => setIsHovered(false)}
 	>
 		<div
-			// style chatbubble according to role - card style
-			style={mode === 'display' ? {
-				background: 'linear-gradient(135deg, var(--void-bg-1) 0%, color-mix(in srgb, var(--void-bg-1) 90%, var(--vscode-focusBorder) 10%) 100%)',
-				border: '1px solid color-mix(in srgb, var(--void-border-1) 60%, var(--vscode-focusBorder) 40%)',
-				borderRadius: '12px',
-				boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-			} : {}}
 			className={`
             text-left max-w-full
             ${mode === 'edit' ? ''
-					: mode === 'display' ? 'p-3 flex flex-col text-void-fg-1 overflow-x-auto cursor-pointer' : ''
+					: mode === 'display' ? 'py-1 flex flex-col text-void-fg-1 overflow-x-auto cursor-pointer font-medium' : ''
 				}
         `}
 			onClick={() => { if (mode === 'display') { onOpenEdit() } }}
@@ -1545,17 +1477,15 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 			{chatbubbleContents}
 		</div>
 
-
-
 		<div
-			className="absolute -top-1 -right-1 translate-x-0 -translate-y-0 z-1"
+			className="absolute top-0 right-0 z-1"
 		>
 			<EditSymbol
-				size={18}
+				size={16}
 				className={`
                     cursor-pointer
                     p-[2px]
-                    bg-void-bg-1 border border-void-border-1 rounded-md
+                    text-void-fg-3 hover:text-void-fg-1
                     transition-opacity duration-200 ease-in-out
                     ${isHovered || (isFocused && mode === 'edit') ? 'opacity-100' : 'opacity-0'}
                 `}
@@ -1568,8 +1498,6 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 				}}
 			/>
 		</div>
-
-
 	</div>
 
 }
@@ -1768,169 +1696,32 @@ const FlowIndicator = ({ messages, isRunning, reasoningSoFar }: {
 
 	if (!isRunning || phases.length === 0) return null;
 
-	// For non-Division providers, show single model name
-	const singleModelLabel = !isDivision && modelSelection
-		? modelSelection.modelName
-		: null;
+	const activePhase = phases.find(p => p.status === 'active');
+	if (!activePhase) return null;
 
 	return (
-		<div style={{
-			display: 'flex', alignItems: 'center', gap: '6px',
-			padding: '4px 0',
-			flexWrap: 'wrap',
-		}}>
-			{singleModelLabel && (
-				<span style={{
-					fontSize: '10px',
-					color: 'var(--void-fg-3)',
-					background: 'var(--void-bg-2)',
-					border: '1px solid var(--void-border-1)',
-					borderRadius: '3px',
-					padding: '1px 5px',
-					marginRight: '2px',
-					whiteSpace: 'nowrap',
-				}}>{singleModelLabel}</span>
-			)}
-			{phases.map((phase, i) => (
-				<React.Fragment key={phase.id}>
-					{i > 0 && (
-						<span style={{ color: 'var(--void-fg-4)', fontSize: '10px' }}>→</span>
-					)}
-					<span style={{
-						display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '1px',
-					}}>
-						<span style={{
-							fontSize: '11px',
-							color: phase.status === 'active' ? 'var(--void-fg-1)' : 'var(--void-fg-3)',
-							fontWeight: phase.status === 'active' ? 600 : 400,
-							opacity: phase.status === 'done' ? 0.5 : 1,
-						}}>
-							{phase.label}{phase.status === 'active' ? '...' : ''}
-						</span>
-						{phase.modelName && (
-							<span style={{
-								fontSize: '9px',
-								color: 'var(--void-fg-4)',
-								opacity: phase.status === 'done' ? 0.4 : 0.7,
-								whiteSpace: 'nowrap',
-							}}>{phase.modelName}</span>
-						)}
-					</span>
-				</React.Fragment>
-			))}
+		<div className="text-[11px] text-void-fg-4 py-1">
+			{activePhase.label}...
 		</div>
 	);
 };
 const DivisionOrchestrationComponent = ({ response, chatMessageLocation }: { response: any, chatMessageLocation: ChatMessageLocation }) => {
 	const tasks = response.tasks || [];
-	const status = response.status || 'success';
-	const totalDuration = response.totalDurationMs;
-	const [showInput, setShowInput] = useState(false);
 
 	return (
-		<div className="flex flex-col gap-4 my-2">
-
-			{/* Task Generation Flow Card */}
-			<div style={{
-				background: 'var(--void-bg-1)',
-				border: '1px solid var(--void-border-1)',
-				borderRadius: '8px',
-				padding: '12px',
-				boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-			}}>
-				<div className="flex items-center gap-2 mb-3 pb-2 border-b border-void-border-1">
-					<div className={`w-2 h-2 rounded-full ${status === 'error' ? 'bg-red-500' : 'bg-green-500'}`} />
-					<span className="text-[11px] font-bold text-void-fg-2 uppercase tracking-wide">
-						Task Generation Flow
-					</span>
-					{totalDuration !== undefined && (
-						<span className="text-[10px] text-void-fg-4 ml-auto">
-							{totalDuration}ms
-						</span>
-					)}
-				</div>
-
-				{response.input && (
-					<div className="mb-1">
-						<button
-							onClick={() => setShowInput(!showInput)}
-							className="text-[11px] text-void-fg-4 hover:text-void-fg-2 transition-colors flex items-center gap-1"
-						>
-							<ChevronRight size={10} className={`transform transition-transform ${showInput ? 'rotate-90' : ''}`} />
-							{showInput ? 'Hide' : 'Show'} Context Input
-						</button>
-						{showInput && (
-							<div className="mt-2 p-2 bg-void-bg-2 rounded text-[11px] text-void-fg-4 font-mono overflow-auto max-h-[200px] whitespace-pre-wrap border border-void-border-1">
-								{response.input}
-							</div>
-						)}
-					</div>
-				)}
-			</div>
-
-			{/* Task Execution Cards */}
+		<div className="flex flex-col gap-2 my-1">
 			{tasks.map((task: any, i: number) => (
-				<div key={i} style={{
-					background: 'var(--void-bg-1)',
-					border: '1px solid var(--void-border-1)',
-					borderRadius: '8px',
-					padding: '12px',
-					boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-					position: 'relative',
-					overflow: 'hidden',
-				}}>
-					{/* Left accent strip */}
-					<div style={{
-						position: 'absolute', top: 0, bottom: 0, left: 0, width: '3px',
-						background: 'var(--vscode-focusBorder)', opacity: 0.7,
-					}} />
-
-					<div className="flex items-center gap-2 mb-3 pb-2 border-b border-void-border-1 pl-2">
-						<span className="text-[11px] font-bold text-void-fg-2 uppercase tracking-wide">
-							Task Execution Flow {i + 1}
-						</span>
-					</div>
-
-					<div className="pl-2">
-						<ToolHeaderWrapper
-							title={task.role ? (task.role.charAt(0).toUpperCase() + task.role.slice(1)) : 'Task'}
-							desc1={
-								<div className="flex items-center gap-1.5 text-[11px] text-void-fg-4">
-									<span>{task.provider || 'AI'}</span>
-									<span>•</span>
-									<span>{task.model || 'Model'}</span>
-									{task.durationMs !== undefined && (
-										<>
-											<span>•</span>
-											<span>{task.durationMs}ms</span>
-										</>
-									)}
-								</div>
-							}
-							isOpen={task.status === 'error' || tasks.length === 1}
-						>
-							<ToolChildrenWrapper>
-								<div className="flex flex-col gap-2 py-1">
-									{task.reason && (
-										<div className="text-[12px] italic text-void-fg-3">
-											{task.reason}
-										</div>
-									)}
-									{task.output && (
-										<div className="text-[13px] leading-snug">
-											<ChatMarkdownRender
-												string={task.output}
-												chatMessageLocation={chatMessageLocation}
-												isApplyEnabled={true}
-												isLinkDetectionEnabled={true}
-											/>
-										</div>
-									)}
-									{!task.output && !task.reason && <div className="text-[12px] text-void-fg-4 italic">No output</div>}
-								</div>
-							</ToolChildrenWrapper>
-						</ToolHeaderWrapper>
-					</div>
+				<div key={i}>
+					{task.output ? (
+						<ProseWrapper>
+							<ChatMarkdownRender
+								string={task.output}
+								chatMessageLocation={chatMessageLocation}
+								isApplyEnabled={true}
+								isLinkDetectionEnabled={true}
+							/>
+						</ProseWrapper>
+					) : null}
 				</div>
 			))}
 		</div>
@@ -1995,29 +1786,7 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 	const isEmpty = !chatMessage.displayContent && !chatMessage.reasoning
 	if (isEmpty) return null
 
-	return <div style={{
-		background: 'linear-gradient(135deg, var(--void-bg-2) 0%, color-mix(in srgb, var(--void-bg-2) 95%, var(--vscode-focusBorder) 5%) 100%)',
-		border: '1px solid var(--void-border-1)',
-		borderLeft: '3px solid var(--vscode-focusBorder)',
-		borderRadius: '8px',
-		padding: '12px 14px',
-		boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-	}}>
-		{/* model label header */}
-		{modelLabel && (
-			<div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', paddingBottom: '6px', borderBottom: '1px solid var(--void-border-1)' }}>
-				<div style={{
-					width: '6px', height: '6px', borderRadius: '50%',
-					background: 'var(--vscode-focusBorder)',
-				}} />
-				<span style={{
-					fontSize: '11px',
-					color: 'var(--void-fg-3)',
-					fontWeight: 500,
-					letterSpacing: '0.3px',
-				}}>{modelLabel}</span>
-			</div>
-		)}
+	return <div className="py-1">
 		{/* reasoning token */}
 		{hasReasoning &&
 			<div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
@@ -3285,14 +3054,36 @@ const FlowReviewComponent = ({ chatMessage, isCheckpointGhost }: {
 }) => {
 	const accessor = useAccessor()
 	const chatThreadsService = accessor.get('IChatThreadService')
-	const [isExpanded, setIsExpanded] = useState(true)
+
+	const flowOutputs = chatMessage.allFlowOutputs || [
+		{ role: chatMessage.flowRole, mdFileName: chatMessage.mdFileName, mdFilePath: chatMessage.mdFilePath, mdContent: chatMessage.mdContent }
+	]
+
+	const [editedContents, setEditedContents] = useState<Record<string, string>>(() => {
+		const initial: Record<string, string> = {}
+		for (const o of flowOutputs) {
+			initial[o.mdFileName] = o.mdContent
+		}
+		return initial
+	})
+
+	const [activeTab, setActiveTab] = useState(flowOutputs[0]?.mdFileName || '')
+	const [isEditing, setIsEditing] = useState(false)
+
+	const { status } = chatMessage
+	const currentIdx = chatMessage.completedTaskIndex
+	const totalTasks = chatMessage.totalTasks
 
 	const onApprove = useCallback(() => {
 		try {
 			const threadId = chatThreadsService.state.currentThreadId
-			chatThreadsService.approveFlowReview(threadId)
+			const editedOutputs = flowOutputs.map(o => ({
+				mdFileName: o.mdFileName,
+				mdContent: editedContents[o.mdFileName] ?? o.mdContent,
+			}))
+			chatThreadsService.approveFlowReview(threadId, editedOutputs)
 		} catch (e) { console.error('Error approving flow review:', e) }
-	}, [chatThreadsService])
+	}, [chatThreadsService, flowOutputs, editedContents])
 
 	const onReject = useCallback(() => {
 		try {
@@ -3301,218 +3092,91 @@ const FlowReviewComponent = ({ chatMessage, isCheckpointGhost }: {
 		} catch (e) { console.error('Error rejecting flow review:', e) }
 	}, [chatThreadsService])
 
-	const { status } = chatMessage
-
-	// Flow phases for the progress stepper
-	const flowPhases = [
-		{ key: 'design', label: 'Design', icon: '🎨', file: 'DESIGN.md' },
-		{ key: 'search', label: 'Search', icon: '🔍', file: 'SEARCH.md' },
-		{ key: 'research', label: 'Search', icon: '🔍', file: 'SEARCH.md' },
-		{ key: 'writing', label: 'Writing', icon: '✍️', file: 'WRITING.md' },
-		{ key: 'planning', label: 'Planning', icon: '📋', file: 'PLANNING.md' },
-		{ key: 'coding', label: 'Coding', icon: '💻', file: '' },
-		{ key: 'coder', label: 'Coding', icon: '💻', file: '' },
-	]
-
-	// Determine which phases exist in this session and mark their status
-	const currentFlowKey = chatMessage.flowRole.toLowerCase()
-	const currentIdx = chatMessage.completedTaskIndex
-	const totalTasks = chatMessage.totalTasks
-
-	// Build a simplified stepper: show the current task and its neighbors
-	const allPhaseKeys = ['design', 'search', 'writing', 'planning', 'coding']
-	const currentPhase = flowPhases.find(p => p.key === currentFlowKey)
-
-	// Container styles based on status
-	const containerStyles = {
-		pending: 'border border-[var(--vscode-focusBorder)] bg-[var(--vscode-editor-background)]',
-		approved: 'border border-green-500/40 bg-green-500/5',
-		rejected: 'border border-red-500/40 bg-red-500/5 opacity-70',
-	}
+	const activeOutput = flowOutputs.find(o => o.mdFileName === activeTab) || flowOutputs[0]
 
 	return (
-		<div className={`${isCheckpointGhost ? 'opacity-50 pointer-events-none' : ''} my-3`}>
-			<div className={`rounded-lg overflow-hidden ${containerStyles[status]}`}>
-
-				{/* ===== Header ===== */}
-				<div className="px-4 pt-3 pb-2">
-					<div className="flex items-center justify-between">
-						<div className="flex items-center gap-2">
-							<span className="text-base">📝</span>
-							<span className="font-semibold text-sm text-[var(--vscode-foreground)]">
-								ドキュメントレビュー
-							</span>
-						</div>
-						{/* Status badge */}
-						{status === 'pending' ? (
-							<span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-[var(--vscode-focusBorder)]/20 text-[var(--vscode-focusBorder)] border border-[var(--vscode-focusBorder)]/40">
-								レビュー待ち
-							</span>
-						) : status === 'approved' ? (
-							<span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-green-500/20 text-green-400 border border-green-500/40">
-								✓ 承認済み
-							</span>
-						) : (
-							<span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-red-500/20 text-red-400 border border-red-500/40">
-								✕ 却下
-							</span>
-						)}
-					</div>
+		<div className={`${isCheckpointGhost ? 'opacity-50 pointer-events-none' : ''} my-2`}>
+			{/* Tabs */}
+			{flowOutputs.length > 1 && (
+				<div className="flex gap-1 pb-1 flex-wrap">
+					{flowOutputs.map(o => (
+						<button
+							key={o.mdFileName}
+							onClick={() => setActiveTab(o.mdFileName)}
+							className={`text-[11px] px-2 py-0.5 rounded cursor-pointer ${
+								activeTab === o.mdFileName
+									? 'text-void-fg-1 bg-void-bg-3'
+									: 'text-void-fg-4 hover:text-void-fg-2'
+							}`}
+						>
+							{o.mdFileName}
+						</button>
+					))}
 				</div>
+			)}
 
-				{/* ===== Progress Stepper ===== */}
-				<div className="px-4 py-2">
-					<div className="flex items-center gap-0.5">
-						{allPhaseKeys.map((phaseKey, idx) => {
-							const phase = flowPhases.find(p => p.key === phaseKey)
-							if (!phase) return null
+			{flowOutputs.length === 1 && (
+				<div className="text-void-fg-3 text-[12px] pb-1">{activeOutput?.mdFileName}</div>
+			)}
 
-							const isCurrent = phaseKey === currentFlowKey
-							const phaseIdx = allPhaseKeys.indexOf(phaseKey)
-							const currentPhaseIdx = allPhaseKeys.indexOf(currentFlowKey)
-							const isCompleted = phaseIdx < currentPhaseIdx || (phaseIdx === currentPhaseIdx && status === 'approved')
-							const isUpcoming = phaseIdx > currentPhaseIdx
-
-							return (
-								<Fragment key={phaseKey}>
-									{idx > 0 && (
-										<div className={`flex-1 h-[2px] mx-0.5 rounded-full transition-colors ${
-											isCompleted ? 'bg-green-500/60' :
-											isCurrent && status === 'pending' ? 'bg-[var(--vscode-focusBorder)]/40' :
-											'bg-[var(--vscode-widget-border)]/30'
-										}`} />
-									)}
-									<div className="flex flex-col items-center gap-1 min-w-[40px]">
-										<div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${
-											isCompleted ? 'bg-green-500/30 text-green-400 border border-green-500/50' :
-											isCurrent && status === 'pending' ? 'bg-[var(--vscode-focusBorder)]/30 text-[var(--vscode-focusBorder)] border-2 border-[var(--vscode-focusBorder)] scale-110' :
-											isCurrent && status === 'rejected' ? 'bg-red-500/30 text-red-400 border border-red-500/50' :
-											'bg-[var(--vscode-widget-border)]/20 text-[var(--vscode-foreground)]/40 border border-[var(--vscode-widget-border)]/30'
-										}`}>
-											{isCompleted ? '✓' : phase.icon}
-										</div>
-										<span className={`text-[9px] font-medium leading-none ${
-											isCurrent ? 'text-[var(--vscode-foreground)]' :
-											isCompleted ? 'text-green-400/80' :
-											'text-[var(--vscode-foreground)]/30'
-										}`}>
-											{phase.label}
-										</span>
-									</div>
-								</Fragment>
-							)
-						})}
+			{/* Content */}
+			{activeOutput && (
+				status === 'pending' && isEditing ? (
+					<textarea
+						className="w-full min-h-[200px] p-2 text-[12px] font-mono bg-void-bg-1 text-void-fg-2 border border-void-border-1 rounded resize-y outline-none"
+						value={editedContents[activeOutput.mdFileName] ?? activeOutput.mdContent}
+						onChange={(e) => {
+							setEditedContents(prev => ({ ...prev, [activeOutput.mdFileName]: e.target.value }))
+						}}
+					/>
+				) : (
+					<div className="pb-1">
+						<ProseWrapper>
+							<ChatMarkdownRender
+								string={editedContents[activeOutput.mdFileName] ?? activeOutput.mdContent}
+								chatMessageLocation={{ threadId: chatThreadsService.state.currentThreadId, messageIdx: 0 }}
+								isApplyEnabled={true}
+								isLinkDetectionEnabled={true}
+							/>
+						</ProseWrapper>
 					</div>
-				</div>
+				)
+			)}
 
-				{/* ===== Document Preview ===== */}
-				<div className="px-4 py-1">
+			{/* Progress */}
+			<div className="text-void-fg-4 text-[10px] py-0.5">{currentIdx + 1}/{totalTasks}</div>
+
+			{/* Actions */}
+			{status === 'pending' && (
+				<div className="flex gap-2 pt-1">
 					<button
-						onClick={() => setIsExpanded(!isExpanded)}
-						className="w-full text-left"
+						onClick={onApprove}
+						className="text-[12px] text-void-fg-3 hover:text-void-fg-1 cursor-pointer"
 					>
-						<div className={`rounded-md border transition-colors ${
-							isExpanded
-								? 'border-[var(--vscode-focusBorder)]/40 bg-[var(--vscode-editor-background)]'
-								: 'border-[var(--vscode-widget-border)]/30 bg-[var(--vscode-editor-background)] hover:border-[var(--vscode-focusBorder)]/30'
-						}`}>
-							{/* Doc header */}
-							<div className="flex items-center justify-between px-3 py-2">
-								<div className="flex items-center gap-2">
-									<svg className="w-4 h-4 opacity-60" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-										<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-										<polyline points="14 2 14 8 20 8" />
-										<line x1="16" y1="13" x2="8" y2="13" />
-										<line x1="16" y1="17" x2="8" y2="17" />
-									</svg>
-									<span className="text-xs font-semibold text-[var(--vscode-foreground)]">
-										{chatMessage.mdFileName}
-									</span>
-								</div>
-								<span className="text-[10px] opacity-40">
-									{isExpanded ? '▼ 折りたたむ' : '▶ 内容を表示'}
-								</span>
-							</div>
-
-							{/* Doc content */}
-							{isExpanded && (
-								<div className="border-t border-[var(--vscode-widget-border)]/20 px-3 py-2 max-h-48 overflow-y-auto">
-									<pre className="whitespace-pre-wrap font-mono text-[10px] leading-[1.6] text-[var(--vscode-foreground)]/70">
-										{chatMessage.mdContent.length > 2000
-											? chatMessage.mdContent.substring(0, 2000) + '\n\n... (truncated)'
-											: chatMessage.mdContent}
-									</pre>
-								</div>
-							)}
-						</div>
+						承認して実行
+					</button>
+					<span className="text-void-fg-4 text-[12px]">|</span>
+					<button
+						onClick={() => setIsEditing(!isEditing)}
+						className="text-[12px] text-void-fg-3 hover:text-void-fg-1 cursor-pointer"
+					>
+						{isEditing ? 'プレビュー' : '編集'}
+					</button>
+					<span className="text-void-fg-4 text-[12px]">|</span>
+					<button
+						onClick={onReject}
+						className="text-[12px] text-void-fg-3 hover:text-void-fg-1 cursor-pointer"
+					>
+						やり直す
 					</button>
 				</div>
-
-				{/* ===== Task Progress ===== */}
-				<div className="px-4 pt-1 pb-1">
-					<div className="flex items-center gap-2">
-						<div className="flex-1 h-1.5 rounded-full bg-[var(--vscode-widget-border)]/20 overflow-hidden">
-							<div
-								className={`h-full rounded-full transition-all duration-500 ${
-									status === 'approved' ? 'bg-green-500/70' :
-									status === 'rejected' ? 'bg-red-500/70' :
-									'bg-[var(--vscode-focusBorder)]/70'
-								}`}
-								style={{ width: `${((currentIdx + (status === 'approved' ? 1 : 0)) / totalTasks) * 100}%` }}
-							/>
-						</div>
-						<span className="text-[10px] text-[var(--vscode-foreground)]/50 font-mono whitespace-nowrap">
-							{currentIdx + (status === 'approved' ? 1 : 0)}/{totalTasks}
-						</span>
-					</div>
-				</div>
-
-				{/* ===== Action Buttons ===== */}
-				{status === 'pending' && (
-					<div className="px-4 pt-2 pb-3">
-						<div className="flex gap-2">
-							<button
-								onClick={onApprove}
-								className="flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-all duration-200 bg-green-600 hover:bg-green-500 active:bg-green-700 text-white shadow-sm hover:shadow-md flex items-center justify-center gap-2"
-							>
-								承認して次へ進む
-								<svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-									<polyline points="9 18 15 12 9 6" />
-								</svg>
-							</button>
-							<button
-								onClick={onReject}
-								className="px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 border border-[var(--vscode-widget-border)]/50 text-[var(--vscode-foreground)]/70 hover:text-[var(--vscode-foreground)] hover:border-[var(--vscode-widget-border)] hover:bg-[var(--vscode-editor-background)]"
-							>
-								やり直す
-							</button>
-						</div>
-					</div>
-				)}
-
-				{/* ===== Completed Status Message ===== */}
-				{status === 'approved' && (
-					<div className="px-4 pt-1 pb-3">
-						<div className="flex items-center gap-2 text-xs text-green-400/80">
-							<svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-								<polyline points="20 6 9 17 4 12" />
-							</svg>
-							<span>承認済み — 次のタスクを実行中...</span>
-						</div>
-					</div>
-				)}
-				{status === 'rejected' && (
-					<div className="px-4 pt-1 pb-3">
-						<div className="flex items-center gap-2 text-xs text-red-400/80">
-							<svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-								<line x1="18" y1="6" x2="6" y2="18" />
-								<line x1="6" y1="6" x2="18" y2="18" />
-							</svg>
-							<span>却下 — オーケストレーションを停止しました</span>
-						</div>
-					</div>
-				)}
-			</div>
+			)}
+			{status === 'approved' && (
+				<div className="text-[11px] text-void-fg-4">承認済み</div>
+			)}
+			{status === 'rejected' && (
+				<div className="text-[11px] text-void-fg-4">却下</div>
+			)}
 		</div>
 	)
 }

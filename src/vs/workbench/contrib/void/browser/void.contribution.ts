@@ -25,6 +25,9 @@ import './autocompleteService.js'
 // settings pane
 import './voidSettingsPane.js'
 
+// role output pane (main panel for each agent role's markdown output)
+import './roleOutputPane.js'
+
 // register css
 import './media/void.css'
 

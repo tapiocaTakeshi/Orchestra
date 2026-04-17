@@ -100,15 +100,22 @@ export type AnthropicReasoning = ({ type: 'thinking'; thinking: any; signature: 
 export type OnText = (p: { fullText: string; fullReasoning: string; toolCall?: RawToolCallObj }) => void
 export type OnFinalMessage = (p: { fullText: string; fullReasoning: string; toolCall?: RawToolCallObj; anthropicReasoning: AnthropicReasoning[] | null; flowReview?: FlowReviewData }) => void // id is tool_use_id
 
-// Flow review data sent from Division API when a flow MD is generated and needs human review
+export type FlowOutputEntry = {
+	role: string;
+	mdFileName: string;
+	mdFilePath: string;
+	mdContent: string;
+}
+
 export type FlowReviewData = {
-	flowRole: string; // e.g. 'design', 'search', 'writing', 'planning'
-	mdFileName: string; // e.g. 'DESIGN.md'
-	mdFilePath: string; // full absolute path to the saved MD file
-	mdContent: string; // content of the generated MD
-	sessionId: string; // orchestration session ID
-	completedTaskIndex: number; // index of the completed task
-	totalTasks: number; // total number of tasks in the session
+	flowRole: string;
+	mdFileName: string;
+	mdFilePath: string;
+	mdContent: string;
+	sessionId: string;
+	completedTaskIndex: number;
+	totalTasks: number;
+	allFlowOutputs?: FlowOutputEntry[];
 }
 export type OnError = (p: { message: string; fullError: Error | null }) => void
 export type OnAbort = () => void
