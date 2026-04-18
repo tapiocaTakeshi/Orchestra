@@ -1074,16 +1074,32 @@ const DivisionSettings = () => {
 		});
 	};
 
-	// Role helpers
-	const allRoles: import('../../../../common/voidSettingsTypes.js').AgentRole[] = ['leader', 'coder', 'planner', 'search', 'research', 'design', 'writing'];
+	// Role helpers — order matches the Orchestra flow diagram
+	const allRoles: import('../../../../common/voidSettingsTypes.js').AgentRole[] = [
+		'leader',
+		'ideaman',
+		'search',
+		'filesearch',
+		'research',
+		'design',
+		'image',
+		'planner',
+		'coder',
+		'writing',
+		'review',
+	];
 	const roleLabels: Record<string, string> = {
 		leader: 'Leader',
 		coder: 'Coder',
 		planner: 'Planner',
 		search: 'Search',
 		research: 'Research',
-		design: 'Design',
-		writing: 'Writing',
+		design: 'Designer',
+		writing: 'Writer',
+		ideaman: 'Idea man',
+		filesearch: 'File Search',
+		image: 'Image',
+		review: 'Reviewer',
 	};
 
 	const getModelsForProvider = (pn: import('../../../../common/voidSettingsTypes.js').ProviderName) => {

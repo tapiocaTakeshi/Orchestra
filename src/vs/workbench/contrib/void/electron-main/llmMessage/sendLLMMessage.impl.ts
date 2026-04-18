@@ -865,6 +865,7 @@ const FLOW_ROLE_TO_FILENAME: Record<string, string> = {
 	'design': 'DESIGN.md',
 	'search': 'SEARCH.md',
 	'file-search': 'FILE-SEARCH.md',
+	'filesearch': 'FILE-SEARCH.md',
 	'research': 'RESEARCH.md',
 	'deep-research': 'RESEARCH.md',
 	'review': 'REVIEW.md',
