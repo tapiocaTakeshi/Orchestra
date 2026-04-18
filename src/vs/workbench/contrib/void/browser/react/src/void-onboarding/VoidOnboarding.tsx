@@ -5,7 +5,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useAccessor, useIsDark, useSettingsState } from '../util/services.js';
-import { Brain, Check, ChevronRight, DollarSign, ExternalLink, Lock, X, Code, FileText, Search, Palette } from 'lucide-react';
+import { Brain, Check, ChevronRight, DollarSign, ExternalLink, Lock, X, Code, FileText, Search, Palette, Lightbulb, Folder, Globe, Image as ImageIcon, CheckCircle, PenLine } from 'lucide-react';
 import { displayInfoOfProviderName, ProviderName, providerNames, localProviderNames, featureNames, FeatureName, isFeatureNameDisabled, AgentRole, RoleAssignment } from '../../../../common/voidSettingsTypes.js';
 import { ChatMarkdownRender } from '../markdown/ChatMarkdownRender.js';
 import { OllamaSetupInstructions, OneClickSwitchButton, SettingsForProvider, ModelDump } from '../void-settings-tsx/Settings.js';
@@ -381,7 +381,13 @@ const RoleAssignmentPage = ({
 		coder: 'Writes and modifies code with deep technical expertise',
 		planner: 'Creates implementation plans and architectural designs',
 		search: 'Searches documentation and external resources',
+		research: 'Runs deep research and analysis across web sources',
 		design: 'Generates UI designs and visual assets',
+		writing: 'Writes long-form content, docs, and articles',
+		ideaman: 'Brainstorms ideas and creative directions',
+		filesearch: 'Finds relevant files across the workspace',
+		image: 'Generates images and visual content',
+		review: 'Reviews and verifies code or text output',
 	};
 
 	const roleIcons: Record<AgentRole, any> = {
@@ -389,7 +395,13 @@ const RoleAssignmentPage = ({
 		coder: Code,
 		planner: FileText,
 		search: Search,
+		research: Globe,
 		design: Palette,
+		writing: PenLine,
+		ideaman: Lightbulb,
+		filesearch: Folder,
+		image: ImageIcon,
+		review: CheckCircle,
 	};
 
 	const handleAssignmentChange = (role: AgentRole, provider: ProviderName, model: string) => {
@@ -407,7 +419,19 @@ const RoleAssignmentPage = ({
 			</div>
 
 			<div className="flex flex-col gap-4 overflow-y-auto flex-1">
-				{(['leader', 'coder', 'planner', 'search', 'design'] as AgentRole[]).map(role => (
+				{([
+					'leader',
+					'ideaman',
+					'search',
+					'filesearch',
+					'research',
+					'design',
+					'image',
+					'planner',
+					'coder',
+					'writing',
+					'review',
+				] as AgentRole[]).map(role => (
 					<RoleSelector
 						key={role}
 						role={role}

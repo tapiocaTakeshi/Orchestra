@@ -460,7 +460,7 @@ export type ChatMode = 'agent' | 'gather' | 'normal'
 
 
 // Division API role assignment types
-export type AgentRole = 'leader' | 'coder' | 'planner' | 'search' | 'research' | 'design' | 'writing';
+export type AgentRole = 'leader' | 'coder' | 'planner' | 'search' | 'research' | 'design' | 'writing' | 'ideaman' | 'filesearch' | 'image' | 'review';
 
 export type RoleAssignment = {
 	role: AgentRole;
@@ -489,14 +489,20 @@ export type GlobalSettings = {
 }
 
 // Default role assignments for Division API
+// Ordered to match the Orchestra flow:
+// User → Leader → (ideaman, search, filesearch, research) → (design, image, planner) → (coder or writing) → review → User
 export const defaultRoleAssignments: RoleAssignment[] = [
 	{ role: 'leader', provider: 'openAI', model: 'gpt-5.2' },
-	{ role: 'coder', provider: 'anthropic', model: 'claude-opus-4-6' },
-	{ role: 'planner', provider: 'gemini', model: 'gemini-3-pro' },
+	{ role: 'ideaman', provider: 'openAI', model: 'gpt-5.2' },
 	{ role: 'search', provider: 'openAI', model: 'gpt-5.2-instant' },
+	{ role: 'filesearch', provider: 'openAI', model: 'gpt-5.2-instant' },
 	{ role: 'research', provider: 'perplexity', model: 'sonar-pro' },
 	{ role: 'design', provider: 'gemini', model: 'gemini-3-flash' },
+	{ role: 'image', provider: 'gemini', model: 'gemini-3-flash' },
+	{ role: 'planner', provider: 'gemini', model: 'gemini-3-pro' },
+	{ role: 'coder', provider: 'anthropic', model: 'claude-opus-4-6' },
 	{ role: 'writing', provider: 'openAI', model: 'gpt-5.2' },
+	{ role: 'review', provider: 'anthropic', model: 'claude-opus-4-6' },
 ];
 
 export const defaultGlobalSettings: GlobalSettings = {

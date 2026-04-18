@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import React, { useState, useCallback } from 'react';
-import { Plus, X, GripVertical, ArrowDown, Save, Brain, Code, FileText, Search, Palette, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, X, GripVertical, ArrowDown, Save, Brain, Code, FileText, Search, Palette, ChevronDown, ChevronUp, Lightbulb, Folder, Globe, Image as ImageIcon, CheckCircle, PenLine } from 'lucide-react';
 import { useSettingsState, useAccessor } from '../util/services.js';
 import { AgentRole, ProviderName, providerNames, displayInfoOfProviderName } from '../../../../common/voidSettingsTypes.js';
 import { defaultModelsOfProvider } from '../../../../common/modelCapabilities.js';
@@ -15,10 +15,28 @@ const roleIcons: Record<AgentRole, React.ComponentType<{ size?: number; classNam
 	coder: Code,
 	planner: FileText,
 	search: Search,
+	research: Globe,
 	design: Palette,
+	writing: PenLine,
+	ideaman: Lightbulb,
+	filesearch: Folder,
+	image: ImageIcon,
+	review: CheckCircle,
 };
 
-const allRoles: AgentRole[] = ['leader', 'coder', 'planner', 'search', 'design'];
+const allRoles: AgentRole[] = [
+	'leader',
+	'ideaman',
+	'search',
+	'filesearch',
+	'research',
+	'design',
+	'image',
+	'planner',
+	'coder',
+	'writing',
+	'review',
+];
 
 interface PipelineStepCardProps {
 	step: PipelineStep;

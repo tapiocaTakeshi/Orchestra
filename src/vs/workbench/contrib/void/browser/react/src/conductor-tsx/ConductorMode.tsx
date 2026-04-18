@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import React, { useState, useMemo } from 'react';
-import { Brain, Code, FileText, Search, Palette, Music } from 'lucide-react';
+import { Brain, Code, FileText, Search, Palette, Music, Globe, PenLine, Lightbulb, Folder, Image as ImageIcon, CheckCircle } from 'lucide-react';
 import { useSettingsState } from '../util/services.js';
 import { AgentRole, displayInfoOfProviderName } from '../../../../common/voidSettingsTypes.js';
 import { AgentState, AgentStatus, roleDisplayConfig } from './ConductorTypes.js';
@@ -14,7 +14,13 @@ const roleIcons: Record<AgentRole, React.ComponentType<{ size?: number; style?: 
 	coder: Code,
 	planner: FileText,
 	search: Search,
+	research: Globe,
 	design: Palette,
+	writing: PenLine,
+	ideaman: Lightbulb,
+	filesearch: Folder,
+	image: ImageIcon,
+	review: CheckCircle,
 };
 
 const statusColors: Record<AgentStatus, string> = {

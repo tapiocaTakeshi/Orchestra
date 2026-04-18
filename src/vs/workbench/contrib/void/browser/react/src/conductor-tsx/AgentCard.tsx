@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import React, { useEffect, useState } from 'react';
-import { Brain, Code, FileText, Search, Palette, RotateCcw, Zap, Clock, Coins } from 'lucide-react';
+import { Brain, Code, FileText, Search, Palette, RotateCcw, Zap, Clock, Coins, Globe, PenLine, Lightbulb, Folder, Image as ImageIcon, CheckCircle } from 'lucide-react';
 import { AgentRole, displayInfoOfProviderName } from '../../../../common/voidSettingsTypes.js';
 import { AgentState, AgentStatus, roleDisplayConfig, agentStrengthTags } from './ConductorTypes.js';
 
@@ -13,7 +13,13 @@ const roleIcons: Record<AgentRole, React.ComponentType<{ className?: string; siz
 	coder: Code,
 	planner: FileText,
 	search: Search,
+	research: Globe,
 	design: Palette,
+	writing: PenLine,
+	ideaman: Lightbulb,
+	filesearch: Folder,
+	image: ImageIcon,
+	review: CheckCircle,
 };
 
 const statusConfig: Record<AgentStatus, { label: string; dotClass: string }> = {

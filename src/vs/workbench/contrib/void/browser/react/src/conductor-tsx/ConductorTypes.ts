@@ -99,6 +99,22 @@ export const agentStrengthTags: Record<AgentRole, AgentStrengthTag[]> = {
 		{ label: 'Content', color: '#14b8a6' },
 		{ label: 'Documentation', color: '#84cc16' },
 	],
+	ideaman: [
+		{ label: 'Ideation', color: '#eab308' },
+		{ label: 'Brainstorming', color: '#f59e0b' },
+	],
+	filesearch: [
+		{ label: 'File Lookup', color: '#0ea5e9' },
+		{ label: 'Codebase', color: '#22c55e' },
+	],
+	image: [
+		{ label: 'Image Gen', color: '#d946ef' },
+		{ label: 'Visuals', color: '#f97316' },
+	],
+	review: [
+		{ label: 'QA', color: '#ef4444' },
+		{ label: 'Verification', color: '#10b981' },
+	],
 };
 
 // Role display configuration
@@ -108,12 +124,35 @@ export const roleDisplayConfig: Record<AgentRole, { label: string; color: string
 	planner: { label: 'Planner', color: '#10b981', glowColor: 'rgba(16, 185, 129, 0.4)' },
 	search: { label: 'Search', color: '#06b6d4', glowColor: 'rgba(6, 182, 212, 0.4)' },
 	research: { label: 'Research', color: '#8b5cf6', glowColor: 'rgba(139, 92, 246, 0.4)' },
-	design: { label: 'Design', color: '#ec4899', glowColor: 'rgba(236, 72, 153, 0.4)' },
-	writing: { label: 'Writing', color: '#14b8a6', glowColor: 'rgba(20, 184, 166, 0.4)' },
+	design: { label: 'Designer', color: '#ec4899', glowColor: 'rgba(236, 72, 153, 0.4)' },
+	writing: { label: 'Writer', color: '#14b8a6', glowColor: 'rgba(20, 184, 166, 0.4)' },
+	ideaman: { label: 'Idea man', color: '#eab308', glowColor: 'rgba(234, 179, 8, 0.4)' },
+	filesearch: { label: 'File Search', color: '#0ea5e9', glowColor: 'rgba(14, 165, 233, 0.4)' },
+	image: { label: 'Image', color: '#d946ef', glowColor: 'rgba(217, 70, 239, 0.4)' },
+	review: { label: 'Reviewer', color: '#ef4444', glowColor: 'rgba(239, 68, 68, 0.4)' },
 };
 
 // Default pipeline templates
 export const defaultTemplates: PipelineTemplate[] = [
+	{
+		id: 'orchestra-flow',
+		name: 'Orchestra Flow',
+		description: 'Leader → (Ideaman, Search, File Search, Research) → (Designer, Image, Planner) → (Coder or Writer) → Reviewer',
+		icon: 'Layers',
+		steps: [
+			{ id: '1', role: 'leader', provider: 'openAI', model: 'gpt-4o', order: 0 },
+			{ id: '2', role: 'ideaman', provider: 'openAI', model: 'gpt-4o', order: 1 },
+			{ id: '3', role: 'search', provider: 'openAI', model: 'gpt-4o', order: 2 },
+			{ id: '4', role: 'filesearch', provider: 'openAI', model: 'gpt-4o', order: 3 },
+			{ id: '5', role: 'research', provider: 'openAI', model: 'gpt-4o', order: 4 },
+			{ id: '6', role: 'design', provider: 'gemini', model: 'gemini-2.0-flash', order: 5 },
+			{ id: '7', role: 'image', provider: 'gemini', model: 'gemini-2.0-flash', order: 6 },
+			{ id: '8', role: 'planner', provider: 'gemini', model: 'gemini-2.0-flash', order: 7 },
+			{ id: '9', role: 'coder', provider: 'anthropic', model: 'claude-sonnet-4-20250514', order: 8 },
+			{ id: '10', role: 'writing', provider: 'openAI', model: 'gpt-4o', order: 9 },
+			{ id: '11', role: 'review', provider: 'anthropic', model: 'claude-sonnet-4-20250514', order: 10 },
+		],
+	},
 	{
 		id: 'web-article',
 		name: 'Web Article Generation',
@@ -123,7 +162,8 @@ export const defaultTemplates: PipelineTemplate[] = [
 			{ id: '1', role: 'leader', provider: 'openAI', model: 'gpt-4o', order: 0 },
 			{ id: '2', role: 'search', provider: 'openAI', model: 'gpt-4o', order: 1 },
 			{ id: '3', role: 'planner', provider: 'gemini', model: 'gemini-2.0-flash', order: 2 },
-			{ id: '4', role: 'coder', provider: 'anthropic', model: 'claude-sonnet-4-20250514', order: 3 },
+			{ id: '4', role: 'writing', provider: 'openAI', model: 'gpt-4o', order: 3 },
+			{ id: '5', role: 'review', provider: 'anthropic', model: 'claude-sonnet-4-20250514', order: 4 },
 		],
 	},
 	{
@@ -134,8 +174,9 @@ export const defaultTemplates: PipelineTemplate[] = [
 		steps: [
 			{ id: '1', role: 'leader', provider: 'openAI', model: 'gpt-4o', order: 0 },
 			{ id: '2', role: 'planner', provider: 'gemini', model: 'gemini-2.0-flash', order: 1 },
-			{ id: '3', role: 'coder', provider: 'anthropic', model: 'claude-sonnet-4-20250514', order: 2 },
-			{ id: '4', role: 'design', provider: 'gemini', model: 'gemini-2.0-flash', order: 3 },
+			{ id: '3', role: 'design', provider: 'gemini', model: 'gemini-2.0-flash', order: 2 },
+			{ id: '4', role: 'coder', provider: 'anthropic', model: 'claude-sonnet-4-20250514', order: 3 },
+			{ id: '5', role: 'review', provider: 'anthropic', model: 'claude-sonnet-4-20250514', order: 4 },
 		],
 	},
 	{
@@ -146,7 +187,8 @@ export const defaultTemplates: PipelineTemplate[] = [
 		steps: [
 			{ id: '1', role: 'leader', provider: 'openAI', model: 'gpt-4o', order: 0 },
 			{ id: '2', role: 'search', provider: 'openAI', model: 'gpt-4o', order: 1 },
-			{ id: '3', role: 'planner', provider: 'gemini', model: 'gemini-2.0-flash', order: 2 },
+			{ id: '3', role: 'research', provider: 'openAI', model: 'gpt-4o', order: 2 },
+			{ id: '4', role: 'planner', provider: 'gemini', model: 'gemini-2.0-flash', order: 3 },
 		],
 	},
 ];
