@@ -15,21 +15,37 @@ Leader AI がユーザーのリクエストを分析し、「検索」「設計�
 ```
 ユーザー: 「クイズアプリを作って」
          ↓
-    🧠 Leader AI (GPT-4.1)
-    タスクを分析・分解 + finalRole を決定
+  ┌─ POST /api/tasks/create ──────────────────────┐
+  │  🧠 Leader AI (GPT-4.1)                       │
+  │  タスクを分析・分解 + finalRole を決定          │
+  │       ↓                                        │
+  │  Wave 1 (並列実行)                              │
+  │  ┌─────────────────────────────────────────┐   │
+  │  │  💡 Ideaman  → Claude                   │   │
+  │  │  🔍 Search   → Perplexity               │   │
+  │  │  📂 FileSearch → GPT-4.1                │   │
+  │  │  🔬 Research → Perplexity Deep Research  │   │
+  │  └─────────────────────────────────────────┘   │
+  │       ↓ Markdown                               │
+  │  Wave 2 (並列実行、Wave 1に依存)                │
+  │  ┌─────────────────────────────────────────┐   │
+  │  │  🎨 Designer → Gemini                   │   │
+  │  │  🖼️ Image    → GPT Image 1              │   │
+  │  │  📐 Planner  → Gemini                   │   │
+  │  └─────────────────────────────────────────┘   │
+  └────────────────────────────────────────────────┘
+         ↓ tasks (各タスクの出力を含む)
+  ┌─ POST /api/tasks/execute ─────────────────────┐
+  │  ✍️ Writer / 💻 Coder (合成ステップ)            │
+  │  全出力を統合 → コード変更・ファイル生成        │
+  └────────────────────────────────────────────────┘
+         ↓ Code or Text
+  ┌─ POST /api/tasks/execute ─────────────────────┐
+  │  🔎 Reviewer (レビューステップ)                 │
+  │  品質確認・評価                                 │
+  └────────────────────────────────────────────────┘
          ↓
-    ┌──────────────────────────────────────────────┐
-    │  🔍 Search  → Perplexity     ┐              │
-    │  📐 Planning → Gemini        ├─ 並列実行     │
-    │  💡 Ideaman → Claude         ┘              │
-    │          ↓ (依存タスク)                       │
-    │  💻 Coding  → Claude                         │
-    │  🔎 Review  → Gemini                         │
-    └──────────────────────────────────────────────┘
-         ↓ 全出力を Markdown で集約
-    ✍️ Writer / 💻 Coder (合成ステップ)
-         ↓
-    最終成果物を Markdown で返却
+    最終成果物をユーザーに返却
 ```
 
 ## エンドポイント
@@ -38,55 +54,93 @@ Leader AI がユーザーのリクエストを分析し、「検索」「設計�
 
 ### エージェント実行
 
-#### `POST /api/agent/stream` — マルチエージェントストリーミング
+エージェント実行は **2ステップ** で行います。
 
-リアルタイムでマルチエージェントの実行状況をSSEストリームで受信できます。
-依存関係のないタスクは**並列実行**され、最後に合成ステップで統合されます。
+```
+Step 1: POST /api/tasks/create   → Leader AIがタスク分解＋各タスク実行
+Step 2: POST /api/tasks/execute  → 合成 (Coder/Writer) + レビュー (Reviewer)
+```
+
+#### `POST /api/tasks/create` — タスク作成・実行
+
+Leader AIがユーザーのリクエストを分析・分解し、各サブタスクを実行して結果を返します。
 
 ```bash
-curl -N -X POST https://api.division.he-ro.jp/api/agent/stream \
+curl -X POST https://api.division.he-ro.jp/api/tasks/create \
   -H "Authorization: Bearer div_..." \
   -H "Content-Type: application/json" \
   -d '{
     "projectId": "your-project-id",
-    "input": "クイズアプリを作って",
-    "format": "sse"
+    "input": "クイズアプリを作って"
   }'
 ```
 
-`format` は `"sse"`（デフォルト）または `"ndjson"` を指定可能です。
+**リクエストボディ:**
 
-**イベント一覧:**
+| パラメータ    | 型       | 必須 | 説明                           |
+| ------------- | -------- | ---- | ------------------------------ |
+| `projectId`   | string   | ○    | プロジェクトID                 |
+| `input`       | string   | ○    | ユーザーの入力テキスト         |
+| `chatHistory` | array    | -    | 過去の会話履歴（user/assistant）|
 
-| イベント           | 説明                                                         |
-| ------------------ | ------------------------------------------------------------ |
-| `session_start`    | セッション開始（sessionId含む）                              |
-| `leader_start`     | Leader AIがタスク分解を開始                                  |
-| `leader_chunk`     | Leader AIからのストリーミングテキスト                        |
-| `leader_done`      | タスク分解完了（dependsOn含む依存関係、finalRole情報）       |
-| `leader_error`     | Leader AI失敗                                                |
-| `wave_start`       | 並列実行グループの開始（同時実行されるタスクID）             |
-| `task_start`       | サブタスク実行開始（プロバイダー・入力情報含む）             |
-| `task_chunk`       | サブタスクAIからのストリーミングテキスト                     |
-| `task_thinking_chunk` | サブタスクAIの思考プロセス（Anthropic等）                 |
-| `task_done`        | サブタスク完了（出力含む）                                   |
-| `task_error`       | サブタスク失敗                                               |
-| `wave_done`        | 並列実行グループの完了                                       |
-| `synthesis_start`  | 合成ステップ開始（Coder/Writerが全出力を統合）               |
-| `synthesis_chunk`  | 合成AIからのストリーミングテキスト                           |
-| `synthesis_done`   | 合成完了（最終Markdown出力）                                 |
-| `session_done`     | 全タスク完了（集計結果含む）                                 |
-| `heartbeat`        | 接続維持（15秒ごと）                                         |
+**レスポンス:**
 
-#### `POST /api/agent/run` — エージェント実行（非ストリーム）
+```json
+{
+  "sessionId": "session-abc123",
+  "tasks": [
+    { "taskId": "t1", "role": "search", "title": "技術調査", "output": "..." },
+    { "taskId": "t2", "role": "planning", "title": "設計", "output": "..." },
+    { "taskId": "t3", "role": "ideaman", "title": "アイデア出し", "output": "..." }
+  ],
+  "finalRole": "coder"
+}
+```
 
-NDJSONで結果を返します。
+#### `POST /api/tasks/execute` — 単一ロール実行（SSE対応）
+
+プロジェクトに割り当てられたロールを1つだけ実行します。合成ステップ（Coder/Writer）とレビューステップ（Reviewer）で使用します。`stream: true` 指定時は SSE でストリーミング、未指定時は JSON で完了後にまとめて返却されます。
 
 ```bash
-curl -X POST https://api.division.he-ro.jp/api/agent/run \
+curl -N -X POST https://api.division.he-ro.jp/api/tasks/execute \
   -H "Authorization: Bearer div_..." \
   -H "Content-Type: application/json" \
-  -d '{"projectId": "your-project-id", "input": "FizzBuzzを書いて"}'
+  -d '{
+    "projectId": "your-project-id",
+    "roleSlug": "coder",
+    "input": "プロンプト内容",
+    "sessionId": "session-abc123",
+    "stream": true
+  }'
+```
+
+**リクエストボディ:**
+
+| パラメータ    | 型      | 必須 | 説明                                                   |
+| ------------- | ------- | ---- | ------------------------------------------------------ |
+| `projectId`   | string  | ○    | プロジェクトID                                         |
+| `roleSlug`    | string  | ○    | 実行するロール名（例: `coder`, `review`, `writing`）   |
+| `input`       | string  | ○    | 入力テキスト                                           |
+| `sessionId`   | string  | -    | セッションID（tasks/createの戻り値）                   |
+| `chatHistory` | array   | -    | 過去の会話履歴（user/assistant）                       |
+| `stream`      | boolean | -    | `true` で SSE ストリーミング、既定は JSON レスポンス   |
+
+**SSEイベント（`stream: true` 時）:**
+
+| イベント | 説明                                      |
+| -------- | ----------------------------------------- |
+| `chunk`  | テキストチャンク（`text`フィールド）      |
+| `done`   | 完了（`output`, `provider`, `durationMs`）|
+| `error`  | エラー発生                                |
+
+**JSONレスポンス（stream未指定時）:**
+
+```json
+{
+  "output": "...",
+  "provider": "claude-opus-4",
+  "durationMs": 12345
+}
 ```
 
 ### モデル管理
@@ -104,11 +158,11 @@ curl -X POST https://api.division.he-ro.jp/api/agent/run \
 
 ### その他
 
-| エンドポイント       | メソッド | 説明                                       |
-| -------------------- | -------- | ------------------------------------------ |
-| `/api/generate`      | POST     | 単一AIモデルで直接テキスト生成             |
-| `/api/generate/stream` | POST   | 単一AIモデルでSSEストリーミング生成        |
-| `/api/providers`     | GET      | プロバイダーCRUD                           |
+| エンドポイント         | メソッド | 説明                                       |
+| ---------------------- | -------- | ------------------------------------------ |
+| `/api/tasks/create`    | POST     | タスク作成・Leader AI分解・各タスク実行    |
+| `/api/tasks/execute`   | POST     | 単一ロール実行（SSE対応、合成/レビュー用） |
+| `/api/providers`       | GET      | プロバイダーCRUD                           |
 | `/api/roles`         | GET      | ロールCRUD                                 |
 | `/api/assignments`   | GET      | ロール割当CRUD                             |
 | `/api/projects`      | GET      | プロジェクトCRUD（認証ユーザーのみ）       |
@@ -145,12 +199,15 @@ curl -X POST https://api.division.he-ro.jp/api/agent/run \
 | `image`         | GPT Image 1               | 画像生成・ビジュアルコンテンツ               |
 | `ideaman`       | Claude                    | アイデア発想・ブレインストーミング           |
 
-### 合成ステップ (Synthesis)
+### 合成ステップ (Synthesis) + レビューステップ (Review)
 
-全エージェントの作業完了後、Leader が指定した `finalRole`（`coder` or `writer`）のAIが全出力を統合し、**Markdown形式の最終成果物**を生成します。
+全エージェントの作業完了後、`/api/tasks/execute` を2回呼び出します。
+
+1. **合成**: Leader が指定した `finalRole`（`coder` or `writer`）のAIが全出力を統合し、コード変更・ファイル生成を実行
+2. **レビュー**: `review` ロールのAIが成果物の品質を確認・評価
 
 ```
-全エージェント出力 → Coder/Writer → 最終 Markdown
+全エージェント出力 → Coder/Writer (コード変更) → Reviewer (品質確認) → 最終成果物
 ```
 
 ## overrides（モデル切り替え）

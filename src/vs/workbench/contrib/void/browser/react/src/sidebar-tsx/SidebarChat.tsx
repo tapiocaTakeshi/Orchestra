@@ -21,11 +21,11 @@ import { PastThreadsList } from './SidebarThreadSelector.js';
 import { VOID_CTRL_L_ACTION_ID } from '../../../actionIDs.js';
 import { VOID_OPEN_SETTINGS_ACTION_ID } from '../../../voidSettingsPane.js';
 // import { VOID_OPEN_ROLE_OUTPUT_ACTION_ID } from '../../../roleOutputPane.js';
-import { AgentRole, ChatMode, displayInfoOfProviderName, FeatureName, isFeatureNameDisabled, RoleAssignment } from '../../../../../../../workbench/contrib/void/common/voidSettingsTypes.js';
+import { AgentRole, ChatMode, displayInfoOfProviderName, contextTags, contextTagGroups, FeatureName, isFeatureNameDisabled, RoleAssignment } from '../../../../../../../workbench/contrib/void/common/voidSettingsTypes.js';
 import { ICommandService } from '../../../../../../../platform/commands/common/commands.js';
 import { WarningBox } from '../void-settings-tsx/WarningBox.js';
 import { getModelCapabilities, getIsReasoningEnabledState } from '../../../../common/modelCapabilities.js';
-import { AlertTriangle, File, Ban, Check, ChevronDown, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text, Image as ImageIcon, Paperclip } from 'lucide-react';
+import { AlertTriangle, File, Ban, Check, ChevronDown, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text, Image as ImageIcon, Paperclip, Palette, Blocks } from 'lucide-react';
 import { ChatMessage, CheckpointEntry, StagingSelectionItem, ToolMessage } from '../../../../common/chatThreadServiceTypes.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, ToolName, LintErrorItem, ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsServiceTypes.js';
 import { CopyButton, EditToolAcceptRejectButtonsHTML, IconShell1, JumpToFileButton, JumpToTerminalButton, StatusIndicator, StatusIndicatorForApplyButton, useApplyStreamState, useEditToolStreamState } from '../markdown/ApplyBlockHoverButtons.js';
@@ -939,7 +939,8 @@ export const SelectedFiles = (
 					: selection.type === 'File' ? selection.type + selection.language + selection.state.wasAddedAsCurrentFile + selection.uri.fsPath
 						: selection.type === 'Folder' ? selection.type + selection.language + selection.state + selection.uri.fsPath
 							: selection.type === 'Image' ? 'Image_' + selection.fileName + '_' + i
-								: i
+								: selection.type === 'ContextTag' ? 'Tag_' + selection.tagGroup + '_' + selection.tagId
+									: i
 
 				// Render image selections as thumbnails
 				if (selection.type === 'Image') {
@@ -964,6 +965,47 @@ export const SelectedFiles = (
 								className='w-6 h-6 object-cover rounded-sm'
 							/>
 							<span className='max-w-[80px] truncate'>{selection.fileName}</span>
+							{type === 'staging' && !isThisSelectionProspective ?
+								<div
+									className='cursor-pointer z-1 self-stretch flex items-center justify-center'
+									onClick={(e) => {
+										e.stopPropagation();
+										if (type !== 'staging') return;
+										setSelections([...selections.slice(0, i), ...selections.slice(i + 1)])
+									}}
+								>
+									<IconX className='stroke-[2]' size={10} />
+								</div>
+								: <></>
+							}
+						</div>
+					</div>
+				}
+
+				if (selection.type === 'ContextTag') {
+					const tag = contextTags.find(t => t.id === selection.tagId);
+					const groupInfo = contextTagGroups[selection.tagGroup];
+					const TagIcon = selection.tagGroup === 'design' ? Palette : Blocks;
+					return <div key={thisKey} className='flex flex-col space-y-[1px]'>
+						<div
+							className={`
+								flex items-center gap-1 relative
+								px-1 py-0.5
+								w-fit h-fit
+								select-none
+								text-xs text-nowrap
+								border rounded-sm
+								bg-void-bg-1 hover:brightness-95 text-void-fg-1
+								border-void-border-1
+								transition-all duration-150
+							`}
+							data-tooltip-id='void-tooltip'
+							data-tooltip-content={tag ? `${groupInfo.title}: ${tag.description}` : selection.tagId}
+							data-tooltip-place='top'
+							data-tooltip-delay-show={500}
+						>
+							<TagIcon size={10} />
+							<span>{tag?.title ?? selection.tagId}</span>
 							{type === 'staging' && !isThisSelectionProspective ?
 								<div
 									className='cursor-pointer z-1 self-stretch flex items-center justify-center'
@@ -1455,9 +1497,8 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 
 	return <div
 		className={`
-        relative
-        ${mode === 'edit' ? 'w-full max-w-full'
-				: mode === 'display' ? `w-full max-w-full whitespace-pre-wrap` : ''
+        ${mode === 'edit' ? 'relative w-full max-w-full'
+				: mode === 'display' ? `sticky top-0 z-10 w-full max-w-full whitespace-pre-wrap bg-void-bg-1 border border-void-border-3 rounded-md px-3 py-2 shadow-sm` : ''
 			}
 
         ${isCheckpointGhost && !isMsgAfterCheckpoint ? 'opacity-50 pointer-events-none' : ''}
@@ -3715,20 +3756,19 @@ export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTa
 		</ProseWrapper> : null}
 
 
-		{/* error message */}
-		{latestError === undefined ? null :
-			<div className='px-2 my-1'>
-				<ErrorDisplay
-					message={latestError.message}
-					fullError={latestError.fullError}
-					onDismiss={() => { chatThreadsService.dismissStreamError(currentThread.id) }}
-					showDismiss={true}
-				/>
-
-				<WarningBox className='text-sm my-2 mx-4' onClick={() => { commandService.executeCommand(VOID_OPEN_SETTINGS_ACTION_ID) }} text='Open settings' />
-			</div>
-		}
 	</ScrollToBottomContainer>
+
+	const errorDisplayHTML = latestError === undefined ? null :
+		<div className='px-2 my-1'>
+			<ErrorDisplay
+				message={latestError.message}
+				fullError={latestError.fullError}
+				onDismiss={() => { chatThreadsService.dismissStreamError(currentThread.id) }}
+				showDismiss={true}
+			/>
+
+			<WarningBox className='text-sm my-2 mx-4' onClick={() => { commandService.executeCommand(VOID_OPEN_SETTINGS_ACTION_ID) }} text='Open settings' />
+		</div>
 
 
 	const onChangeText = useCallback((newStr: string) => {
@@ -3791,6 +3831,7 @@ export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTa
 
 
 	const threadPageInput = <div key={'input' + chatThreadsState.currentThreadId}>
+		{errorDisplayHTML && <div className='px-2'>{errorDisplayHTML}</div>}
 		<div className='px-4'>
 			<CommandBarInChat />
 		</div>
@@ -3800,6 +3841,7 @@ export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTa
 	</div>
 
 	const landingPageInput = <div>
+		{errorDisplayHTML && <div className='px-2'>{errorDisplayHTML}</div>}
 		<div className='pt-8'>
 			{inputChatArea}
 		</div>

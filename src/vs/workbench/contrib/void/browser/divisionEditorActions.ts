@@ -13,13 +13,14 @@ import { ResourceContextKey } from '../../../common/contextkeys.js';
 import { IDivisionProjectService } from './divisionProjectService.js';
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
 
-const DIVISION_SYNC_SUPABASE_ACTION_ID = 'division.syncFromSupabase';
+const DIVISION_PULL_REMOTE_ACTION_ID = 'division.pullFromRemote';
+const DIVISION_PUSH_REMOTE_ACTION_ID = 'division.pushToRemote';
 
 registerAction2(class extends Action2 {
 	constructor() {
 		super({
-			id: DIVISION_SYNC_SUPABASE_ACTION_ID,
-			title: localize2('divisionSyncSupabase', 'Division: Sync from Supabase'),
+			id: DIVISION_PULL_REMOTE_ACTION_ID,
+			title: localize2('divisionPullRemote', 'Division: Pull from Remote'),
 			icon: Codicon.cloudDownload,
 			f1: true,
 			menu: [
@@ -38,6 +39,37 @@ registerAction2(class extends Action2 {
 		const notificationService = accessor.get(INotificationService);
 
 		const result = await divisionProjectService.fetchFromSupabase();
+		if (result.success) {
+			notificationService.info(result.message);
+		} else {
+			notificationService.error(result.message);
+		}
+	}
+});
+
+registerAction2(class extends Action2 {
+	constructor() {
+		super({
+			id: DIVISION_PUSH_REMOTE_ACTION_ID,
+			title: localize2('divisionPushRemote', 'Division: Push to Remote'),
+			icon: Codicon.cloudUpload,
+			f1: true,
+			menu: [
+				{
+					id: MenuId.EditorTitle,
+					when: ContextKeyExpr.equals(ResourceContextKey.Filename.key, 'agents.json'),
+					group: 'navigation',
+					order: 2,
+				},
+			],
+		});
+	}
+
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const divisionProjectService = accessor.get(IDivisionProjectService);
+		const notificationService = accessor.get(INotificationService);
+
+		const result = await divisionProjectService.pushToSupabase();
 		if (result.success) {
 			notificationService.info(result.message);
 		} else {

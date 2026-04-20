@@ -107,6 +107,12 @@ export type StagingSelectionItem = {
 	fileName: string;       // display name of the image file
 	language?: undefined;
 	state?: undefined;
+} | {
+	type: 'ContextTag';
+	tagId: string;
+	tagGroup: import('./voidSettingsTypes.js').ContextTagGroup;
+	language?: undefined;
+	state?: undefined;
 }
 
 

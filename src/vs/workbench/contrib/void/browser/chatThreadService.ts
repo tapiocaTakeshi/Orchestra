@@ -52,6 +52,12 @@ const findStagingSelectionIndex = (currentSelections: StagingSelectionItem[] | u
 	for (let i = 0; i < currentSelections.length; i += 1) {
 		const s = currentSelections[i]
 
+		if (s.type === 'ContextTag' && newSelection.type === 'ContextTag') {
+			if (s.tagId === newSelection.tagId && s.tagGroup === newSelection.tagGroup) return i
+			continue
+		}
+		if (s.type === 'ContextTag' || newSelection.type === 'ContextTag') continue
+
 		if (s.uri.fsPath !== newSelection.uri.fsPath) continue
 
 		if (s.type === 'File' && newSelection.type === 'File') {
@@ -356,7 +362,10 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 					const uri = URI.file(op.filePath);
 
 					if (op.action === 'edit' && op.searchReplaceBlocks) {
-						// EDIT: Apply search/replace blocks through editCodeService for diff highlighting
+						// EDIT: Apply search/replace blocks through editCodeService for diff highlighting.
+						// instantlyApplySearchReplaceBlocks internally checks autoAcceptLLMChanges and
+						// auto-accepts only when the setting is enabled; otherwise the user keeps
+						// control via the inline Accept/Reject buttons.
 						await this._voidModelService.initializeModel(uri);
 						await this._editCodeService.callBeforeApplyOrEdit(uri);
 						this._editCodeService.instantlyApplySearchReplaceBlocks({
@@ -385,9 +394,9 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 					const toolName = 'run_command';
 					const unvalidatedToolParams = { command: cmd.command }; // the AI might not output cwd/terminalId, so unvalidated
 
-					// Instead of generating a single 'tool_request' via `_addMessageToThread`, we use `_runToolCall`
-					// `_runToolCall` handles the "Auto-approve terminal" logic internally
-					// and creates the `tool_request` if approval is required.
+					// `_runToolCall` checks the user's autoApprove setting internally.
+					// When autoApprove for terminal is OFF, it surfaces a tool_request that the user
+					// must approve before the command actually runs.
 					this._runToolCall(threadId, toolName, toolId, undefined, {
 						preapproved: false,
 						unvalidatedToolParams,
@@ -1486,7 +1495,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 			// URIs of user selections
 			if (m.role === 'user') {
 				for (const sel of m.selections ?? []) {
-					addURI(sel.uri)
+					if ('uri' in sel && sel.uri) addURI(sel.uri)
 				}
 			}
 			// URIs of files that have been read

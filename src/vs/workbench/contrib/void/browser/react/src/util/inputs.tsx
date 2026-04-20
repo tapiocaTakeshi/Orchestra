@@ -18,7 +18,8 @@ import { inputBackground, inputForeground } from '../../../../../../../platform/
 import { useFloating, autoUpdate, offset, flip, shift, size, autoPlacement } from '@floating-ui/react';
 import { URI } from '../../../../../../../base/common/uri.js';
 import { getBasename, getFolderName } from '../sidebar-tsx/SidebarChat.js';
-import { ChevronRight, File, Folder, FolderClosed, LucideProps } from 'lucide-react';
+import { ChevronRight, File, Folder, FolderClosed, LucideProps, Palette, Blocks, Tag } from 'lucide-react';
+import { contextTagsOfGroup } from '../../../../common/voidSettingsTypes.js';
 import { StagingSelectionItem } from '../../../../common/chatThreadServiceTypes.js';
 import { DiffEditorWidget } from '../../../../../../../editor/browser/widget/diffEditor/diffEditorWidget.js';
 import { extractSearchReplaceBlocks, ExtractedSearchReplaceBlock } from '../../../../common/helpers/extractCodeFromResult.js';
@@ -67,6 +68,7 @@ type Option = {
 		| { leafNodeType?: undefined, nextOptions: Option[], generateNextOptions?: undefined, }
 		| { leafNodeType?: undefined, nextOptions?: undefined, generateNextOptions: GenerateNextOptions, }
 		| { leafNodeType: 'File' | 'Folder', uri: URI, nextOptions?: undefined, generateNextOptions?: undefined, }
+		| { leafNodeType: 'ContextTag', tagId: string, tagGroup: import('../../../../common/voidSettingsTypes.js').ContextTagGroup, nextOptions?: undefined, generateNextOptions?: undefined, }
 	)
 
 
@@ -296,6 +298,32 @@ const getOptionsAtPath = async (accessor: ReturnType<typeof useAccessor>, path: 
 			iconInMenu: Folder,
 			generateNextOptions: async (t) => (await searchForFilesOrFolders(t, 'folders')) || [],
 		},
+		{
+			fullName: 'design',
+			abbreviatedName: 'design',
+			iconInMenu: Palette,
+			nextOptions: contextTagsOfGroup('design').map(t => ({
+				fullName: t.title,
+				abbreviatedName: t.title,
+				iconInMenu: Palette,
+				leafNodeType: 'ContextTag' as const,
+				tagId: t.id,
+				tagGroup: 'design' as const,
+			})),
+		},
+		{
+			fullName: 'feature',
+			abbreviatedName: 'feature',
+			iconInMenu: Blocks,
+			nextOptions: contextTagsOfGroup('feature').map(t => ({
+				fullName: t.title,
+				abbreviatedName: t.title,
+				iconInMenu: Blocks,
+				leafNodeType: 'ContextTag' as const,
+				tagId: t.id,
+				tagGroup: 'feature' as const,
+			})),
+		},
 	]
 
 	// follow the path in the optionsTree (until the last path element)
@@ -438,6 +466,13 @@ export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fun
 			else if (option.leafNodeType === 'Folder') newSelection = {
 				type: 'Folder',
 				uri: option.uri,
+				language: undefined,
+				state: undefined,
+			}
+			else if (option.leafNodeType === 'ContextTag') newSelection = {
+				type: 'ContextTag',
+				tagId: option.tagId,
+				tagGroup: option.tagGroup,
 				language: undefined,
 				state: undefined,
 			}

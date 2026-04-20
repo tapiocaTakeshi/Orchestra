@@ -16,7 +16,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 /* eslint-enable */
 
-import { AnthropicLLMChatMessage, GeminiLLMChatMessage, LLMChatMessage, LLMFIMMessage, ModelListParams, OllamaModelResponse, OnError, OnFinalMessage, OnText, RawToolCallObj, RawToolParamsObj, FileOperationItem, CommandOperationItem } from '../../common/sendLLMMessageTypes.js';
+import { AnthropicLLMChatMessage, GeminiLLMChatMessage, LLMChatMessage, LLMFIMMessage, ModelListParams, OllamaModelResponse, OnError, OnFinalMessage, OnText, RawToolCallObj, RawToolParamsObj, FileOperationItem, CommandOperationItem, FlowOutputEntry, FlowReviewData } from '../../common/sendLLMMessageTypes.js';
 import { ChatMode, displayInfoOfProviderName, ModelSelectionOptions, OverridesOfModel, ProviderName, RoleAssignment, SettingsOfProvider } from '../../common/voidSettingsTypes.js';
 import { getSendableReasoningInfo, getModelCapabilities, getProviderCapabilities, defaultProviderSettings, getReservedOutputTokenSpace } from '../../common/modelCapabilities.js';
 import { extractReasoningWrapper, extractXMLToolsWrapper } from './extractGrammar.js';
@@ -904,6 +904,85 @@ const saveFlowResultAsMd = (
 	}
 };
 
+type OrchestrationState = {
+	approved: boolean;
+	sessionId?: string;
+	finalRole?: string;
+	currentInput?: string;
+	allFlowOutputs?: FlowOutputEntry[];
+	editedOutputs?: Array<{ mdFileName: string; mdContent: string }>;
+	// Timestamp so we can clean up stale state files
+	createdAt?: number;
+};
+
+const getOrchestrationStatePath = (workspaceFolderPath: string): string => {
+	return path.join(workspaceFolderPath, '.division', '.orchestration-state.json');
+};
+
+const readOrchestrationState = (workspaceFolderPath: string): OrchestrationState | null => {
+	try {
+		const p = getOrchestrationStatePath(workspaceFolderPath);
+		if (!fs.existsSync(p)) return null;
+		const raw = fs.readFileSync(p, 'utf-8');
+		return JSON.parse(raw) as OrchestrationState;
+	} catch (_e) {
+		return null;
+	}
+};
+
+const writeOrchestrationState = (workspaceFolderPath: string, state: OrchestrationState): void => {
+	try {
+		const divisionDir = path.join(workspaceFolderPath, '.division');
+		fs.mkdirSync(divisionDir, { recursive: true });
+		const p = getOrchestrationStatePath(workspaceFolderPath);
+		fs.writeFileSync(p, JSON.stringify(state, null, 2), 'utf-8');
+	} catch (_e) { /* ignore */ }
+};
+
+const clearOrchestrationState = (workspaceFolderPath: string): void => {
+	try {
+		const p = getOrchestrationStatePath(workspaceFolderPath);
+		if (fs.existsSync(p)) fs.unlinkSync(p);
+	} catch (_e) { /* ignore */ }
+};
+
+// Apply user-edited MD contents to the actual .division/*.md files so the final
+// flow picks up the edits.
+const applyEditedMdFiles = (
+	workspaceFolderPath: string,
+	editedOutputs: Array<{ mdFileName: string; mdContent: string }>,
+): void => {
+	const divisionDir = path.join(workspaceFolderPath, '.division');
+	try { fs.mkdirSync(divisionDir, { recursive: true }); } catch (_e) { /* ignore */ }
+	for (const out of editedOutputs) {
+		if (!out || !out.mdFileName) continue;
+		const filePath = path.join(divisionDir, out.mdFileName);
+		try {
+			fs.writeFileSync(filePath, out.mdContent ?? '', 'utf-8');
+		} catch (_e) { /* ignore */ }
+	}
+};
+
+// Load the (possibly user-edited) MD files from .division/ so they can be used
+// as context for the final synthesis flow.
+const loadFlowMdFiles = (
+	workspaceFolderPath: string,
+	entries: FlowOutputEntry[],
+): FlowOutputEntry[] => {
+	const result: FlowOutputEntry[] = [];
+	for (const e of entries) {
+		const filePath = path.join(workspaceFolderPath, '.division', e.mdFileName);
+		let mdContent = e.mdContent;
+		try {
+			if (fs.existsSync(filePath)) {
+				mdContent = fs.readFileSync(filePath, 'utf-8');
+			}
+		} catch (_e) { /* ignore */ }
+		result.push({ ...e, mdContent });
+	}
+	return result;
+};
+
 
 
 // Auto file create/edit: extract code blocks from AI output
@@ -997,13 +1076,15 @@ const saveCodeBlocksFromOutput = (output: string, _sessionId: string, workspaceF
 
 
 
-const callDivisionGenerate = async (
+const callDivisionGenerateStream = async (
 	endpointBase: string,
 	divisionModelName: string,
 	input: string,
 	signal: AbortSignal,
+	onChunk: (text: string) => void,
 	mode?: string,
-	divisionApiKey?: string
+	divisionApiKey?: string,
+	sessionId?: string,
 ): Promise<{ output: string; error?: string; provider?: string; durationMs?: number }> => {
 	try {
 		const apiKey = divisionApiKey || process.env.DIVISION_API_KEY || '';
@@ -1013,31 +1094,466 @@ const callDivisionGenerate = async (
 		if (apiKey) {
 			headers['Authorization'] = `Bearer ${apiKey}`;
 		}
-		const response = await fetch(`${endpointBase}/api/generate`, {
+		const response = await fetch(`${endpointBase}/api/generate/stream`, {
 			method: 'POST',
 			headers,
 			body: JSON.stringify({
 				input,
 				provider: divisionModelName,
-				...(mode ? { mode } : {})
+				...(mode ? { mode } : {}),
+				...(sessionId ? { sessionId } : {}),
 			}),
 			signal,
 		});
 
-		const responseText = await response.text();
-		if (!responseText) {
-			return { output: '', error: 'Empty response body' };
+		if (!response.ok) {
+			const errorText = await response.text();
+			return { output: '', error: `HTTP ${response.status}: ${errorText.substring(0, 300)}` };
 		}
 
-		const data = JSON.parse(responseText);
-		if (data.status === 'error') {
-			return { output: '', error: data.error || 'Unknown error', provider: data.provider, durationMs: data.durationMs };
+		const reader = response.body!.getReader();
+		const decoder = new TextDecoder();
+		let sseBuffer = '';
+		let currentEvent = '';
+		let fullOutput = '';
+		let provider = '';
+		let durationMs = 0;
+
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
+
+			sseBuffer += decoder.decode(value, { stream: true });
+			const lines = sseBuffer.split('\n');
+			sseBuffer = lines.pop() || '';
+
+			for (const line of lines) {
+				if (line.startsWith('event: ')) {
+					currentEvent = line.slice(7).trim();
+				} else if (line.startsWith('data: ')) {
+					const rawData = line.slice(6);
+					if (rawData) {
+						try {
+							const data = JSON.parse(rawData);
+							switch (currentEvent) {
+								case 'chunk':
+								case 'text':
+									if (data.text) {
+										fullOutput += data.text;
+										onChunk(data.text);
+									}
+									break;
+								case 'done':
+								case 'finish':
+									if (data.output) fullOutput = data.output;
+									if (data.provider) provider = data.provider;
+									if (data.durationMs) durationMs = data.durationMs;
+									break;
+								case 'error':
+									return { output: fullOutput, error: data.error || 'Stream error', provider, durationMs };
+								default:
+									if (data.text) {
+										fullOutput += data.text;
+										onChunk(data.text);
+									}
+									break;
+							}
+						} catch (_e) { /* skip malformed JSON */ }
+					}
+					currentEvent = '';
+				} else if (line.trim() === '') {
+					currentEvent = '';
+				}
+			}
 		}
-		return { output: data.output || '', provider: data.provider, durationMs: data.durationMs };
+
+		return { output: fullOutput, provider, durationMs };
 	} catch (e: any) {
+		if (e?.name === 'AbortError') {
+			return { output: '', error: 'Aborted' };
+		}
 		return { output: '', error: e?.message || String(e) };
 	}
 };
+
+const callDivisionTaskCreate = async (
+	endpointBase: string,
+	projectId: string,
+	input: string,
+	signal: AbortSignal,
+	divisionApiKey?: string,
+	chatHistory?: { role: 'user' | 'assistant'; content: string }[],
+): Promise<{
+	sessionId: string;
+	tasks: { taskId: string; role: string; title: string; input?: string; output?: string; provider?: string; dependsOn?: string[] }[];
+	finalRole: string;
+	error?: string;
+}> => {
+	try {
+		const apiKey = divisionApiKey || process.env.DIVISION_API_KEY || '';
+		const headers: Record<string, string> = {
+			'Content-Type': 'application/json',
+		};
+		if (apiKey) {
+			headers['Authorization'] = `Bearer ${apiKey}`;
+		}
+		const response = await fetch(`${endpointBase}/api/tasks/create`, {
+			method: 'POST',
+			headers,
+			body: JSON.stringify({
+				projectId,
+				input,
+				// Ask the server to skip the Coder step — we run it ourselves on the client
+				// using the user's actual workspace via /api/generate/stream. If the server
+				// ignores these params it's harmless; if it honors any of them it saves time/cost.
+				skipCoder: true,
+				excludeRoles: ['coder', 'coding'],
+				runCoder: false,
+				...(chatHistory && chatHistory.length > 0 ? { chatHistory } : {}),
+			}),
+			signal,
+		});
+
+		if (!response.ok) {
+			const errorText = await response.text();
+			return { sessionId: '', tasks: [], finalRole: '', error: `HTTP ${response.status}: ${errorText.substring(0, 300)}` };
+		}
+
+		const data = await response.json();
+		return {
+			sessionId: data.sessionId || '',
+			tasks: data.tasks || [],
+			finalRole: data.finalRole || 'coder',
+			error: data.error,
+		};
+	} catch (e: any) {
+		return { sessionId: '', tasks: [], finalRole: '', error: e?.message || String(e) };
+	}
+};
+
+// POST /api/tasks/execute — execute a single role's task.
+// Supports SSE streaming when the server sends `Content-Type: text/event-stream`.
+// Falls back to parsing a JSON response body (`{ output }` or `{ task: { output } }`) otherwise.
+const callDivisionTaskExecute = async (
+	endpointBase: string,
+	projectId: string,
+	roleSlug: string,
+	input: string,
+	signal: AbortSignal,
+	onChunk: (text: string) => void,
+	divisionApiKey?: string,
+	sessionId?: string,
+	chatHistory?: { role: 'user' | 'assistant'; content: string }[],
+): Promise<{ output: string; error?: string; provider?: string; durationMs?: number }> => {
+	try {
+		const apiKey = divisionApiKey || process.env.DIVISION_API_KEY || '';
+		const headers: Record<string, string> = {
+			'Content-Type': 'application/json',
+			'Accept': 'text/event-stream, application/json',
+		};
+		if (apiKey) {
+			headers['Authorization'] = `Bearer ${apiKey}`;
+		}
+		const response = await fetch(`${endpointBase}/api/tasks/execute`, {
+			method: 'POST',
+			headers,
+			body: JSON.stringify({
+				projectId,
+				roleSlug,
+				input,
+				stream: true,
+				...(sessionId ? { sessionId } : {}),
+				...(chatHistory && chatHistory.length > 0 ? { chatHistory } : {}),
+			}),
+			signal,
+		});
+
+		if (!response.ok) {
+			const errorText = await response.text();
+			return { output: '', error: `HTTP ${response.status}: ${errorText.substring(0, 300)}` };
+		}
+
+		const contentType = (response.headers.get('content-type') || '').toLowerCase();
+
+		// Non-SSE JSON response: extract output directly
+		if (!contentType.includes('text/event-stream')) {
+			const data = await response.json().catch(() => null) as any;
+			const out = (data && (data.output || data?.task?.output || data?.result)) || '';
+			if (out) onChunk(out);
+			return {
+				output: out,
+				provider: data?.provider || '',
+				durationMs: data?.durationMs || 0,
+				error: data?.error,
+			};
+		}
+
+		// SSE streaming response: mirror callDivisionGenerateStream parsing
+		const reader = response.body!.getReader();
+		const decoder = new TextDecoder();
+		let sseBuffer = '';
+		let currentEvent = '';
+		let fullOutput = '';
+		let provider = '';
+		let durationMs = 0;
+
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
+
+			sseBuffer += decoder.decode(value, { stream: true });
+			const lines = sseBuffer.split('\n');
+			sseBuffer = lines.pop() || '';
+
+			for (const line of lines) {
+				if (line.startsWith('event: ')) {
+					currentEvent = line.slice(7).trim();
+				} else if (line.startsWith('data: ')) {
+					const rawData = line.slice(6);
+					if (rawData) {
+						try {
+							const data = JSON.parse(rawData);
+							switch (currentEvent) {
+								case 'chunk':
+								case 'text':
+									if (data.text) {
+										fullOutput += data.text;
+										onChunk(data.text);
+									}
+									break;
+								case 'done':
+								case 'finish':
+									if (data.output) fullOutput = data.output;
+									if (data.provider) provider = data.provider;
+									if (data.durationMs) durationMs = data.durationMs;
+									break;
+								case 'error':
+									return { output: fullOutput, error: data.error || 'Stream error', provider, durationMs };
+								default:
+									if (data.text) {
+										fullOutput += data.text;
+										onChunk(data.text);
+									}
+									break;
+							}
+						} catch (_e) { /* skip malformed JSON */ }
+					}
+					currentEvent = '';
+				} else if (line.trim() === '') {
+					currentEvent = '';
+				}
+			}
+		}
+
+		return { output: fullOutput, provider, durationMs };
+	} catch (e: any) {
+		if (e?.name === 'AbortError') {
+			return { output: '', error: 'Aborted' };
+		}
+		return { output: '', error: e?.message || String(e) };
+	}
+};
+
+// Local file search: scan the workspace and return matching files with their contents.
+// Used to enrich the file-search task output with actual file contents from the user's workspace.
+const IGNORED_DIRS = new Set([
+	'node_modules', '.git', '.next', 'dist', 'build', 'out', '.cache',
+	'.turbo', '.vercel', '.nuxt', 'coverage', '__pycache__', '.venv', 'venv',
+	'.idea', '.vscode', '.DS_Store', 'target', '.gradle',
+]);
+const TEXT_EXTENSIONS = new Set([
+	'.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.json', '.md', '.mdx',
+	'.html', '.css', '.scss', '.sass', '.less', '.vue', '.svelte',
+	'.py', '.rb', '.go', '.rs', '.java', '.kt', '.swift', '.dart',
+	'.c', '.cpp', '.h', '.hpp', '.cs', '.php', '.sh', '.bash', '.zsh',
+	'.yml', '.yaml', '.toml', '.xml', '.txt', '.env', '.sql', '.graphql',
+]);
+const MAX_SEARCH_FILES = 30;
+const MAX_FILE_SIZE_BYTES = 100 * 1024; // 100KB
+const MAX_TOTAL_OUTPUT_CHARS = 60000;
+
+const extractKeywordsFromQuery = (query: string): string[] => {
+	const lowered = query.toLowerCase();
+	const tokens = lowered.match(/[a-z0-9_\-./]+|[\u3040-\u30ff\u4e00-\u9fff]+/g) || [];
+	const stopWords = new Set([
+		'the', 'a', 'an', 'and', 'or', 'of', 'to', 'in', 'on', 'for', 'with',
+		'is', 'are', 'was', 'were', 'be', 'been', 'this', 'that', 'these',
+		'find', 'search', 'look', 'show', 'list', 'file', 'files', 'about',
+		'を', 'は', 'が', 'の', 'に', 'で', 'と', 'から', 'まで', 'して', 'する',
+		'ファイル', '検索', '探して', '読み込んで', '読んで', '一覧',
+	]);
+	return Array.from(new Set(tokens.filter(t => t.length >= 2 && !stopWords.has(t))));
+};
+
+const walkDirectory = (dir: string, root: string, results: string[], maxFiles: number): void => {
+	if (results.length >= maxFiles) return;
+	let entries: fs.Dirent[];
+	try {
+		entries = fs.readdirSync(dir, { withFileTypes: true });
+	} catch (_e) {
+		return;
+	}
+	for (const entry of entries) {
+		if (results.length >= maxFiles) return;
+		if (entry.name.startsWith('.') && entry.name !== '.env' && entry.name !== '.gitignore') {
+			if (IGNORED_DIRS.has(entry.name)) continue;
+		}
+		if (IGNORED_DIRS.has(entry.name)) continue;
+		const full = path.join(dir, entry.name);
+		if (entry.isDirectory()) {
+			walkDirectory(full, root, results, maxFiles);
+		} else if (entry.isFile()) {
+			const ext = path.extname(entry.name).toLowerCase();
+			if (TEXT_EXTENSIONS.has(ext) || entry.name === 'package.json' || entry.name === 'README.md') {
+				results.push(full);
+			}
+		}
+	}
+};
+
+const searchWorkspaceFiles = (
+	workspaceFolderPath: string,
+	query: string,
+): { matches: { relativePath: string; content: string }[]; summary: string } => {
+	const allFiles: string[] = [];
+	walkDirectory(workspaceFolderPath, workspaceFolderPath, allFiles, 5000);
+
+	const keywords = extractKeywordsFromQuery(query);
+	const scored: { file: string; score: number }[] = [];
+
+	for (const file of allFiles) {
+		const relative = path.relative(workspaceFolderPath, file).toLowerCase();
+		let score = 0;
+		for (const kw of keywords) {
+			if (relative.includes(kw)) {
+				score += relative.endsWith('/' + kw) || relative === kw ? 10 : 3;
+			}
+			const base = path.basename(relative);
+			if (base.includes(kw)) score += 2;
+		}
+		if (score > 0) scored.push({ file, score });
+	}
+
+	// If no path-based matches, fall back to content search on a limited set
+	const pickedFiles: string[] = [];
+	if (scored.length > 0) {
+		scored.sort((a, b) => b.score - a.score);
+		pickedFiles.push(...scored.slice(0, MAX_SEARCH_FILES).map(s => s.file));
+	} else {
+		// Fallback: scan file contents for keywords (limited number of files)
+		const contentScored: { file: string; score: number }[] = [];
+		const candidatesForContent = allFiles.slice(0, 500);
+		for (const file of candidatesForContent) {
+			try {
+				const stat = fs.statSync(file);
+				if (stat.size > MAX_FILE_SIZE_BYTES) continue;
+				const content = fs.readFileSync(file, 'utf-8').toLowerCase();
+				let score = 0;
+				for (const kw of keywords) {
+					const matches = content.split(kw).length - 1;
+					if (matches > 0) score += matches;
+				}
+				if (score > 0) contentScored.push({ file, score });
+			} catch (_e) { /* skip */ }
+		}
+		contentScored.sort((a, b) => b.score - a.score);
+		pickedFiles.push(...contentScored.slice(0, MAX_SEARCH_FILES).map(s => s.file));
+	}
+
+	const matches: { relativePath: string; content: string }[] = [];
+	let totalChars = 0;
+	for (const file of pickedFiles) {
+		try {
+			const stat = fs.statSync(file);
+			if (stat.size > MAX_FILE_SIZE_BYTES) continue;
+			const content = fs.readFileSync(file, 'utf-8');
+			const relativePath = path.relative(workspaceFolderPath, file);
+			if (totalChars + content.length > MAX_TOTAL_OUTPUT_CHARS) {
+				const remaining = MAX_TOTAL_OUTPUT_CHARS - totalChars;
+				if (remaining > 200) {
+					matches.push({ relativePath, content: content.slice(0, remaining) + '\n... (truncated)' });
+					totalChars = MAX_TOTAL_OUTPUT_CHARS;
+				}
+				break;
+			}
+			matches.push({ relativePath, content });
+			totalChars += content.length;
+		} catch (_e) { /* skip */ }
+	}
+
+	const summary = matches.length === 0
+		? `ワークスペース内にキーワード「${keywords.join(', ')}」に一致するファイルが見つかりませんでした。`
+		: `${matches.length} 件のファイルが見つかりました（キーワード: ${keywords.join(', ')}）。`;
+
+	return { matches, summary };
+};
+
+const buildFileSearchOutput = (workspaceFolderPath: string, query: string): string => {
+	const { matches, summary } = searchWorkspaceFiles(workspaceFolderPath, query);
+	const lines: string[] = [summary, ''];
+	for (const m of matches) {
+		const ext = path.extname(m.relativePath).slice(1) || 'text';
+		lines.push(`### \`${m.relativePath}\``);
+		lines.push('```' + ext);
+		lines.push(m.content);
+		lines.push('```');
+		lines.push('');
+	}
+	return lines.join('\n');
+};
+
+// Code output instructions appended to prompts when we want the AI to apply code changes.
+// The renderer's editCodeService will pick up SEARCH/REPLACE blocks and apply them as a diff.
+const buildCodeOutputInstructions = (): string => [
+	`## 出力ルール（必ず守ってください）`,
+	``,
+	`コードを出力する際は、必ず以下のいずれかの形式を使用してください。形式を守らないとファイルに反映されません。`,
+	``,
+	`### 新規ファイル作成 / ファイル全体上書き`,
+	`コードブロックの言語の後にコロン（:）でファイルパスを指定してください（ワークスペースルートからの相対パス）。`,
+	``,
+	`例:`,
+	'```ts:src/components/Button.tsx',
+	`export const Button = () => <button>Click</button>;`,
+	'```',
+	``,
+	`### 既存ファイルの部分編集（推奨）`,
+	`既存ファイルの一部を変更する場合は、SEARCH/REPLACE形式を使用してください。差分が自動でエディタに反映されます。`,
+	``,
+	`例:`,
+	'```ts:src/utils/api.ts',
+	`<<<SEARCH`,
+	`const BASE_URL = 'https://old.example.com';`,
+	`===`,
+	`const BASE_URL = 'https://new.example.com';`,
+	`>>>REPLACE`,
+	'```',
+	``,
+	`### ターミナルコマンド（自動実行されます）`,
+	`実行が必要なコマンドは bash ブロック（ファイルパス指定なし）で出力してください。ユーザーの環境で自動実行されます。`,
+	``,
+	`使用例:`,
+	`- 依存パッケージのインストール: \`npm install react\`, \`pip install requests\` など`,
+	`- ファイル/ディレクトリ操作: \`mkdir -p src/components\`, \`mv old.ts new.ts\` など`,
+	`- ビルド・テスト・実行: \`npm run build\`, \`npm test\`, \`python script.py\` など`,
+	`- Git操作: \`git init\`, \`git add .\` など`,
+	``,
+	'```bash',
+	`npm install react react-dom`,
+	'```',
+	``,
+	'```bash',
+	`mkdir -p src/components && touch src/components/Button.tsx`,
+	'```',
+	``,
+	`複数のコマンドが必要な場合は、bash ブロックを複数出力するか、\`&&\` で連結してください。`,
+	``,
+	`### 重要な注意点`,
+	`- ファイルパスは必ず指定してください（パスがないコードブロックはコマンドとして実行されるか、無視されます）`,
+	`- SEARCH部分は既存ファイルの内容と完全に一致する必要があります（インデント・空白も含めて）`,
+	`- 既存ファイルを編集する場合は、ファイル全体ではなく SEARCH/REPLACE で必要な箇所だけ変更してください`,
+	`- 必要であれば、コード変更とコマンド実行を組み合わせて出力してください`,
+].join('\n');
 
 // Extract prompt from LLM messages
 const buildPromptFromMessages = (messages: any[], separateSystemMessage?: string): string => {
@@ -1106,24 +1622,36 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 
 		// =============================================
 		// DIRECT MODEL MODE: If user selected a specific model (not orchestrator),
-		// skip orchestration and call /api/generate directly with that model
+		// skip orchestration and call /api/generate/stream with that model
 		// =============================================
 		if (selectedModel && selectedModel !== 'division-orchestrator') {
 
-			const result = await callDivisionGenerate(endpointBase, selectedModel, prompt, controller.signal, chatMode === 'agent' ? 'function_calling' : chatMode === 'gather' ? 'search' : 'chat', divisionApiKey);
+			const mode = chatMode === 'agent' ? 'function_calling' : chatMode === 'gather' ? 'search' : 'chat';
+
+			// In agent mode, append code output instructions so the model produces
+			// file-targeted code blocks / SEARCH-REPLACE diffs that we can auto-apply.
+			const directPrompt = chatMode === 'agent'
+				? `${prompt}\n\n${buildCodeOutputInstructions()}`
+				: prompt;
+
+			const result = await callDivisionGenerateStream(
+				endpointBase, selectedModel, directPrompt, controller.signal,
+				(chunk) => appendText(chunk),
+				mode, divisionApiKey,
+			);
 
 			if (result.error) {
-				appendText(`Error: ${result.error}\n`);
+				appendText(`\nError: ${result.error}\n`);
 			} else {
-				let sanitizedOutput = result.output;
-				const codeBlockOpens = (sanitizedOutput.match(/```/g) || []).length;
+				const output = result.output;
+				const codeBlockOpens = (output.match(/```/g) || []).length;
 				if (codeBlockOpens % 2 !== 0) {
-					sanitizedOutput += '\n```\n';
+					appendText('\n```\n');
 				}
-				appendText(`${sanitizedOutput}\n\n`);
+				appendText('\n\n');
 
 				if (workspaceFolderPath) {
-					const { savedFiles, fileOperations, commands } = saveCodeBlocksFromOutput(result.output, `direct-${selectedModel}`, workspaceFolderPath);
+					const { savedFiles, fileOperations, commands } = saveCodeBlocksFromOutput(output, `direct-${selectedModel}`, workspaceFolderPath);
 					if (savedFiles.length > 0) {
 						for (const sf of savedFiles) {
 							const basename = path.basename(sf.filePath);
@@ -1145,9 +1673,22 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		}
 
 		// =============================================
-		// ORCHESTRATION MODE: /api/agent/stream SSE
-		// Server handles Leader AI decomposition, wave-based parallel execution,
-		// and synthesis step (Coder/Writer) automatically
+		// ORCHESTRATION MODE: /api/tasks/create + /api/tasks/execute
+		//
+		// Two-phase orchestration with a single consolidated flow_review:
+		//
+		// Phase A (first invocation):
+		//   1. Call /api/tasks/create for task decomposition (Leader AI + Wave agents)
+		//   2. Execute all intermediate flows (design, search, planning, research, ...)
+		//      — save each output as .division/*.md
+		//   3. Emit ONE flow_review with all intermediate outputs, persist
+		//      orchestration state to .division/.orchestration-state.json, and return.
+		//
+		// Phase B (second invocation, after user approval):
+		//   4. Detect the approved state file, apply user-edited MD, then run the
+		//      final flow (synthesis/coder/writer) via /api/tasks/execute with the
+		//      edited context
+		//   5. Run the review step via /api/tasks/execute, clear state, and return.
 		// =============================================
 
 		const extractContent = (msg: LLMChatMessage): string => {
@@ -1179,218 +1720,274 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				content: extractContent(msg)
 			}));
 
-		console.log('[DivisionAPI] /api/agent/stream request:', JSON.stringify({
+		const codeOutputInstructions = buildCodeOutputInstructions();
+
+		// Shared helper: run the final (synthesis + review) flow given intermediate outputs.
+		const runFinalFlow = async (
+			finalRoleArg: string,
+			sessionIdArg: string,
+			flowOutputs: FlowOutputEntry[],
+		): Promise<void> => {
+			const synthesisInput = flowOutputs
+				.filter(o => o.mdContent && o.mdContent.trim())
+				.map(o => `## ${o.role}\n${o.mdContent}`)
+				.join('\n\n');
+
+			const coderMandate = [
+				`## あなたのタスク（必ず実行してください）`,
+				``,
+				`あなたは ${finalRoleArg} です。**説明や提案だけで終わらせず、必ず以下のいずれかを行ってください**:`,
+				``,
+				`1. **新しいファイルを作成する** — 必要なファイルを ` + '```lang:path/to/file```' + ` 形式で出力`,
+				`2. **既存ファイルを変更する** — SEARCH/REPLACE形式で差分を出力`,
+				`3. **コマンドを実行する** — 依存パッケージのインストール、ファイル移動、ビルドなど必要なコマンドを ` + '```bash```' + ` 形式で出力`,
+				``,
+				`コード変更とコマンド実行は併用可能です。例えば「新しいライブラリを使うコードを作成 + npm install で依存追加」のように、ユーザーの要求を完遂するまで全ての操作を出力してください。`,
+				``,
+				`「~~したらどうですか」「~~を検討してください」のような提案だけの回答は禁止です。実際にコードを書き、コマンドを発行してください。`,
+			].join('\n');
+
+			const synthesisPrompt = synthesisInput
+				? [
+					coderMandate,
+					``,
+					`## ユーザーの要求`,
+					currentInput,
+					``,
+					`## 承認済みエージェント出力（ユーザー編集反映済み）`,
+					synthesisInput,
+					``,
+					codeOutputInstructions,
+				].join('\n')
+				: [
+					coderMandate,
+					``,
+					`## ユーザーの要求`,
+					currentInput,
+					``,
+					codeOutputInstructions,
+				].join('\n');
+
+			appendText(`---\n\n**合成ステップ** (${finalRoleArg}) 開始...\n\n`);
+
+			const synthesisResult = await callDivisionTaskExecute(
+				endpointBase, projectId, finalRoleArg, synthesisPrompt, controller.signal,
+				(chunk) => appendText(chunk),
+				divisionApiKey, sessionIdArg,
+			);
+
+			if (synthesisResult.error) {
+				appendText(`\n❌ **Synthesis Error:** ${synthesisResult.error}\n`);
+				onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null });
+				return;
+			}
+
+			const synthesisOutput = synthesisResult.output;
+
+			if (synthesisOutput && workspaceFolderPath) {
+				const { savedFiles, fileOperations, commands } = saveCodeBlocksFromOutput(synthesisOutput, sessionIdArg || 'synthesis', workspaceFolderPath);
+				if (savedFiles.length > 0) {
+					appendText(`\n`);
+					for (const sf of savedFiles) {
+						appendText(`${path.basename(sf.filePath)} — \`${sf.filePath}\`\n`);
+					}
+					appendText(`\n`);
+					if (fileOperations.length > 0 && onFileOperation) onFileOperation(fileOperations);
+				}
+				if (commands.length > 0 && onCommandRun) onCommandRun(commands);
+
+				if (FLOW_ROLE_TO_FILENAME[finalRoleArg.toLowerCase()]) {
+					saveFlowResultAsMd(workspaceFolderPath, finalRoleArg, '', synthesisOutput, sessionIdArg);
+				}
+			}
+
+			// Review step
+			appendText(`\n---\n\n**レビューステップ** (reviewer) 開始...\n\n`);
+
+			const reviewPrompt = [
+				`以下の成果物をレビューしてください。品質、正確性、改善点を評価してください。`,
+				``,
+				`## ユーザーの要求`,
+				currentInput,
+				``,
+				`## 成果物`,
+				synthesisOutput,
+			].join('\n');
+
+			const reviewResult = await callDivisionTaskExecute(
+				endpointBase, projectId, 'review', reviewPrompt, controller.signal,
+				(chunk) => appendText(chunk),
+				divisionApiKey, sessionIdArg,
+			);
+
+			if (reviewResult.error) {
+				appendText(`\n❌ **Review Error:** ${reviewResult.error}\n`);
+			} else if (reviewResult.output && workspaceFolderPath && FLOW_ROLE_TO_FILENAME['review']) {
+				saveFlowResultAsMd(workspaceFolderPath, 'review', '', reviewResult.output, sessionIdArg);
+			}
+
+			if (workspaceFolderPath) clearOrchestrationState(workspaceFolderPath);
+			onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null });
+		};
+
+		// ---------- Phase B: resume after flow_review approval ----------
+		if (workspaceFolderPath) {
+			const resumeState = readOrchestrationState(workspaceFolderPath);
+			if (resumeState && resumeState.approved && resumeState.finalRole) {
+				appendText(`✅ **全フロー承認完了** — 最終フロー (${resumeState.finalRole}) を実行します。\n\n`);
+
+				if (resumeState.editedOutputs && resumeState.editedOutputs.length > 0) {
+					applyEditedMdFiles(workspaceFolderPath, resumeState.editedOutputs);
+					appendText(`編集済みフロー出力 (${resumeState.editedOutputs.length} 件) を反映しました。\n\n`);
+				}
+
+				const baseOutputs = resumeState.allFlowOutputs ?? [];
+				const refreshedOutputs = loadFlowMdFiles(workspaceFolderPath, baseOutputs);
+
+				await runFinalFlow(
+					resumeState.finalRole,
+					resumeState.sessionId || '',
+					refreshedOutputs,
+				);
+				return;
+			}
+		}
+
+		// ---------- Phase A: initial invocation ----------
+		// Step 1: Create tasks via /api/tasks/create
+		console.log('[DivisionAPI] /api/tasks/create request:', JSON.stringify({
 			projectId,
 			inputLength: currentInput.length,
 			inputPreview: currentInput.substring(0, 100),
 			chatHistoryLength: chatHistory.length,
 		}));
 
-		const apiKey = divisionApiKey || process.env.DIVISION_API_KEY || '';
-		const sseHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-		if (apiKey) sseHeaders['Authorization'] = `Bearer ${apiKey}`;
+		appendText(`**Leader AI** がタスクを分析中...\n\n`);
 
-		const sseResponse = await fetch(`${endpointBase}/api/agent/stream`, {
-			method: 'POST',
-			headers: sseHeaders,
-			body: JSON.stringify({
-				projectId,
-				input: currentInput,
-				format: 'sse',
-				...(chatHistory.length > 0 ? { chatHistory } : {}),
-			}),
-			signal: controller.signal,
-		});
+		const taskResult = await callDivisionTaskCreate(
+			endpointBase, projectId, currentInput, controller.signal,
+			divisionApiKey, chatHistory.length > 0 ? chatHistory : undefined,
+		);
 
-		if (!sseResponse.ok) {
-			const errorText = await sseResponse.text();
-			console.error(`[DivisionAPI] /api/agent/stream returned HTTP ${sseResponse.status}: ${errorText.substring(0, 500)}`);
-			appendText(`❌ **Error:** HTTP ${sseResponse.status} from /api/agent/stream\n`);
-			appendText(`\`\`\`\n${errorText.substring(0, 300)}\n\`\`\`\n\n`);
+		if (taskResult.error) {
+			appendText(`❌ **Task Create Error:** ${taskResult.error}\n\n`);
 
-			// Fallback: single agent via /api/generate
-			const fallbackResult = await callDivisionGenerate(endpointBase, 'gpt-5.2', prompt, controller.signal, 'chat', divisionApiKey);
+			// Fallback: single model via /api/generate/stream
+			appendText(`フォールバック: 単一モデルで生成中...\n\n`);
+			const fallbackResult = await callDivisionGenerateStream(
+				endpointBase, 'gpt-5.2', prompt, controller.signal,
+				(chunk) => appendText(chunk),
+				'chat', divisionApiKey,
+			);
 			if (fallbackResult.error) {
-				appendText(`❌ **Fallback Error:** ${fallbackResult.error}\n`);
-			} else {
-				appendText(fallbackResult.output + '\n');
+				appendText(`\n❌ **Fallback Error:** ${fallbackResult.error}\n`);
 			}
 			onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null });
 			return;
 		}
 
-		// SSE stream consumption
-		const reader = sseResponse.body!.getReader();
-		const decoder = new TextDecoder();
-		let sseBuffer = '';
-		let currentSSEEvent = '';
-		let sessionId = '';
-		const taskOutputs = new Map<string, string>();
-		let synthesisText = '';
+		const { sessionId, tasks: rawTasks, finalRole } = taskResult;
 
-		const processSSEEvent = (eventName: string, data: any) => {
-			switch (eventName) {
-				case 'session_start':
-					sessionId = data.sessionId || '';
-					break;
+		// Filter out server-side Coder/Coding tasks.
+		// The server sandbox cannot access the user's real workspace, so its Coder output
+		// is useless (and often wastes up to 20 tool iterations). We run the Coder step
+		// locally via /api/generate/stream below, which applies edits to actual files.
+		const tasks = rawTasks.filter(t => {
+			const role = (t.role || '').toLowerCase();
+			return role !== 'coder' && role !== 'coding';
+		});
+		const droppedCoderCount = rawTasks.length - tasks.length;
+		if (droppedCoderCount > 0) {
+			console.log(`[DivisionAPI] Skipped ${droppedCoderCount} server-side Coder task(s) — running Coder locally instead.`);
+		}
 
-				case 'leader_start':
-					appendText(`**Leader AI** がタスクを分析中...\n\n`);
-					break;
-
-				case 'leader_chunk':
-					break;
-
-				case 'leader_done': {
-					if (data.tasks && Array.isArray(data.tasks)) {
-						for (let i = 0; i < data.tasks.length; i++) {
-							const t = data.tasks[i];
-							appendText(`${i + 1}. **${t.role}** — ${t.title}\n`);
-						}
-						appendText(`\n`);
-					}
-					if (data.finalRole) {
-						appendText(`合成ロール: **${data.finalRole}**\n\n`);
-					}
-					break;
-				}
-
-				case 'leader_error':
-					appendText(`❌ **Leader Error:** ${data.error || 'Unknown error'}\n\n`);
-					break;
-
-				case 'wave_start':
-					appendText(`---\n\n**Wave ${(data.waveIndex ?? 0) + 1}** 開始\n\n`);
-					break;
-
-				case 'task_start':
-					appendText(`▶ **${data.role}** (${data.provider || ''}) 実行中...\n`);
-					break;
-
-				case 'task_chunk':
-					break;
-
-				case 'task_thinking_chunk':
-					break;
-
-				case 'task_done': {
-					const taskRole = data.role || '';
-					const taskOutput = data.output || '';
-					if (taskOutput) {
-						let sanitized = taskOutput;
-						const opens = (sanitized.match(/```/g) || []).length;
-						if (opens % 2 !== 0) sanitized += '\n```\n';
-						appendText(`## ${taskRole}\n\n${sanitized}\n\n`);
-
-						taskOutputs.set(data.taskId || taskRole, sanitized);
-
-						if (workspaceFolderPath && sanitized.trim() && FLOW_ROLE_TO_FILENAME[taskRole.toLowerCase()]) {
-							saveFlowResultAsMd(workspaceFolderPath, taskRole, data.title || '', sanitized, sessionId);
-						}
-					}
-					break;
-				}
-
-				case 'task_error':
-					appendText(`❌ **${data.role || 'Task'}**: ${data.error || 'Unknown error'}\n\n`);
-					break;
-
-				case 'wave_done':
-					break;
-
-				case 'synthesis_start':
-					appendText(`---\n\n**合成ステップ** (${data.finalRole || 'coder'}) 開始...\n\n`);
-					break;
-
-				case 'synthesis_chunk':
-					if (data.text) {
-						synthesisText += data.text;
-						appendText(data.text);
-					}
-					break;
-
-				case 'synthesis_done': {
-					const output = data.output || synthesisText;
-					if (output && workspaceFolderPath) {
-						const { savedFiles, fileOperations, commands } = saveCodeBlocksFromOutput(output, sessionId || 'synthesis', workspaceFolderPath);
-						if (savedFiles.length > 0) {
-							appendText(`\n`);
-							for (const sf of savedFiles) {
-								appendText(`${path.basename(sf.filePath)} — \`${sf.filePath}\`\n`);
-							}
-							appendText(`\n`);
-							if (fileOperations.length > 0 && onFileOperation) onFileOperation(fileOperations);
-						}
-						if (commands.length > 0 && onCommandRun) onCommandRun(commands);
-
-						const finalRole = data.finalRole || 'coding';
-						if (FLOW_ROLE_TO_FILENAME[finalRole.toLowerCase()]) {
-							saveFlowResultAsMd(workspaceFolderPath, finalRole, '', output, sessionId);
-						}
-					}
-					break;
-				}
-
-				case 'session_done':
-					break;
-
-				case 'heartbeat':
-					break;
-
-				default:
-					break;
+		// Display task decomposition results
+		if (tasks.length > 0) {
+			for (let i = 0; i < tasks.length; i++) {
+				const t = tasks[i];
+				appendText(`${i + 1}. **${t.role}** — ${t.title}\n`);
 			}
+			appendText(`\n`);
+		}
+		if (finalRole) {
+			appendText(`合成ロール: **${finalRole}**\n\n`);
+		}
+
+		// Local file-search: replace remote file-search task outputs with actual workspace contents
+		if (workspaceFolderPath) {
+			for (const task of tasks) {
+				const role = (task.role || '').toLowerCase();
+				if (role === 'file-search' || role === 'filesearch' || role === 'file_search') {
+					const query = task.input || task.title || currentInput;
+					appendText(`📂 **file-search** がワークスペースのファイルを読み込み中...\n\n`);
+					try {
+						const localOutput = buildFileSearchOutput(workspaceFolderPath, query);
+						task.output = localOutput;
+						appendText(`📂 file-search 完了（ローカルファイル読み込み）\n\n`);
+					} catch (e: any) {
+						appendText(`⚠️ file-search エラー: ${e?.message || String(e)}\n\n`);
+					}
+				}
+			}
+		}
+
+		// Display task outputs (from tasks/create response) and save as MD
+		const flowOutputs: FlowOutputEntry[] = [];
+		for (const task of tasks) {
+			if (!task.output) continue;
+			let sanitized = task.output;
+			const opens = (sanitized.match(/```/g) || []).length;
+			if (opens % 2 !== 0) sanitized += '\n```\n';
+			appendText(`## ${task.role}\n\n${sanitized}\n\n`);
+
+			if (workspaceFolderPath && sanitized.trim() && FLOW_ROLE_TO_FILENAME[task.role.toLowerCase()]) {
+				const savedPath = saveFlowResultAsMd(workspaceFolderPath, task.role, task.title || '', sanitized, sessionId);
+				const mdFileName = FLOW_ROLE_TO_FILENAME[task.role.toLowerCase()];
+				if (mdFileName) {
+					flowOutputs.push({
+						role: task.role,
+						mdFileName,
+						mdFilePath: savedPath || path.join(workspaceFolderPath, '.division', mdFileName),
+						mdContent: sanitized,
+					});
+				}
+			}
+		}
+
+		// If there are no intermediate outputs at all, skip flow_review and go straight to synthesis.
+		if (flowOutputs.length === 0) {
+			await runFinalFlow(finalRole, sessionId, []);
+			return;
+		}
+
+		// Persist orchestration state so Phase B (resume) can pick it up after user approval.
+		if (workspaceFolderPath) {
+			writeOrchestrationState(workspaceFolderPath, {
+				approved: false,
+				sessionId,
+				finalRole,
+				currentInput,
+				allFlowOutputs: flowOutputs,
+				createdAt: Date.now(),
+			});
+		}
+
+		// Emit a single consolidated flow_review request and pause for user approval.
+		appendText(`\n---\n\n**承認待ち** — 全中間フロー (${flowOutputs.length} 件) が完了しました。内容を確認・編集して承認してください。\n\n`);
+
+		const primary = flowOutputs[0];
+		const flowReview: FlowReviewData = {
+			flowRole: 'all',
+			mdFileName: primary.mdFileName,
+			mdFilePath: primary.mdFilePath,
+			mdContent: primary.mdContent,
+			sessionId,
+			completedTaskIndex: flowOutputs.length,
+			totalTasks: flowOutputs.length + 1, // +1 for the pending final flow
+			allFlowOutputs: flowOutputs,
 		};
 
-		// Read SSE stream
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-
-			sseBuffer += decoder.decode(value, { stream: true });
-			const lines = sseBuffer.split('\n');
-			sseBuffer = lines.pop() || '';
-
-			for (const line of lines) {
-				if (line.startsWith('event: ')) {
-					currentSSEEvent = line.slice(7).trim();
-				} else if (line.startsWith('data: ')) {
-					const rawData = line.slice(6);
-					if (currentSSEEvent && rawData) {
-						try {
-							const data = JSON.parse(rawData);
-							processSSEEvent(currentSSEEvent, data);
-						} catch (_e) {
-							console.warn('[DivisionAPI] SSE JSON parse error:', rawData.substring(0, 100));
-						}
-					}
-					currentSSEEvent = '';
-				} else if (line.trim() === '') {
-					currentSSEEvent = '';
-				}
-			}
-		}
-
-		// Process remaining buffer
-		if (sseBuffer.trim()) {
-			const remainingLines = sseBuffer.split('\n');
-			for (const line of remainingLines) {
-				if (line.startsWith('event: ')) {
-					currentSSEEvent = line.slice(7).trim();
-				} else if (line.startsWith('data: ')) {
-					const rawData = line.slice(6);
-					if (currentSSEEvent && rawData) {
-						try {
-							const data = JSON.parse(rawData);
-							processSSEEvent(currentSSEEvent, data);
-						} catch (_e) { /* skip */ }
-					}
-					currentSSEEvent = '';
-				}
-			}
-		}
-
-		onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null });
+		onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null, flowReview });
 
 	} catch (error: any) {
 		if (error?.name === 'AbortError') {

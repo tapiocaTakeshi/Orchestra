@@ -459,6 +459,49 @@ export const isFeatureNameDisabled = (featureName: FeatureName, settingsState: V
 export type ChatMode = 'agent' | 'gather' | 'normal'
 
 
+// Context tag types for chat context injection
+export type ContextTagGroup = 'design' | 'feature';
+
+export type ContextTag = {
+	group: ContextTagGroup;
+	id: string;
+	title: string;
+	description: string;
+};
+
+export const contextTagGroups: Record<ContextTagGroup, { title: string; icon: string }> = {
+	design: { title: 'Design', icon: 'palette' },
+	feature: { title: 'Feature', icon: 'blocks' },
+};
+
+export const contextTags: ContextTag[] = [
+	// Design group
+	{ group: 'design', id: 'minimal', title: 'Minimal', description: 'シンプルで余白を活かしたデザイン' },
+	{ group: 'design', id: 'modern', title: 'Modern', description: 'モダンでトレンドに沿ったデザイン' },
+	{ group: 'design', id: 'flat', title: 'Flat', description: 'フラットデザイン' },
+	{ group: 'design', id: 'glassmorphism', title: 'Glassmorphism', description: 'ガラス風の透過エフェクト' },
+	{ group: 'design', id: 'neumorphism', title: 'Neumorphism', description: 'ソフトな凹凸のニューモーフィズム' },
+	{ group: 'design', id: 'animation', title: 'Animation', description: 'アニメーション・モーション効果' },
+	{ group: 'design', id: 'dark-theme', title: 'Dark Theme', description: 'ダークテーマベースのデザイン' },
+	{ group: 'design', id: 'responsive', title: 'Responsive', description: 'レスポンシブ対応デザイン' },
+	{ group: 'design', id: '3d', title: '3D', description: '3Dグラフィックス・立体表現' },
+	{ group: 'design', id: 'accessibility', title: 'Accessibility', description: 'アクセシビリティ重視のデザイン' },
+	// Feature group
+	{ group: 'feature', id: 'login', title: 'Login', description: 'ログイン・認証機能' },
+	{ group: 'feature', id: 'ai-chat', title: 'AI Chat', description: 'AIチャット・対話機能' },
+	{ group: 'feature', id: 'search', title: 'Search', description: '検索機能' },
+	{ group: 'feature', id: 'notification', title: 'Notification', description: '通知・アラート機能' },
+	{ group: 'feature', id: 'payment', title: 'Payment', description: '決済・課金機能' },
+	{ group: 'feature', id: 'dashboard', title: 'Dashboard', description: 'ダッシュボード・管理画面' },
+	{ group: 'feature', id: 'file-upload', title: 'File Upload', description: 'ファイルアップロード機能' },
+	{ group: 'feature', id: 'realtime', title: 'Realtime', description: 'リアルタイム通信・WebSocket' },
+	{ group: 'feature', id: 'crud', title: 'CRUD', description: 'データの作成・読取・更新・削除' },
+	{ group: 'feature', id: 'i18n', title: 'i18n', description: '多言語対応・国際化' },
+];
+
+export const contextTagsOfGroup = (group: ContextTagGroup): ContextTag[] =>
+	contextTags.filter(t => t.group === group);
+
 // Division API role assignment types
 export type AgentRole = 'leader' | 'coder' | 'planner' | 'search' | 'research' | 'design' | 'writing' | 'ideaman' | 'filesearch' | 'image' | 'review';
 

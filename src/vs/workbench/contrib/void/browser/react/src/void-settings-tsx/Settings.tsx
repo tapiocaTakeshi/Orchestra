@@ -8,7 +8,7 @@ import { ProviderName, SettingName, displayInfoOfSettingName, providerNames, Voi
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
 import { VoidButtonBgDarken, VoidCustomDropdownBox, VoidInputBox2, VoidSimpleInputBox, VoidSwitch } from '../util/inputs.js'
 import { useAccessor, useDivisionProjects, useIsDark, useIsOptedOut, useRefreshModelListener, useRefreshModelState, useSettingsState } from '../util/services.js'
-import { X, RefreshCw, Loader2, Check, Asterisk, Plus, CloudDownload } from 'lucide-react'
+import { X, RefreshCw, Loader2, Check, Asterisk, Plus, CloudDownload, CloudUpload } from 'lucide-react'
 import { URI } from '../../../../../../../base/common/uri.js'
 import { ModelDropdown } from './ModelDropdown.js'
 import { ChatMarkdownRender } from '../markdown/ChatMarkdownRender.js'
@@ -1042,7 +1042,8 @@ const DivisionSettings = () => {
 
 	const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
 	const [allUpdateStatus, setAllUpdateStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-	const [supabaseSyncStatus, setSupabaseSyncStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+	const [remotePullStatus, setRemotePullStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+	const [remotePushStatus, setRemotePushStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
 	const [projectUpdateStatus, setProjectUpdateStatus] = useState<Record<string, 'idle' | 'loading' | 'success' | 'error'>>({});
 
 	const handleUpdateAll = async () => {
@@ -1052,11 +1053,18 @@ const DivisionSettings = () => {
 		setTimeout(() => setAllUpdateStatus('idle'), 2000);
 	};
 
-	const handleSupabaseSync = async () => {
-		setSupabaseSyncStatus('loading');
+	const handleRemotePull = async () => {
+		setRemotePullStatus('loading');
 		const result = await divisionProjectService.fetchFromSupabase();
-		setSupabaseSyncStatus(result.success ? 'success' : 'error');
-		setTimeout(() => setSupabaseSyncStatus('idle'), 2000);
+		setRemotePullStatus(result.success ? 'success' : 'error');
+		setTimeout(() => setRemotePullStatus('idle'), 2000);
+	};
+
+	const handleRemotePush = async () => {
+		setRemotePushStatus('loading');
+		const result = await divisionProjectService.pushToSupabase();
+		setRemotePushStatus(result.success ? 'success' : 'error');
+		setTimeout(() => setRemotePushStatus('idle'), 2000);
 	};
 
 	const handleUpdateProject = async (projectId: string) => {
@@ -1131,16 +1139,28 @@ const DivisionSettings = () => {
 				<span className="text-xs text-void-fg-3 uppercase font-semibold tracking-wide">Configured Projects</span>
 				<div className="flex items-center gap-3">
 					<button
-						onClick={handleSupabaseSync}
-						disabled={supabaseSyncStatus === 'loading'}
+						onClick={handleRemotePush}
+						disabled={remotePushStatus === 'loading'}
 						className="flex items-center gap-1 text-xs text-void-fg-3 hover:text-void-fg-1 transition-colors disabled:opacity-50"
-						title="Sync all projects from Supabase"
+						title="Push local JSON to Remote"
 					>
-						{supabaseSyncStatus === 'success' ? <Check className='stroke-green-500 size-3' />
-							: supabaseSyncStatus === 'error' ? <X className='stroke-red-500 size-3' />
-								: supabaseSyncStatus === 'loading' ? <Loader2 className='size-3 animate-spin' />
+						{remotePushStatus === 'success' ? <Check className='stroke-green-500 size-3' />
+							: remotePushStatus === 'error' ? <X className='stroke-red-500 size-3' />
+								: remotePushStatus === 'loading' ? <Loader2 className='size-3 animate-spin' />
+									: <CloudUpload className='size-3' />}
+						<span>Push to Remote</span>
+					</button>
+					<button
+						onClick={handleRemotePull}
+						disabled={remotePullStatus === 'loading'}
+						className="flex items-center gap-1 text-xs text-void-fg-3 hover:text-void-fg-1 transition-colors disabled:opacity-50"
+						title="Pull from Remote"
+					>
+						{remotePullStatus === 'success' ? <Check className='stroke-green-500 size-3' />
+							: remotePullStatus === 'error' ? <X className='stroke-red-500 size-3' />
+								: remotePullStatus === 'loading' ? <Loader2 className='size-3 animate-spin' />
 									: <CloudDownload className='size-3' />}
-						<span>Supabase Sync</span>
+						<span>Pull from Remote</span>
 					</button>
 					<button
 						onClick={handleUpdateAll}

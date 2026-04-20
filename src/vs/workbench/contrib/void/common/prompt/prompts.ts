@@ -10,7 +10,7 @@ import { StagingSelectionItem } from '../chatThreadServiceTypes.js';
 import { os } from '../helpers/systemInfo.js';
 import { RawToolParamsObj } from '../sendLLMMessageTypes.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, BuiltinToolResultType, ToolName } from '../toolsServiceTypes.js';
-import { ChatMode } from '../voidSettingsTypes.js';
+import { ChatMode, contextTags, contextTagGroups } from '../voidSettingsTypes.js';
 
 // Triple backtick wrapper used throughout the prompts for code blocks
 export const tripleTick = ['```', '```']
@@ -614,6 +614,12 @@ export const messageOfSelection = async (
 		// Image data is sent as a separate multimodal content block,
 		// so we just include a text reference here
 		return `[Image: ${s.fileName}]`
+	}
+	else if (s.type === 'ContextTag') {
+		const tag = contextTags.find(t => t.id === s.tagId);
+		const groupInfo = contextTagGroups[s.tagGroup];
+		const label = tag ? `${tag.title} — ${tag.description}` : s.tagId;
+		return `[${groupInfo.title}: ${label}]`
 	}
 	else
 		return ''

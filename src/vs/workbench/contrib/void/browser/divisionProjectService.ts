@@ -100,6 +100,9 @@ export interface IDivisionProjectService {
 
 	/** Fetch project data from Supabase and update agents.json */
 	fetchFromSupabase(projectId?: string): Promise<{ success: boolean; message: string }>;
+
+	/** Push local agents.json data to Supabase */
+	pushToSupabase(): Promise<{ success: boolean; message: string }>;
 }
 
 
@@ -504,6 +507,19 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 		this._onDidChangeProject.fire();
 	}
 
+	async pushToSupabase(): Promise<{ success: boolean; message: string }> {
+		const projects = this._projects.filter(p => p.projectId);
+		if (projects.length === 0) {
+			return { success: false, message: 'No projects with Project ID configured' };
+		}
+		try {
+			await this._syncToSupabase();
+			return { success: true, message: `${projects.length} project(s) pushed to Supabase` };
+		} catch (e) {
+			return { success: false, message: `Supabase push error: ${e}` };
+		}
+	}
+
 	async fetchFromSupabase(projectId?: string): Promise<{ success: boolean; message: string }> {
 		try {
 			const targetProjects = projectId
@@ -519,26 +535,37 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 				'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
 			};
 
-			// Fetch Role and Provider tables to resolve IDs → slug/name
-			const [rolesRes, providersRes] = await Promise.all([
-				fetch(`${SUPABASE_URL}/rest/v1/Role?select=id,slug,name`, { headers: supaHeaders }),
-				fetch(`${SUPABASE_URL}/rest/v1/Provider?select=id,name,displayName`, { headers: supaHeaders }),
-			]);
-
+			// Build Role ID→slug and Provider ID→name maps
 			const roleIdToSlug = new Map<string, string>();
-			if (rolesRes.ok) {
-				const roles: Array<{ id: string; slug: string; name: string }> = await rolesRes.json();
-				for (const r of roles) {
-					roleIdToSlug.set(r.id, r.slug || r.name || r.id);
-				}
-			}
-
 			const providerIdToName = new Map<string, string>();
-			if (providersRes.ok) {
-				const providers: Array<{ id: string; name: string; displayName: string }> = await providersRes.json();
-				for (const p of providers) {
-					providerIdToName.set(p.id, p.name || p.id);
+
+			try {
+				const [rolesRes, providersRes] = await Promise.all([
+					fetch(`${SUPABASE_URL}/rest/v1/Role?select=id,slug,name`, { headers: supaHeaders }),
+					fetch(`${SUPABASE_URL}/rest/v1/Provider?select=id,name,displayName`, { headers: supaHeaders }),
+				]);
+
+				if (rolesRes.ok) {
+					const roles: Array<{ id: string; slug?: string; name?: string }> = await rolesRes.json();
+					for (const r of roles) {
+						roleIdToSlug.set(r.id, r.slug || r.name || r.id);
+					}
+					console.log(`[DivisionProjectService] Fetched ${roles.length} roles from Supabase`);
+				} else {
+					console.warn(`[DivisionProjectService] Role table fetch failed: ${rolesRes.status}`);
 				}
+
+				if (providersRes.ok) {
+					const providers: Array<{ id: string; name?: string; displayName?: string }> = await providersRes.json();
+					for (const p of providers) {
+						providerIdToName.set(p.id, p.name || p.id);
+					}
+					console.log(`[DivisionProjectService] Fetched ${providers.length} providers from Supabase`);
+				} else {
+					console.warn(`[DivisionProjectService] Provider table fetch failed: ${providersRes.status}`);
+				}
+			} catch (e) {
+				console.warn('[DivisionProjectService] Role/Provider lookup failed, will use raw IDs:', e);
 			}
 
 			let totalUpdated = 0;
@@ -548,16 +575,31 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 					`${SUPABASE_URL}/rest/v1/Project?id=eq.${encodeURIComponent(project.projectId)}&select=*`,
 					{ headers: supaHeaders }
 				);
-				if (!projectRes.ok) continue;
+				if (!projectRes.ok) {
+					console.warn(`[DivisionProjectService] Project fetch failed for ${project.projectId}: ${projectRes.status}`);
+					continue;
+				}
 				const projectRows = await projectRes.json();
 				const projectData = projectRows[0];
 
+				// Fetch RoleAssignment with embedded Role and Provider relations
 				const assignRes = await fetch(
-					`${SUPABASE_URL}/rest/v1/RoleAssignment?projectId=eq.${encodeURIComponent(project.projectId)}&select=*&order=priority.asc`,
+					`${SUPABASE_URL}/rest/v1/RoleAssignment?projectId=eq.${encodeURIComponent(project.projectId)}&select=roleId,providerId,priority,config,Role(id,slug,name),Provider(id,name)&order=priority.asc`,
 					{ headers: supaHeaders }
 				);
-				if (!assignRes.ok) continue;
-				const assignments: Array<{ roleId: string; providerId: string; config: string }> = await assignRes.json();
+				if (!assignRes.ok) {
+					console.warn(`[DivisionProjectService] RoleAssignment fetch failed for ${project.projectId}: ${assignRes.status}`);
+					continue;
+				}
+				const assignments: Array<{
+					roleId: string;
+					providerId: string;
+					config: string;
+					Role?: { id: string; slug?: string; name?: string } | null;
+					Provider?: { id: string; name?: string } | null;
+				}> = await assignRes.json();
+
+				console.log(`[DivisionProjectService] Fetched ${assignments.length} assignments for project ${project.projectId}:`, JSON.stringify(assignments).substring(0, 500));
 
 				const agents: RoleAssignment[] = assignments.map(a => {
 					let model = '';
@@ -566,12 +608,25 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 						model = cfg.model || '';
 					} catch { /* ignore */ }
 
-					const roleSlug = roleIdToSlug.get(a.roleId) || a.roleId;
-					const providerName = providerIdToName.get(a.providerId) || a.providerId;
+					// Resolve role: embedded relation → map lookup → raw ID
+					let role = a.roleId;
+					if (a.Role && (a.Role.slug || a.Role.name)) {
+						role = a.Role.slug || a.Role.name || a.Role.id;
+					} else if (roleIdToSlug.has(a.roleId)) {
+						role = roleIdToSlug.get(a.roleId)!;
+					}
+
+					// Resolve provider: embedded relation → map lookup → raw ID
+					let provider = a.providerId;
+					if (a.Provider && a.Provider.name) {
+						provider = a.Provider.name;
+					} else if (providerIdToName.has(a.providerId)) {
+						provider = providerIdToName.get(a.providerId)!;
+					}
 
 					return {
-						role: roleSlug as AgentRole,
-						provider: providerName as ProviderName,
+						role: role as AgentRole,
+						provider: provider as ProviderName,
 						model,
 					};
 				});
