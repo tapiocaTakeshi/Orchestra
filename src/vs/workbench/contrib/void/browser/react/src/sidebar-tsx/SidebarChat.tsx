@@ -642,12 +642,15 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 
 					{isStreaming && loadingIcon}
 
-					{isStreaming ? (
+					{isStreaming && isDisabled ? (
 						<ButtonStop onClick={onAbort} />
 					) : (
 						<ButtonSubmit
 							onClick={onSubmit}
-							disabled={isDisabled}
+							disabled={!isStreaming && isDisabled}
+							data-tooltip-id='void-tooltip'
+							data-tooltip-content={isStreaming ? '割り込んで送信' : undefined}
+							data-tooltip-place='left'
 						/>
 					)}
 				</div>
@@ -3954,11 +3957,10 @@ export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTa
 	const onSubmit = useCallback(async (_forceSubmit?: string) => {
 
 		if (isDisabled && !_forceSubmit) return
-		if (isRunning) return
 
 		const threadId = chatThreadsService.state.currentThreadId
 
-		// send message to LLM
+		// send message to LLM (service layer aborts any running stream first)
 		const userMessage = _forceSubmit || textAreaRef.current?.value || ''
 
 		try {
@@ -3971,7 +3973,7 @@ export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTa
 		textAreaFnsRef.current?.setValue('')
 		textAreaRef.current?.focus() // focus input after submit
 
-	}, [chatThreadsService, isDisabled, isRunning, textAreaRef, textAreaFnsRef, setSelections, settingsState])
+	}, [chatThreadsService, isDisabled, textAreaRef, textAreaFnsRef, setSelections, settingsState])
 
 	const onAbort = async () => {
 		const threadId = currentThread.id
