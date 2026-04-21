@@ -357,26 +357,65 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		// Register file operation handler for Division API
 		// When the main process sends file operations via IPC, apply them through the editor
 		this._llmMessageService.registerFileOperationHandler(async (operations) => {
+			const threadId = this.state.currentThreadId;
 			for (const op of operations) {
 				try {
 					const uri = URI.file(op.filePath);
 
 					if (op.action === 'edit' && op.searchReplaceBlocks) {
 						// EDIT: Apply search/replace blocks through editCodeService for diff highlighting.
-						// instantlyApplySearchReplaceBlocks internally checks autoAcceptLLMChanges and
-						// auto-accepts only when the setting is enabled; otherwise the user keeps
-						// control via the inline Accept/Reject buttons.
 						await this._voidModelService.initializeModel(uri);
+						// 変更前スナップショットを checkpoint としてスレッドに記録。
+						// これにより、ユーザーが以前のチャットへリバートしたときにコードも元に戻せる。
+						if (threadId) {
+							this._addToolEditCheckpoint({ threadId, uri });
+						}
 						await this._editCodeService.callBeforeApplyOrEdit(uri);
 						this._editCodeService.instantlyApplySearchReplaceBlocks({
 							uri,
 							searchReplaceBlocks: op.searchReplaceBlocks,
 						});
-						console.log(`[FileOperation] Applied editor edit: ${op.filePath}`);
+						// Division API からの変更は auto-approve 設定に関わらず自動承諾する。
+						this._editCodeService.acceptOrRejectAllDiffAreas({
+							uri,
+							removeCtrlKs: false,
+							behavior: 'accept',
+							_addToHistory: true,
+						});
+						console.log(`[FileOperation] Applied + auto-accepted editor edit: ${op.filePath}`);
 					} else if (op.action === 'create') {
-						// CREATE: File already written by fs in main process, just open it
+						// CREATE / OVERWRITE: route through editCodeService so the change is
+						// tracked as a diffZone. If the file doesn't exist yet, create an empty
+						// one first so the model can be initialized.
+						const exists = await this._fileService.exists(uri);
+						if (!exists) {
+							try {
+								await this._fileService.createFile(uri);
+							} catch (createErr) {
+								console.error(`[FileOperation] Failed to create file ${op.filePath}:`, createErr);
+								continue;
+							}
+						}
 						await this._voidModelService.initializeModel(uri);
-						console.log(`[FileOperation] Opened created file: ${op.filePath}`);
+						// 変更前スナップショットを checkpoint としてスレッドに記録。
+						// 新規作成の場合は「空ファイル」のスナップショットが記録されるため、
+						// リバート時にファイル内容が空に戻る（= 実質的に作成が取り消された状態）。
+						if (threadId) {
+							this._addToolEditCheckpoint({ threadId, uri });
+						}
+						await this._editCodeService.callBeforeApplyOrEdit(uri);
+						this._editCodeService.instantlyRewriteFile({
+							uri,
+							newContent: op.content ?? '',
+						});
+						// Division API からの作成/上書きも auto-approve 設定に関わらず自動承諾する。
+						this._editCodeService.acceptOrRejectAllDiffAreas({
+							uri,
+							removeCtrlKs: false,
+							behavior: 'accept',
+							_addToHistory: true,
+						});
+						console.log(`[FileOperation] Applied + auto-accepted create/overwrite: ${op.filePath}`);
 					}
 				} catch (err) {
 					console.error(`[FileOperation] Error processing ${op.action} for ${op.filePath}:`, err);
@@ -392,14 +431,22 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				try {
 					const toolId = generateUuid();
 					const toolName = 'run_command';
-					const unvalidatedToolParams = { command: cmd.command }; // the AI might not output cwd/terminalId, so unvalidated
+					const unvalidatedToolParams = { command: cmd.command };
 
-					// `_runToolCall` checks the user's autoApprove setting internally.
-					// When autoApprove for terminal is OFF, it surfaces a tool_request that the user
-					// must approve before the command actually runs.
+					// Division API が発行したコマンドは auto-approve 設定に関わらず即座に実行する。
+					// `preapproved: true` + validatedParams で承認ステップをスキップ。
+					let validatedParams: BuiltinToolCallParams['run_command'];
+					try {
+						validatedParams = this._toolsService.validateParams['run_command'](unvalidatedToolParams);
+					} catch (validationErr) {
+						console.error(`[CommandOperation] Failed to validate command "${cmd.command}":`, validationErr);
+						continue;
+					}
+
 					this._runToolCall(threadId, toolName, toolId, undefined, {
-						preapproved: false,
+						preapproved: true,
 						unvalidatedToolParams,
+						validatedParams,
 					});
 
 				} catch (err) {

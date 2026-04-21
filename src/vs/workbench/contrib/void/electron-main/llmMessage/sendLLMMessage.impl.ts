@@ -862,14 +862,23 @@ const FLOW_ROLE_TO_FILENAME: Record<string, string> = {
 	'leader': 'LEADER.md',
 	'coder': 'CODER.md',
 	'coding': 'CODER.md',
-	'design': 'DESIGN.md',
+	'design': 'DESIGNER.html',
+	'designer': 'DESIGNER.html',
 	'search': 'SEARCH.md',
+	'searcher': 'SEARCH.md',
 	'file-search': 'FILE-SEARCH.md',
 	'filesearch': 'FILE-SEARCH.md',
+	'file_search': 'FILE-SEARCH.md',
+	'file-searcher': 'FILE-SEARCH.md',
+	'filesearcher': 'FILE-SEARCH.md',
 	'research': 'RESEARCH.md',
+	'researcher': 'RESEARCH.md',
 	'deep-research': 'RESEARCH.md',
+	'deep-researcher': 'RESEARCH.md',
 	'review': 'REVIEW.md',
+	'reviewer': 'REVIEW.md',
 	'writing': 'WRITING.md',
+	'writer': 'WRITING.md',
 	'planning': 'PLANNING.md',
 	'planner': 'PLANNING.md',
 	'ideaman': 'IDEAMAN.md',
@@ -1053,12 +1062,12 @@ const saveCodeBlocksFromOutput = (output: string, _sessionId: string, workspaceF
 				});
 				savedFiles.push({ filePath: fullPath, language, action: 'updated' });
 			} else {
-				// CREATE/OVERWRITE MODE: write full file content via fs
+				// CREATE/OVERWRITE MODE: we do NOT write the file via fs here anymore.
+				// Instead, the renderer will apply the content via editCodeService.instantlyRewriteFile
+				// so the change is tracked as a diffZone (shows up in the "変更されたファイル" bar,
+				// and respects the autoAcceptLLMChanges setting).
 				const existed = fs.existsSync(fullPath);
-				fs.mkdirSync(path.dirname(fullPath), { recursive: true });
-				fs.writeFileSync(fullPath, code, 'utf-8');
 
-				// Also notify the renderer to open the new/overwritten file in the editor
 				fileOperations.push({
 					filePath: fullPath,
 					language,
@@ -1085,6 +1094,7 @@ const callDivisionGenerateStream = async (
 	mode?: string,
 	divisionApiKey?: string,
 	sessionId?: string,
+	workspacePath?: string,
 ): Promise<{ output: string; error?: string; provider?: string; durationMs?: number }> => {
 	try {
 		const apiKey = divisionApiKey || process.env.DIVISION_API_KEY || '';
@@ -1102,6 +1112,9 @@ const callDivisionGenerateStream = async (
 				provider: divisionModelName,
 				...(mode ? { mode } : {}),
 				...(sessionId ? { sessionId } : {}),
+				// Division APIがローカル実行時に file-searcher / coder でユーザーの
+				// ワークスペースを走査するために必要。リモートAPI側は無視される。
+				...(workspacePath ? { workspacePath } : {}),
 			}),
 			signal,
 		});
@@ -1183,9 +1196,10 @@ const callDivisionTaskCreate = async (
 	signal: AbortSignal,
 	divisionApiKey?: string,
 	chatHistory?: { role: 'user' | 'assistant'; content: string }[],
+	workspacePath?: string,
 ): Promise<{
 	sessionId: string;
-	tasks: { taskId: string; role: string; title: string; input?: string; output?: string; provider?: string; dependsOn?: string[] }[];
+	tasks: { taskId: string; role: string; title: string; input?: string; output?: string; provider?: string; dependsOn?: string[]; description?: string; reason?: string; mode?: string }[];
 	finalRole: string;
 	error?: string;
 }> => {
@@ -1203,13 +1217,8 @@ const callDivisionTaskCreate = async (
 			body: JSON.stringify({
 				projectId,
 				input,
-				// Ask the server to skip the Coder step — we run it ourselves on the client
-				// using the user's actual workspace via /api/generate/stream. If the server
-				// ignores these params it's harmless; if it honors any of them it saves time/cost.
-				skipCoder: true,
-				excludeRoles: ['coder', 'coding'],
-				runCoder: false,
 				...(chatHistory && chatHistory.length > 0 ? { chatHistory } : {}),
+				...(workspacePath ? { workspacePath } : {}),
 			}),
 			signal,
 		});
@@ -1244,6 +1253,7 @@ const callDivisionTaskExecute = async (
 	divisionApiKey?: string,
 	sessionId?: string,
 	chatHistory?: { role: 'user' | 'assistant'; content: string }[],
+	workspacePath?: string,
 ): Promise<{ output: string; error?: string; provider?: string; durationMs?: number }> => {
 	try {
 		const apiKey = divisionApiKey || process.env.DIVISION_API_KEY || '';
@@ -1264,6 +1274,7 @@ const callDivisionTaskExecute = async (
 				stream: true,
 				...(sessionId ? { sessionId } : {}),
 				...(chatHistory && chatHistory.length > 0 ? { chatHistory } : {}),
+				...(workspacePath ? { workspacePath } : {}),
 			}),
 			signal,
 		});
@@ -1356,10 +1367,14 @@ const callDivisionTaskExecute = async (
 
 // Local file search: scan the workspace and return matching files with their contents.
 // Used to enrich the file-search task output with actual file contents from the user's workspace.
+//
+// `.division` は Orchestra が Division API の中間成果物 (*.md / DESIGNER.html) を
+// 書き出す作業フォルダなので、file-searcher が本体プロジェクトのファイルではなく
+// 自分が書いた中間 MD を読み込んでしまうのを防ぐため常に除外する。
 const IGNORED_DIRS = new Set([
 	'node_modules', '.git', '.next', 'dist', 'build', 'out', '.cache',
 	'.turbo', '.vercel', '.nuxt', 'coverage', '__pycache__', '.venv', 'venv',
-	'.idea', '.vscode', '.DS_Store', 'target', '.gradle',
+	'.idea', '.vscode', '.DS_Store', 'target', '.gradle', '.division',
 ]);
 const TEXT_EXTENSIONS = new Set([
 	'.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.json', '.md', '.mdx',
@@ -1371,6 +1386,120 @@ const TEXT_EXTENSIONS = new Set([
 const MAX_SEARCH_FILES = 30;
 const MAX_FILE_SIZE_BYTES = 100 * 1024; // 100KB
 const MAX_TOTAL_OUTPUT_CHARS = 60000;
+
+// レビューサイクル（Coder → Reviewer → 不合格ならもう一度）の最大反復回数。
+// ユーザーは「OK が出るまでずっとループ」を要求したが、API コスト暴走と
+// 無応答対策として安全弁のハードキャップを設ける。ユーザーは AbortController
+// 経由でいつでも中断できる。
+const MAX_REVIEW_ITERATIONS = 10;
+
+// レビュアー出力が「合格」かどうかを判定する。
+// 日本語/英語の典型的な合否表現と、明示的な不合格マーカーの両方を見る。
+const judgeReviewPass = (reviewOutput: string): boolean => {
+	if (!reviewOutput || !reviewOutput.trim()) return false;
+	const lower = reviewOutput.toLowerCase();
+
+	// 明示的な不合格マーカーがあれば即 fail
+	const failMarkers = [
+		'不合格', '要修正', '修正が必要', 'NG', '却下',
+		'fail', 'failed', 'rejected', 'not approved', 'needs fix', 'needs revision',
+		'requires change', 'must fix', 'must change',
+	];
+	for (const m of failMarkers) {
+		if (reviewOutput.includes(m) || lower.includes(m.toLowerCase())) return false;
+	}
+
+	// 合格マーカー
+	const passMarkers = [
+		'合格', '承認', '問題ありません', '問題なし', '完了', 'OK です', 'OKです',
+		'approved', 'pass', 'passed', 'lgtm', 'looks good', 'all good', 'no issues',
+		'no problems', 'ready to merge', 'ready to ship',
+	];
+	for (const m of passMarkers) {
+		if (reviewOutput.includes(m) || lower.includes(m.toLowerCase())) return true;
+	}
+
+	// どちらのマーカーも無い場合は、保守的に「不合格」とみなす
+	// （Reviewer が合格判定を明示していない = 改善点だけ列挙している可能性が高い）
+	return false;
+};
+
+// .divisionignore 読込み & マッチャ
+//
+// gitignore ライクな簡易セマンティクスで file-searcher の走査対象から特定ファイル/
+// ディレクトリを除外する。サポートする記法:
+//   - `#` 始まりはコメント、空行は無視
+//   - `dir/`         → そのディレクトリ以下すべて除外
+//   - `*.md`         → basename の glob マッチ（任意の階層）
+//   - `path/to/x`    → ワークスペースルートからの相対パスに完全一致 or プレフィックス一致
+//   - `name`         → basename が `name` のファイル/ディレクトリを任意の階層で除外
+type DivisionIgnoreMatcher = (relativePath: string, isDirectory: boolean) => boolean;
+
+const globToRegExp = (pattern: string): RegExp => {
+	let re = '';
+	for (let i = 0; i < pattern.length; i++) {
+		const c = pattern[i];
+		if (c === '*') {
+			if (pattern[i + 1] === '*') { re += '.*'; i++; } else { re += '[^/]*'; }
+		} else if (c === '?') {
+			re += '[^/]';
+		} else if (/[.+^${}()|[\]\\]/.test(c)) {
+			re += '\\' + c;
+		} else {
+			re += c;
+		}
+	}
+	return new RegExp('^' + re + '$');
+};
+
+const loadDivisionIgnore = (workspaceFolderPath: string): DivisionIgnoreMatcher => {
+	const ignoreFilePath = path.join(workspaceFolderPath, '.divisionignore');
+	let lines: string[] = [];
+	try {
+		if (fs.existsSync(ignoreFilePath)) {
+			lines = fs.readFileSync(ignoreFilePath, 'utf-8').split(/\r?\n/);
+		}
+	} catch (_e) { /* no ignore file */ }
+
+	const dirPrefixes: string[] = [];          // `dir/` → ignore everything under it
+	const exactRelativePaths: string[] = [];   // `path/to/x` with a slash
+	const basenameExact = new Set<string>();   // `name` (no slash, no glob)
+	const basenameGlobs: RegExp[] = [];        // `*.md` etc (no slash, has glob char)
+
+	for (const raw of lines) {
+		const line = raw.trim();
+		if (!line || line.startsWith('#')) continue;
+		if (line.endsWith('/')) {
+			dirPrefixes.push(line.slice(0, -1).replace(/^\.\//, ''));
+		} else if (line.includes('/')) {
+			exactRelativePaths.push(line.replace(/^\.\//, ''));
+		} else if (/[*?\[]/.test(line)) {
+			basenameGlobs.push(globToRegExp(line));
+		} else {
+			basenameExact.add(line);
+		}
+	}
+
+	if (dirPrefixes.length === 0 && exactRelativePaths.length === 0 && basenameExact.size === 0 && basenameGlobs.length === 0) {
+		return () => false;
+	}
+
+	return (relativePath: string, isDirectory: boolean): boolean => {
+		const normalized = relativePath.replace(/\\/g, '/');
+		const basename = normalized.split('/').pop() || '';
+		if (basenameExact.has(basename)) return true;
+		for (const re of basenameGlobs) { if (re.test(basename)) return true; }
+		for (const prefix of dirPrefixes) {
+			if (normalized === prefix) return true;
+			if (normalized.startsWith(prefix + '/')) return true;
+		}
+		for (const exact of exactRelativePaths) {
+			if (normalized === exact) return true;
+			if (isDirectory && normalized.startsWith(exact + '/')) return true;
+		}
+		return false;
+	};
+};
 
 const extractKeywordsFromQuery = (query: string): string[] => {
 	const lowered = query.toLowerCase();
@@ -1385,7 +1514,13 @@ const extractKeywordsFromQuery = (query: string): string[] => {
 	return Array.from(new Set(tokens.filter(t => t.length >= 2 && !stopWords.has(t))));
 };
 
-const walkDirectory = (dir: string, root: string, results: string[], maxFiles: number): void => {
+const walkDirectory = (
+	dir: string,
+	root: string,
+	results: string[],
+	maxFiles: number,
+	ignoreMatcher?: DivisionIgnoreMatcher,
+): void => {
 	if (results.length >= maxFiles) return;
 	let entries: fs.Dirent[];
 	try {
@@ -1400,8 +1535,10 @@ const walkDirectory = (dir: string, root: string, results: string[], maxFiles: n
 		}
 		if (IGNORED_DIRS.has(entry.name)) continue;
 		const full = path.join(dir, entry.name);
+		const relative = path.relative(root, full).replace(/\\/g, '/');
+		if (ignoreMatcher && ignoreMatcher(relative, entry.isDirectory())) continue;
 		if (entry.isDirectory()) {
-			walkDirectory(full, root, results, maxFiles);
+			walkDirectory(full, root, results, maxFiles, ignoreMatcher);
 		} else if (entry.isFile()) {
 			const ext = path.extname(entry.name).toLowerCase();
 			if (TEXT_EXTENSIONS.has(ext) || entry.name === 'package.json' || entry.name === 'README.md') {
@@ -1416,7 +1553,8 @@ const searchWorkspaceFiles = (
 	query: string,
 ): { matches: { relativePath: string; content: string }[]; summary: string } => {
 	const allFiles: string[] = [];
-	walkDirectory(workspaceFolderPath, workspaceFolderPath, allFiles, 5000);
+	const ignoreMatcher = loadDivisionIgnore(workspaceFolderPath);
+	walkDirectory(workspaceFolderPath, workspaceFolderPath, allFiles, 5000, ignoreMatcher);
 
 	const keywords = extractKeywordsFromQuery(query);
 	const scored: { file: string; score: number }[] = [];
@@ -1502,6 +1640,401 @@ const buildFileSearchOutput = (workspaceFolderPath: string, query: string): stri
 	return lines.join('\n');
 };
 
+// ---- ワークスペースの使用言語 / フレームワーク検出 ----
+//
+// 各種マニフェストファイル（package.json, pubspec.yaml, Cargo.toml, 等）と
+// ファイル拡張子の分布から、プロジェクトで使われている言語とフレームワークを
+// 推定する。結果は Markdown 文字列で返し、Leader / 各中間タスク / Coder の
+// コンテキストに assistant turn として添付する。
+//
+// これにより、例えば Flutter プロジェクトに対して React コードを生成したり、
+// Next.js プロジェクトに Django コードを混ぜ込むといった事故を防ぐ。
+
+type StackInfo = {
+	languages: string[];  // 例: ['TypeScript', 'Dart']
+	frameworks: string[]; // 例: ['Next.js', 'Tailwind CSS', 'Flutter']
+	packageManagers: string[]; // 例: ['npm', 'pub']
+	runtime: string[]; // 例: ['Node.js 20', 'Python 3.11']
+	notes: string[]; // 補足（検出根拠など）
+};
+
+const safeReadText = (p: string, maxBytes = 256 * 1024): string | null => {
+	try {
+		const stat = fs.statSync(p);
+		if (!stat.isFile() || stat.size > maxBytes) return null;
+		return fs.readFileSync(p, 'utf-8');
+	} catch {
+		return null;
+	}
+};
+
+const tryParseJson = (s: string | null): any | null => {
+	if (!s) return null;
+	try { return JSON.parse(s); } catch { return null; }
+};
+
+// package.json の deps/devDeps から React / Next / Vue / Nuxt / Svelte / Vite などを判定
+const detectJsFrameworks = (pkg: any, info: StackInfo): void => {
+	if (!pkg || typeof pkg !== 'object') return;
+	const deps: Record<string, string> = {
+		...(pkg.dependencies || {}),
+		...(pkg.devDependencies || {}),
+		...(pkg.peerDependencies || {}),
+	};
+	const has = (name: string) => Object.prototype.hasOwnProperty.call(deps, name);
+	const ver = (name: string) => (deps[name] || '').replace(/^[\^~=><\s]+/, '') || '';
+
+	const fw: string[] = [];
+	// Meta-frameworks (check before base frameworks so we report the most specific one)
+	if (has('next')) fw.push(`Next.js${ver('next') ? ' ' + ver('next') : ''}`);
+	if (has('nuxt')) fw.push(`Nuxt${ver('nuxt') ? ' ' + ver('nuxt') : ''}`);
+	if (has('@remix-run/react') || has('@remix-run/node')) fw.push('Remix');
+	if (has('gatsby')) fw.push('Gatsby');
+	if (has('astro')) fw.push('Astro');
+	if (has('@sveltejs/kit')) fw.push('SvelteKit');
+	if (has('solid-start')) fw.push('SolidStart');
+	// UI frameworks
+	if (has('react') && !fw.some(f => /next|remix|gatsby/i.test(f))) fw.push(`React${ver('react') ? ' ' + ver('react') : ''}`);
+	if (has('vue') && !fw.some(f => /nuxt/i.test(f))) fw.push(`Vue${ver('vue') ? ' ' + ver('vue') : ''}`);
+	if (has('svelte') && !fw.some(f => /sveltekit/i.test(f))) fw.push('Svelte');
+	if (has('solid-js')) fw.push('SolidJS');
+	if (has('@angular/core')) fw.push(`Angular${ver('@angular/core') ? ' ' + ver('@angular/core') : ''}`);
+	// Build tools
+	if (has('vite')) fw.push('Vite');
+	if (has('webpack')) fw.push('webpack');
+	if (has('turbo')) fw.push('Turborepo');
+	// Styling
+	if (has('tailwindcss')) fw.push('Tailwind CSS');
+	if (has('styled-components')) fw.push('styled-components');
+	if (has('@emotion/react')) fw.push('Emotion');
+	if (has('@mui/material')) fw.push('Material-UI (MUI)');
+	if (has('@chakra-ui/react')) fw.push('Chakra UI');
+	if (has('@shadcn/ui') || has('shadcn-ui')) fw.push('shadcn/ui');
+	// State
+	if (has('redux') || has('@reduxjs/toolkit')) fw.push('Redux');
+	if (has('zustand')) fw.push('Zustand');
+	if (has('jotai')) fw.push('Jotai');
+	if (has('recoil')) fw.push('Recoil');
+	// Backend
+	if (has('express')) fw.push('Express');
+	if (has('fastify')) fw.push('Fastify');
+	if (has('koa')) fw.push('Koa');
+	if (has('@nestjs/core')) fw.push('NestJS');
+	if (has('hono')) fw.push('Hono');
+	// DB/ORM
+	if (has('prisma') || has('@prisma/client')) fw.push('Prisma');
+	if (has('drizzle-orm')) fw.push('Drizzle ORM');
+	if (has('mongoose')) fw.push('Mongoose');
+	if (has('typeorm')) fw.push('TypeORM');
+	// Supabase / Firebase
+	if (has('@supabase/supabase-js')) fw.push('Supabase');
+	if (has('firebase')) fw.push('Firebase');
+	// Test
+	if (has('jest')) fw.push('Jest');
+	if (has('vitest')) fw.push('Vitest');
+	if (has('@playwright/test')) fw.push('Playwright');
+	if (has('cypress')) fw.push('Cypress');
+
+	info.frameworks.push(...fw);
+
+	// Runtime declaration
+	if (pkg.engines?.node) info.runtime.push(`Node.js ${pkg.engines.node}`);
+	if (pkg.packageManager) info.packageManagers.push(String(pkg.packageManager).split('@')[0]);
+};
+
+const detectPythonFrameworks = (info: StackInfo, reqs: string, pyprojectText: string | null): void => {
+	const all = (reqs + '\n' + (pyprojectText || '')).toLowerCase();
+	const fw: string[] = [];
+	if (/\bdjango\b/.test(all)) fw.push('Django');
+	if (/\bflask\b/.test(all)) fw.push('Flask');
+	if (/\bfastapi\b/.test(all)) fw.push('FastAPI');
+	if (/\bstreamlit\b/.test(all)) fw.push('Streamlit');
+	if (/\bgradio\b/.test(all)) fw.push('Gradio');
+	if (/\bpandas\b/.test(all)) fw.push('pandas');
+	if (/\bnumpy\b/.test(all)) fw.push('NumPy');
+	if (/\btorch\b|pytorch/.test(all)) fw.push('PyTorch');
+	if (/tensorflow/.test(all)) fw.push('TensorFlow');
+	if (/\bsqlalchemy\b/.test(all)) fw.push('SQLAlchemy');
+	if (/\bpydantic\b/.test(all)) fw.push('Pydantic');
+	info.frameworks.push(...fw);
+};
+
+const detectRustFrameworks = (info: StackInfo, cargoText: string): void => {
+	const low = cargoText.toLowerCase();
+	const fw: string[] = [];
+	if (/\baxum\b/.test(low)) fw.push('Axum');
+	if (/actix-web/.test(low)) fw.push('Actix Web');
+	if (/\brocket\b/.test(low)) fw.push('Rocket');
+	if (/\btauri\b/.test(low)) fw.push('Tauri');
+	if (/\btokio\b/.test(low)) fw.push('Tokio');
+	if (/\bserde\b/.test(low)) fw.push('serde');
+	if (/\bdiesel\b/.test(low)) fw.push('Diesel');
+	info.frameworks.push(...fw);
+};
+
+const detectGoFrameworks = (info: StackInfo, goModText: string): void => {
+	const low = goModText.toLowerCase();
+	const fw: string[] = [];
+	if (/gin-gonic\/gin/.test(low)) fw.push('Gin');
+	if (/gofiber\/fiber/.test(low)) fw.push('Fiber');
+	if (/labstack\/echo/.test(low)) fw.push('Echo');
+	if (/grpc/.test(low)) fw.push('gRPC');
+	info.frameworks.push(...fw);
+};
+
+const detectDartFlutter = (info: StackInfo, pubspecText: string): void => {
+	// pubspec.yaml is YAML; a shallow regex parse is enough here
+	const hasFlutter = /^\s*flutter\s*:/m.test(pubspecText) || /sdk:\s*flutter/.test(pubspecText);
+	if (hasFlutter) {
+		info.frameworks.push('Flutter');
+		if (!info.languages.includes('Dart')) info.languages.push('Dart');
+	}
+	const fw: string[] = [];
+	if (/riverpod/.test(pubspecText)) fw.push('Riverpod');
+	if (/\bbloc\b|flutter_bloc/.test(pubspecText)) fw.push('BLoC');
+	if (/\bprovider\b/.test(pubspecText)) fw.push('Provider');
+	if (/go_router/.test(pubspecText)) fw.push('go_router');
+	if (/firebase_core/.test(pubspecText)) fw.push('Firebase (Flutter)');
+	info.frameworks.push(...fw);
+};
+
+const detectJvmFrameworks = (info: StackInfo, gradleText: string | null, pomText: string | null): void => {
+	const all = ((gradleText || '') + '\n' + (pomText || '')).toLowerCase();
+	const fw: string[] = [];
+	if (/spring-boot|springframework\.boot/.test(all)) fw.push('Spring Boot');
+	if (/androidx\.compose|jetpack\s*compose/.test(all)) fw.push('Jetpack Compose');
+	if (/kotlinx\.coroutines/.test(all)) fw.push('Kotlin Coroutines');
+	if (/ktor/.test(all)) fw.push('Ktor');
+	info.frameworks.push(...fw);
+	if (/kotlin/.test(all) && !info.languages.includes('Kotlin')) info.languages.push('Kotlin');
+	if (/\bjava\b/.test(all) && !info.languages.includes('Java')) info.languages.push('Java');
+};
+
+const detectPhpFrameworks = (info: StackInfo, composerJson: any): void => {
+	if (!composerJson || typeof composerJson !== 'object') return;
+	const reqs = { ...(composerJson.require || {}), ...(composerJson['require-dev'] || {}) };
+	const has = (n: string) => Object.prototype.hasOwnProperty.call(reqs, n);
+	const fw: string[] = [];
+	if (has('laravel/framework')) fw.push('Laravel');
+	if (has('symfony/framework-bundle')) fw.push('Symfony');
+	if (has('cakephp/cakephp')) fw.push('CakePHP');
+	if (has('slim/slim')) fw.push('Slim');
+	info.frameworks.push(...fw);
+};
+
+// 拡張子の分布（上位ディレクトリのみ）から言語を推定する副次シグナル
+const detectLanguagesFromExtensions = (workspacePath: string, info: StackInfo): void => {
+	const extMap: Record<string, string> = {
+		ts: 'TypeScript', tsx: 'TypeScript',
+		js: 'JavaScript', jsx: 'JavaScript', mjs: 'JavaScript', cjs: 'JavaScript',
+		py: 'Python',
+		rb: 'Ruby',
+		go: 'Go',
+		rs: 'Rust',
+		java: 'Java',
+		kt: 'Kotlin', kts: 'Kotlin',
+		swift: 'Swift',
+		dart: 'Dart',
+		php: 'PHP',
+		cs: 'C#',
+		cpp: 'C++', cc: 'C++', cxx: 'C++', hpp: 'C++',
+		c: 'C', h: 'C/C++ Header',
+		sh: 'Shell', bash: 'Shell', zsh: 'Shell',
+		sql: 'SQL',
+		html: 'HTML', css: 'CSS', scss: 'SCSS',
+		vue: 'Vue SFC', svelte: 'Svelte',
+	};
+	const counts: Record<string, number> = {};
+	try {
+		const entries = fs.readdirSync(workspacePath, { withFileTypes: true });
+		const roots: string[] = [workspacePath];
+		for (const e of entries) {
+			if (!e.isDirectory() || IGNORED_DIRS.has(e.name) || e.name.startsWith('.')) continue;
+			roots.push(path.join(workspacePath, e.name));
+		}
+		const walk = (dir: string, depth: number) => {
+			if (depth > 2) return;
+			let items: fs.Dirent[];
+			try { items = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+			for (const it of items) {
+				if (it.name.startsWith('.')) continue;
+				if (it.isDirectory()) {
+					if (IGNORED_DIRS.has(it.name)) continue;
+					walk(path.join(dir, it.name), depth + 1);
+				} else if (it.isFile()) {
+					const ext = path.extname(it.name).slice(1).toLowerCase();
+					const lang = extMap[ext];
+					if (lang) counts[lang] = (counts[lang] || 0) + 1;
+				}
+			}
+		};
+		for (const r of roots) walk(r, 0);
+	} catch {
+		/* ignore */
+	}
+	// Top 5 languages by file count
+	const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+	for (const [lang] of sorted) {
+		if (!info.languages.includes(lang)) info.languages.push(lang);
+	}
+};
+
+const detectWorkspaceStack = (workspacePath: string): StackInfo => {
+	const info: StackInfo = { languages: [], frameworks: [], packageManagers: [], runtime: [], notes: [] };
+
+	// --- Node.js / JS / TS ecosystem ---
+	const pkgJson = tryParseJson(safeReadText(path.join(workspacePath, 'package.json')));
+	if (pkgJson) {
+		info.notes.push('package.json を検出');
+		// Language inference from presence of tsconfig.json / *.ts files
+		if (safeReadText(path.join(workspacePath, 'tsconfig.json')) !== null) {
+			info.languages.push('TypeScript');
+		} else {
+			info.languages.push('JavaScript');
+		}
+		detectJsFrameworks(pkgJson, info);
+		if (safeReadText(path.join(workspacePath, 'pnpm-lock.yaml'))) info.packageManagers.push('pnpm');
+		if (safeReadText(path.join(workspacePath, 'yarn.lock'))) info.packageManagers.push('yarn');
+		if (safeReadText(path.join(workspacePath, 'package-lock.json'))) info.packageManagers.push('npm');
+		if (safeReadText(path.join(workspacePath, 'bun.lockb'))) info.packageManagers.push('bun');
+	}
+
+	// --- Python ---
+	const reqs = safeReadText(path.join(workspacePath, 'requirements.txt')) || '';
+	const pyproject = safeReadText(path.join(workspacePath, 'pyproject.toml'));
+	const pipfile = safeReadText(path.join(workspacePath, 'Pipfile'));
+	if (reqs || pyproject || pipfile) {
+		if (!info.languages.includes('Python')) info.languages.push('Python');
+		info.notes.push(
+			reqs ? 'requirements.txt を検出'
+				: pyproject ? 'pyproject.toml を検出'
+					: 'Pipfile を検出',
+		);
+		detectPythonFrameworks(info, reqs, pyproject || pipfile);
+		if (pyproject && /poetry/.test(pyproject)) info.packageManagers.push('Poetry');
+		if (reqs) info.packageManagers.push('pip');
+	}
+
+	// --- Rust ---
+	const cargo = safeReadText(path.join(workspacePath, 'Cargo.toml'));
+	if (cargo) {
+		if (!info.languages.includes('Rust')) info.languages.push('Rust');
+		info.notes.push('Cargo.toml を検出');
+		detectRustFrameworks(info, cargo);
+		info.packageManagers.push('cargo');
+	}
+
+	// --- Go ---
+	const goMod = safeReadText(path.join(workspacePath, 'go.mod'));
+	if (goMod) {
+		if (!info.languages.includes('Go')) info.languages.push('Go');
+		info.notes.push('go.mod を検出');
+		detectGoFrameworks(info, goMod);
+		info.packageManagers.push('go modules');
+		const verMatch = goMod.match(/^go\s+([\d.]+)/m);
+		if (verMatch) info.runtime.push(`Go ${verMatch[1]}`);
+	}
+
+	// --- Dart / Flutter ---
+	const pubspec = safeReadText(path.join(workspacePath, 'pubspec.yaml'));
+	if (pubspec) {
+		if (!info.languages.includes('Dart')) info.languages.push('Dart');
+		info.notes.push('pubspec.yaml を検出');
+		detectDartFlutter(info, pubspec);
+		info.packageManagers.push('pub');
+	}
+
+	// --- Ruby ---
+	const gemfile = safeReadText(path.join(workspacePath, 'Gemfile'));
+	if (gemfile) {
+		if (!info.languages.includes('Ruby')) info.languages.push('Ruby');
+		info.notes.push('Gemfile を検出');
+		if (/rails/.test(gemfile)) info.frameworks.push('Ruby on Rails');
+		if (/sinatra/.test(gemfile)) info.frameworks.push('Sinatra');
+		info.packageManagers.push('bundler');
+	}
+
+	// --- JVM (Gradle / Maven) ---
+	const gradle = safeReadText(path.join(workspacePath, 'build.gradle'))
+		|| safeReadText(path.join(workspacePath, 'build.gradle.kts'));
+	const pom = safeReadText(path.join(workspacePath, 'pom.xml'));
+	if (gradle || pom) {
+		info.notes.push(gradle ? 'Gradle ビルドを検出' : 'Maven (pom.xml) を検出');
+		detectJvmFrameworks(info, gradle, pom);
+		if (gradle) info.packageManagers.push('Gradle');
+		if (pom) info.packageManagers.push('Maven');
+	}
+
+	// --- Swift ---
+	if (safeReadText(path.join(workspacePath, 'Package.swift'))) {
+		if (!info.languages.includes('Swift')) info.languages.push('Swift');
+		info.notes.push('Package.swift を検出');
+		info.packageManagers.push('SwiftPM');
+	}
+
+	// --- PHP ---
+	const composer = tryParseJson(safeReadText(path.join(workspacePath, 'composer.json')));
+	if (composer) {
+		if (!info.languages.includes('PHP')) info.languages.push('PHP');
+		info.notes.push('composer.json を検出');
+		detectPhpFrameworks(info, composer);
+		info.packageManagers.push('Composer');
+	}
+
+	// --- C# / .NET ---
+	try {
+		const entries = fs.readdirSync(workspacePath);
+		if (entries.some(n => /\.(csproj|sln|fsproj)$/.test(n))) {
+			if (!info.languages.includes('C#')) info.languages.push('C#');
+			info.notes.push('.csproj / .sln を検出');
+			info.packageManagers.push('NuGet (dotnet)');
+		}
+	} catch { /* ignore */ }
+
+	// Secondary signal: extension distribution
+	detectLanguagesFromExtensions(workspacePath, info);
+
+	// Deduplicate
+	info.languages = Array.from(new Set(info.languages));
+	info.frameworks = Array.from(new Set(info.frameworks));
+	info.packageManagers = Array.from(new Set(info.packageManagers));
+	info.runtime = Array.from(new Set(info.runtime));
+
+	return info;
+};
+
+// Build the Markdown block that gets injected as an `assistant` turn into task
+// contexts so downstream AIs know which stack they're generating code for.
+const buildStackContextMarkdown = (workspacePath: string): string => {
+	const info = detectWorkspaceStack(workspacePath);
+	if (info.languages.length === 0 && info.frameworks.length === 0) {
+		return ''; // Nothing detected (empty workspace?) — skip injection entirely
+	}
+	const lines: string[] = [];
+	lines.push('## ワークスペースの技術スタック (自動検出)');
+	lines.push('');
+	lines.push('あなたが生成するコード・提案・設計は **必ず以下のスタックに合わせてください**。既存の言語・フレームワークを無視して別のスタック (例: Flutter プロジェクトに React) を提案することは禁止です。');
+	lines.push('');
+	if (info.languages.length > 0) {
+		lines.push(`- **言語**: ${info.languages.join(', ')}`);
+	}
+	if (info.frameworks.length > 0) {
+		lines.push(`- **フレームワーク / 主要ライブラリ**: ${info.frameworks.join(', ')}`);
+	}
+	if (info.packageManagers.length > 0) {
+		lines.push(`- **パッケージマネージャ**: ${info.packageManagers.join(', ')}`);
+	}
+	if (info.runtime.length > 0) {
+		lines.push(`- **ランタイム**: ${info.runtime.join(', ')}`);
+	}
+	if (info.notes.length > 0) {
+		lines.push(`- **検出根拠**: ${info.notes.join(' / ')}`);
+	}
+	lines.push('');
+	lines.push('コード出力時は既存のファイル構造・命名規則・インポートパス・スタイル規約に従い、上記スタックのイディオムに沿った実装を行ってください。必要なパッケージインストールコマンドも、このスタックのパッケージマネージャで出力してください。');
+	return lines.join('\n');
+};
+
 // Code output instructions appended to prompts when we want the AI to apply code changes.
 // The renderer's editCodeService will pick up SEARCH/REPLACE blocks and apply them as a diff.
 const buildCodeOutputInstructions = (): string => [
@@ -1553,6 +2086,16 @@ const buildCodeOutputInstructions = (): string => [
 	`- SEARCH部分は既存ファイルの内容と完全に一致する必要があります（インデント・空白も含めて）`,
 	`- 既存ファイルを編集する場合は、ファイル全体ではなく SEARCH/REPLACE で必要な箇所だけ変更してください`,
 	`- 必要であれば、コード変更とコマンド実行を組み合わせて出力してください`,
+	``,
+	`### 禁止されるコマンド（出力しないでください）`,
+	`あなたは対話的シェルではなくワンショット生成です。以下のような**探索系コマンド**を出力しても実行結果は返ってきません。ワークスペース情報は別エージェント（file-searcher 等）が既に収集済みで、プロンプト内に含まれています。`,
+	``,
+	`- \`find ...\` / \`ls ...\` / \`tree ...\`（ファイル一覧調査）`,
+	`- \`cat ...\` / \`head ...\` / \`tail ...\` / \`less ...\`（ファイル内容閲覧）`,
+	`- \`grep ...\` / \`rg ...\` / \`ack ...\`（コード検索）`,
+	`- \`pwd\` / \`which ...\` / \`echo ...\`（環境確認）`,
+	``,
+	`これらを出力するのは禁止です。代わりに、プロンプトに含まれる情報と常識的な推測だけで**実ファイルの作成/編集**を直接出力してください。情報が足りない場合は、最もあり得る構成を仮定して実装を進め、ユーザーが後でパスや内容を調整できるようにしてください。`,
 ].join('\n');
 
 // Extract prompt from LLM messages
@@ -1637,7 +2180,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			const result = await callDivisionGenerateStream(
 				endpointBase, selectedModel, directPrompt, controller.signal,
 				(chunk) => appendText(chunk),
-				mode, divisionApiKey,
+				mode, divisionApiKey, undefined, workspaceFolderPath,
 			);
 
 			if (result.error) {
@@ -1713,117 +2256,514 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			currentInput = prompt;
 		}
 
-		const chatHistory = messages.slice(0, -1)
+		// Size caps to avoid "request entity too large" (HTTP 500) from the Division API.
+		// The server has an aggressive body-size limit, so we must cap *both* the
+		// intermediate flow outputs (.md files) and the raw chatHistory entries
+		// coming from the sidebar (the user may have pasted long logs as prompts).
+		const MAX_CHARS_PER_CONTEXT = 8_000;        // per flow output / per chatHistory entry
+		const MAX_TOTAL_CONTEXT_CHARS = 150_000;    // across all context entries combined
+		const MAX_CHARS_PER_HISTORY_MSG = 8_000;    // per raw chat message
+		const MAX_TOTAL_HISTORY_CHARS = 20_000;     // raw chatHistory total budget
+		const truncateForContext = (s: string, max: number): string => {
+			if (!s) return '';
+			if (s.length <= max) return s;
+			const head = s.slice(0, Math.floor(max * 0.8));
+			const tail = s.slice(-Math.floor(max * 0.15));
+			return `${head}\n\n... [中略 ${s.length - head.length - tail.length} 文字省略] ...\n\n${tail}`;
+		};
+
+		// Build the raw chatHistory but also cap it. Long pasted build logs in
+		// prior user prompts were causing synthesis POSTs to exceed the limit
+		// even before we added any intermediate context.
+		const rawChatHistory = messages.slice(0, -1)
 			.filter(msg => msg.role !== 'system' && msg.role !== 'developer')
 			.map(msg => ({
 				role: (msg.role === 'model' ? 'assistant' : msg.role) as 'user' | 'assistant',
 				content: extractContent(msg)
 			}));
+		const chatHistory: { role: 'user' | 'assistant'; content: string }[] = [];
+		{
+			// Keep the most recent messages first (they're most relevant) and drop
+			// older ones once the total budget is exhausted.
+			let totalHistoryChars = 0;
+			const reversed = [...rawChatHistory].reverse();
+			const keptReversed: { role: 'user' | 'assistant'; content: string }[] = [];
+			for (const msg of reversed) {
+				if (!msg.content || !msg.content.trim()) continue;
+				const truncated = truncateForContext(msg.content, MAX_CHARS_PER_HISTORY_MSG);
+				if (totalHistoryChars + truncated.length > MAX_TOTAL_HISTORY_CHARS) break;
+				keptReversed.push({ role: msg.role, content: truncated });
+				totalHistoryChars += truncated.length;
+			}
+			chatHistory.push(...keptReversed.reverse());
+		}
 
 		const codeOutputInstructions = buildCodeOutputInstructions();
 
+		// ワークスペースの言語・フレームワークを 1 度だけ検出し、以降すべての AI 呼び出し
+		// （Leader / 中間タスク / Coder / Reviewer）で同じ assistant turn として添付する。
+		// これで downstream AI は「このプロジェクトは Flutter なのか Next.js なのか」を
+		// 確実に把握できる。
+		const stackContextMarkdown = workspaceFolderPath
+			? buildStackContextMarkdown(workspaceFolderPath)
+			: '';
+		const stackContextTurn: { role: 'user' | 'assistant'; content: string } | null =
+			stackContextMarkdown ? { role: 'assistant', content: stackContextMarkdown } : null;
+		if (stackContextTurn) {
+			console.log('[DivisionAPI] Detected workspace stack context:\n' + stackContextMarkdown);
+		}
+
+		// Helper: prepend stack context (if any) to a chatHistory array.
+		const withStackContext = (
+			history: { role: 'user' | 'assistant'; content: string }[],
+		): { role: 'user' | 'assistant'; content: string }[] =>
+			stackContextTurn ? [stackContextTurn, ...history] : history;
+
+		// Helper to recognize file-searcher variants (reused by runIntermediateCycle and elsewhere)
+		const isFileSearchRole = (r: string): boolean => {
+			const role = (r || '').toLowerCase();
+			return role === 'file-search' || role === 'filesearch' || role === 'file_search'
+				|| role === 'file-searcher' || role === 'filesearcher';
+		};
+
+		// Shared helper: decompose user input via Leader AI and execute all intermediate
+		// (non-Coder/Reviewer) tasks, returning the collected flow outputs.
+		//
+		// Phase A の初回実行と、レビュー失敗後の再試行の両方から呼ぶ。
+		// 再試行時 (isRetry=true) はフロー承認用ポーズを行わず、呼び出し側が
+		// そのまま synthesis+review を走らせる。
+		const runIntermediateCycle = async (
+			cycleInput: string,
+			cycleLabel: string,
+		): Promise<{
+			flowOutputs: FlowOutputEntry[];
+			sessionId: string;
+			finalRole: string;
+			aborted: boolean;
+		}> => {
+			console.log(`[DivisionAPI] /api/tasks/create request (${cycleLabel}):`, JSON.stringify({
+				projectId,
+				inputLength: cycleInput.length,
+				inputPreview: cycleInput.substring(0, 100),
+				chatHistoryLength: chatHistory.length,
+			}));
+
+			appendText(`**Leader AI** がタスクを分析中 (${cycleLabel})...\n\n`);
+
+			// Leader にも技術スタックを伝えることで、スタックに合ったタスク分解を誘導する。
+			const leaderChatHistory = withStackContext(chatHistory);
+			const taskResult = await callDivisionTaskCreate(
+				endpointBase, projectId, cycleInput, controller.signal,
+				divisionApiKey, leaderChatHistory.length > 0 ? leaderChatHistory : undefined,
+				workspaceFolderPath,
+			);
+
+			if (taskResult.error) {
+				appendText(`❌ **Task Create Error:** ${taskResult.error}\n\n`);
+				return { flowOutputs: [], sessionId: '', finalRole: '', aborted: true };
+			}
+
+			const { sessionId: cycleSessionId, tasks: rawTasks, finalRole: cycleFinalRole } = taskResult;
+
+			// Filter out server-side Coder/Reviewer tasks (we run those locally).
+			const EXCLUDED_SERVER_ROLES = new Set(['coder', 'coding', 'review', 'reviewer']);
+			const tasks = rawTasks.filter(t => !EXCLUDED_SERVER_ROLES.has((t.role || '').toLowerCase()));
+			const droppedCount = rawTasks.length - tasks.length;
+			if (droppedCount > 0) {
+				console.log(`[DivisionAPI] Skipped ${droppedCount} server-side Coder/Reviewer task(s) — will run locally instead.`);
+			}
+
+			// SAFETY NET: ensure file-search task exists so Coder always sees existing files.
+			const hasFileSearch = tasks.some(t => isFileSearchRole(t.role));
+			if (!hasFileSearch && workspaceFolderPath) {
+				tasks.unshift({
+					taskId: 'local-file-search',
+					role: 'file-search',
+					title: '既存ワークスペースのスキャン',
+					input: cycleInput,
+					description: 'ユーザーの要求に関連する既存ファイルを読み込み、後続の Coder に現行プロジェクトの文脈を渡す。',
+					reason: 'Leader AI の分解に file-search が無かったため Orchestra 側で自動挿入。',
+				});
+				console.log('[DivisionAPI] Injected local file-search task (Leader did not include one).');
+			}
+
+			// Display task decomposition
+			if (tasks.length > 0) {
+				for (let i = 0; i < tasks.length; i++) {
+					appendText(`${i + 1}. **${tasks[i].role}** — ${tasks[i].title}\n`);
+				}
+				appendText(`\n`);
+			}
+			if (cycleFinalRole) {
+				appendText(`合成ロール: **${cycleFinalRole}**\n\n`);
+			}
+
+			// Context history built from prior task outputs (for downstream tasks)
+			const buildPriorContextHistory = (): { role: 'user' | 'assistant'; content: string }[] => {
+				const entries: { role: 'user' | 'assistant'; content: string }[] = [];
+				let total = 0;
+				for (const t of tasks) {
+					if (!t.output || !t.output.trim()) continue;
+					const truncated = truncateForContext(t.output.trim(), MAX_CHARS_PER_CONTEXT);
+					if (total + truncated.length > MAX_TOTAL_CONTEXT_CHARS) {
+						entries.push({
+							role: 'assistant',
+							content: `[${t.role}] 以降の先行出力は合計上限を超過したため省略されました。`,
+						});
+						break;
+					}
+					entries.push({
+						role: 'assistant',
+						content: `## 先行タスクの出力: ${t.role} — ${t.title || ''}\n\n${truncated}`,
+					});
+					total += truncated.length;
+				}
+				return entries;
+			};
+
+			for (let i = 0; i < tasks.length; i++) {
+				const task = tasks[i];
+				const role = (task.role || '').toLowerCase();
+
+				if (isFileSearchRole(role)) {
+					const query = task.input || task.title || cycleInput;
+					appendText(`### ${i + 1}. file-search — ${task.title || ''}\n\nワークスペースのファイルを読み込み中...\n\n`);
+					try {
+						const rawOutput = workspaceFolderPath
+							? buildFileSearchOutput(workspaceFolderPath, query)
+							: '(ワークスペース未指定のため file-search をスキップ)';
+						const capped = truncateForContext(rawOutput, MAX_CHARS_PER_CONTEXT);
+						task.output = capped;
+						const sizeMsg = rawOutput.length > capped.length
+							? `（${rawOutput.length.toLocaleString()} → ${capped.length.toLocaleString()} 文字に要約）`
+							: `（${capped.length.toLocaleString()} 文字）`;
+						appendText(`📂 file-search 完了 ${sizeMsg}\n\n`);
+					} catch (e: any) {
+						appendText(`⚠️ file-search エラー: ${e?.message || String(e)}\n\n`);
+						task.output = `(file-search failed: ${e?.message || String(e)})`;
+					}
+					continue;
+				}
+
+				if (task.output && task.output.trim()) {
+					appendText(`### ${i + 1}. ${task.role} — ${task.title || ''}\n\n(サーバー実行済み)\n\n`);
+					continue;
+				}
+
+				const isDesignerRole = role === 'design' || role === 'designer';
+				const taskInstruction = isDesignerRole
+					? [
+						`直前の assistant メッセージに先行タスクの出力が添付されています（ある場合）。それを踏まえ、ユーザーの要求を視覚化した **1 枚の自己完結型 HTML ファイル** を生成してください。`,
+						``,
+						`### 出力要件`,
+						`- 必ず ` + '```html' + ` ... ` + '```' + ` のコードブロック 1 つだけで返してください。説明文やプレーンテキストは書かないでください。`,
+						`- ` + '`<!DOCTYPE html>`' + ` から始まる完全な HTML ドキュメント（head / body / style / script すべて含むインライン構成）にしてください。外部 CSS / JS / 画像 URL は使わないでください。`,
+						`- スタイルは ` + '`<style>`' + ` タグ内のインライン CSS（必要なら簡素なアニメーションも可）で記述してください。`,
+						`- 実装コードではなく**デザインモック**です。レイアウト・配色・タイポグラフィ・主要コンポーネントの見た目がブラウザで確認できることが目的です。`,
+						`- モダンで洗練されたビジュアル、適切な余白、視覚的階層、アクセシブルなコントラストを意識してください。`,
+					].join('\n')
+					: `直前の assistant メッセージに先行タスクの出力が添付されています（ある場合）。それを参考に、あなたの担当タスクを遂行してください。出力は Markdown 形式で、後続エージェントが直接利用できるよう具体的・網羅的にまとめてください。`;
+
+				const taskInput = [
+					`## ユーザーの元のリクエスト`,
+					cycleInput,
+					``,
+					`## あなたの担当タスク`,
+					`- ロール: ${task.role}`,
+					`- タイトル: ${task.title || ''}`,
+					task.description ? `- 説明: ${task.description}` : '',
+					task.reason ? `- 目的: ${task.reason}` : '',
+					``,
+					`## 指示`,
+					taskInstruction,
+				].filter(Boolean).join('\n');
+
+				const taskChatHistory = withStackContext([...chatHistory, ...buildPriorContextHistory()]);
+
+				appendText(`### ${i + 1}. ${task.role} — ${task.title || ''}\n\n`);
+
+				const execResult = await callDivisionTaskExecute(
+					endpointBase, projectId, task.role, taskInput, controller.signal,
+					(chunk) => appendText(chunk),
+					divisionApiKey, cycleSessionId,
+					taskChatHistory,
+					workspaceFolderPath,
+				);
+
+				if (execResult.error) {
+					appendText(`\n\n⚠️ ${task.role} 実行エラー: ${execResult.error}\n\n`);
+					task.output = `(execution failed: ${execResult.error})`;
+					continue;
+				}
+
+				task.output = execResult.output || '';
+				const fences = (task.output.match(/```/g) || []).length;
+				if (fences % 2 !== 0) appendText(`\n\`\`\`\n`);
+				appendText(`\n\n`);
+			}
+
+			// Build flowOutputs & persist MDs
+			const flowOutputs: FlowOutputEntry[] = [];
+			for (const task of tasks) {
+				if (!task.output) continue;
+				const roleKey = task.role.toLowerCase();
+				const isDesigner = roleKey === 'design' || roleKey === 'designer';
+
+				let sanitized = task.output;
+				const opens = (sanitized.match(/```/g) || []).length;
+				if (opens % 2 !== 0) sanitized += '\n```\n';
+
+				let contentToSave = sanitized;
+				if (isDesigner) {
+					const htmlMatch = sanitized.match(/```(?:html)?\s*\n([\s\S]*?)```/i);
+					if (htmlMatch && htmlMatch[1]) {
+						contentToSave = htmlMatch[1].trim() + '\n';
+					} else {
+						contentToSave = sanitized.replace(/```[a-zA-Z0-9]*\s*\n?/g, '').replace(/```/g, '').trim() + '\n';
+					}
+				}
+
+				if (workspaceFolderPath && sanitized.trim() && FLOW_ROLE_TO_FILENAME[roleKey]) {
+					const savedPath = saveFlowResultAsMd(workspaceFolderPath, task.role, task.title || '', contentToSave, cycleSessionId);
+					const mdFileName = FLOW_ROLE_TO_FILENAME[roleKey];
+					if (mdFileName) {
+						flowOutputs.push({
+							role: task.role,
+							mdFileName,
+							mdFilePath: savedPath || path.join(workspaceFolderPath, '.division', mdFileName),
+							mdContent: isDesigner ? contentToSave : sanitized,
+						});
+					}
+				}
+			}
+
+			return { flowOutputs, sessionId: cycleSessionId, finalRole: cycleFinalRole, aborted: false };
+		};
+
 		// Shared helper: run the final (synthesis + review) flow given intermediate outputs.
+		// On review failure, re-invoke runIntermediateCycle with review feedback and loop
+		// until the reviewer approves or MAX_REVIEW_ITERATIONS is reached.
 		const runFinalFlow = async (
-			finalRoleArg: string,
-			sessionIdArg: string,
-			flowOutputs: FlowOutputEntry[],
+			initialFinalRole: string,
+			initialSessionId: string,
+			initialFlowOutputs: FlowOutputEntry[],
 		): Promise<void> => {
-			const synthesisInput = flowOutputs
-				.filter(o => o.mdContent && o.mdContent.trim())
-				.map(o => `## ${o.role}\n${o.mdContent}`)
-				.join('\n\n');
+			let finalRoleArg = initialFinalRole;
+			let sessionIdArg = initialSessionId;
+			let flowOutputs = initialFlowOutputs;
+			let iteration = 0;
+			let lastReviewFeedback = '';
 
-			const coderMandate = [
-				`## あなたのタスク（必ず実行してください）`,
-				``,
-				`あなたは ${finalRoleArg} です。**説明や提案だけで終わらせず、必ず以下のいずれかを行ってください**:`,
-				``,
-				`1. **新しいファイルを作成する** — 必要なファイルを ` + '```lang:path/to/file```' + ` 形式で出力`,
-				`2. **既存ファイルを変更する** — SEARCH/REPLACE形式で差分を出力`,
-				`3. **コマンドを実行する** — 依存パッケージのインストール、ファイル移動、ビルドなど必要なコマンドを ` + '```bash```' + ` 形式で出力`,
-				``,
-				`コード変更とコマンド実行は併用可能です。例えば「新しいライブラリを使うコードを作成 + npm install で依存追加」のように、ユーザーの要求を完遂するまで全ての操作を出力してください。`,
-				``,
-				`「~~したらどうですか」「~~を検討してください」のような提案だけの回答は禁止です。実際にコードを書き、コマンドを発行してください。`,
-			].join('\n');
+			// Loop: Coder → Reviewer → （不合格なら Leader に再分解依頼して） Coder → Reviewer...
+			while (true) {
+				// Build synthesis context from current flowOutputs
+				const synthesisContextHistory: { role: 'user' | 'assistant'; content: string }[] = [];
+				let totalContextChars = 0;
+				for (const o of flowOutputs) {
+					if (!o.mdContent || !o.mdContent.trim()) continue;
+					const truncated = truncateForContext(o.mdContent, MAX_CHARS_PER_CONTEXT);
+					if (totalContextChars + truncated.length > MAX_TOTAL_CONTEXT_CHARS) {
+						synthesisContextHistory.push({
+							role: 'assistant',
+							content: `[${o.role}] 以降のコンテキストは合計上限 (${MAX_TOTAL_CONTEXT_CHARS} 文字) を超過したため省略されました。`,
+						});
+						break;
+					}
+					synthesisContextHistory.push({
+						role: 'assistant',
+						content: `## ${o.role} の出力 (${o.mdFileName})\n\n${truncated}`,
+					});
+					totalContextChars += truncated.length;
+				}
 
-			const synthesisPrompt = synthesisInput
-				? [
+				// On retries, add the prior review feedback as an additional assistant turn so
+				// the Coder knows exactly what was rejected in the previous attempt.
+				if (iteration > 0 && lastReviewFeedback.trim()) {
+					synthesisContextHistory.push({
+						role: 'assistant',
+						content: `## 前回レビューでの指摘（必ず反映してください）\n\n${truncateForContext(lastReviewFeedback, MAX_CHARS_PER_CONTEXT)}`,
+					});
+				}
+
+				const combinedChatHistory = withStackContext([...chatHistory, ...synthesisContextHistory]);
+
+				// Extract existing file paths from file-search output so Coder doesn't recreate them.
+				const existingFilePaths: string[] = [];
+				for (const o of flowOutputs) {
+					if (!isFileSearchRole(o.role)) continue;
+					const lines = (o.mdContent || '').split('\n');
+					for (const line of lines) {
+						const m = line.match(/^###\s+`([^`]+)`\s*$/);
+						if (m && m[1]) existingFilePaths.push(m[1]);
+					}
+				}
+				const existingFilesBlock = existingFilePaths.length > 0
+					? [
+						``,
+						`### ワークスペースに既に存在するファイル（必ず新規作成ではなく編集すること）`,
+						...existingFilePaths.map(p => `- \`${p}\``),
+						``,
+						`上記ファイルはワークスペース内に既に存在します。ユーザー要求の実現に関連するものは、**必ず SEARCH/REPLACE 形式で差分編集** してください。新規作成ブロック（` + '```lang:path/to/file```' + `）で同じパスを上書きすると既存コードの意図が失われるため禁止です。既存ファイルを置き換えるほど大幅な刷新が必要な場合のみ、その旨を一言添えた上で ` + '```lang:path/to/file```' + ` を使ってください。`,
+					].join('\n')
+					: '';
+
+				const retryNote = iteration > 0
+					? `\n> ⚠️ **${iteration + 1} 回目の試行です。** 直前の assistant コンテキストに前回レビューの指摘が含まれているので、それを必ず反映してください。同じ不具合を繰り返すと再度不合格になります。\n`
+					: '';
+
+				const coderMandate = [
+					`## あなたのタスク（必ず実行してください）`,
+					retryNote,
+					`あなたは ${finalRoleArg} です。**説明や提案だけで終わらせず、必ず以下のいずれかを行ってください**:`,
+					``,
+					`1. **既存ファイルを編集する（最優先）** — 直前の assistant コンテキストに含まれる既存ファイルの内容を踏まえ、SEARCH/REPLACE 形式で差分のみを出力`,
+					`2. **新しいファイルを作成する（対応する既存ファイルが無い場合のみ）** — ` + '```lang:path/to/file```' + ` 形式で出力`,
+					`3. **セットアップコマンドを発行する** — 依存パッケージのインストール（npm install 等）、ファイル移動、ビルドなど、ファイル編集後に必要なコマンドを ` + '```bash```' + ` 形式で出力`,
+					``,
+					`コード変更とコマンド実行は併用可能です。ユーザーの要求を完遂するまで全ての操作を出力してください。`,
+					``,
+					`### 絶対禁止事項`,
+					``,
+					`- **既存ファイルをゼロから書き直してはいけません**。コンテキストに含まれる既存ファイルは、必要な差分だけを SEARCH/REPLACE で編集してください。既存の import / 構造 / 命名 / スタイルは維持すること。`,
+					`- **同じパスを ` + '```lang:path/to/file```' + ` で上書きしてはいけません**（既存ファイルを全文リセットするのと同じです）。どうしても全面刷新が必要な場合は、その理由を明記してから上書きしてください。`,
+					`- 探索系シェルコマンド（` + '`find`' + `, ` + '`ls`' + `, ` + '`cat`' + `, ` + '`grep`' + `, ` + '`head`' + `, ` + '`tail`' + ` など）を出力してはいけません。ワークスペースのファイル一覧や内容は既に **直前の assistant メッセージ（コンテキスト）** に揃っています。`,
+					`- 「まずプロジェクト構造を確認させてください」のような**前置き探索**を書かないでください。あなたは対話的 shell ではなくワンショット生成です。探索コマンドを出しても実行結果は返ってきません。`,
+					`- 「~~したらどうですか」「~~を検討してください」のような提案だけの回答は禁止です。実際にコードを書き、コマンドを発行してください。`,
+					`- 回答の最初から最後まで、コードブロック（SEARCH-REPLACE / ` + '```lang:path/to/file```' + ` / ` + '```bash```' + `）を必ず1つ以上含めてください。含まれていない回答は不合格です。`,
+					existingFilesBlock,
+				].filter(Boolean).join('\n');
+
+				const synthesisPrompt = [
 					coderMandate,
 					``,
 					`## ユーザーの要求`,
 					currentInput,
 					``,
-					`## 承認済みエージェント出力（ユーザー編集反映済み）`,
-					synthesisInput,
+					synthesisContextHistory.length > 0
+						? `## コンテキスト参照\n直前の assistant メッセージとして添付された中間エージェントの出力（ideaman / file-searcher / designer / planner など）を参照し、ユーザーの要求を満たすコードを生成してください。**既存ファイルの内容は file-searcher の出力に含まれているため、それをベースに差分編集してください。**`
+						: '',
 					``,
 					codeOutputInstructions,
-				].join('\n')
-				: [
-					coderMandate,
+				].filter(Boolean).join('\n');
+
+				const iterLabel = iteration === 0 ? '' : ` (${iteration + 1} 回目)`;
+				appendText(`---\n\n**合成ステップ** (${finalRoleArg})${iterLabel} 開始...\n\n`);
+
+				const synthesisResult = await callDivisionTaskExecute(
+					endpointBase, projectId, finalRoleArg, synthesisPrompt, controller.signal,
+					(chunk) => appendText(chunk),
+					divisionApiKey, sessionIdArg,
+					combinedChatHistory,
+					workspaceFolderPath,
+				);
+
+				if (synthesisResult.error) {
+					appendText(`\n❌ **Synthesis Error:** ${synthesisResult.error}\n`);
+					break;
+				}
+
+				const synthesisOutput = synthesisResult.output;
+
+				if (synthesisOutput && workspaceFolderPath) {
+					const { savedFiles, fileOperations, commands } = saveCodeBlocksFromOutput(synthesisOutput, sessionIdArg || 'synthesis', workspaceFolderPath);
+					if (savedFiles.length > 0) {
+						appendText(`\n`);
+						for (const sf of savedFiles) {
+							appendText(`${path.basename(sf.filePath)} — \`${sf.filePath}\`\n`);
+						}
+						appendText(`\n`);
+						if (fileOperations.length > 0 && onFileOperation) onFileOperation(fileOperations);
+					}
+					if (commands.length > 0 && onCommandRun) onCommandRun(commands);
+
+					if (FLOW_ROLE_TO_FILENAME[finalRoleArg.toLowerCase()]) {
+						saveFlowResultAsMd(workspaceFolderPath, finalRoleArg, '', synthesisOutput, sessionIdArg);
+					}
+				}
+
+				// Review step
+				appendText(`\n---\n\n**レビューステップ** (reviewer)${iterLabel} 開始...\n\n`);
+
+				const reviewContextHistory: { role: 'user' | 'assistant'; content: string }[] = [];
+				if (synthesisOutput && synthesisOutput.trim()) {
+					reviewContextHistory.push({
+						role: 'assistant',
+						content: `## ${finalRoleArg} が生成した成果物\n\n${truncateForContext(synthesisOutput, MAX_CHARS_PER_CONTEXT)}`,
+					});
+				}
+
+				const reviewPrompt = [
+					`以下の成果物をレビューしてください。品質・正確性・ユーザー要求の充足度を評価してください。`,
 					``,
 					`## ユーザーの要求`,
 					currentInput,
 					``,
-					codeOutputInstructions,
+					`## 指示`,
+					`直前の assistant メッセージに ${finalRoleArg} の成果物が添付されています。評価結果を Markdown で返してください。`,
+					``,
+					`### 出力形式（厳守）`,
+					`1 行目に必ず以下のどちらかのマーカーを出力してください:`,
+					`- **合格** の場合: ` + '`判定: 合格`',
+					`- **不合格** の場合: ` + '`判定: 不合格`',
+					``,
+					`その下に、理由・具体的な改善点（不合格時は修正指示）を箇条書きで書いてください。改善点が無く完全に問題ない場合のみ合格にしてください。`,
 				].join('\n');
 
-			appendText(`---\n\n**合成ステップ** (${finalRoleArg}) 開始...\n\n`);
+				const reviewResult = await callDivisionTaskExecute(
+					endpointBase, projectId, 'review', reviewPrompt, controller.signal,
+					(chunk) => appendText(chunk),
+					divisionApiKey, sessionIdArg,
+					withStackContext(reviewContextHistory),
+					workspaceFolderPath,
+				);
 
-			const synthesisResult = await callDivisionTaskExecute(
-				endpointBase, projectId, finalRoleArg, synthesisPrompt, controller.signal,
-				(chunk) => appendText(chunk),
-				divisionApiKey, sessionIdArg,
-			);
-
-			if (synthesisResult.error) {
-				appendText(`\n❌ **Synthesis Error:** ${synthesisResult.error}\n`);
-				onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null });
-				return;
-			}
-
-			const synthesisOutput = synthesisResult.output;
-
-			if (synthesisOutput && workspaceFolderPath) {
-				const { savedFiles, fileOperations, commands } = saveCodeBlocksFromOutput(synthesisOutput, sessionIdArg || 'synthesis', workspaceFolderPath);
-				if (savedFiles.length > 0) {
-					appendText(`\n`);
-					for (const sf of savedFiles) {
-						appendText(`${path.basename(sf.filePath)} — \`${sf.filePath}\`\n`);
-					}
-					appendText(`\n`);
-					if (fileOperations.length > 0 && onFileOperation) onFileOperation(fileOperations);
+				if (reviewResult.error) {
+					appendText(`\n❌ **Review Error:** ${reviewResult.error}\n`);
+					break;
 				}
-				if (commands.length > 0 && onCommandRun) onCommandRun(commands);
 
-				if (FLOW_ROLE_TO_FILENAME[finalRoleArg.toLowerCase()]) {
-					saveFlowResultAsMd(workspaceFolderPath, finalRoleArg, '', synthesisOutput, sessionIdArg);
+				const reviewOutput = reviewResult.output || '';
+				lastReviewFeedback = reviewOutput;
+				if (reviewOutput && workspaceFolderPath && FLOW_ROLE_TO_FILENAME['review']) {
+					saveFlowResultAsMd(workspaceFolderPath, 'review', '', reviewOutput, sessionIdArg);
 				}
-			}
 
-			// Review step
-			appendText(`\n---\n\n**レビューステップ** (reviewer) 開始...\n\n`);
+				const passed = judgeReviewPass(reviewOutput);
+				if (passed) {
+					appendText(`\n\n✅ **レビュー合格** (${iteration + 1} 回目で合格) — 完了しました。\n`);
+					break;
+				}
 
-			const reviewPrompt = [
-				`以下の成果物をレビューしてください。品質、正確性、改善点を評価してください。`,
-				``,
-				`## ユーザーの要求`,
-				currentInput,
-				``,
-				`## 成果物`,
-				synthesisOutput,
-			].join('\n');
+				if (iteration >= MAX_REVIEW_ITERATIONS - 1) {
+					appendText(`\n\n⚠️ **最大反復回数 (${MAX_REVIEW_ITERATIONS}) に到達** — レビュー合格に至らなかったためここで終了します。最新のレビュー指摘は REVIEW.md を参照してください。\n`);
+					break;
+				}
 
-			const reviewResult = await callDivisionTaskExecute(
-				endpointBase, projectId, 'review', reviewPrompt, controller.signal,
-				(chunk) => appendText(chunk),
-				divisionApiKey, sessionIdArg,
-			);
+				// Failed → retry: Leader に再分解させて Coder/Reviewer をもう一度回す
+				iteration++;
+				appendText(`\n\n🔄 **レビュー不合格** — Leader に再分解を依頼して ${iteration + 1} 回目を実行します...\n\n`);
 
-			if (reviewResult.error) {
-				appendText(`\n❌ **Review Error:** ${reviewResult.error}\n`);
-			} else if (reviewResult.output && workspaceFolderPath && FLOW_ROLE_TO_FILENAME['review']) {
-				saveFlowResultAsMd(workspaceFolderPath, 'review', '', reviewResult.output, sessionIdArg);
+				const retryInput = [
+					currentInput,
+					``,
+					`---`,
+					``,
+					`## 前回実行のレビュー指摘（必ず解決してください）`,
+					truncateForContext(reviewOutput, 6000),
+					``,
+					`上記の指摘事項を解消するようタスクを再分解し、各ロールで実装してください。`,
+				].join('\n');
+
+				const retryCycle = await runIntermediateCycle(retryInput, `retry-${iteration}`);
+				if (retryCycle.aborted) {
+					appendText(`\n❌ **再試行の中間フロー実行に失敗しました** — ループを終了します。\n`);
+					break;
+				}
+
+				// Update state for next synthesis/review round
+				finalRoleArg = retryCycle.finalRole || finalRoleArg;
+				sessionIdArg = retryCycle.sessionId || sessionIdArg;
+				flowOutputs = retryCycle.flowOutputs;
 			}
 
 			if (workspaceFolderPath) clearOrchestrationState(workspaceFolderPath);
@@ -1854,30 +2794,17 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		}
 
 		// ---------- Phase A: initial invocation ----------
-		// Step 1: Create tasks via /api/tasks/create
-		console.log('[DivisionAPI] /api/tasks/create request:', JSON.stringify({
-			projectId,
-			inputLength: currentInput.length,
-			inputPreview: currentInput.substring(0, 100),
-			chatHistoryLength: chatHistory.length,
-		}));
-
-		appendText(`**Leader AI** がタスクを分析中...\n\n`);
-
-		const taskResult = await callDivisionTaskCreate(
-			endpointBase, projectId, currentInput, controller.signal,
-			divisionApiKey, chatHistory.length > 0 ? chatHistory : undefined,
-		);
-
-		if (taskResult.error) {
-			appendText(`❌ **Task Create Error:** ${taskResult.error}\n\n`);
-
+		// Delegate decompose + intermediate task execution to the shared helper
+		// (runIntermediateCycle). Review-failure retries reuse the same helper inside
+		// runFinalFlow, so the Phase A path here is simple.
+		const initialCycle = await runIntermediateCycle(currentInput, 'initial');
+		if (initialCycle.aborted) {
 			// Fallback: single model via /api/generate/stream
 			appendText(`フォールバック: 単一モデルで生成中...\n\n`);
 			const fallbackResult = await callDivisionGenerateStream(
 				endpointBase, 'gpt-5.2', prompt, controller.signal,
 				(chunk) => appendText(chunk),
-				'chat', divisionApiKey,
+				'chat', divisionApiKey, undefined, workspaceFolderPath,
 			);
 			if (fallbackResult.error) {
 				appendText(`\n❌ **Fallback Error:** ${fallbackResult.error}\n`);
@@ -1886,73 +2813,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			return;
 		}
 
-		const { sessionId, tasks: rawTasks, finalRole } = taskResult;
-
-		// Filter out server-side Coder/Coding tasks.
-		// The server sandbox cannot access the user's real workspace, so its Coder output
-		// is useless (and often wastes up to 20 tool iterations). We run the Coder step
-		// locally via /api/generate/stream below, which applies edits to actual files.
-		const tasks = rawTasks.filter(t => {
-			const role = (t.role || '').toLowerCase();
-			return role !== 'coder' && role !== 'coding';
-		});
-		const droppedCoderCount = rawTasks.length - tasks.length;
-		if (droppedCoderCount > 0) {
-			console.log(`[DivisionAPI] Skipped ${droppedCoderCount} server-side Coder task(s) — running Coder locally instead.`);
-		}
-
-		// Display task decomposition results
-		if (tasks.length > 0) {
-			for (let i = 0; i < tasks.length; i++) {
-				const t = tasks[i];
-				appendText(`${i + 1}. **${t.role}** — ${t.title}\n`);
-			}
-			appendText(`\n`);
-		}
-		if (finalRole) {
-			appendText(`合成ロール: **${finalRole}**\n\n`);
-		}
-
-		// Local file-search: replace remote file-search task outputs with actual workspace contents
-		if (workspaceFolderPath) {
-			for (const task of tasks) {
-				const role = (task.role || '').toLowerCase();
-				if (role === 'file-search' || role === 'filesearch' || role === 'file_search') {
-					const query = task.input || task.title || currentInput;
-					appendText(`📂 **file-search** がワークスペースのファイルを読み込み中...\n\n`);
-					try {
-						const localOutput = buildFileSearchOutput(workspaceFolderPath, query);
-						task.output = localOutput;
-						appendText(`📂 file-search 完了（ローカルファイル読み込み）\n\n`);
-					} catch (e: any) {
-						appendText(`⚠️ file-search エラー: ${e?.message || String(e)}\n\n`);
-					}
-				}
-			}
-		}
-
-		// Display task outputs (from tasks/create response) and save as MD
-		const flowOutputs: FlowOutputEntry[] = [];
-		for (const task of tasks) {
-			if (!task.output) continue;
-			let sanitized = task.output;
-			const opens = (sanitized.match(/```/g) || []).length;
-			if (opens % 2 !== 0) sanitized += '\n```\n';
-			appendText(`## ${task.role}\n\n${sanitized}\n\n`);
-
-			if (workspaceFolderPath && sanitized.trim() && FLOW_ROLE_TO_FILENAME[task.role.toLowerCase()]) {
-				const savedPath = saveFlowResultAsMd(workspaceFolderPath, task.role, task.title || '', sanitized, sessionId);
-				const mdFileName = FLOW_ROLE_TO_FILENAME[task.role.toLowerCase()];
-				if (mdFileName) {
-					flowOutputs.push({
-						role: task.role,
-						mdFileName,
-						mdFilePath: savedPath || path.join(workspaceFolderPath, '.division', mdFileName),
-						mdContent: sanitized,
-					});
-				}
-			}
-		}
+		const { sessionId, finalRole, flowOutputs } = initialCycle;
 
 		// If there are no intermediate outputs at all, skip flow_review and go straight to synthesis.
 		if (flowOutputs.length === 0) {

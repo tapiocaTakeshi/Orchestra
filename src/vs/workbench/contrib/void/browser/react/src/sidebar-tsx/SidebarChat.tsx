@@ -3,7 +3,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import React, { ButtonHTMLAttributes, FormEvent, FormHTMLAttributes, Fragment, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { ButtonHTMLAttributes, FormEvent, FormHTMLAttributes, Fragment, KeyboardEvent, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 
 import { useAccessor, useChatThreadsState, useChatThreadsStreamState, useSettingsState, useActiveURI, useCommandBarState, useFullChatThreadsStreamState, useDivisionProjects, useDivisionProjectConfig } from '../util/services.js';
@@ -708,6 +708,12 @@ const ScrollToBottomContainer = ({ children, className, style, scrollContainerRe
 	const divRef = scrollContainerRef
 	const contentRef = useRef<HTMLDivElement>(null);
 	const isAtBottomRef = useRef(isAtBottom);
+	// True once the user has actively scrolled away from the bottom. While this
+	// is set, we disable all auto-scroll-to-bottom behaviour so streaming output
+	// or ResizeObserver ticks can't "pull" the user back down. Resets to false
+	// only when the user explicitly returns to the bottom (scroll to bottom, or
+	// clicks the floating chevron button).
+	const userPinnedAwayRef = useRef(false);
 
 	useEffect(() => {
 		isAtBottomRef.current = isAtBottom;
@@ -717,16 +723,53 @@ const ScrollToBottomContainer = ({ children, className, style, scrollContainerRe
 		const div = divRef.current;
 		if (!div) return;
 
-		const isBottom = Math.abs(
-			div.scrollHeight - div.clientHeight - div.scrollTop
-		) < 10;
+		const distanceFromBottom = div.scrollHeight - div.clientHeight - div.scrollTop;
+		const isBottom = Math.abs(distanceFromBottom) < 10;
+
+		// When the user has moved meaningfully away from the bottom, pin them
+		// there until they manually return. We use a larger threshold here so
+		// tiny content-height adjustments don't accidentally release the pin.
+		if (distanceFromBottom > 40) {
+			userPinnedAwayRef.current = true;
+		} else if (isBottom) {
+			userPinnedAwayRef.current = false;
+		}
 
 		setIsAtBottom(isBottom);
 	};
 
+	// Detect active user scroll gestures. Once the user initiates any of these,
+	// treat it as intent to stay where they are even if streaming content tries
+	// to push the viewport.
+	useEffect(() => {
+		const div = divRef.current;
+		if (!div) return;
+		const markPinnedIfAway = () => {
+			const el = divRef.current;
+			if (!el) return;
+			const distance = el.scrollHeight - el.clientHeight - el.scrollTop;
+			if (distance > 40) userPinnedAwayRef.current = true;
+		};
+		const onWheel = () => markPinnedIfAway();
+		const onTouchMove = () => markPinnedIfAway();
+		const onKeyDown = (e: KeyboardEvent) => {
+			if (['ArrowUp', 'PageUp', 'Home', 'ArrowDown', 'PageDown', 'End'].includes(e.key)) {
+				markPinnedIfAway();
+			}
+		};
+		div.addEventListener('wheel', onWheel, { passive: true });
+		div.addEventListener('touchmove', onTouchMove, { passive: true });
+		div.addEventListener('keydown', onKeyDown);
+		return () => {
+			div.removeEventListener('wheel', onWheel);
+			div.removeEventListener('touchmove', onTouchMove);
+			div.removeEventListener('keydown', onKeyDown);
+		};
+	}, [divRef]);
+
 	// When children change (new messages added)
 	useEffect(() => {
-		if (isAtBottom) {
+		if (isAtBottom && !userPinnedAwayRef.current) {
 			scrollToBottom(divRef);
 		}
 	}, [children, isAtBottom]); // Dependency on children to detect new messages
@@ -735,7 +778,7 @@ const ScrollToBottomContainer = ({ children, className, style, scrollContainerRe
 	useEffect(() => {
 		if (!contentRef.current) return;
 		const observer = new ResizeObserver(() => {
-			if (isAtBottomRef.current) {
+			if (isAtBottomRef.current && !userPinnedAwayRef.current) {
 				scrollToBottom(divRef);
 			}
 		});
@@ -748,12 +791,17 @@ const ScrollToBottomContainer = ({ children, className, style, scrollContainerRe
 		scrollToBottom(divRef);
 	}, []);
 
+	const jumpToBottom = () => {
+		userPinnedAwayRef.current = false;
+		scrollToBottom(divRef);
+	};
+
 	return (
 		<div className='relative' style={style}>
 			<div
 				ref={divRef}
 				onScroll={onScroll}
-				className={className}
+				className={`${className ?? ''} void-chat-scroll`}
 				style={{ flex: '1 1 0', minHeight: 0, height: '100%' }}
 			>
 				<div ref={contentRef}>
@@ -761,23 +809,25 @@ const ScrollToBottomContainer = ({ children, className, style, scrollContainerRe
 				</div>
 			</div>
 
-			{/* Floating scroll-to-bottom button */}
+			{/* Cursor-style floating scroll-to-bottom pill */}
 			{!isAtBottom && (
 				<button
-					onClick={() => scrollToBottom(divRef)}
+					onClick={jumpToBottom}
 					className='absolute bottom-3 left-1/2 -translate-x-1/2 z-10
-						w-7 h-7 rounded-full
-						bg-void-bg-1 border border-void-border-1
-						flex items-center justify-center
+						h-7 px-2.5 rounded-full
+						conductor-glass border border-void-border-2
+						flex items-center gap-1
 						cursor-pointer
-						shadow-md hover:shadow-lg
-						opacity-80 hover:opacity-100
-						transition-all duration-200'
+						text-[11px] text-void-fg-2 hover:text-void-fg-1
+						shadow-[0_4px_14px_-4px_rgba(0,0,0,0.4)]
+						hover:border-void-border-1
+						transition-all duration-150 ease-out'
 					data-tooltip-id='void-tooltip'
 					data-tooltip-content='Scroll to bottom'
 					data-tooltip-place='top'
 				>
-					<ChevronDown size={16} className='text-void-fg-2' />
+					<ChevronDown size={13} className='text-void-fg-2' />
+					<span className='font-medium tracking-tight'>Jump to latest</span>
 				</button>
 			)}
 		</div>
@@ -1341,6 +1391,83 @@ const SimplifiedToolHeader = ({
 
 
 
+// ---------------------------------------------------------------------------
+// Sticky prompt-card stack context
+//
+// The sidebar chat renders each user message as a `position: sticky top:0`
+// card. Without coordination, newer messages just paint on top of older ones
+// during scroll, which feels abrupt. This context lets every sticky user
+// card report when it becomes pinned to the top of the scroll container,
+// and then read back its "depth" in the overall stack: depth 0 = the
+// currently active card (the newest pinned one), depth 1+ = older cards
+// receding behind it. UserMessageComponent uses the depth to animate
+// scale / opacity / z-index, producing a layered history-stack effect
+// instead of a hard cross-fade.
+// ---------------------------------------------------------------------------
+type StickyStackCtx = {
+	scrollRoot: HTMLElement | null;
+	reportPinned: (messageIdx: number, pinned: boolean) => void;
+	getDepth: (messageIdx: number) => number; // -1 = not pinned
+};
+const StickyStackContext = React.createContext<StickyStackCtx | null>(null);
+
+const StickyStackProvider = ({
+	scrollRootRef,
+	children,
+}: {
+	scrollRootRef: React.MutableRefObject<HTMLElement | null>;
+	children: React.ReactNode;
+}) => {
+	// The ref's `.current` is null on the first render pass (before the scroll
+	// container mounts). We mirror it into state so that once the ref is
+	// populated, the context value updates and child IntersectionObservers are
+	// re-created with the correct root.
+	const [scrollRoot, setScrollRoot] = useState<HTMLElement | null>(scrollRootRef.current);
+	useEffect(() => {
+		if (scrollRootRef.current !== scrollRoot) {
+			setScrollRoot(scrollRootRef.current);
+		}
+	});
+
+	// Sorted ascending by messageIdx → the last element is the *newest* pinned
+	// card (which is also the active one, depth 0). Using an array keeps
+	// `indexOf` O(n) but n is small (at most a handful pinned at once).
+	const [pinnedIdxs, setPinnedIdxs] = useState<number[]>([]);
+
+	const reportPinned = useCallback((messageIdx: number, pinned: boolean) => {
+		setPinnedIdxs((prev) => {
+			const has = prev.indexOf(messageIdx) >= 0;
+			if (pinned && !has) {
+				const next = [...prev, messageIdx];
+				next.sort((a, b) => a - b);
+				return next;
+			}
+			if (!pinned && has) {
+				return prev.filter((i) => i !== messageIdx);
+			}
+			return prev;
+		});
+	}, []);
+
+	const getDepth = useCallback((messageIdx: number) => {
+		const pos = pinnedIdxs.indexOf(messageIdx);
+		if (pos < 0) return -1;
+		// Newest pinned (largest idx, end of array) is depth 0.
+		return pinnedIdxs.length - 1 - pos;
+	}, [pinnedIdxs]);
+
+	const value = useMemo<StickyStackCtx>(() => ({
+		scrollRoot,
+		reportPinned,
+		getDepth,
+	}), [scrollRoot, reportPinned, getDepth]);
+
+	return <StickyStackContext.Provider value={value}>{children}</StickyStackContext.Provider>;
+};
+
+
+
+
 const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, currCheckpointIdx, _scrollToBottom }: { chatMessage: ChatMessage & { role: 'user' }, messageIdx: number, currCheckpointIdx: number | undefined, isCheckpointGhost: boolean, _scrollToBottom: (() => void) | null }) => {
 
 	const accessor = useAccessor()
@@ -1368,6 +1495,50 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 	const [isDisabled, setIsDisabled] = useState(false)
 	const [textAreaRefState, setTextAreaRef] = useState<HTMLTextAreaElement | null>(null)
 	const textAreaFnsRef = useRef<TextAreaFns | null>(null)
+
+	// Sticky-stack wiring: observe our own sticky element and report pinned
+	// state so this card can receive its depth in the stack and animate.
+	const stackCtx = useContext(StickyStackContext)
+	const stickyRef = useRef<HTMLDivElement | null>(null)
+	useEffect(() => {
+		const reportPinned = stackCtx?.reportPinned
+		const scrollRoot = stackCtx?.scrollRoot ?? null
+		if (!reportPinned) return
+		const el = stickyRef.current
+		if (!el) return
+		// Trick: observe the sticky element with a -1px top rootMargin. While
+		// the element sits in its natural flow, intersectionRatio === 1. Once
+		// `position: sticky` pins it to the container's top edge, the synthetic
+		// 1px cut-off makes the ratio drop below 1, which is our pinned signal.
+		const observer = new IntersectionObserver(
+			([entry]) => {
+				const pinned = entry.intersectionRatio < 1
+				reportPinned(messageIdx, pinned)
+			},
+			{
+				root: scrollRoot,
+				rootMargin: '-1px 0px 0px 0px',
+				threshold: [1],
+			}
+		)
+		observer.observe(el)
+		return () => {
+			observer.disconnect()
+			reportPinned(messageIdx, false)
+		}
+	}, [stackCtx?.scrollRoot, stackCtx?.reportPinned, messageIdx, mode])
+
+	const depth = stackCtx?.getDepth(messageIdx) ?? -1
+	const isActiveTop = depth === 0
+	// Stack animation parameters. Keep step sizes small so the effect feels
+	// layered rather than cartoonish. depth < 0 means "not pinned yet" — the
+	// card is in its natural flow and should render unaffected.
+	const stackTransform = depth > 0
+		? `scale(${Math.max(0.82, 1 - 0.04 * depth)}) translateY(${-3 * depth}px)`
+		: undefined
+	const stackOpacity = depth > 0 ? Math.max(0.15, 1 - 0.28 * depth) : 1
+	const stackFilter = depth > 1 ? `blur(${Math.min(0.6 * (depth - 1), 1.2)}px)` : undefined
+	const stackZ = depth >= 0 ? 30 - depth : 10
 	// initialize on first render, and when edit was just enabled
 	const _mustInitialize = useRef(true)
 	const _justEnabledEdit = useRef(false)
@@ -1394,6 +1565,19 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 	}, [chatMessage, mode, _justEnabledEdit, textAreaRefState, textAreaFnsRef.current, _justEnabledEdit.current, _mustInitialize.current])
 
 	const onOpenEdit = () => {
+		// Only one message can be in edit mode at a time. Close any other user
+		// messages that currently have their input/edit panel open before opening
+		// this one so the sidebar never stacks multiple prompt input areas.
+		const thread = chatThreadsService.getCurrentThread()
+		if (thread?.messages) {
+			for (let i = 0; i < thread.messages.length; i++) {
+				if (i === messageIdx) continue
+				const m = thread.messages[i]
+				if (m.role === 'user' && m.state?.isBeingEdited) {
+					chatThreadsService.setCurrentMessageState(i, { isBeingEdited: false })
+				}
+			}
+		}
 		setIsBeingEdited(true)
 		chatThreadsService.setCurrentlyFocusedMessageIdx(messageIdx)
 		_justEnabledEdit.current = true
@@ -1411,9 +1595,30 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 
 	let chatbubbleContents: React.ReactNode
 	if (mode === 'display') {
+		// When the user message is pinned as a sticky header, long prompts eat
+		// up vertical space while scrolling. Clamp to 2 lines with an ellipsis
+		// and collapse internal whitespace so the header stays compact. The
+		// full text is still reachable by clicking into edit mode (or via the
+		// native `title` tooltip on hover).
 		chatbubbleContents = <>
 			<SelectedFiles type='past' messageIdx={messageIdx} selections={chatMessage.selections || []} />
-			<span className='px-0.5'>{chatMessage.displayContent}</span>
+			<span
+				className='px-0.5'
+				style={{
+					display: '-webkit-box',
+					WebkitLineClamp: 2,
+					WebkitBoxOrient: 'vertical',
+					overflow: 'hidden',
+					textOverflow: 'ellipsis',
+					whiteSpace: 'normal',
+					wordBreak: 'break-word',
+					maxHeight: '3.2em',
+					lineHeight: '1.4em',
+				}}
+				title={chatMessage.displayContent}
+			>
+				{chatMessage.displayContent}
+			</span>
 		</>
 	}
 	else if (mode === 'edit') {
@@ -1496,21 +1701,60 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 	const isMsgAfterCheckpoint = currCheckpointIdx !== undefined && currCheckpointIdx === messageIdx - 1
 
 	return <div
+		ref={stickyRef}
 		className={`
-        ${mode === 'edit' ? 'relative w-full max-w-full'
-				: mode === 'display' ? `sticky top-0 z-10 w-full max-w-full whitespace-pre-wrap bg-void-bg-1 border border-void-border-3 rounded-md px-3 py-2 shadow-sm` : ''
-			}
+        group sticky top-0 w-full max-w-full rounded-lg overflow-hidden
+        ${mode === 'edit' ? 'pl-0 pr-0 py-0' : 'pl-3 pr-8 py-1.5'}
 
         ${isCheckpointGhost && !isMsgAfterCheckpoint ? 'opacity-50 pointer-events-none' : ''}
     `}
+		// Unified sticky stack for both display and edit modes. While pinned
+		// at the top of the scroll container, each previous prompt card
+		// shrinks / fades behind the newest one (depth 0 = active / fully
+		// visible). In edit mode we don't clamp height (the user needs room
+		// to type) but we still apply the same depth-based transforms so an
+		// open input card participates in the stack just like a collapsed
+		// display card.
+		style={{
+			maxHeight: mode === 'display' ? '4.4em' : undefined,
+			background: mode === 'display'
+				? (isActiveTop
+					? 'color-mix(in srgb, var(--void-bg-1) 92%, transparent)'
+					: 'color-mix(in srgb, var(--void-bg-1) 80%, transparent)')
+				: 'color-mix(in srgb, var(--void-bg-1) 94%, transparent)',
+			backdropFilter: 'blur(10px) saturate(130%)',
+			WebkitBackdropFilter: 'blur(10px) saturate(130%)',
+			border: '1px solid color-mix(in srgb, var(--void-border-3) 80%, transparent)',
+			boxShadow: isActiveTop
+				? '0 6px 18px -10px rgba(0,0,0,0.45), 0 1px 0 0 color-mix(in srgb, var(--void-fg-1) 3%, transparent) inset'
+				: '0 1px 2px 0 rgba(0,0,0,0.18), 0 0 0 1px color-mix(in srgb, var(--void-fg-1) 2%, transparent) inset',
+			transform: stackTransform,
+			transformOrigin: 'top center',
+			opacity: stackOpacity,
+			filter: stackFilter,
+			zIndex: stackZ,
+			// If an edit card falls back into the stack (depth > 0), disable
+			// pointer input so clicks / typing can't land on it accidentally.
+			pointerEvents: mode === 'edit' && depth > 0 ? 'none' : undefined,
+			transition: 'transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 240ms ease, filter 240ms ease, background-color 200ms ease, box-shadow 200ms ease',
+			willChange: 'transform, opacity',
+		}}
 		onMouseEnter={() => setIsHovered(true)}
 		onMouseLeave={() => setIsHovered(false)}
 	>
+		{/* Cursor-style subtle left accent strip on the sticky header */}
+		{mode === 'display' && (
+			<span
+				aria-hidden
+				className="pointer-events-none absolute left-0 top-1 bottom-1 w-[2px] rounded-full"
+				style={{ background: 'color-mix(in srgb, var(--void-fg-3) 55%, transparent)' }}
+			/>
+		)}
 		<div
 			className={`
             text-left max-w-full
             ${mode === 'edit' ? ''
-					: mode === 'display' ? 'py-1 flex flex-col text-void-fg-1 overflow-x-auto cursor-pointer font-medium' : ''
+					: mode === 'display' ? 'flex flex-col text-void-fg-1 overflow-hidden cursor-pointer text-[13px] leading-[1.4]' : ''
 				}
         `}
 			onClick={() => { if (mode === 'display') { onOpenEdit() } }}
@@ -1519,15 +1763,15 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 		</div>
 
 		<div
-			className="absolute top-0 right-0 z-1"
+			className="absolute top-1.5 right-1.5 z-1"
 		>
 			<EditSymbol
-				size={16}
+				size={14}
 				className={`
                     cursor-pointer
-                    p-[2px]
-                    text-void-fg-3 hover:text-void-fg-1
-                    transition-opacity duration-200 ease-in-out
+                    p-[3px] rounded
+                    text-void-fg-3 hover:text-void-fg-1 hover:bg-[color-mix(in_srgb,var(--void-fg-1)_8%,transparent)]
+                    transition-all duration-150 ease-out
                     ${isHovered || (isFocused && mode === 'edit') ? 'opacity-100' : 'opacity-0'}
                 `}
 				onClick={() => {
@@ -3229,6 +3473,57 @@ const FlowReviewComponent = ({ chatMessage, isCheckpointGhost }: {
 	)
 }
 
+// 現在のスレッドの全メッセージを人間可読なプレーンテキストへ整形する。
+const formatChatThreadAsText = (messages: ChatMessage[] | undefined): string => {
+	if (!messages || messages.length === 0) return ''
+	const lines: string[] = []
+	for (const m of messages) {
+		switch (m.role) {
+			case 'user': {
+				const body = (m.displayContent || m.content || '').trim()
+				if (!body) break
+				lines.push(`## User`, body, '')
+				break
+			}
+			case 'assistant': {
+				const body = (m.displayContent || '').trim()
+				const reasoning = (m.reasoning || '').trim()
+				if (!body && !reasoning) break
+				lines.push(`## Assistant`)
+				if (reasoning) {
+					lines.push(`<thinking>`, reasoning, `</thinking>`, '')
+				}
+				if (body) lines.push(body, '')
+				break
+			}
+			case 'tool': {
+				const name = m.name ?? 'tool'
+				let body = ''
+				if (m.type === 'success') body = typeof m.result === 'string' ? m.result : JSON.stringify(m.result)
+				else if (m.type === 'tool_error') body = m.result ?? ''
+				else if (m.type === 'rejected') body = '(rejected by user)'
+				else if (m.type === 'invalid_params' || m.type === 'tool_request' || m.type === 'running_now') body = m.content ?? ''
+				lines.push(`## Tool (${name})`)
+				if (body.trim()) lines.push(body.trim())
+				lines.push('')
+				break
+			}
+			case 'flow_review': {
+				lines.push(`## Flow Review (${m.flowRole})`, `- status: ${m.status}`, `- file: ${m.mdFileName}`, '')
+				if (m.mdContent?.trim()) {
+					lines.push(m.mdContent.trim(), '')
+				}
+				break
+			}
+			// checkpoint / interrupted_streaming_tool: 内部情報のため含めない
+			default:
+				break
+		}
+	}
+	return lines.join('\n').trim() + '\n'
+}
+
+
 const CommandBarInChat = () => {
 	const { stateOfURI: commandBarStateOfURI, sortedURIs: sortedCommandBarURIs } = useCommandBarState()
 	const numFilesChanged = sortedCommandBarURIs.length
@@ -3236,19 +3531,35 @@ const CommandBarInChat = () => {
 	const accessor = useAccessor()
 	const editCodeService = accessor.get('IEditCodeService')
 	const commandService = accessor.get('ICommandService')
+	const clipboardService = accessor.get('IClipboardService')
+	const chatThreadsService = accessor.get('IChatThreadService')
 	const chatThreadsState = useChatThreadsState()
 	const commandBarState = useCommandBarState()
 	const chatThreadsStreamState = useChatThreadsStreamState(chatThreadsState.currentThreadId)
 
-	// (
-	// 	<IconShell1
-	// 		Icon={CopyIcon}
-	// 		onClick={copyChatToClipboard}
-	// 		data-tooltip-id='void-tooltip'
-	// 		data-tooltip-place='top'
-	// 		data-tooltip-content='Copy chat JSON'
-	// 	/>
-	// )
+	const [copyChatFeedback, setCopyChatFeedback] = useState<'idle' | 'copied' | 'error'>('idle')
+
+	useEffect(() => {
+		if (copyChatFeedback === 'idle') return
+		const t = setTimeout(() => setCopyChatFeedback('idle'), 1500)
+		return () => clearTimeout(t)
+	}, [copyChatFeedback])
+
+	const onCopyChatLog = useCallback(async () => {
+		const threadId = chatThreadsService.state.currentThreadId
+		const thread = threadId ? chatThreadsState.allThreads[threadId] : undefined
+		const text = formatChatThreadAsText(thread?.messages)
+		if (!text.trim()) {
+			setCopyChatFeedback('error')
+			return
+		}
+		try {
+			await clipboardService.writeText(text)
+			setCopyChatFeedback('copied')
+		} catch {
+			setCopyChatFeedback('error')
+		}
+	}, [chatThreadsService, chatThreadsState, clipboardService])
 
 	const [fileDetailsOpenedState, setFileDetailsOpenedState] = useState<'auto-opened' | 'auto-closed' | 'user-opened' | 'user-closed'>('auto-closed');
 	const isFileDetailsOpened = fileDetailsOpenedState === 'auto-opened' || fileDetailsOpenedState === 'user-opened';
@@ -3481,6 +3792,17 @@ const CommandBarInChat = () => {
 					{fileDetailsButton}
 				</div>
 				<div className="flex gap-2 items-center">
+					<IconShell1
+						Icon={copyChatFeedback === 'copied' ? Check : copyChatFeedback === 'error' ? X : CopyIcon}
+						onClick={onCopyChatLog}
+						data-tooltip-id='void-tooltip'
+						data-tooltip-place='top'
+						data-tooltip-content={
+							copyChatFeedback === 'copied' ? 'コピーしました' :
+								copyChatFeedback === 'error' ? 'コピーできませんでした' :
+									'チャットログをコピー'
+						}
+					/>
 					{acceptRejectAllButtons}
 					{threadStatusHTML}
 				</div>
@@ -3736,24 +4058,26 @@ export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTa
 		`}
 		style={{ flex: '1 1 0', minHeight: 0 }}
 	>
-		{/* previous messages */}
-		{previousMessagesHTML}
-		{currStreamingMessageHTML}
+		<StickyStackProvider scrollRootRef={scrollContainerRef as React.MutableRefObject<HTMLElement | null>}>
+			{/* previous messages */}
+			{previousMessagesHTML}
+			{currStreamingMessageHTML}
 
-		{/* Generating tool */}
-		{generatingTool}
+			{/* Generating tool */}
+			{generatingTool}
 
-		{/* Flow indicator - shows agent workflow phases */}
-		<FlowIndicator
-			messages={previousMessages}
-			isRunning={isRunning}
-			reasoningSoFar={reasoningSoFar}
-		/>
+			{/* Flow indicator - shows agent workflow phases */}
+			<FlowIndicator
+				messages={previousMessages}
+				isRunning={isRunning}
+				reasoningSoFar={reasoningSoFar}
+			/>
 
-		{/* loading indicator */}
-		{isRunning === 'LLM' || isRunning === 'idle' && !toolIsGenerating ? <ProseWrapper>
-			{<IconLoading className='opacity-50 text-sm' />}
-		</ProseWrapper> : null}
+			{/* loading indicator */}
+			{isRunning === 'LLM' || isRunning === 'idle' && !toolIsGenerating ? <ProseWrapper>
+				{<IconLoading className='opacity-50 text-sm' />}
+			</ProseWrapper> : null}
+		</StickyStackProvider>
 
 
 	</ScrollToBottomContainer>
