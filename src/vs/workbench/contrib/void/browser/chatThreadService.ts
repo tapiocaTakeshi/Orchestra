@@ -357,7 +357,6 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		// Register file operation handler for Division API
 		// When the main process sends file operations via IPC, apply them through the editor
 		this._llmMessageService.registerFileOperationHandler(async (operations) => {
-			const threadId = this.state.currentThreadId;
 			for (const op of operations) {
 				try {
 					const uri = URI.file(op.filePath);
@@ -365,11 +364,6 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 					if (op.action === 'edit' && op.searchReplaceBlocks) {
 						// EDIT: Apply search/replace blocks through editCodeService for diff highlighting.
 						await this._voidModelService.initializeModel(uri);
-						// 変更前スナップショットを checkpoint としてスレッドに記録。
-						// これにより、ユーザーが以前のチャットへリバートしたときにコードも元に戻せる。
-						if (threadId) {
-							this._addToolEditCheckpoint({ threadId, uri });
-						}
 						await this._editCodeService.callBeforeApplyOrEdit(uri);
 						this._editCodeService.instantlyApplySearchReplaceBlocks({
 							uri,
@@ -397,12 +391,6 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 							}
 						}
 						await this._voidModelService.initializeModel(uri);
-						// 変更前スナップショットを checkpoint としてスレッドに記録。
-						// 新規作成の場合は「空ファイル」のスナップショットが記録されるため、
-						// リバート時にファイル内容が空に戻る（= 実質的に作成が取り消された状態）。
-						if (threadId) {
-							this._addToolEditCheckpoint({ threadId, uri });
-						}
 						await this._editCodeService.callBeforeApplyOrEdit(uri);
 						this._editCodeService.instantlyRewriteFile({
 							uri,
