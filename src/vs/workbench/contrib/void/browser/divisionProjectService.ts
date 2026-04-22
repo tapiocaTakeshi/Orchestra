@@ -558,7 +558,7 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 				if (providersRes.ok) {
 					const providers: Array<{ id: string; name?: string; displayName?: string }> = await providersRes.json();
 					for (const p of providers) {
-						providerIdToName.set(p.id, p.name || p.id);
+						providerIdToName.set(p.id, p.displayName || p.name || p.id);
 					}
 					console.log(`[DivisionProjectService] Fetched ${providers.length} providers from Supabase`);
 				} else {
@@ -584,7 +584,7 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 
 				// Fetch RoleAssignment with embedded Role and Provider relations
 				const assignRes = await fetch(
-					`${SUPABASE_URL}/rest/v1/RoleAssignment?projectId=eq.${encodeURIComponent(project.projectId)}&select=roleId,providerId,priority,config,Role(id,slug,name),Provider(id,name)&order=priority.asc`,
+					`${SUPABASE_URL}/rest/v1/RoleAssignment?projectId=eq.${encodeURIComponent(project.projectId)}&select=roleId,providerId,priority,config,Role(id,slug,name),Provider(id,name,displayName)&order=priority.asc`,
 					{ headers: supaHeaders }
 				);
 				if (!assignRes.ok) {
@@ -596,7 +596,7 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 					providerId: string;
 					config: string;
 					Role?: { id: string; slug?: string; name?: string } | null;
-					Provider?: { id: string; name?: string } | null;
+					Provider?: { id: string; name?: string; displayName?: string } | null;
 				}> = await assignRes.json();
 
 				console.log(`[DivisionProjectService] Fetched ${assignments.length} assignments for project ${project.projectId}:`, JSON.stringify(assignments).substring(0, 500));
@@ -616,10 +616,10 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 						role = roleIdToSlug.get(a.roleId)!;
 					}
 
-					// Resolve provider: embedded relation → map lookup → raw ID
+					// Resolve provider: embedded relation (displayName > name) → map lookup → raw ID
 					let provider = a.providerId;
-					if (a.Provider && a.Provider.name) {
-						provider = a.Provider.name;
+					if (a.Provider && (a.Provider.displayName || a.Provider.name)) {
+						provider = a.Provider.displayName || a.Provider.name || a.Provider.id;
 					} else if (providerIdToName.has(a.providerId)) {
 						provider = providerIdToName.get(a.providerId)!;
 					}

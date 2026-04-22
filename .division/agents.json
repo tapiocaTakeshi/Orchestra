@@ -1,0 +1,68 @@
+{
+  "activeProjectIds": [
+    "d9a0ad4e-dcda-40ac-b8aa-183d4f412674"
+  ],
+  "projects": [
+    {
+      "projectId": "d9a0ad4e-dcda-40ac-b8aa-183d4f412674",
+      "name": "Division Project",
+      "agents": [
+        {
+          "role": "leader",
+          "provider": "OpenAI",
+          "model": "gpt-5.4-pro"
+        },
+        {
+          "role": "reviewer",
+          "provider": "Anthropic",
+          "model": "claude-sonnet-4-6"
+        },
+        {
+          "role": "planner",
+          "provider": "Google",
+          "model": "gemini-3.1-flash-lite-preview"
+        },
+        {
+          "role": "designer",
+          "provider": "Google",
+          "model": "gemini-3.1-pro-preview"
+        },
+        {
+          "role": "imager",
+          "provider": "Google",
+          "model": "gemini-3.1-flash-image-preview"
+        },
+        {
+          "role": "ideaman",
+          "provider": "OpenAI",
+          "model": "gpt-5.4-nano"
+        },
+        {
+          "role": "writer",
+          "provider": "OpenAI",
+          "model": "gpt-5.4"
+        },
+        {
+          "role": "coder",
+          "provider": "Anthropic",
+          "model": "claude-opus-4-7"
+        },
+        {
+          "role": "file-searcher",
+          "provider": "Anthropic",
+          "model": "claude-sonnet-4-6"
+        },
+        {
+          "role": "searcher",
+          "provider": "Perplexity",
+          "model": "sonar-pro"
+        },
+        {
+          "role": "researcher",
+          "provider": "Perplexity",
+          "model": "sonar-deep-research"
+        }
+      ]
+    }
+  ]
+}

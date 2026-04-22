@@ -23,6 +23,7 @@ product.overrides.json
 .vscode-test
 
 .env
+.history/
 .tmp/
 .tmp2/
 .tool-versions

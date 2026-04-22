@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Orchestra UI/UX System Redesign</title>
+  <style>
+    /* =========================================
+       CSS Variables (Tailwind Inspired)
+    ========================================= */
+    :root {
+      /* Colors */
+      --gray-50: #f9fafb;
+      --gray-100: #f3f4f6;
+      --gray-200: #e5e7eb;
+      --gray-300: #d1d5db;
+      --gray-400: #9ca3af;
+      --gray-500: #6b7280;
+      --gray-600: #4b5563;
+      --gray-700: #374151;
+      --gray-800: #1f2937;
+      --gray-900: #111827;
+
+      --primary-50: #eff6ff;
+      --primary-100: #dbeafe;
+      --primary-500: #3b82f6;
+      --primary-600: #2563eb;
+      --primary-700: #1d4ed8;
+      
+      --red-50: #fef2f2;
+      --red-100: #fee2e2;
+      --red-500: #ef4444;
+      --red-600: #dc2626;
+
+      --green-50: #ecfdf5;
+      --green-500: #10b981;
+      --green-600: #059669;
+
+      /* Typography */
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      
+      /* Shadows */
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      
+      /* Radius */
+      --radius-sm: 0.25rem;
+      --radius-md: 0.375rem;
+      --radius-lg: 0.5rem;
+      --radius-xl: 0.75rem;
+    }
+
+    /* =========================================
+       Reset & Base
+    ========================================= */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background-color: var(--gray-50);
+      color: var(--gray-900);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { text-decoration: none; color: inherit; }
+    ul { list-style: none; }
+    button { font-family: inherit; }
+
+    /* =========================================
+       Layout
+    ========================================= */
+    .app-wrapper {
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Sidebar Navigation */
+    .sidebar {
+      width: 260px;
+      background-color: #ffffff;
+      border-right: 1px solid var(--gray-200);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sidebar-header {
+      padding: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      border-bottom: 1px solid var(--gray-100);
+    }
+
+    .brand-icon {
+      width: 32px;
+      height: 32px;
+      background: var(--primary-600);
+      color: #fff;
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .brand-title {
+      font-size: 1.125rem;
+      font-weight: 700;
+      color: var(--gray-900);
+    }
+
+    .nav-list {
+      padding: 1.5rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.5rem 0.75rem;
+      border-radius: var(--radius-md);
+      color: var(--gray-600);
+      font-weight: 500;
+      font-size: 0.875rem;
+      transition: all 0.2s;
+    }
+
+    .nav-item:hover {
+      background-color: var(--gray-50);
+      color: var(--gray-900);
+    }
+
+    .nav-item.active {
+      background-color: var(--primary-50);
+      color: var(--primary-700);
+    }
+
+    .nav-icon {
+      width: 20px;
+      height: 20px;
+      stroke-width: 2;
+    }
+
+    /* Main Area */
+    .main-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .top-header {
+      height: 64px;
+      background-color: #ffffff;
+      border-bottom: 1px solid var(--gray-200);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 2rem;
+    }
+
+    .breadcrumb {
+      font-size: 0.875rem;
+      color: var(--gray-500);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .breadcrumb span.current {
+      color: var(--gray-900);
+      font-weight: 500;
+    }
+
+    .user-profile {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background-color: var(--primary-100);
+      color: var(--primary-700);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: 0.875rem;
+    }
+
+    .main-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 2rem;
+    }
+
+    /* =========================================
+       Components
+    ========================================= */
+    .section-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--gray-900);
+      margin-bottom: 1.5rem;
+    }
+
+    .section-container {
+      margin-bottom: 3rem;
+    }
+
+    /* Grid */
+    .grid { display: grid; gap: 1.5rem; }
+    .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+    /* Cards */
+    .card {
+      background-color: #ffffff;
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow);
+      border: 1px solid var(--gray-200);
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stat-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 1rem;
+    }
+
+    .stat-title {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--gray-500);
+    }
+
+    .stat-value {
+      font-size: 1.875rem;
+      font-weight: 700;
+      color: var(--gray-900);
+    }
+
+    .stat-trend {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      margin-top: 0.5rem;
+    }
+    .trend-up { color: var(--green-600); }
+    .trend-down { color: var(--red-600); }
+
+    .icon-wrapper {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius-lg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .icon-wrapper.blue { background-color: var(--primary-50); color: var(--primary-600); }
+    .icon-wrapper.green { background-color: var(--green-50); color: var(--green-600); }
+
+    /* Forms */
+    .form-group {
+      margin-bottom: 1.25rem;
+    }
+    .form-label {
+      display: block;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--gray-700);
+      margin-bottom: 0.5rem;
+    }
+    .form-input, .form-select {
+      width: 100%;
+      padding: 0.625rem 0.75rem;
+      font-size: 0.875rem;
+      border: 1px solid var(--gray-300);
+      border-radius: var(--radius-md);
+      background-color: #fff;
+      color: var(--gray-900);
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+    }
+    .form-input::placeholder { color: var(--gray-400); }
+    .form-input:focus, .form-select:focus {
+      border-color: var(--primary-500);
+      box-shadow: 0 0 0 3px var(--primary-100);
+    }
+    .form-input.is-error {
+      border-color: var(--red-500);
+    }
+    .form-input.is-error:focus {
+      box-shadow: 0 0 0 3px var(--red-100);
+    }
+    .form-error-msg {
+      font-size: 0.75rem;
+      color: var(--red-600);
+      margin-top: 0.375rem;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.625rem 1rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      border-radius: var(--radius-md);
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s;
+      outline: none;
+    }
+    .btn:focus-visible {
+      box-shadow: 0 0 0 3px var(--primary-100);
+    }
+    .btn-primary {
+      background-color: var(--primary-600);
+      color: #fff;
+    }
+    .btn-primary:hover { background-color: var(--primary-700); }
+    
+    .btn-secondary {
+      background-color: #fff;
+      border-color: var(--gray-300);
+      color: var(--gray-700);
+      box-shadow: var(--shadow-sm);
+    }
+    .btn-secondary:hover { background-color: var(--gray-50); color: var(--gray-900); }
+
+    .btn-danger {
+      background-color: var(--red-600);
+      color: #fff;
+    }
+    .btn-danger:hover { background-color: var(--red-500); }
+
+    .btn-ghost {
+      background-color: transparent;
+      color: var(--gray-600);
+    }
+    .btn-ghost:hover { background-color: var(--gray-100); color: var(--gray-900); }
+
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .btn-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    /* States (Empty, Loading, Error) */
+    .state-box {
+      border: 1px dashed var(--gray-300);
+      border-radius: var(--radius-xl);
+      padding: 3rem 2rem;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background-color: #fff;
+      height: 100%;
+    }
+
+    .state-icon {
+      width: 48px;
+      height: 48px;
+      color: var(--gray-400);
+      margin-bottom: 1rem;
+    }
+
+    .state-title {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: var(--gray-900);
+      margin-bottom: 0.5rem;
+    }
+
+    .state-desc {
+      font-size: 0.875rem;
+      color: var(--gray-500);
+      margin-bottom: 1.5rem;
+      max-width: 250px;
+    }
+
+    /* Loading Skeleton */
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .skeleton {
+      background-color: var(--gray-200);
+      border-radius: var(--radius-sm);
+      animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    .skeleton-avatar { width: 48px; height: 48px; border-radius: 50%; }
+    .skeleton-text-lg { width: 60%; height: 1.25rem; margin-bottom: 0.5rem; }
+    .skeleton-text-sm { width: 80%; height: 0.875rem; margin-bottom: 0.25rem; }
+
+    /* Alert Banner */
+    .alert {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      padding: 1rem;
+      border-radius: var(--radius-md);
+      background-color: var(--red-50);
+      border: 1px solid var(--red-100);
+    }
+    .alert-icon {
+      width: 20px;
+      height: 20px;
+      color: var(--red-500);
+      flex-shrink: 0;
+    }
+    .alert-content .alert-title {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--red-600);
+      margin-bottom: 0.25rem;
+    }
+    .alert-content .alert-desc {
+      font-size: 0.875rem;
+      color: var(--red-600);
+    }
+
+    /* Loading Spinner */
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 3px solid var(--gray-200);
+      border-top-color: var(--primary-600);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 1rem;
+    }
+
+  </style>
+</head>
+<body>
+  <div class="app-wrapper">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="brand-icon">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" width="20" height="20">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+        </div>
+        <div class="brand-title">Orchestra</div>
+      </div>
+      <ul class="nav-list">
+        <li>
+          <a href="#" class="nav-item active">
+            <svg class="nav-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+            </svg>
+            Dashboard
+          </a>
+        </li>
+        <li>
+          <a href="#" class="nav-item">
+            <svg class="nav-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+            </svg>
+            Projects
+          </a>
+        </li>
+        <li>
+          <a href="#" class="nav-item">
+            <svg class="nav-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+            </svg>
+            Team
+          </a>
+        </li>
+        <li>
+          <a href="#" class="nav-item">
+            <svg class="nav-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+            Settings
+          </a>
+        </li>
+      </ul>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-area">
+      <!-- Header -->
+      <header class="top-header">
+        <div class="breadcrumb">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" width="16" height="16">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+          </svg>
+          <span>/</span>
+          <span class="current">Components Showcase</span>
+        </div>
+        <div class="user-profile">
+          <svg fill="none" viewBox="0 0 24 24" stroke="var(--gray-400)" width="24" height="24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+          </svg>
+          <div class="avatar">JD</div>
+        </div>
+      </header>
+
+      <!-- Content Scrollable -->
+      <div class="main-content">
+        
+        <!-- Section 1: Dashboard Cards Layout -->
+        <section class="section-container">
+          <h2 class="section-title">Overview Cards</h2>
+          <div class="grid grid-cols-3">
+            <div class="card">
+              <div class="stat-card-header">
+                <div class="stat-title">Total Users</div>
+                <div class="icon-wrapper blue">
+                  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" width="24" height="24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+                  </svg>
+                </div>
+              </div>
+              <div class="stat-value">24,592</div>
+              <div class="stat-trend trend-up">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+                12% from last month
+              </div>
+            </div>
+            
+            <div class="card">
+              <div class="stat-card-header">
+                <div class="stat-title">Active Projects</div>
+                <div class="icon-wrapper green">
+                  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" width="24" height="24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                  </svg>
+                </div>
+              </div>
+              <div class="stat-value">142</div>
+              <div class="stat-trend trend-down">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" width="16" height="16" style="transform: rotate(180deg);"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+                2% from last month
+              </div>
+            </div>
+
+            <div class="card" style="justify-content: center;">
+              <!-- Example of a minimalist card layout -->
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                  <div class="stat-title">Storage Used</div>
+                  <div class="stat-value" style="font-size: 1.5rem;">64.2 GB</div>
+                </div>
+                <div style="width: 60px; height: 60px; border-radius: 50%; border: 4px solid var(--primary-100); border-top-color: var(--primary-500); transform: rotate(45deg);"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Section 2: Forms & Buttons -->
+        <section class="section-container">
+          <h2 class="section-title">Forms & Buttons</h2>
+          <div class="grid grid-cols-2">
+            <!-- Forms -->
+            <div class="card">
+              <div class="form-group">
+                <label class="form-label">Email Address</label>
+                <input type="email" class="form-input" placeholder="you@example.com">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Project Role</label>
+                <select class="form-select">
+                  <option>Admin</option>
+                  <option>Editor</option>
+                  <option>Viewer</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Repository Name (Error State)</label>
+                <input type="text" class="form-input is-error" value="orchestra-ui%">
+                <div class="form-error-msg">Special characters are not allowed.</div>
+              </div>
+            </div>
+
+            <!-- Buttons -->
+            <div class="card">
+              <label class="form-label">Action Buttons</label>
+              <div class="btn-group" style="margin-bottom: 1.5rem;">
+                <button class="btn btn-primary">Save Changes</button>
+                <button class="btn btn-secondary">Cancel</button>
+              </div>
+              
+              <label class="form-label">Destructive & Ghost</label>
+              <div class="btn-group" style="margin-bottom: 1.5rem;">
+                <button class="btn btn-danger">Delete Project</button>
+                <button class="btn btn-ghost">Learn more</button>
+              </div>
+
+              <label class="form-label">States</label>
+              <div class="btn-group">
+                <button class="btn btn-primary" disabled>
+                  <svg class="nav-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="animation: spin 1s linear infinite;">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Processing...
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Section 3: UI States (Empty, Loading, Error) -->
+        <section class="section-container">
+          <h2 class="section-title">UI States</h2>
+          <div class="grid grid-cols-3" style="align-items: stretch;">
+            
+            <!-- Empty State -->
+            <div class="state-box">
+              <svg class="state-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              </svg>
+              <h3 class="state-title">No projects found</h3>
+              <p class="state-desc">Get started by creating a new project to orchestrate your tasks.</p>
+              <button class="btn btn-primary">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" width="16" height="16">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+                New Project
+              </button>
+            </div>
+
+            <!-- Loading State -->
+            <div class="state-box" style="border-style: solid; justify-content: center; align-items: flex-start; text-align: left;">
+              <div style="display: flex; gap: 1rem; width: 100%; margin-bottom: 1.5rem;">
+                <div class="skeleton skeleton-avatar"></div>
+                <div style="flex: 1; padding-top: 0.25rem;">
+                  <div class="skeleton skeleton-text-lg"></div>
+                  <div class="skeleton skeleton-text-sm"></div>
+                </div>
+              </div>
+              <div class="skeleton skeleton-text-sm" style="width: 100%;"></div>
+              <div class="skeleton skeleton-text-sm" style="width: 90%;"></div>
+              <div class="skeleton skeleton-text-sm" style="width: 70%;"></div>
+              
+              <div style="margin-top: 2rem; width: 100%; display: flex; justify-content: center;">
+                 <div class="spinner"></div>
+              </div>
+            </div>
+
+            <!-- Error State -->
+            <div class="state-box" style="border-style: solid; background-color: var(--gray-50); justify-content: center;">
+              <div class="alert" style="width: 100%; text-align: left; margin-bottom: 1rem;">
+                <svg class="alert-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <div class="alert-content">
+                  <div class="alert-title">Connection Error</div>
+                  <div class="alert-desc">Failed to load data from Orchestra API. Please check your network connection.</div>
+                </div>
+              </div>
+              <button class="btn btn-secondary">Retry Connection</button>
+            </div>
+
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+</body>
+</html>
