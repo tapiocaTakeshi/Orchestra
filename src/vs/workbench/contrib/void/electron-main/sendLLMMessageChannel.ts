@@ -8,7 +8,7 @@
 
 import { IServerChannel } from '../../../../base/parts/ipc/common/ipc.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
-import { EventLLMMessageOnTextParams, EventLLMMessageOnErrorParams, EventLLMMessageOnFinalMessageParams, EventLLMMessageOnFileOperationParams, EventLLMMessageOnCommandRunParams, MainSendLLMMessageParams, AbortRef, SendLLMMessageParams, MainLLMMessageAbortParams, ModelListParams, EventModelListOnSuccessParams, EventModelListOnErrorParams, OllamaModelResponse, OpenaiCompatibleModelResponse, MainModelListParams, } from '../common/sendLLMMessageTypes.js';
+import { EventLLMMessageOnTextParams, EventLLMMessageOnErrorParams, EventLLMMessageOnFinalMessageParams, EventLLMMessageOnFileOperationParams, EventLLMMessageOnCommandRunParams, MainSendLLMMessageParams, AbortRef, SendLLMMessageParams, MainLLMMessageAbortParams, MainLLMMessageInterjectParams, ModelListParams, EventModelListOnSuccessParams, EventModelListOnErrorParams, OllamaModelResponse, OpenaiCompatibleModelResponse, MainModelListParams, } from '../common/sendLLMMessageTypes.js';
 import { sendLLMMessage } from './llmMessage/sendLLMMessage.js'
 import { IMetricsService } from '../common/metricsService.js';
 import { sendLLMMessageToProviderImplementation } from './llmMessage/sendLLMMessage.impl.js';
@@ -30,6 +30,11 @@ export class LLMMessageChannel implements IServerChannel {
 
 	// aborters for above
 	private readonly _infoOfRunningRequest: Record<string, { waitForSend: Promise<void> | undefined, abortRef: AbortRef }> = {}
+
+	// ユーザー割り込みメッセージの保留キュー（requestId ごと）。
+	// renderer 側で実行中にチャットを送信されたとき、abort せずにここへ積む。
+	// main 側の orchestration loop は各フェーズの境目で pop して取り込む。
+	private readonly _pendingInjections: Record<string, string[]> = {}
 
 
 	// list
@@ -80,6 +85,9 @@ export class LLMMessageChannel implements IServerChannel {
 			else if (command === 'abort') {
 				await this._callAbort(params)
 			}
+			else if (command === 'interjectMessage') {
+				this._callInterject(params)
+			}
 			else if (command === 'ollamaList') {
 				this._callOllamaList(params)
 			}
@@ -124,6 +132,15 @@ export class LLMMessageChannel implements IServerChannel {
 				this.llmMessageEmitters.onCommandRun.fire({ requestId, commands });
 			},
 			abortRef: this._infoOfRunningRequest[requestId].abortRef,
+			// orchestration loop から「今たまっている割り込みをください」と呼ばれる。
+			// 1回呼ぶと配列は空になるので、取りこぼしなく消費できる。
+			takePendingInjection: () => {
+				const arr = this._pendingInjections[requestId];
+				if (!arr || arr.length === 0) return null;
+				const merged = arr.join('\n\n');
+				this._pendingInjections[requestId] = [];
+				return merged;
+			},
 		}
 		const p = sendLLMMessage(mainThreadParams, this.metricsService);
 		this._infoOfRunningRequest[requestId].waitForSend = p
@@ -136,6 +153,16 @@ export class LLMMessageChannel implements IServerChannel {
 		await waitForSend // wait for the send to finish so we know abortRef was set
 		abortRef?.current?.()
 		delete this._infoOfRunningRequest[requestId]
+		delete this._pendingInjections[requestId]
+	}
+
+	private _callInterject(params: MainLLMMessageInterjectParams) {
+		const { requestId, text } = params;
+		if (!text || !text.trim()) return;
+		// 実行中の request が無いなら無視（abort 直後などの競合回避）
+		if (!(requestId in this._infoOfRunningRequest)) return;
+		if (!this._pendingInjections[requestId]) this._pendingInjections[requestId] = [];
+		this._pendingInjections[requestId].push(text);
 	}
 
 

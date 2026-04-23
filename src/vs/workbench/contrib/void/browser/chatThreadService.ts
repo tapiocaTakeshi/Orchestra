@@ -745,6 +745,10 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 	// private readonly _currentlyRunningToolInterruptor: { [threadId: string]: (() => void) | undefined } = {}
 
+	// 実行中リクエストの requestId / provider を追跡。user が「途中で乱入」したときに
+	// abort ではなく interject を投げる判定に使う（divisionAPI のみ interject 対応）。
+	private readonly _currentLLMRequestOfThread: { [threadId: string]: { requestId: string; providerName: string } | undefined } = {}
+
 
 	// returns true when the tool call is waiting for user approval
 	private _runToolCall = async (
@@ -947,6 +951,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				let resMessageIsDonePromise: (res: ResTypes) => void // resolves when user approves this tool use (or if tool doesn't require approval)
 				const messageIsDonePromise = new Promise<ResTypes>((res, rej) => { resMessageIsDonePromise = res })
 
+				const _currentProviderName = modelSelection?.providerName ?? '';
 				const llmCancelToken = this._llmMessageService.sendLLMMessage({
 					messagesType: 'chatMessages',
 					chatMode,
@@ -992,6 +997,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 					this._setStreamState(threadId, { isRunning: undefined, error: { message: 'There was an unexpected error when sending your chat message.', fullError: null } })
 					break
 				}
+				this._currentLLMRequestOfThread[threadId] = { requestId: llmCancelToken, providerName: _currentProviderName }
 
 				let reasoningStartMs: number | undefined = undefined;
 				let reasoningEndMs: number | undefined = undefined;
@@ -1004,6 +1010,9 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 					// console.log('Chat thread interrupted by a newer chat thread', this.streamState[threadId]?.isRunning)
 					return
 				}
+
+				// リクエスト完了（成功/失敗/中断いずれも）したので currentLLMRequest を解除
+				this._currentLLMRequestOfThread[threadId] = undefined
 
 				// llm res aborted
 				if (llmRes.type === 'llmAborted') {
@@ -1460,6 +1469,22 @@ We only need to do it for files that were edited since `from`, ie files between 
 	async addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId }: { userMessage: string, _chatSelections?: StagingSelectionItem[], threadId: string }) {
 		const thread = this.state.allThreads[threadId];
 		if (!thread) return
+
+		// === 途中乱入（interject）: 実行中の Division orchestration があれば、abort+restart
+		// ではなく「走っている orchestration に新指示を流し込む」モードにする。
+		// チャットは中断されずに進み続け、次の AI ステップから追加リクエストが反映される。
+		const running = this._currentLLMRequestOfThread[threadId];
+		const isLLMStreaming = this.streamState[threadId]?.isRunning === 'LLM';
+		const isDivision = running?.providerName === 'divisionAPI';
+		if (isLLMStreaming && running && isDivision) {
+			// チャット履歴にも user message を積み、UI 上で見失わないようにする。
+			const currSelns: StagingSelectionItem[] = _chatSelections ?? thread.state.stagingSelections;
+			const userMessageContent = await chat_userMessageContent(userMessage, currSelns, { directoryStrService: this._directoryStringService, fileService: this._fileService });
+			const userHistoryElt: ChatMessage = { role: 'user', content: userMessageContent, displayContent: userMessage, selections: currSelns, state: defaultMessageState };
+			this._addMessageToThread(threadId, userHistoryElt);
+			this._llmMessageService.interject(running.requestId, userMessage);
+			return;
+		}
 
 		// if there's a current checkpoint, delete all messages after it
 		if (thread.state.currCheckpointIdx !== null) {

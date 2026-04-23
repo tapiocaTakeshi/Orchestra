@@ -1,734 +1,466 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Orchestra - Workspace Design Mockup</title>
-  <style>
-    /* 
-     * ==========================================
-     * DESIGN TOKENS (tailwind.config.js equivalent)
-     * ==========================================
-     */
-    :root {
-      /* Colors */
-      --color-slate-50: #f8fafc;
-      --color-slate-300: #cbd5e1;
-      --color-slate-400: #94a3b8;
-      --color-slate-700: #334155;
-      --color-slate-800: #1e293b;
-      --color-slate-850: #172033;
-      --color-slate-900: #0f172a;
-      --color-slate-950: #020617;
-      
-      --color-blue-500: #3b82f6;
-      --color-blue-600: #2563eb;
-      --color-indigo-500: #6366f1;
-      --color-emerald-500: #10b981;
-      --color-amber-500: #f59e0b;
-      --color-rose-500: #f43f5e;
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatGPT Overview - Elaborate Design</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* Color Palette */
+            --primary: #10a37f;
+            --primary-dark: #0e8f6e;
+            --primary-light: #d1f0e6;
+            --secondary: #202123;
+            --bg-gradient-start: #f8fafc;
+            --bg-gradient-end: #e2e8f0;
+            --surface: #ffffff;
+            --text-main: #334155;
+            --text-muted: #64748b;
+            --success: #059669;
+            --success-bg: #ecfdf5;
+            --warning: #e11d48;
+            --warning-bg: #fff1f2;
+            
+            /* Shadows */
+            --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
+            --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02);
+            
+            /* Transitions */
+            --transition-bounce: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            --transition-fade: all 0.3s ease;
+        }
 
-      /* Semantic Colors */
-      --bg-app: var(--color-slate-950);
-      --bg-surface: var(--color-slate-900);
-      --bg-surface-hover: var(--color-slate-800);
-      --bg-panel: var(--color-slate-850);
-      --border-color: var(--color-slate-700);
-      
-      --text-primary: var(--color-slate-50);
-      --text-secondary: var(--color-slate-400);
-      --text-disabled: var(--color-slate-700);
-      
-      --accent-primary: var(--color-blue-500);
-      --accent-hover: var(--color-blue-600);
-      
-      /* Typography */
-      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
-      
-      /* Spacing & Layout */
-      --space-1: 4px;
-      --space-2: 8px;
-      --space-3: 12px;
-      --space-4: 16px;
-      --space-6: 24px;
-      
-      /* Radii */
-      --radius-sm: 4px;
-      --radius-md: 6px;
-      --radius-lg: 8px;
-      --radius-full: 9999px;
-      
-      /* Shadows */
-      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-      --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-      
-      /* Z-index */
-      --z-header: 40;
-      --z-sidebar: 30;
-      --z-modal: 50;
-      --z-drag-region: 9999;
-    }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
-    /* 
-     * ==========================================
-     * GLOBAL STYLES
-     * ==========================================
-     */
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+        body {
+            font-family: 'Inter', 'Noto Sans JP', sans-serif;
+            background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+            color: var(--text-main);
+            line-height: 1.6;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem 1rem;
+        }
 
-    body {
-      font-family: var(--font-sans);
-      background-color: var(--bg-app);
-      color: var(--text-primary);
-      height: 100vh;
-      overflow: hidden;
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-      user-select: none;
-    }
+        .container {
+            max-width: 1000px;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            border-radius: 24px;
+            padding: 3rem;
+            box-shadow: var(--shadow-lg);
+            position: relative;
+            overflow: hidden;
+        }
 
-    /* Electron App Region */
-    .electron-drag-region {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 38px;
-      -webkit-app-region: drag;
-      z-index: var(--z-drag-region);
-      pointer-events: none;
-    }
-    .no-drag {
-      -webkit-app-region: no-drag;
-      pointer-events: auto;
-    }
+        /* Decorative Background Elements */
+        .container::before {
+            content: '';
+            position: absolute;
+            top: -100px;
+            right: -100px;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, var(--primary-light) 0%, rgba(255,255,255,0) 70%);
+            border-radius: 50%;
+            z-index: 0;
+            opacity: 0.6;
+            pointer-events: none;
+        }
 
-    /* 
-     * ==========================================
-     * ATOMIC CLASSES (Tailwind-like utilities)
-     * ==========================================
-     */
-    .flex { display: flex; }
-    .flex-col { flex-direction: column; }
-    .items-center { align-items: center; }
-    .justify-between { justify-content: space-between; }
-    .justify-center { justify-content: center; }
-    .gap-1 { gap: var(--space-1); }
-    .gap-2 { gap: var(--space-2); }
-    .gap-3 { gap: var(--space-3); }
-    .gap-4 { gap: var(--space-4); }
-    .w-full { width: 100%; }
-    .h-full { height: 100%; }
-    .flex-1 { flex: 1; }
-    .overflow-hidden { overflow: hidden; }
-    .relative { position: relative; }
-    .absolute { position: absolute; }
-    
-    .text-xs { font-size: 11px; }
-    .text-sm { font-size: 13px; }
-    .text-base { font-size: 14px; }
-    .font-medium { font-weight: 500; }
-    .font-semibold { font-weight: 600; }
-    .text-secondary { color: var(--text-secondary); }
-    
-    .cursor-pointer { cursor: pointer; }
+        .content-wrapper {
+            position: relative;
+            z-index: 1;
+        }
 
-    /* 
-     * ==========================================
-     * COMPONENT STYLES (Atomic Design mapped to React components)
-     * ==========================================
-     */
-     
-    /* Atoms */
-    .a-button {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: var(--space-2);
-      border-radius: var(--radius-md);
-      font-size: 13px;
-      font-weight: 500;
-      transition: all 0.2s ease;
-      cursor: pointer;
-      border: 1px solid transparent;
-      outline: none;
-    }
-    .a-button--primary {
-      background-color: var(--accent-primary);
-      color: white;
-      padding: 6px 14px;
-    }
-    .a-button--primary:hover { background-color: var(--accent-hover); }
-    .a-button--ghost {
-      background-color: transparent;
-      color: var(--text-secondary);
-      padding: 6px;
-    }
-    .a-button--ghost:hover {
-      background-color: var(--bg-surface-hover);
-      color: var(--text-primary);
-    }
-    
-    .a-icon { width: 16px; height: 16px; flex-shrink: 0; }
-    .a-icon--lg { width: 20px; height: 20px; }
-    
-    .a-badge {
-      padding: 2px 6px;
-      border-radius: var(--radius-full);
-      font-size: 10px;
-      font-weight: 600;
-      background-color: var(--color-slate-800);
-      color: var(--color-slate-300);
-      border: 1px solid var(--border-color);
-    }
-    
-    .a-kbd {
-      font-family: var(--font-mono);
-      font-size: 10px;
-      padding: 2px 4px;
-      background-color: var(--bg-surface-hover);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-sm);
-      color: var(--text-secondary);
-    }
+        /* Header Section */
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
 
-    /* Molecules */
-    .m-nav-item {
-      display: flex;
-      align-items: center;
-      gap: var(--space-3);
-      padding: 8px 12px;
-      border-radius: var(--radius-md);
-      color: var(--text-secondary);
-      text-decoration: none;
-      font-size: 13px;
-      font-weight: 500;
-      transition: all 0.15s ease;
-      cursor: pointer;
-    }
-    .m-nav-item:hover {
-      background-color: var(--bg-surface-hover);
-      color: var(--text-primary);
-    }
-    .m-nav-item.is-active {
-      background-color: rgba(59, 130, 246, 0.1);
-      color: var(--accent-primary);
-    }
-    .m-nav-item.is-active svg { color: var(--accent-primary); }
+        .header-badge {
+            display: inline-block;
+            background: var(--secondary);
+            color: white;
+            padding: 0.5rem 1.2rem;
+            border-radius: 50px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            letter-spacing: 1px;
+            margin-bottom: 1.5rem;
+            text-transform: uppercase;
+        }
 
-    .m-search-input {
-      display: flex;
-      align-items: center;
-      background-color: var(--bg-app);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-md);
-      padding: 4px 12px;
-      width: 240px;
-      height: 32px;
-      transition: border-color 0.2s ease;
-    }
-    .m-search-input:focus-within {
-      border-color: var(--accent-primary);
-      box-shadow: 0 0 0 1px var(--accent-primary);
-    }
-    .m-search-input input {
-      background: transparent;
-      border: none;
-      outline: none;
-      color: var(--text-primary);
-      font-size: 13px;
-      width: 100%;
-      margin-left: 8px;
-    }
-    .m-search-input input::placeholder { color: var(--text-secondary); }
+        .title {
+            font-size: 3rem;
+            font-weight: 800;
+            color: var(--secondary);
+            margin-bottom: 1rem;
+            letter-spacing: -0.05em;
+        }
 
-    .m-panel-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 12px 16px;
-      border-bottom: 1px solid var(--border-color);
-      background-color: var(--bg-surface);
-    }
-    
-    .m-module-item {
-      display: flex;
-      align-items: center;
-      padding: 10px 16px;
-      gap: 12px;
-      border-bottom: 1px solid var(--border-color);
-      cursor: grab;
-      transition: background-color 0.15s;
-    }
-    .m-module-item:hover { background-color: var(--bg-surface-hover); }
+        .title span {
+            background: linear-gradient(135deg, var(--primary), #06b6d4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
 
-    /* Organisms */
-    .o-sidebar {
-      width: 240px;
-      background-color: var(--bg-surface);
-      border-right: 1px solid var(--border-color);
-      display: flex;
-      flex-direction: column;
-      z-index: var(--z-sidebar);
-    }
-    
-    .o-header {
-      height: 56px;
-      background-color: var(--bg-surface);
-      border-bottom: 1px solid var(--border-color);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 20px;
-      z-index: var(--z-header);
-    }
-    
-    .o-statusbar {
-      height: 28px;
-      background-color: var(--bg-surface);
-      border-top: 1px solid var(--border-color);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 16px;
-      font-size: 11px;
-      color: var(--text-secondary);
-    }
+        .subtitle {
+            font-size: 1.125rem;
+            color: var(--text-muted);
+            max-width: 600px;
+            margin: 0 auto;
+        }
 
-    .o-workspace-layout {
-      display: flex;
-      flex: 1;
-      overflow: hidden;
-    }
+        /* Section Styling */
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            color: var(--secondary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
 
-    .o-side-panel {
-      width: 280px;
-      background-color: var(--bg-panel);
-      border-right: 1px solid var(--border-color);
-      display: flex;
-      flex-direction: column;
-    }
+        .section-title::before {
+            content: '';
+            display: block;
+            width: 24px;
+            height: 4px;
+            background: var(--primary);
+            border-radius: 2px;
+        }
 
-    .o-properties-panel {
-      width: 320px;
-      background-color: var(--bg-panel);
-      border-left: 1px solid var(--border-color);
-      display: flex;
-      flex-direction: column;
-    }
+        .section {
+            margin-bottom: 4rem;
+        }
 
-    .o-canvas-area {
-      flex: 1;
-      background-color: var(--bg-app);
-      position: relative;
-      overflow: hidden;
-      /* Dots pattern for canvas */
-      background-image: radial-gradient(var(--color-slate-800) 1px, transparent 1px);
-      background-size: 20px 20px;
-    }
+        /* Tags / Badges for Features */
+        .tags-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
 
-    /* Specific components for Canvas */
-    .c-node {
-      position: absolute;
-      background-color: var(--bg-surface);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-md);
-      width: 180px;
-      box-shadow: var(--shadow-md);
-      transition: box-shadow 0.2s, border-color 0.2s;
-    }
-    .c-node:hover { box-shadow: var(--shadow-lg); }
-    .c-node.is-selected {
-      border-color: var(--accent-primary);
-      box-shadow: 0 0 0 1px var(--accent-primary), var(--shadow-lg);
-    }
-    .c-node-header {
-      padding: 8px 12px;
-      border-bottom: 1px solid var(--border-color);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 12px;
-      font-weight: 600;
-      border-top-left-radius: var(--radius-md);
-      border-top-right-radius: var(--radius-md);
-    }
-    .c-node-header.trigger { background-color: rgba(16, 185, 129, 0.1); color: var(--color-emerald-500); }
-    .c-node-header.action { background-color: rgba(59, 130, 246, 0.1); color: var(--color-blue-500); }
-    .c-node-body { padding: 12px; font-size: 12px; color: var(--text-secondary); }
-    .c-port {
-      width: 10px;
-      height: 10px;
-      background-color: var(--bg-surface);
-      border: 2px solid var(--text-secondary);
-      border-radius: 50%;
-      position: absolute;
-    }
-    .c-port:hover { border-color: var(--accent-primary); background-color: var(--accent-primary); cursor: crosshair; }
-    .c-port.input { left: -5px; top: 50%; transform: translateY(-50%); }
-    .c-port.output { right: -5px; top: 50%; transform: translateY(-50%); }
+        .tag {
+            background: var(--surface);
+            border: 1px solid rgba(16, 163, 127, 0.2);
+            color: var(--primary-dark);
+            padding: 0.75rem 1.5rem;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            box-shadow: var(--shadow-sm);
+            transition: var(--transition-bounce);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: default;
+        }
 
-    /* Utilities */
-    .mac-traffic-lights {
-      display: flex;
-      gap: 8px;
-      padding: 0 8px;
-      align-items: center;
-    }
-    .mac-dot {
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-    }
-    .mac-close { background-color: #FF5F56; }
-    .mac-min { background-color: #FFBD2E; }
-    .mac-max { background-color: #27C93F; }
+        .tag:hover {
+            transform: translateY(-5px) scale(1.02);
+            box-shadow: var(--shadow-md);
+            border-color: var(--primary);
+            background: var(--primary);
+            color: white;
+        }
 
-    /* Node Connection Line (SVG styling) */
-    .c-edge {
-      fill: none;
-      stroke: var(--color-slate-600);
-      stroke-width: 2;
-      transition: stroke 0.2s;
-    }
-    .c-edge:hover { stroke: var(--accent-primary); stroke-width: 3; cursor: pointer; }
-    .c-edge.animated { stroke-dasharray: 5; animation: flow 1s linear infinite; stroke: var(--accent-primary); }
-    @keyframes flow { to { stroke-dashoffset: -10; } }
-  </style>
+        /* Grid Cards for Use Cases */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .card {
+            background: var(--surface);
+            padding: 2rem;
+            border-radius: 16px;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid rgba(0,0,0,0.05);
+            transition: var(--transition-fade);
+            height: 100%;
+        }
+
+        .card:hover {
+            transform: translateY(-8px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .card-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1.25rem;
+            display: inline-block;
+            background: var(--primary-light);
+            width: 60px;
+            height: 60px;
+            line-height: 60px;
+            text-align: center;
+            border-radius: 16px;
+        }
+
+        .card h3 {
+            font-size: 1.25rem;
+            margin-bottom: 0.75rem;
+            color: var(--secondary);
+        }
+
+        .card p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        /* Pros and Cons Split Section */
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+
+        .feature-card {
+            padding: 2rem;
+            border-radius: 20px;
+            box-shadow: var(--shadow-md);
+            position: relative;
+            overflow: hidden;
+            transition: var(--transition-fade);
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .pro-card {
+            background: linear-gradient(145deg, var(--surface), var(--success-bg));
+            border: 1px solid rgba(5, 150, 105, 0.1);
+        }
+
+        .con-card {
+            background: linear-gradient(145deg, var(--surface), var(--warning-bg));
+            border: 1px solid rgba(225, 29, 72, 0.1);
+        }
+
+        .feature-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .feature-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+
+        .pro-card .feature-icon {
+            background: var(--success);
+            color: white;
+            box-shadow: 0 4px 15px rgba(5, 150, 105, 0.3);
+        }
+
+        .con-card .feature-icon {
+            background: var(--warning);
+            color: white;
+            box-shadow: 0 4px 15px rgba(225, 29, 72, 0.3);
+        }
+
+        .feature-card h3 {
+            font-size: 1.5rem;
+            color: var(--secondary);
+        }
+
+        .feature-list {
+            list-style: none;
+        }
+
+        .feature-list li {
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            font-size: 1rem;
+        }
+
+        .feature-list li:last-child {
+            margin-bottom: 0;
+        }
+
+        .pro-card .feature-list li::before {
+            content: '✓';
+            color: var(--success);
+            font-weight: bold;
+            font-size: 1.2rem;
+            line-height: 1.2;
+        }
+
+        .con-card .feature-list li::before {
+            content: '!';
+            color: var(--warning);
+            font-weight: bold;
+            font-size: 1.2rem;
+            line-height: 1.2;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            margin-top: 3rem;
+            padding-top: 2rem;
+            border-top: 1px solid rgba(0,0,0,0.08);
+            color: var(--text-muted);
+            font-size: 0.875rem;
+        }
+
+        .footer p {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .container {
+                padding: 2rem 1.5rem;
+            }
+
+            .title {
+                font-size: 2.25rem;
+            }
+
+            .comparison-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        /* Subtle Entrance Animation */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .animate-up {
+            animation: fadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .delay-1 { animation-delay: 0.1s; }
+        .delay-2 { animation-delay: 0.2s; }
+        .delay-3 { animation-delay: 0.3s; }
+    </style>
 </head>
 <body>
-  <!-- Drag handle for frameless electron window -->
-  <div class="electron-drag-region"></div>
 
-  <!-- TEMPLATE: MainLayout -->
-  <div class="flex h-full w-full">
-    
-    <!-- ORGANISM: Global Sidebar -->
-    <aside class="o-sidebar flex-col">
-      <!-- Top Window Controls (macOS style simulation) -->
-      <div class="h-[38px] flex items-center px-4" style="height: 38px; padding-left: 16px;">
-        <div class="mac-traffic-lights no-drag">
-          <div class="mac-dot mac-close"></div>
-          <div class="mac-dot mac-min"></div>
-          <div class="mac-dot mac-max"></div>
-        </div>
-      </div>
-
-      <!-- App Brand -->
-      <div class="flex items-center gap-3 px-5 py-4 mb-2">
-        <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-600" style="background-color: var(--accent-primary);">
-          <svg class="a-icon text-white" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
-            <path d="M2 17l10 5 10-5"></path>
-            <path d="M2 12l10 5 10-5"></path>
-          </svg>
-        </div>
-        <span class="font-semibold text-base tracking-wide text-white">Orchestra</span>
-      </div>
-
-      <!-- Navigation Menu -->
-      <div class="flex-1 px-3 overflow-y-auto no-drag">
-        <div class="text-xs font-semibold text-secondary uppercase tracking-wider px-3 mb-2 mt-2">Workspace</div>
-        <a class="m-nav-item">
-          <svg class="a-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
-          Dashboard
-        </a>
-        <a class="m-nav-item is-active">
-          <svg class="a-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
-          Workflows
-        </a>
-        <a class="m-nav-item">
-          <svg class="a-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
-          Modules
-        </a>
-        <a class="m-nav-item">
-          <svg class="a-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
-          Databases
-        </a>
-
-        <div class="text-xs font-semibold text-secondary uppercase tracking-wider px-3 mb-2 mt-6">System</div>
-        <a class="m-nav-item">
-          <svg class="a-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-          Settings
-        </a>
-      </div>
-      
-      <!-- User / Profile section -->
-      <div class="p-4 border-t border-[var(--border-color)] no-drag cursor-pointer hover:bg-[var(--bg-surface-hover)] transition">
-        <div class="flex items-center gap-3">
-          <div class="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-xs font-semibold">JD</div>
-          <div class="flex-1 overflow-hidden">
-            <div class="text-sm font-medium text-white truncate">John Doe</div>
-            <div class="text-xs text-secondary truncate">Admin Workspace</div>
-          </div>
-          <svg class="a-icon text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
-        </div>
-      </div>
-    </aside>
-
-    <!-- MAIN CONTENT AREA -->
-    <main class="flex-1 flex flex-col min-w-0">
-      
-      <!-- ORGANISM: Main Header -->
-      <header class="o-header no-drag">
-        <!-- Context / Breadcrumb -->
-        <div class="flex items-center gap-2 text-sm">
-          <span class="text-secondary hover:text-white cursor-pointer">Workflows</span>
-          <svg class="a-icon text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
-          <span class="font-medium text-white">User Onboarding Pipeline</span>
-          <span class="a-badge ml-2" style="background-color: rgba(16, 185, 129, 0.1); color: var(--color-emerald-500); border-color: rgba(16, 185, 129, 0.2);">Active</span>
-        </div>
-
-        <!-- Global Search -->
-        <div class="m-search-input">
-          <svg class="a-icon text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-          <input type="text" placeholder="Search resources...">
-          <kbd class="a-kbd">⌘K</kbd>
-        </div>
-
-        <!-- Actions -->
-        <div class="flex items-center gap-3">
-          <button class="a-button a-button--ghost relative">
-            <svg class="a-icon--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
-            <span class="absolute top-1 right-1 w-2 h-2 rounded-full bg-rose-500"></span>
-          </button>
-          <button class="a-button a-button--primary">
-            <svg class="a-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-            Deploy
-          </button>
-        </div>
-      </header>
-
-      <!-- TEMPLATE/ORGANISM: Editor Workspace -->
-      <div class="o-workspace-layout no-drag">
-        
-        <!-- Left Panel: Module Library -->
-        <div class="o-side-panel">
-          <div class="m-panel-header">
-            <span class="font-semibold text-sm">Library</span>
-            <button class="a-button a-button--ghost"><svg class="a-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 14 10 14 10 20"></polyline><polyline points="20 10 14 10 14 4"></polyline><line x1="14" y1="10" x2="21" y2="3"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg></button>
-          </div>
-          <div class="p-3">
-            <div class="m-search-input w-full mb-3" style="height: 28px;">
-              <svg class="a-icon text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-              <input type="text" placeholder="Filter modules...">
-            </div>
+    <main class="container animate-up">
+        <div class="content-wrapper">
             
-            <div class="text-xs font-semibold text-secondary uppercase tracking-wider mb-2 mt-4">Triggers</div>
-            <div class="m-module-item">
-              <div class="w-6 h-6 rounded bg-emerald-500 bg-opacity-20 flex items-center justify-center text-emerald-500">
-                <svg class="a-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-              </div>
-              <div class="flex-col">
-                <span class="text-sm font-medium">Webhook</span>
-                <span class="text-xs text-secondary">HTTP POST Trigger</span>
-              </div>
-            </div>
-            <div class="m-module-item">
-              <div class="w-6 h-6 rounded bg-emerald-500 bg-opacity-20 flex items-center justify-center text-emerald-500">
-                <svg class="a-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-              </div>
-              <div class="flex-col">
-                <span class="text-sm font-medium">Schedule</span>
-                <span class="text-xs text-secondary">Cron interval</span>
-              </div>
-            </div>
+            <!-- Header -->
+            <header class="header">
+                <div class="header-badge">AI Assistant Overview</div>
+                <h1 class="title">Discover <span>ChatGPT</span></h1>
+                <p class="subtitle">OpenAIが開発した高度な会話型AIモデル。日常の些細な疑問から専門的なタスクまで、自然言語で柔軟に対応します。</p>
+            </header>
 
-            <div class="text-xs font-semibold text-secondary uppercase tracking-wider mb-2 mt-4">Actions</div>
-            <div class="m-module-item">
-              <div class="w-6 h-6 rounded bg-blue-500 bg-opacity-20 flex items-center justify-center text-blue-500">
-                <svg class="a-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-              </div>
-              <div class="flex-col">
-                <span class="text-sm font-medium">Auth Check</span>
-                <span class="text-xs text-secondary">Validate JWT</span>
-              </div>
-            </div>
-            <div class="m-module-item">
-              <div class="w-6 h-6 rounded bg-blue-500 bg-opacity-20 flex items-center justify-center text-blue-500">
-                <svg class="a-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path></svg>
-              </div>
-              <div class="flex-col">
-                <span class="text-sm font-medium">Database Insert</span>
-                <span class="text-xs text-secondary">Save record to PG</span>
-              </div>
-            </div>
-            <div class="m-module-item">
-              <div class="w-6 h-6 rounded bg-blue-500 bg-opacity-20 flex items-center justify-center text-blue-500">
-                <svg class="a-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
-              </div>
-              <div class="flex-col">
-                <span class="text-sm font-medium">Send Email</span>
-                <span class="text-xs text-secondary">SMTP or API</span>
-              </div>
-            </div>
-          </div>
+            <!-- Features Section -->
+            <section class="section animate-up delay-1">
+                <h2 class="section-title">主要機能</h2>
+                <div class="tags-container">
+                    <span class="tag">📝 テキスト生成・要約</span>
+                    <span class="tag">💻 コード作成・デバッグ</span>
+                    <span class="tag">🌐 翻訳・多言語対応</span>
+                    <span class="tag">🎨 画像生成 (DALL·E 3)</span>
+                    <span class="tag">⚙️ カスタムGPT構築</span>
+                    <span class="tag">📊 データ分析</span>
+                </div>
+            </section>
+
+            <!-- Use Cases Section -->
+            <section class="section animate-up delay-2">
+                <h2 class="section-title">活用例</h2>
+                <div class="grid">
+                    <div class="card">
+                        <div class="card-icon">🎓</div>
+                        <h3>学習・質問回答</h3>
+                        <p>専門的な概念や歴史的な事実など、幅広い分野の疑問に対して対話形式で分かりやすく解説します。</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">✍️</div>
+                        <h3>文章執筆支援</h3>
+                        <p>メールの構成、ブログ記事のドラフト作成、企画書のアイデア出しなど、執筆作業を大幅に効率化します。</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">🚀</div>
+                        <h3>プログラミング補助</h3>
+                        <p>要件に基づいたコードの生成、エラーの原因究明、リファクタリングの提案など開発者を強力にサポートします。</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Pros & Cons Section -->
+            <section class="section animate-up delay-3">
+                <h2 class="section-title">特徴と留意点</h2>
+                <div class="comparison-grid">
+                    <!-- Pros -->
+                    <div class="feature-card pro-card">
+                        <div class="feature-header">
+                            <div class="feature-icon">✨</div>
+                            <h3>強み・メリット</h3>
+                        </div>
+                        <ul class="feature-list">
+                            <li>人間のように自然で高速な応答生成</li>
+                            <li>長文のコンテキスト（文脈）の保持と理解</li>
+                            <li>多様なフォーマットでの出力対応</li>
+                            <li>プラグインやAPI連携による高い拡張性</li>
+                        </ul>
+                    </div>
+
+                    <!-- Cons -->
+                    <div class="feature-card con-card">
+                        <div class="feature-header">
+                            <div class="feature-icon">⚠️</div>
+                            <h3>注意点・リスク</h3>
+                        </div>
+                        <ul class="feature-list">
+                            <li>事実とは異なる情報（ハルシネーション）の生成</li>
+                            <li>最新情報へのアクセス制限（※モデルによる）</li>
+                            <li>機密情報や個人情報の入力に関するセキュリティ配慮</li>
+                            <li>出力結果に対する人間による事実確認（ファクトチェック）が必須</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Footer -->
+            <footer class="footer">
+                <p>
+                    <span>© 2026 AI Insight DB</span>
+                    <span>|</span>
+                    <span>Designed with modern UI principles</span>
+                </p>
+            </footer>
+
         </div>
-
-        <!-- Center: Node Canvas Area -->
-        <div class="o-canvas-area">
-          <!-- Canvas Toolbar overlay -->
-          <div class="absolute top-4 left-4 flex gap-2 z-10 bg-surface rounded-md border border-[var(--border-color)] p-1 shadow-md" style="background-color: var(--bg-surface);">
-            <button class="a-button a-button--ghost p-1"><svg class="a-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
-            <button class="a-button a-button--ghost p-1"><svg class="a-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
-            <div class="w-px h-4 bg-[var(--border-color)] self-center mx-1"></div>
-            <span class="text-xs text-secondary self-center px-2 font-mono">100%</span>
-          </div>
-
-          <!-- SVG Edges Background -->
-          <svg class="absolute inset-0 w-full h-full pointer-events-none" style="z-index: 0;">
-            <!-- Connection 1 -->
-            <path class="c-edge animated" d="M 220 120 C 300 120, 250 180, 340 180" pointer-events="stroke"></path>
-            <!-- Connection 2 -->
-            <path class="c-edge" d="M 520 180 C 600 180, 550 120, 640 120" pointer-events="stroke"></path>
-            <path class="c-edge" d="M 520 180 C 600 180, 550 260, 640 260" pointer-events="stroke"></path>
-          </svg>
-
-          <!-- Node 1: Trigger -->
-          <div class="c-node" style="left: 40px; top: 80px; z-index: 1;">
-            <div class="c-node-header trigger">
-              <svg class="a-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-              <span>Webhook</span>
-            </div>
-            <div class="c-node-body flex-col gap-1">
-              <div class="text-xs">POST /api/users</div>
-            </div>
-            <div class="c-port output"></div>
-          </div>
-
-          <!-- Node 2: Action -->
-          <div class="c-node is-selected" style="left: 340px; top: 140px; z-index: 2;">
-            <div class="c-port input"></div>
-            <div class="c-node-header action">
-              <svg class="a-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-              <span>Validate Request</span>
-            </div>
-            <div class="c-node-body flex-col gap-1">
-              <div class="flex justify-between items-center">
-                <span>Schema</span>
-                <span class="a-badge">UserDTO</span>
-              </div>
-            </div>
-            <div class="c-port output"></div>
-          </div>
-
-          <!-- Node 3: Database -->
-          <div class="c-node" style="left: 640px; top: 80px; z-index: 1;">
-            <div class="c-port input"></div>
-            <div class="c-node-header action" style="background-color: rgba(139, 92, 246, 0.1); color: #8b5cf6;">
-              <svg class="a-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path></svg>
-              <span>Save DB</span>
-            </div>
-            <div class="c-node-body">
-              <div>Table: users</div>
-            </div>
-            <div class="c-port output"></div>
-          </div>
-
-          <!-- Node 4: Email -->
-          <div class="c-node" style="left: 640px; top: 220px; z-index: 1;">
-            <div class="c-port input"></div>
-            <div class="c-node-header action" style="background-color: rgba(245, 158, 11, 0.1); color: #f59e0b;">
-              <svg class="a-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
-              <span>Send Welcome</span>
-            </div>
-            <div class="c-node-body">
-              <div>Template: welcome_v1</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Right Panel: Properties Inspector -->
-        <div class="o-properties-panel">
-          <div class="m-panel-header">
-            <span class="font-semibold text-sm">Properties</span>
-            <button class="a-button a-button--ghost"><svg class="a-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
-          </div>
-          
-          <!-- Property Content for Selected Node -->
-          <div class="p-4 flex-col gap-4 overflow-y-auto">
-            <div class="flex items-center gap-2 mb-2 border-b border-[var(--border-color)] pb-3">
-              <div class="w-8 h-8 rounded bg-blue-500 bg-opacity-20 flex items-center justify-center text-blue-500">
-                <svg class="a-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-              </div>
-              <div class="flex-col">
-                <span class="text-sm font-semibold text-white">Validate Request</span>
-                <span class="text-xs text-secondary">Auth Check Module</span>
-              </div>
-            </div>
-
-            <!-- Form Fields (Molecules) -->
-            <div class="flex-col gap-2 mb-4">
-              <label class="text-xs font-semibold text-secondary">Node Name</label>
-              <input type="text" value="Validate Request" class="w-full bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--accent-primary)] transition">
-            </div>
-
-            <div class="flex-col gap-2 mb-4">
-              <label class="text-xs font-semibold text-secondary flex justify-between">
-                <span>Validation Schema</span>
-                <span class="text-accent-primary cursor-pointer text-[var(--accent-primary)] hover:underline">Edit JSON</span>
-              </label>
-              <select class="w-full bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--accent-primary)] transition appearance-none cursor-pointer">
-                <option>UserDTO</option>
-                <option>ProductDTO</option>
-                <option>Custom Schema...</option>
-              </select>
-            </div>
-
-            <div class="flex-col gap-2 mb-4">
-              <label class="text-xs font-semibold text-secondary">Error Handling Behavior</label>
-              <div class="flex-col gap-2 mt-1">
-                <label class="flex items-center gap-2 text-sm cursor-pointer">
-                  <input type="radio" name="error" checked class="accent-blue-500">
-                  <span>Halt execution and return 400</span>
-                </label>
-                <label class="flex items-center gap-2 text-sm cursor-pointer">
-                  <input type="radio" name="error" class="accent-blue-500">
-                  <span>Continue to fallback node</span>
-                </label>
-              </div>
-            </div>
-
-            <div class="flex-col gap-2 mt-4 pt-4 border-t border-[var(--border-color)]">
-              <button class="a-button w-full border border-[var(--border-color)] text-white hover:bg-[var(--bg-surface-hover)] p-2">
-                <svg class="a-icon text-rose-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                Delete Node
-              </button>
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      <!-- ORGANISM: Utility / Status Bar -->
-      <footer class="o-statusbar no-drag">
-        <div class="flex items-center gap-4">
-          <div class="flex items-center gap-1 text-emerald-500">
-            <svg class="a-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-            <span>All changes saved</span>
-          </div>
-          <span class="text-secondary">|</span>
-          <span>Environment: <strong class="text-slate-300">Production</strong></span>
-        </div>
-        
-        <div class="flex items-center gap-3">
-          <div class="flex items-center gap-1">
-            <svg class="a-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-            <span>0 Errors</span>
-          </div>
-          <div class="flex items-center gap-1">
-            <span>Palette:</span> <kbd class="a-kbd">⌘ + P</kbd>
-          </div>
-        </div>
-      </footer>
     </main>
 
-  </div>
 </body>
 </html>

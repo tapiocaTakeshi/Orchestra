@@ -165,15 +165,23 @@ export type SendLLMMessageParams = {
 	divisionProjectId?: string;
 	divisionApiKey?: string;
 	workspaceFolderPath?: string;
+	// main 側（channel）が注入する関数。IPC を越えないので BlockedMainLLMMessageParams に含める。
+	takePendingInjection?: () => string | null;
 } & SendLLMType
 
 
 
 // can't send functions across a proxy, use listeners instead
-export type BlockedMainLLMMessageParams = 'onText' | 'onFinalMessage' | 'onError' | 'onFileOperation' | 'onCommandRun' | 'abortRef'
+export type BlockedMainLLMMessageParams = 'onText' | 'onFinalMessage' | 'onError' | 'onFileOperation' | 'onCommandRun' | 'abortRef' | 'takePendingInjection'
 export type MainSendLLMMessageParams = Omit<SendLLMMessageParams, BlockedMainLLMMessageParams> & { requestId: string } & SendLLMType
 
 export type MainLLMMessageAbortParams = { requestId: string }
+
+// ユーザー割り込みメッセージ: Division API orchestration の実行中に
+// 新しいユーザー指示を「途中参加」させるためのチャネル。
+// main プロセス側で requestId ごとにキューへ積まれ、次の注入ポイント
+// （Leader / intermediate / Coder / Reviewer の境目）で消費される。
+export type MainLLMMessageInterjectParams = { requestId: string; text: string }
 
 export type EventLLMMessageOnTextParams = Parameters<OnText>[0] & { requestId: string }
 export type EventLLMMessageOnFinalMessageParams = Parameters<OnFinalMessage>[0] & { requestId: string }

@@ -3954,7 +3954,8 @@ export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTa
 	const onSubmit = useCallback(async (_forceSubmit?: string) => {
 
 		if (isDisabled && !_forceSubmit) return
-		if (isRunning) return
+		// 実行中でも送信を許可（途中乱入）。chatThreadService 側が
+		// Division orchestration なら interject へ、それ以外なら abort+restart に振り分ける。
 
 		const threadId = chatThreadsService.state.currentThreadId
 

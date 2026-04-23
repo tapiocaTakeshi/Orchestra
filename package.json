@@ -70,12 +70,14 @@
     "extensions-ci": "node ./node_modules/gulp/bin/gulp.js extensions-ci",
     "extensions-ci-pr": "node ./node_modules/gulp/bin/gulp.js extensions-ci-pr",
     "perf": "node scripts/code-perf.js",
-    "update-build-ts-version": "npm install typescript@next && tsc -p ./build/tsconfig.build.json"
+    "update-build-ts-version": "npm install typescript@next && tsc -p ./build/tsconfig.build.json",
+    "start": "electron-forge start",
+    "package": "electron-forge package",
+    "make": "electron-forge make"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.40.0",
     "@c4312/eventsource-umd": "^3.0.5",
-
     "@floating-ui/react": "^0.27.8",
     "@google/genai": "^0.13.0",
     "@microsoft/1ds-core-js": "^3.2.13",
@@ -110,6 +112,7 @@
     "ajv": "^8.17.1",
     "cross-spawn": "^7.0.6",
     "diff": "^7.0.0",
+    "electron-squirrel-startup": "^1.0.1",
     "eslint-plugin-react": "^7.37.5",
     "google-auth-library": "^9.15.1",
     "groq-sdk": "^0.20.1",
@@ -138,6 +141,15 @@
     "yazl": "^2.4.3"
   },
   "devDependencies": {
+    "@electron-forge/cli": "^7.11.1",
+    "@electron-forge/maker-deb": "^7.11.1",
+    "@electron-forge/maker-rpm": "^7.11.1",
+    "@electron-forge/maker-squirrel": "^7.11.1",
+    "@electron-forge/maker-zip": "^7.11.1",
+    "@electron-forge/plugin-auto-unpack-natives": "^7.11.1",
+    "@electron-forge/plugin-fuses": "^7.11.1",
+    "@electron-forge/publisher-github": "^7.11.1",
+    "@electron/fuses": "^1.8.0",
     "@playwright/test": "^1.50.0",
     "@stylistic/eslint-plugin-ts": "^2.8.0",
     "@tailwindcss/typography": "^0.5.16",

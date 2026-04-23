@@ -46,6 +46,11 @@ type InternalCommonMessageParams = {
 	overridesOfModel: OverridesOfModel | undefined;
 	modelName: string;
 	_setAborter: (aborter: () => void) => void;
+	// ユーザーからの「途中割り込み」テキストを取り出すゲッター。
+	// null を返せば割り込み無し。Division API orchestration が各フェーズの
+	// 境目（Leader 前 / 各中間タスク前 / Coder 前 / Reviewer 前 / 再分解前）で
+	// ポーリングし、テキストがあれば currentInput に追記した上で処理継続。
+	takePendingInjection?: () => string | null;
 }
 
 type SendChatParams_Internal = InternalCommonMessageParams & {
@@ -1501,6 +1506,68 @@ const loadDivisionIgnore = (workspaceFolderPath: string): DivisionIgnoreMatcher 
 	};
 };
 
+// 日本語 → 英語の簡易シノニムマップ。
+// ユーザーが日本語で「ダッシュボード」と書いたときに、ファイル名に現れる
+// `dashboard.tsx` 等にヒットさせるために使う。網羅性より再現率重視で足していく。
+const JP_EN_SYNONYMS: Record<string, string[]> = {
+	'ダッシュボード': ['dashboard'],
+	'ログイン': ['login', 'signin', 'auth'],
+	'ログアウト': ['logout', 'signout'],
+	'サインアップ': ['signup', 'register'],
+	'認証': ['auth', 'authentication'],
+	'画面': ['page', 'screen', 'view'],
+	'ページ': ['page'],
+	'ホーム': ['home', 'index'],
+	'設定': ['settings', 'config', 'preferences'],
+	'ユーザー': ['user'],
+	'プロフィール': ['profile'],
+	'ボタン': ['button', 'btn'],
+	'カード': ['card'],
+	'モーダル': ['modal', 'dialog'],
+	'リスト': ['list'],
+	'テーブル': ['table'],
+	'フォーム': ['form'],
+	'入力': ['input'],
+	'検索': ['search'],
+	'ナビゲーション': ['nav', 'navigation', 'navbar'],
+	'ヘッダー': ['header'],
+	'フッター': ['footer'],
+	'サイドバー': ['sidebar'],
+	'ルーター': ['router', 'route'],
+	'ルーティング': ['router', 'routing', 'route'],
+	'状態': ['state', 'store'],
+	'ストア': ['store'],
+	'スタイル': ['style', 'styles', 'css'],
+	'テーマ': ['theme'],
+	'エラー': ['error'],
+	'通知': ['notification', 'toast'],
+	'決済': ['payment', 'checkout', 'stripe'],
+	'支払': ['payment', 'checkout'],
+	'課金': ['billing', 'payment', 'stripe', 'subscription'],
+	'サブスク': ['subscription', 'stripe'],
+	'サブスクリプション': ['subscription', 'stripe'],
+	'チャット': ['chat', 'message'],
+	'メッセージ': ['message', 'chat'],
+	'エージェント': ['agent'],
+	'レビュー': ['review', 'reviewer'],
+	'リーダー': ['leader'],
+	'コーダー': ['coder'],
+	'プランナー': ['planner'],
+	'デザイナー': ['designer', 'design'],
+	'アイデア': ['idea', 'ideaman'],
+	'プロジェクト': ['project'],
+	'ワークスペース': ['workspace'],
+	'タスク': ['task'],
+	'プロバイダ': ['provider'],
+	'プロバイダー': ['provider'],
+	'モデル': ['model'],
+	'ロール': ['role'],
+	'フロー': ['flow'],
+	'アセット': ['asset', 'assets'],
+	'画像': ['image', 'img'],
+	'アイコン': ['icon'],
+};
+
 const extractKeywordsFromQuery = (query: string): string[] => {
 	const lowered = query.toLowerCase();
 	const tokens = lowered.match(/[a-z0-9_\-./]+|[\u3040-\u30ff\u4e00-\u9fff]+/g) || [];
@@ -1511,7 +1578,18 @@ const extractKeywordsFromQuery = (query: string): string[] => {
 		'を', 'は', 'が', 'の', 'に', 'で', 'と', 'から', 'まで', 'して', 'する',
 		'ファイル', '検索', '探して', '読み込んで', '読んで', '一覧',
 	]);
-	return Array.from(new Set(tokens.filter(t => t.length >= 2 && !stopWords.has(t))));
+	const base = tokens.filter(t => t.length >= 2 && !stopWords.has(t));
+	const expanded = new Set<string>(base);
+	// 日本語トークンに対応する英単語を追加（ファイル名が英語になりやすいため）
+	for (const t of base) {
+		const syns = JP_EN_SYNONYMS[t];
+		if (syns) {
+			for (const s of syns) expanded.add(s);
+		}
+		// 全角カタカナ/ひらがな単体を小文字英字に写像するのは困難なので、
+		// マップに無い日本語語はそのまま残す（content-search 側でヒットする可能性）
+	}
+	return Array.from(expanded);
 };
 
 const walkDirectory = (
@@ -1548,10 +1626,51 @@ const walkDirectory = (
 	}
 };
 
+// プロジェクトのベースライン文脈として、キーワードヒットの有無に関わらず
+// 常に AI に渡したい「マニフェスト/エントリ」候補。
+// 存在するものだけを拾い、上から順に優先して入れる。
+const BASELINE_FILE_CANDIDATES: string[] = [
+	// JavaScript / TypeScript
+	'package.json', 'tsconfig.json', 'next.config.js', 'next.config.mjs', 'next.config.ts',
+	'vite.config.ts', 'vite.config.js', 'tailwind.config.ts', 'tailwind.config.js',
+	'nuxt.config.ts', 'svelte.config.js', 'astro.config.mjs',
+	// Flutter / Dart
+	'pubspec.yaml', 'analysis_options.yaml',
+	// Python
+	'pyproject.toml', 'requirements.txt', 'setup.py', 'poetry.lock',
+	// Rust / Go
+	'Cargo.toml', 'go.mod',
+	// JVM
+	'build.gradle', 'build.gradle.kts', 'pom.xml', 'settings.gradle',
+	// PHP / Ruby
+	'composer.json', 'Gemfile',
+	// Meta
+	'README.md', 'README', 'AGENTS.md',
+	'.env.example', '.env.local.example',
+	// Entry points (best-effort; may or may not exist)
+	'src/main.ts', 'src/main.tsx', 'src/index.ts', 'src/index.tsx', 'src/App.tsx',
+	'src/main.dart', 'lib/main.dart',
+	'app/page.tsx', 'app/layout.tsx', 'pages/index.tsx',
+	'main.py', 'app.py',
+];
+
+// ディレクトリツリー（上位 maxEntries 件）を整形して返す。
+// キーワード一致が 0 件でも、AI にワークスペース全体の構成を見せるため。
+const buildDirectoryTree = (files: string[], workspaceFolderPath: string, maxEntries = 300): string => {
+	const sorted = files
+		.map(f => path.relative(workspaceFolderPath, f).replace(/\\/g, '/'))
+		.sort();
+	const picked = sorted.slice(0, maxEntries);
+	const truncated = sorted.length > picked.length
+		? `\n... 他 ${sorted.length - picked.length} ファイル（省略）`
+		: '';
+	return picked.map(p => `- ${p}`).join('\n') + truncated;
+};
+
 const searchWorkspaceFiles = (
 	workspaceFolderPath: string,
 	query: string,
-): { matches: { relativePath: string; content: string }[]; summary: string } => {
+): { matches: { relativePath: string; content: string }[]; summary: string; tree: string } => {
 	const allFiles: string[] = [];
 	const ignoreMatcher = loadDivisionIgnore(workspaceFolderPath);
 	walkDirectory(workspaceFolderPath, workspaceFolderPath, allFiles, 5000, ignoreMatcher);
@@ -1572,12 +1691,30 @@ const searchWorkspaceFiles = (
 		if (score > 0) scored.push({ file, score });
 	}
 
-	// If no path-based matches, fall back to content search on a limited set
+	// Baseline: always prepend important manifests / entry points that actually exist.
+	const baselineFiles: string[] = [];
+	const seen = new Set<string>();
+	for (const candidate of BASELINE_FILE_CANDIDATES) {
+		const full = path.join(workspaceFolderPath, candidate);
+		try {
+			const stat = fs.statSync(full);
+			if (stat.isFile() && stat.size <= MAX_FILE_SIZE_BYTES) {
+				if (!seen.has(full)) {
+					baselineFiles.push(full);
+					seen.add(full);
+				}
+			}
+		} catch (_e) { /* not present */ }
+	}
+
+	// Keyword/content-matched files
 	const pickedFiles: string[] = [];
 	if (scored.length > 0) {
 		scored.sort((a, b) => b.score - a.score);
-		pickedFiles.push(...scored.slice(0, MAX_SEARCH_FILES).map(s => s.file));
-	} else {
+		for (const s of scored.slice(0, MAX_SEARCH_FILES)) {
+			if (!seen.has(s.file)) { pickedFiles.push(s.file); seen.add(s.file); }
+		}
+	} else if (keywords.length > 0) {
 		// Fallback: scan file contents for keywords (limited number of files)
 		const contentScored: { file: string; score: number }[] = [];
 		const candidatesForContent = allFiles.slice(0, 500);
@@ -1595,12 +1732,17 @@ const searchWorkspaceFiles = (
 			} catch (_e) { /* skip */ }
 		}
 		contentScored.sort((a, b) => b.score - a.score);
-		pickedFiles.push(...contentScored.slice(0, MAX_SEARCH_FILES).map(s => s.file));
+		for (const s of contentScored.slice(0, MAX_SEARCH_FILES)) {
+			if (!seen.has(s.file)) { pickedFiles.push(s.file); seen.add(s.file); }
+		}
 	}
+
+	// Assemble final order: baseline first, then keyword matches.
+	const orderedFiles = [...baselineFiles, ...pickedFiles];
 
 	const matches: { relativePath: string; content: string }[] = [];
 	let totalChars = 0;
-	for (const file of pickedFiles) {
+	for (const file of orderedFiles) {
 		try {
 			const stat = fs.statSync(file);
 			if (stat.size > MAX_FILE_SIZE_BYTES) continue;
@@ -1619,16 +1761,34 @@ const searchWorkspaceFiles = (
 		} catch (_e) { /* skip */ }
 	}
 
-	const summary = matches.length === 0
-		? `ワークスペース内にキーワード「${keywords.join(', ')}」に一致するファイルが見つかりませんでした。`
-		: `${matches.length} 件のファイルが見つかりました（キーワード: ${keywords.join(', ')}）。`;
+	const tree = buildDirectoryTree(allFiles, workspaceFolderPath);
 
-	return { matches, summary };
+	const kwLabel = keywords.length > 0 ? keywords.join(', ') : '(なし)';
+	const summary = matches.length === 0
+		? `ワークスペースを走査しましたが、キーワード「${kwLabel}」に一致するファイルが見つかりませんでした。`
+			+ `以下のディレクトリツリーを参考に、編集対象ファイルを判断してください。`
+		: `${matches.length} 件のファイルを読み込みました（キーワード: ${kwLabel}、合計 ${totalChars.toLocaleString()} 文字）。`
+			+ ` ベースラインとして主要マニフェスト/エントリを常に含めています。`;
+
+	console.log(`[FileSearch] workspace=${workspaceFolderPath} scanned=${allFiles.length} `
+		+ `keywords=[${keywords.join(',')}] baseline=${baselineFiles.length} `
+		+ `keywordMatched=${pickedFiles.length} included=${matches.length} chars=${totalChars}`);
+
+	return { matches, summary, tree };
 };
 
 const buildFileSearchOutput = (workspaceFolderPath: string, query: string): string => {
-	const { matches, summary } = searchWorkspaceFiles(workspaceFolderPath, query);
-	const lines: string[] = [summary, ''];
+	const { matches, summary, tree } = searchWorkspaceFiles(workspaceFolderPath, query);
+	const lines: string[] = [
+		`## ワークスペース: \`${workspaceFolderPath}\``,
+		'',
+		summary,
+		'',
+		`### ディレクトリツリー（関連ファイルの追加読取が必要ならパスを明示してください）`,
+		'',
+		tree,
+		'',
+	];
 	for (const m of matches) {
 		const ext = path.extname(m.relativePath).slice(1) || 'text';
 		lines.push(`### \`${m.relativePath}\``);
@@ -2147,6 +2307,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		modelName: selectedModel,
 		chatMode,
 		settingsOfProvider,
+		takePendingInjection,
 	} = params
 
 	try {
@@ -2319,6 +2480,32 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		): { role: 'user' | 'assistant'; content: string }[] =>
 			stackContextTurn ? [stackContextTurn, ...history] : history;
 
+		// ---------- ユーザー割り込み（interject）のドレイン ----------
+		// orchestration 中に UI 側で「ちょっと待って、これも考慮して」と
+		// 追加メッセージが来たとき、次の注入ポイント（Leader / 各中間タスク /
+		// Coder / Reviewer / 再分解）の直前でここを呼び出し、currentInput と
+		// chatHistory に取り込む。以降の AI リクエストは拡張された currentInput を
+		// 見るので、「途中参加」が自然に反映される。
+		const drainInjections = (): boolean => {
+			if (!takePendingInjection) return false;
+			const injected = takePendingInjection();
+			if (!injected || !injected.trim()) return false;
+			const banner = `\n\n> 💬 **ユーザー割り込み受信** — 次のステップから反映します\n> ${injected.split('\n').join('\n> ')}\n\n`;
+			appendText(banner);
+			currentInput = [
+				currentInput,
+				'',
+				'---',
+				'',
+				'## ユーザーからの追加リクエスト（途中送信）',
+				injected,
+			].join('\n');
+			// chat history にも user turn として追記。これで Leader/Coder/Reviewer は
+			// 「ユーザーが会話を続けた」のと同じ形で新情報を受け取れる。
+			chatHistory.push({ role: 'user', content: injected });
+			return true;
+		};
+
 		// Helper to recognize file-searcher variants (reused by runIntermediateCycle and elsewhere)
 		const isFileSearchRole = (r: string): boolean => {
 			const role = (r || '').toLowerCase();
@@ -2341,6 +2528,18 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			finalRole: string;
 			aborted: boolean;
 		}> => {
+			// Leader 呼び出し前の割り込み取り込み（cycleInput にも merge する）
+			if (drainInjections()) {
+				cycleInput = [
+					cycleInput,
+					'',
+					'---',
+					'',
+					'## ユーザーからの追加リクエスト（途中送信）',
+					// drainInjections がすでに currentInput に追記済みなので、その末尾を再利用
+					currentInput.split('## ユーザーからの追加リクエスト（途中送信）').pop()?.trim() || '',
+				].join('\n');
+			}
 			console.log(`[DivisionAPI] /api/tasks/create request (${cycleLabel}):`, JSON.stringify({
 				projectId,
 				inputLength: cycleInput.length,
@@ -2422,6 +2621,9 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			};
 
 			for (let i = 0; i < tasks.length; i++) {
+				// 各中間タスク実行前にも割り込みをチェック。次タスク以降の taskInput は
+				// cycleInput / currentInput を使って組み立てるので、drain により自動伝播する。
+				drainInjections();
 				const task = tasks[i];
 				const role = (task.role || '').toLowerCase();
 
@@ -2464,9 +2666,12 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					].join('\n')
 					: `直前の assistant メッセージに先行タスクの出力が添付されています（ある場合）。それを参考に、あなたの担当タスクを遂行してください。出力は Markdown 形式で、後続エージェントが直接利用できるよう具体的・網羅的にまとめてください。`;
 
+				// 割り込みがあると currentInput が cycleInput より長くなっているので、
+				// 常に currentInput を優先して渡す（最新のユーザー意図を反映するため）。
+				const effectiveCycleInput = currentInput.length > cycleInput.length ? currentInput : cycleInput;
 				const taskInput = [
 					`## ユーザーの元のリクエスト`,
-					cycleInput,
+					effectiveCycleInput,
 					``,
 					`## あなたの担当タスク`,
 					`- ロール: ${task.role}`,
@@ -2556,6 +2761,8 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 
 			// Loop: Coder → Reviewer → （不合格なら Leader に再分解依頼して） Coder → Reviewer...
 			while (true) {
+				// Coder（synthesis）実行前の割り込み取り込み
+				drainInjections();
 				// Build synthesis context from current flowOutputs
 				const synthesisContextHistory: { role: 'user' | 'assistant'; content: string }[] = [];
 				let totalContextChars = 0;
@@ -2681,6 +2888,9 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					}
 				}
 
+				// Reviewer 実行前の割り込み取り込み
+				drainInjections();
+
 				// Review step
 				appendText(`\n---\n\n**レビューステップ** (reviewer)${iterLabel} 開始...\n\n`);
 
@@ -2741,6 +2951,8 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 
 				// Failed → retry: Leader に再分解させて Coder/Reviewer をもう一度回す
 				iteration++;
+				// 再分解前の割り込み取り込み
+				drainInjections();
 				appendText(`\n\n🔄 **レビュー不合格** — Leader に再分解を依頼して ${iteration + 1} 回目を実行します...\n\n`);
 
 				const retryInput = [

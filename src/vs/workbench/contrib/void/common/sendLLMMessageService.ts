@@ -3,7 +3,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { EventLLMMessageOnTextParams, EventLLMMessageOnErrorParams, EventLLMMessageOnFinalMessageParams, EventLLMMessageOnFileOperationParams, EventLLMMessageOnCommandRunParams, FileOperationItem, CommandOperationItem, ServiceSendLLMMessageParams, MainSendLLMMessageParams, MainLLMMessageAbortParams, ServiceModelListParams, EventModelListOnSuccessParams, EventModelListOnErrorParams, MainModelListParams, OllamaModelResponse, OpenaiCompatibleModelResponse, } from './sendLLMMessageTypes.js';
+import { EventLLMMessageOnTextParams, EventLLMMessageOnErrorParams, EventLLMMessageOnFinalMessageParams, EventLLMMessageOnFileOperationParams, EventLLMMessageOnCommandRunParams, FileOperationItem, CommandOperationItem, ServiceSendLLMMessageParams, MainSendLLMMessageParams, MainLLMMessageAbortParams, MainLLMMessageInterjectParams, ServiceModelListParams, EventModelListOnSuccessParams, EventModelListOnErrorParams, MainModelListParams, OllamaModelResponse, OpenaiCompatibleModelResponse, } from './sendLLMMessageTypes.js';
 
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
@@ -24,6 +24,9 @@ export interface ILLMMessageService {
 	readonly _serviceBrand: undefined;
 	sendLLMMessage: (params: ServiceSendLLMMessageParams) => string | null;
 	abort: (requestId: string) => void;
+	// 実行中リクエストに「途中で」追加のユーザー指示を注入する。abort せずに
+	// 現在走っている Division orchestration に新情報を届ける用途。
+	interject: (requestId: string, text: string) => void;
 	ollamaList: (params: ServiceModelListParams<OllamaModelResponse>) => void;
 	openAICompatibleList: (params: ServiceModelListParams<OpenaiCompatibleModelResponse>) => void;
 	registerFileOperationHandler: (handler: (operations: FileOperationItem[]) => Promise<void>) => void;
@@ -194,6 +197,11 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 		this.llmMessageHooks.onAbort[requestId]?.() // calling the abort hook here is instant (doesn't go over a channel)
 		this.channel.call('abort', { requestId } satisfies MainLLMMessageAbortParams);
 		this._clearChannelHooks(requestId)
+	}
+
+	interject(requestId: string, text: string) {
+		if (!text || !text.trim()) return;
+		this.channel.call('interjectMessage', { requestId, text } satisfies MainLLMMessageInterjectParams);
 	}
 
 

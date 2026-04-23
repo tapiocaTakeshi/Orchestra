@@ -1,137 +1,392 @@
 <think>
-The user has provided an extensive Japanese language prompt about improving UI/UX for an Electron project. They've included feedback on a multi-agent workflow that has already produced several outputs (ideaman, searcher, file-searcher, researcher, planner, designer, writer).
+This is a complex request. Let me break it down:
 
-However, looking at my instructions in the `<goal>` section, I'm supposed to be Perplexity, a helpful deep research assistant trained by Perplexity AI. My role is to create a long, comprehensive, well-structured research report in response to a user's query.
+1. The user has provided a massive React/TypeScript codebase for a chat sidebar component called "SidebarChat"
+2. They've also provided extensive search results about UI/UX design best practices, including:
+   - Chat app design practices
+   - Visual hierarchy
+   - Accessibility guidelines (WCAG)
+   - Whitespace and layout
+   - Dark mode design
+   - Focus management
+   - Error handling
+   - And many other relevant topics
 
-The user's actual query seems to be about UI/UX design improvements for an Electron project, but it's framed within this complex multi-agent workflow framework.
+3. The user is asking me to act as a "researcher" and analyze:
+   - Current structure of SidebarChat
+   - Information hierarchy issues
+   - Whitespace problems
+   - Color scheme
+   - Card design
+   - Accessibility issues
+   - Provide prioritized improvement recommendations
 
-Looking at the search results provided at the beginning, they contain relevant information about:
-- Electron framework basics
-- Performance optimization for Electron apps
-- React development patterns
-- Accessibility guidelines
-- Design systems
-- Testing approaches
-- Responsive design
-- UI/UX best practices
+4. The output should be in Markdown format, concrete and comprehensive for subsequent agents to use
 
-The user is asking me to act as a "researcher" role within this multi-agent workflow, but according to my actual instructions, I should be creating a comprehensive research report following the format specified in `<report_format>`.
+5. There's mention of a "researcher (researcher) role" which I am assigned to
 
-The key issue here is that the user seems to be asking me to respond to a very complex, multi-layered prompt that references:
-1. A previous multi-agent workflow with feedback
-2. Multiple intermediate outputs from other agents
-3. A specific role assignment (researcher)
-4. Specific instructions about what my output should accomplish
+However, looking at the actual user query more carefully: "## ユーザーの元のリクエスト デザインに凝って"
 
-However, my core instructions are to write a 10,000+ word academic report on the user's query.
+This appears to be Japanese, saying something like "User's original request: Paying attention to design" or "Design focused request"
 
-Given the complexity and the fact that the main content appears to be in Japanese, with extensive previous outputs already provided, I think the user actually wants me to create a comprehensive research report on UI/UX improvements for Electron applications that synthesizes the information from the search results and the previous analysis.
+The main task seems to be: Analyze the SidebarChat component's design and provide prioritized improvement recommendations covering structure, information hierarchy, whitespace, colors, cards, and accessibility.
 
-Let me reconsider: The user's original query at the very top is essentially asking for UI/UX improvements for an Electron project (Orchestra). 
+This is indeed a 10,000+ word research task. Let me create a comprehensive report analyzing the code and applying the design principles from the search results to provide actionable recommendations.
 
-The subsequent content about "ideaman," "searcher," etc. appears to be part of that context or perhaps from a previous attempt. The search results provided are relevant to Electron development, performance, design systems, accessibility, testing, etc. Given my instructions to create a 10,000+ word comprehensive report, and given the search results provided, I should create a professional research report on UI/UX improvements for Electron desktop applications, structured with a title, key findings, and detailed sections that synthesize the available information into actionable insights for improving the Orchestra project's user experience.
+Let me structure this as:
+1. Executive Summary
+2. Current State Analysis
+3. Information Hierarchy Assessment
+4. Whitespace & Layout Analysis
+5. Visual Design & Color Scheme
+6. Card & Component Design
+7. Accessibility Assessment
+8. Prioritized Improvement Recommendations
+9. Implementation Considerations
+10. Conclusion
+
+This needs to be written academically but also be practical for implementation.
 </think>
 
-# Comprehensive Framework for UI/UX Improvements in Electron Desktop Applications: Strategic Analysis and Implementation Roadmap
+# SidebarChat コンポーネント設計分析レポート
 
-This comprehensive research report examines the critical strategic factors that determine success in modernizing user interface and user experience design within Electron-based desktop applications. Synthesizing current best practices, architectural constraints specific to Electron's dual-process model, and proven optimization strategies, this analysis identifies the essential success factors that distinguish transformative UI/UX improvements from cosmetic changes that fail to enhance user satisfaction. The fundamental challenge in Electron UI/UX improvement stems from the framework's inherent tension between providing sophisticated cross-platform interface capabilities through web technologies and managing the substantial performance and resource constraints that emerge from bundling Chromium with every application instance[1][5]. This analysis establishes a differentiated framework that moves beyond generic UI design principles to specifically address Electron's unique architectural characteristics, performance optimization requirements, and the complex interplay between technical implementation choices and perceived user experience quality. The research identifies success factors organized around four primary pillars: architectural awareness and constraint recognition, performance-driven design decision-making, systematic measurement and prioritization methodology, and implementation strategies that maintain consistency across the application lifecycle.
+本レポートは、Orchestra プロジェクトの SidebarChat コンポーネントの現行設計を徹底的に分析し、UI/UX 最適化に向けた改善方針を提示します。情報階層、視覚的階層、余白設計、色彩体系、カード構造、およびアクセシビリティ観点から、優先度付きの具体的改善施策を提案します。
 
-## Electron's Architectural Fundamentals and Their Implications for UI/UX Strategy
+## 現行設計の概要
 
-Understanding Electron's distinctive architecture represents the necessary foundation for any strategic UI/UX improvement initiative. The framework combines Chromium, Node.js, and native code capabilities within a unified application runtime[5], creating a development model that appears, at first glance, to simply extend web technologies to desktop. However, the actual architectural reality is substantially more complex, and this complexity has direct implications for UI/UX design decisions and their likely success or failure in practice.
+SidebarChat コンポーネントは、AIアシスタントとのマルチモーダル対話、ファイル操作、ターミナル実行、コード編集の結果表示など、複合的な機能を単一の UI 空間に統合しています。このコンポーネントは以下の主要領域で構成されています：過去のメッセージ表示エリア、ストリーミングメッセージの実時間レンダリング、ツール実行結果の可視化、ユーザー入力フォーム、ファイル変更の統合管理パネル（CommandBarInChat）。
 
-The Electron architecture separates application functionality into two distinct processes that communicate asynchronously through inter-process communication mechanisms[1][4]. The main process executes once at application startup and continues running for the entire application lifetime, handling window management, file system operations, operating system interactions, and other system-level functionality. The renderer process operates independently for each application window and contains the HTML, CSS, and JavaScript that comprise the user interface. This process separation, while providing important security and stability benefits, means that any UI interaction requiring system-level operations must traverse an asynchronous communication boundary, potentially introducing latency that impacts perceived interface responsiveness.
+### 主な設計特性
 
-The practical implication of this architecture for UI/UX is profound: designers and developers cannot assume that interactions will complete instantly or that UI feedback will appear with the latency characteristics of traditional applications. File operations, system clipboard access, external process invocation, and many other operations require communication across the process boundary, and this communication introduces measurable delay. Understanding these latency characteristics and designing interfaces that gracefully handle them represents a critical success factor for UI/UX improvements. An interface designed without awareness of IPC latency may feel sluggish in practice despite technically correct implementation.
+現行実装では、複数のメッセージロール（user、assistant、tool、checkpoint、flow_review など）に対応し、各ロールに異なる視覚的トリートメントを施しています。メッセージバブルは role に応じて配置や背景が異なり、ツール実行結果はハイダー可能な ToolHeaderWrapper コンポーネントで管理されています。入力フォーム（VoidChatArea）には、モデル選択、思考予算調整、複数の UI 制御要素が組み込まれており、ファイル添付、ドラッグアンドドロップ対応など豊富な機能が実装されています。
 
-Furthermore, the requirement to bundle Chromium with every Electron application instance creates resource consumption characteristics that fundamentally shape the design space. Unlike web applications that execute within a shared browser environment maintained by the operating system, each Electron application operates its own complete browser instance with its own rendering engine, JavaScript execution environment, and memory allocation[1][6]. This architectural choice enables impressive consistency across platforms and sophisticated interface capabilities, as demonstrated by successful applications like Visual Studio Code, Discord, and Slack[4]. However, it simultaneously creates substantial memory and storage overhead that directly constrains which UI/UX design approaches are feasible in practice. Interface designs that assume unlimited memory availability or minimal processing overhead for rendering will likely perform poorly in practice, and users will perceive the resulting sluggishness as poor design despite the visual polish of the interface.
+## 情報階層の現状と課題
 
-The persistent perception that Electron applications are "heavy" relative to native desktop software stems directly from these architectural characteristics[6]. When users launch an Electron application, the framework must initialize the Chromium runtime, load the Node.js environment, parse and execute application code, and initialize the renderer process before the application becomes interactive. This startup sequence necessarily requires more time than native applications that leverage pre-existing system components, and this inherent delay cannot be completely eliminated through optimization alone[6]. The architectural limitation is real, not imaginary, and successful UI/UX improvements must acknowledge this reality rather than attempting to deny or completely overcome it through interface design alone.
+### 階層構造の分析
 
-## Architectural Constraints and Performance Realities as Primary Drivers of UI/UX Quality
+現行実装における情報階層は、複数のレベルで機能していますが、一部に不明確さがあります。最上位は会話全体のフロー（過去メッセージ → ストリーミングメッセージ → 入力フォーム）で、次レベルは個別メッセージ（ユーザー発話、アシスタント応答、ツール呼び出し、チェックポイント）、さらに下位は各メッセージ内の詳細（コンテンツ、メタデータ、操作ボタン）となります。
 
-The relationship between technical performance characteristics and perceived UI/UX quality is more direct and consequential in Electron development than in many other technological domains. Performance is not merely a technical concern separate from UI/UX design; rather, performance characteristics fundamentally determine whether users perceive an application as well-designed and responsive or frustratingly sluggish and poorly implemented.
+メッセージコンポーネントの内部構造を観察すると、AssistantMessageComponent では model ラベルが上部に配置され、その下に reasoning（可視状態では ToolHeaderWrapper でラップ）、続いて displayContent が表示されます。ツールメッセージでは title、desc1（ファイル名など）、desc2（数値や操作ボタン）が ToolHeaderWrapper の header に密集して配置されており、重要度の違いが視覚的に明確でない場合があります。
 
-Startup time illustrates this relationship vividly. Users approaching an Electron application for the first time carry expectations shaped by years of experience with native desktop software, which typically becomes available almost instantaneously after being launched. Electron applications, due to the necessity of initializing multiple runtime components, typically require several seconds before becoming fully interactive[6]. This startup delay creates an immediate negative perception that persists even if subsequent operations are perfectly responsive. While splash screens can provide visual feedback during startup and potentially mitigate the subjective perception of delay through explicit progress indication[3], they cannot eliminate the underlying architectural requirement. The most effective approaches to startup time improvement combine multiple complementary strategies: lazy loading of non-critical code to reduce initial parsing requirements, minimization of initialization-time work, and profiling-based identification and elimination of unnecessary startup operations[3]. Designers should understand that startup time perception can be influenced by interface design choices; providing explicit progress feedback through visual indicators may make an application feel faster subjectively even if the actual time to interactivity remains unchanged.
+### 視覚的階層の問題点
 
-Memory consumption represents perhaps the most persistent and challenging technical constraint for Electron UI/UX strategy. Each running Electron application consumes substantial RAM due to the embedded Chromium runtime, and current optimization efforts have not substantially reduced this overhead[6]. When multiple Electron applications execute simultaneously, their combined memory consumption can rapidly exhaust available system resources and cause system-wide performance degradation[6]. From a UI/UX perspective, users experience this degradation not as an issue with individual applications but as general system slowness and unresponsiveness. This system-level degradation indirectly damages the perceived quality of every application running on the user's system, not just the memory-consuming Electron apps. The addition of AI capabilities to Electron applications, which represents a significant current industry trend, will further exacerbate memory consumption issues while simultaneously increasing the pressure to run multiple AI-enhanced applications simultaneously[6].
+**フォントサイズと太さの使い分け**が十分ではありません。例えば、ToolHeaderWrapper 内の title は `text-[12px] font-medium` で、desc1 は `text-void-fg-4 text-[11px]` ですが、この差異は微細で、スキャニング時に重要度の違いが認識しにくくなっています。Search results [2] の visual hierarchy ガイダンス[2]によれば、title サイズは 35-50px（デスクトップ）程度、本文は 18-24px 程度を目安とすべきですが、SidebarChat では絶対的なスケールが小さく、その中での比率調整がより重要になります。
 
-Rendering performance directly determines whether the UI feels responsive and smooth or stutters and struggles to keep pace with user interactions. Complex interfaces with deeply nested component hierarchies, frequent state updates, and inefficient re-rendering patterns will exhibit noticeable lag even on relatively capable hardware. React-based Electron applications can experience particularly severe rendering performance issues if developers fail to implement proper memoization techniques such as React.memo, useMemo, and useCallback[3]. Without these optimization approaches, React components may re-render far more frequently than necessary, consuming processor resources and causing perceptible interface lag. This represents not a fundamental limitation of React itself but rather a common implementation mistake that careful attention to performance optimization can largely address.
+**色彩による階層の表現**も不完全です。ツール実行結果では、左枠線色（`border-left: 2px solid var(--vscode-focusBorder)`）により normal/error/warning 状態を区別していますが、実際には isError フラグと isRejected フラグの組み合わせで複数の状態が存在します。一部の状態では色が一意に決まらないため、ユーザーが各結果の状態を瞬時に理解することが困難になる場合があります。
 
-Virtual scrolling and windowing techniques represent powerful rendering optimization strategies specifically suited to Electron applications displaying large datasets or complex component hierarchies. Rather than rendering all items in a large list or complex interface, virtual scrolling renders only the visible items and a small buffer region beyond the visible area[3]. This approach dramatically reduces the number of DOM nodes the browser must manage and update, enabling smooth scrolling and interaction even with thousands of items. However, implementing virtual scrolling requires intentional architectural decisions that must be made during initial design rather than retrofitted into existing implementations.
+**グループ化と空間的分離**の問題として、CommandBarInChat に表示されるファイル変更情報が、ツール実行結果と異なる視覚的スタイルで実装されており、UI パターンの一貫性が低下しています。例えば、ファイル詳細セクションは `max-h-24 overflow-y-auto` で高さが制限されますが、ツール実行結果の子要素は一貫した高さ制限がなく、非常に長いコンテンツが表示される可能性があります。
 
-CSS-based animations consistently outperform JavaScript-based animations due to the availability of GPU acceleration for certain CSS properties[3]. Animations using transform and opacity properties can achieve smooth 60-frame-per-second motion through GPU acceleration, while JavaScript-driven animations frequently result in dropped frames and visible stuttering due to the overhead of JavaScript calculation on every frame[3]. UI/UX designers working on Electron applications should understand these performance implications and work collaboratively with developers to ensure that animations are implemented using the most performant available techniques. The use of CSS custom properties such as will-change can provide additional optimization hints to the browser about which elements will be animated[3].
+### 改善方針
 
-Inter-process communication latency affects the perceived responsiveness of interactions that require main process involvement. File operations, system notifications, clipboard access, and other system-level functionality all must traverse the IPC boundary, potentially introducing measurable delay between user action and system response. Applications with heavy reliance on main process operations will feel sluggish if developers do not implement careful optimization of IPC patterns and batching strategies. From a UI/UX perspective, designers should anticipate which interactions will require main process involvement and plan the interface accordingly to minimize user frustration during unavoidable latency.
+Search results [2] により、「no more than 3 sizes (small, medium, large) should be used」との推奨が述べられています。SidebarChat では、現在 text-[8px] から text-[14px] まで 10 段階以上のサイズが混在しており、これを整理し、明確に 3-4 段階（タイトル、本文、補助情報、超小体）に統一することが必要です。
 
-## Common Pitfalls in Electron UI/UX Implementation and Strategic Approaches to Avoiding Them
+色彩については、「正常・警告・エラーに対応する色を計画的に配置し、色盲ユーザーにも区別できるよう icon や他の視覚的手段を併用する」（Search results [12]）ことが重要です。現行の左枠線色のみではなく、背景色、icon、テキスト色を組み合わせた多層的な表現に改善すべきです。
 
-Despite the significant capabilities that Electron provides for cross-platform desktop application development, Electron applications frequently suffer from specific UI/UX problems that stem directly from the framework's architectural characteristics and common mistakes developers make when transitioning from web development backgrounds to desktop application development. Understanding these pitfalls and the strategic approaches to avoiding them enables teams to recognize and address issues early in the development lifecycle rather than discovering them only after substantial user exposure.
+## 余白（ホワイトスペース）と レイアウト設計
 
-The most pervasive complaint about Electron applications is that they feel "heavy" and unresponsive compared to native desktop software[6]. This perception is not merely subjective; it reflects genuine performance characteristics that emerge from the architectural constraints of bundling Chromium and the often-suboptimal implementation choices that developers make. The strategy for addressing this issue involves multiple complementary approaches rather than a single comprehensive solution. First, developers must accept the architectural reality that Electron applications will never achieve the startup time or memory efficiency of native applications and design interfaces accordingly, providing appropriate feedback for necessary delays rather than attempting to deny them through misleading instant-response promises. Second, optimization efforts must target the specific operations that users interact with most frequently, using profiling tools to identify genuine bottlenecks rather than optimizing based on assumptions. Third, UI/UX design must actively support graceful degradation when system resources are constrained, perhaps by simplifying certain interface elements or disabling non-essential visual effects when available memory becomes limited.
+### 現行余白設計の詳細
 
-Inefficient rendering performance represents a critical pitfall that manifests as interface lag and unresponsiveness during user interaction. This pitfall typically stems from React component architectures that cause excessive re-rendering, from DOM manipulation patterns that are inefficient, or from layout thrashing that forces the browser to repeatedly recalculate layout. The strategic approach to avoiding this pitfall involves implementing proper component memoization through React.memo and related techniques, using performance profiling tools to identify render hotspots, and architectural decisions such as virtual scrolling for large datasets. Additionally, the strategic use of CSS-based animations and transitions rather than JavaScript-driven animations can substantially improve perceived responsiveness.
+現在の SidebarChat では、React/Tailwind CSS を用いた Utility-First アプローチで余白を管理しています。メイン領域の px-4 py-4 により 16px の padding が設定され、メッセージ間は space-y-4（16px）で分離されています。ただし、UI 要素の種類により余白戦略が統一されていません。
 
-Poor inter-process communication patterns create latency in user interactions that directly impacts perceived application quality. Developers who fail to understand the asynchronous nature of IPC or who implement naive patterns that require multiple round trips across the process boundary create interfaces that feel laggy despite technically correct implementation. The strategic approach involves understanding which operations require IPC involvement, batching IPC calls where feasible to reduce the number of round trips, and designing interfaces that provide appropriate feedback for unavoidable latency rather than pretending it doesn't exist. Some operations, such as frequent status checks, can be optimized through event-based notification patterns rather than polling, reducing the total number of IPC calls required.
+ToolHeaderWrapper の内部では、header に `min-h-[28px] px-2.5 py-1` が設定され、children 領域には children wrapper で `px-2 min-w-full overflow-hidden` が追加されます。つまり、header と children で異なる水平 padding を持つことになります。このため、同じ ToolHeaderWrapper 内であっても左端の align が不統一になる可能性があります。
 
-Failure to account for platform-specific user interface conventions and expectations creates suboptimal experiences on each platform. While Electron's cross-platform capability is a significant advantage, developers who simply apply one interface design across all platforms without modification create interfaces that feel foreign and unintuitive to users on each platform. The strategic approach involves detecting the operating system at runtime and conditionally applying platform-specific styling, keyboard shortcuts, and interaction patterns. For example, macOS applications typically place menu items in the application menu bar at the top of the screen, while Windows applications typically include menus within the application window itself. Respecting these conventions requires explicit architectural decisions and development effort but substantially improves user satisfaction on each platform.
+SelectedFiles コンポーネント（添付ファイル一覧）では `gap-x-0.5 gap-y-1` で密集した配置が採用されており、一方メッセージ間は `space-y-4` の大きな余白があります。この対比が、ファイル選択インターフェースを「密度が高く、雑多に見える」と感じさせます。
 
-## Systematic Measurement and Data-Driven Prioritization Framework
+### 行の長さとテキスト可読性
 
-The most successful Electron UI/UX improvement initiatives employ systematic measurement and analysis to guide prioritization decisions rather than relying on assumptions or general intuitions about where improvements would be most impactful. This data-driven approach ensures that limited development resources are allocated toward improvements that genuinely impact user experience rather than addressing imagined problems or prioritizing improvements based on developer preferences rather than user needs.
+Search results [16] では、行長は 50-75 文字が最適であると示唆されています。SidebarChat では、`max-w-none` や明示的な幅制限がないメッセージコンテンツが多く、特にモバイル表示時や横幅が広い環境で、過度に長い行が生じる可能性があります。ProseWrapper では prose クラスが適用されていますが、その中の`max-w-none` によって max-width 制限が失われています。
 
-The measurement framework should encompass multiple dimensions of application performance and user experience. Startup time measurements establish baseline performance characteristics and track improvements over time. These measurements should distinguish between the total time from application launch to full interactivity and the time required for specific initialization phases, enabling targeted optimization of the most time-consuming steps. Memory consumption profiles should be captured not only for idle applications but also under realistic usage patterns where users interact with actual features and data. Rendering performance metrics should include frame rate measurements during common interactions, enabling identification of specific operations that cause frame drops or stuttering. IPC latency measurements should quantify the round-trip time for common operations, helping developers understand whether IPC overhead is a legitimate performance bottleneck or merely a theoretical concern.
+### 改善方針
 
-User research and feedback should inform prioritization by establishing which aspects of the application are most frequently used and which tasks are most important to user workflows. Application usage analytics can reveal which features users engage with most frequently and which operations cause users to abandon the application. Support tickets and bug reports provide direct evidence of user frustration, though this data requires careful analysis to distinguish between widespread issues affecting many users and edge cases affecting individual users. Direct user interviews and usability testing provide rich qualitative data about user perceptions and frustrations that quantitative metrics alone cannot capture. When prioritization decisions must be made without access to direct user research, analyzing the frequency of use and criticality of different application features can serve as a proxy for user importance.
+Search results [4][1] を参考に、**consistent spacing scale の導入**が必要です。Tailwind では px-2, px-3, px-4 などの既定値を活用しつつ、以下のような統一ガイドラインを設定すべきです：
 
-The combination of technical measurements and user research data enables a prioritization matrix that scores potential improvements along multiple dimensions. Impact assessment should evaluate how significantly each potential improvement would affect overall user experience, distinguishing between improvements that would noticeably change how users perceive the application and improvements that address minor issues or edge cases. Effort estimation should realistically assess the development work required to implement each improvement, accounting not only for direct implementation effort but also for testing, integration, and potential knock-on effects on other application components. Strategic alignment should evaluate how well each potential improvement aligns with business objectives and long-term product direction. Quick-win opportunities—improvements that provide substantial user-facing benefit with relatively limited development effort—should generally be prioritized above improvements that require extensive development even if they would provide marginal additional benefit in the long run.
+- メッセージ外枠の padding: 16px（px-4）
+- メッセージ内部グループ間：12px（px-3）
+- 小要素間（アイコン＋テキスト）：8px（px-2）
 
-The prioritization framework should distinguish between architectural improvements that provide foundational benefits and cosmetic improvements that enhance visual polish. Architectural improvements such as implementing virtual scrolling for large datasets or refactoring state management to reduce unnecessary re-rendering typically provide benefits across multiple parts of the application and enable future improvements. Cosmetic improvements such as adjusting color schemes or adding visual polish enhance user perception but provide more limited benefits. Generally, architectural improvements should be prioritized first to establish a solid foundation, with cosmetic improvements following afterward.
+余白により、以下の 3 階層の群化を明確に表現します：
 
-Platform-specific considerations should be incorporated into the prioritization framework. Issues that affect all platforms equally should generally be prioritized above issues that only affect specific platforms, simply because the solution benefits more users. However, if a specific platform experiences a particularly acute issue that severely impacts user experience on that platform, it may deserve prioritization despite affecting fewer total users. Strategic decisions about which platforms to support most thoroughly should factor into these priorities.
+1. 会話全体（メッセージ間 16px）
+2. メッセージ内グループ（12px）
+3. UI コンポーネント内部（8px）
 
-## Implementation Strategies Maintaining Consistency Through Application Evolution
+特に CommandBarInChat のファイルリストと ToolHeaderWrapper の結果表示が視覚的に調和するよう、gap 値を統一します。また、ProseWrapper および SmallProseWrapper にいずれも `max-w-full` または明示的な max-width（例：max-w-prose = 768px）を設定し、長すぎる行の発生を防ぎます。
 
-Successful UI/UX improvements are not isolated initiatives but rather are incorporated into ongoing development practices and architectural decisions that persist throughout the application lifecycle. Implementation strategies that fail to consider how improvements will interact with future feature development often result in improvements that work well initially but become degraded or inconsistent as the application evolves. The most effective implementation strategies embed performance and UX considerations into the ongoing development culture.
+## 視覚的階層と配色体系
 
-Performance monitoring should be integrated into the development workflow as a continuous practice rather than applied only after problems become apparent. Each significant feature addition should be accompanied by performance profiling to verify that the change does not degrade application performance[3]. Developers should establish performance budgets—targets for how much time or memory budget each feature is allowed to consume—and resist feature additions that exceed these budgets without compensating optimizations elsewhere. This requires developer education about performance implications of different architectural choices and a development culture that prioritizes responsiveness and efficiency alongside feature completeness.
+### 現行配色の分析
 
-Component architecture and design system approaches ensure that UI improvements achieve consistency across the application and remain maintainable as the application evolves. By establishing a shared library of carefully optimized UI components with consistent behavior and appearance, teams can ensure that improvements to those components automatically propagate throughout the application. However, establishing such a design system requires significant upfront investment, and teams should carefully evaluate whether the benefits justify the effort given their specific circumstances.
+SidebarChat は、`--void-*` という CSS Custom Properties（variables）を活用した theming system を採用しています。primary colors として `--void-bg-1`, `--void-bg-2`, `--void-bg-3`（背景），`--void-fg-1`, `--void-fg-2`, `--void-fg-3`, `--void-fg-4`（テキスト）が定義され、accents として `--void-border-1`, `--void-border-2`, `--void-border-3` と `--vscode-focusBorder`（フォーカス/アクティブ状態）が使用されています。
 
-Iterative improvement cycles should be shorter and more frequent than attempting to completely redesign UI/UX in a single large initiative. Smaller improvements that are deployed more frequently allow teams to measure the impact of each change, gather user feedback, and adjust course more easily than attempting comprehensive redesigns. This iterative approach also reduces the risk that a single large redesign effort will fail to achieve its objectives or will create unexpected problems.
+メッセージバブルの配色戦略を観察すると：
 
-Version control and gradual rollout strategies should be employed for significant UI/UX changes to enable rapid rollback if problems emerge in production. Feature flags can enable rolling out UI/UX changes to subsets of users first, allowing collection of usage data and user feedback before applying changes to all users. This approach reduces the risk that the entire user base will be negatively impacted by unforeseen issues with UI/UX changes.
+- **ユーザーメッセージ**：`linear-gradient(135deg, var(--void-bg-1) 0%, color-mix(...) 100%)` による微細なグラデーション + `border: 1px solid` で subtle な視覚効果
+- **アシスタントメッセージ**：`linear-gradient(135deg, var(--void-bg-2) 0%, ...)` で bg-2 をベースに、左に `border-left: 3px solid var(--vscode-focusBorder)` で accent 色を適用
+- **ツール実行結果**：`--void-bg-2` + `border: 1px solid --void-border-1` + `border-left: 2px solid {status色}` による三層的な色使い
 
-Documentation and knowledge capture should accompany UI/UX improvements to ensure that future developers understand the rationale behind design decisions and the performance implications of different approaches. When new developers join teams or when institutional memory is lost through team transitions, detailed documentation about why specific architectural choices were made enables new developers to maintain consistency and understand which changes are safe and which changes might have problematic consequences.
+### アクセシビリティ上の対比問題
 
-## Cross-Platform Considerations and Electron-Specific Technical Requirements
+Search results [12] により、WCAG 2.1 では「text 要素と background の contrast ratio は 4.5:1 以上（通常サイズ），3:1 以上（large text）」が求められています。現行実装で `--void-fg-4`（最も薄いテキスト色）を使用する要素は、`desc1Info` tooltip、disabled state、`opacity-50` クラスなど多数あります。これらが `--void-bg-2` や `--void-bg-3` 上に表示される場合、contrast ratio が 3:1 を下回る可能性が高いです。
 
-Electron's fundamental capability to deliver consistent interfaces across Windows, macOS, and Linux creates significant value for development teams but simultaneously introduces complexity in UI/UX design that teams from pure web development backgrounds may not anticipate. The strategic approach to cross-platform UI/UX involves balancing the efficiencies of shared code with the need to respect platform-specific user expectations and conventions[15].
+特に、ToolHeaderWrapper の `desc1` に `text-void-fg-4` が適用される場合、title とのコントラストが低く、スクリーンリーダーユーザーでなくても視認が困難になります。
 
-Platform-specific styling should adapt the application appearance to match the visual conventions of each platform. macOS applications typically employ lighter color schemes with emphasis on typography, Windows applications often employ more prominent use of color and borders to define interactive regions, and Linux applications may vary depending on the desktop environment. Rather than attempting to force a single visual design across all platforms, strategic approaches involve maintaining a shared component library while allowing platform-specific styling variations. CSS media queries and theme systems that detect the platform and apply appropriate styling can automate this process to some degree.
+### 色による状態表示の問題
 
-Keyboard shortcuts represent another important dimension where platform-specific customization substantially improves user experience. The standard keyboard shortcut for undo is Command+Z on macOS but Control+Z on Windows and Linux. Strategic approaches involve defining keyboard shortcuts in platform-aware ways, allowing the framework to automatically use the appropriate convention on each platform. Electron provides utilities for this through its accelerator system, enabling developers to write accelerators like "CommandOrControl+Z" that automatically translate to the appropriate key combination on each platform[33].
+ツール実行結果の状態は、以下のように色により区別されています：
 
-Responsive design considerations become particularly important for Electron applications because users may resize application windows to any dimensions they prefer, including very small windows that require different layout strategies than large windows[34]. Desktop-specific design approaches should include multiple layout strategies for different window sizes, with the interface adjusting dynamically as the window is resized. This represents a greater challenge than typical responsive web design because Electron applications may need to accommodate windows that are much smaller than typical web pages but potentially much larger than web pages when run on high-resolution displays.
+- normal：`border-left: 2px solid var(--vscode-focusBorder)`（ブルー系）
+- error：`border-left: 2px solid var(--void-warning)`（レッド系）
+- rejected：`border-left: 2px solid var(--void-fg-4)`（グレー系）
 
-## Performance Optimization Specific to React-Based Electron Applications
+ただし、Search results  により「icons are usually formatted as 32px or more for visibility」とあり、現在は icon size が 13-16px に統一されているため、色のみに依存した状態表示は color-blind users に対応できません。
 
-React-based Electron applications represent a particularly common architecture, combining React's component model with Electron's cross-platform capabilities. Performance optimization for this specific architecture involves understanding React's rendering model and how it interacts with Electron's architectural constraints.
+### 改善方針
 
-Memoization techniques should be applied systematically to prevent unnecessary re-rendering. React.memo wraps components to prevent re-rendering when props have not changed, useMemo memoizes expensive computations to prevent recalculation on every render, and useCallback memoizes function references to prevent unnecessary dependency chain updates[3]. These techniques are conceptually straightforward but require discipline and consistent application throughout an application to achieve their full benefits. Teams should establish coding standards and code review practices that ensure memoization is applied consistently.
+Search results [2][6][24] に基づき、以下の改善を提案します：
 
-Code splitting strategies should defer loading of non-critical features to reduce the amount of JavaScript that must be loaded and parsed at startup. Modern bundlers like Webpack and Vite support dynamic import syntax that enables loading code on-demand as users navigate to features that require it[3]. This approach can significantly reduce initial load time and memory consumption, though it requires careful architectural decisions about where code splitting points should be located.
+**色彩スケールの明確化**：
 
-Virtual scrolling should be implemented for interfaces that display large lists or datasets. Libraries like react-window provide efficient implementations of virtual scrolling that render only the visible items and a small buffer, dramatically reducing the number of DOM nodes and component instances that must be managed[3]. This technique enables smooth interaction with datasets containing thousands of items despite the inherent constraints of DOM-based rendering.
+- Primary accent（フォーカス）：`--vscode-focusBorder`（変更なし）
+- Success：専用の green color を導入（例：`--void-success: #4ec9b0`）
+- Warning：yellow（例：`--void-warning: #ce9178`）
+- Error：red（例：`--void-error: #f48771`）
+- Neutral info：gray（例：`--void-info: --void-fg-3`）
 
-CSS animation approaches should leverage GPU-accelerated properties like transform and opacity rather than animating properties that trigger layout recalculation. JavaScript animation libraries can be useful for complex animations, but the most performance-critical animations should be implemented using CSS to benefit from GPU acceleration[3]. The will-change CSS property can provide hints to the browser about which elements will animate, enabling further optimization[3].
+**Contrast ratio の改善**：
 
-## Conclusion and Strategic Recommendations for UI/UX Improvement Initiatives
+- `--void-fg-4` 上の text は使用を最小化し、`--void-fg-3` または `--void-fg-2` に統一
+- disabled state は `opacity-50` に加えて `text-void-fg-4` ではなく `text-void-fg-3` を使用
+- background color + foreground color の組み合わせを事前テストし、4.5:1 以上の対比を保証
 
-Creating excellent UI/UX in Electron applications requires integrated effort from designers and developers who understand both the capabilities and constraints of the framework. The persistent perception that Electron applications are "heavy" stems from genuine architectural limitations, particularly memory consumption and startup time, rather than from design choices alone. However, these limitations can be substantially mitigated through careful architectural decisions, systematic performance optimization, and UI/UX design that respects the framework's constraints while leveraging its capabilities for cross-platform development and sophisticated interface implementation.
+**状態表示の多層化**：
 
-The most critical success factors are: establishing realistic expectations about what Electron can achieve relative to native applications, employing data-driven prioritization based on measurement and user research rather than assumptions, implementing architectural decisions and optimization strategies early in development rather than attempting to retrofit them into existing code, and maintaining performance consciousness throughout the application lifecycle rather than treating performance as an afterthought. Teams should recognize that UI/UX quality in Electron applications depends on technical foundation as much as visual design. A beautifully designed interface that feels sluggish and unresponsive due to poor architectural decisions provides a worse user experience than a less visually polished interface that responds instantly to user input.
+- Color（primary）
+- Icon（secondary）：✓, ✕, ⚠, ℹ などを明確に使い分け
+- Text label（tertiary）：`done`, `error`, `pending` など状態を明示的にテキスト表示
+- Optional animation：status change 時の subtle motion feedback
 
-Strategic prioritization of improvements through systematic performance analysis and user research ensures that improvement efforts provide maximum benefit to actual users rather than addressing imagined problems. Implementation strategies should combine multiple complementary approaches: architectural optimization for performance, rendering optimization specific to frameworks employed in the project, platform-aware interface design that respects user expectations on each platform, and continuous measurement to ensure that improvements maintain their effectiveness as the application evolves.
+## カード設計とコンポーネント構造
 
-For teams embarking on new Electron projects, incorporating performance considerations from the beginning of the project is far more effective and less expensive than attempting to retrofit performance improvements into architecturally unsuitable applications. For teams improving existing Electron applications, systematic prioritization based on user impact and development effort, combined with continuous measurement throughout the improvement process, ensures that improvements provide genuine benefit to users.
+### 現行カード設計の評価
+
+SidebarChat では複数の「カード」型コンポーネントが使用されています。主なものは：
+
+1. **UserMessageComponent**：ユーザーメッセージ表示＆編集カード
+2. **AssistantMessageComponent**：アシスタント応答＆reasoning カード
+3. **ToolHeaderWrapper**：ツール実行結果の collapsible container
+4. **CommandBarInChat**：変更ファイル統合管理パネル
+
+各カード型は独立した visual treatment を持ち、外枠は border + shadow で区別されます。
+
+### 問題点分析
+
+**カード内の情報密度が高すぎる**：ToolHeaderWrapper では、title、desc1、desc2、info icon、error icon、rejected icon、numResults badge がすべて `min-h-[28px]` の header 内に配置されます。これらは `justify-between` で左右に分散されますが、特に numResults と error icon、desc2 が同時に表示される場合、header の右側が過度に込み合います。
+
+Search results [1][8] に基づけば、「cluttered interface は user attention を分散させる」ため、重要な情報と補助情報をより明確に分離すべきです。
+
+**Collapsible state の表示が曖昧**：ToolHeaderWrapper は `isOpen` props により expand/collapse state を管理しますが、chevron icon のみが visual indicator となっています。初期状態（collapsed）では children が `max-h-0 opacity-0` で非表示になりますが、ユーザーは「expand 可能な要素か」を即座に判断できないことがあります。
+
+**ネストされたカードの hierarchy が明確でない**：例えば，ツール実行結果内に BottomChildren（lint errors など）が表示される場合、これ自体も collapsible container（SimplifiedToolHeader）で、2 階層の collapse/expand 操作が必要になります。しかし、両者のスタイルが統一されていないため、階層構造が視覚的に曖昧です。
+
+### 改善方針
+
+Search results [1] および card design patterns に基づき、以下を推奨します：
+
+**情報の優先度付けと分離**：
+
+ToolHeaderWrapper header を以下のセクションに再構成：
+
+```
+左側：
+[Chevron] [Title] [desc1/icon]
+
+右側：
+[desc2?] [info icon?] [status icon?] [numResults badge?]
+```
+
+各セクション間に適切な gap（8-12px）を設定し、視覚的に分離。`justify-between` の代わりに flex による explicit layout を使用。
+
+**Collapsible state の明確化**：
+
+- chevron icon のみでなく、background color を微細に変化させる（normal: `bg-void-bg-2`、expandable: `bg-void-bg-2 hover:bg-void-bg-1`など）
+- `text-sm` の secondary text で `(collapsed)` / `(expanded)` などのテキスト hint を追加
+- cursor を `cursor-pointer` に変更し、clickable であることを示唆
+
+**ネストされた collapsible の統一**：
+
+SimplifiedToolHeader と ToolHeaderWrapper の styling を統一し、どちらも同じ visual pattern で expand/collapse を表示。子要素の BottomChildren も同じ pattern を継承。
+
+## アクセシビリティ評価
+
+### WCAG 2.1 遵守状況
+
+Search results [3][7][15] に基づき、現行実装の WCAG 準拠状況を分析します。
+
+**Perceivable（認知可能性）**：
+
+- Text contrast：前述の通り、`--void-fg-4` の使用により一部で 3:1 未満の対比が発生している可能性あり
+- Images of text：code block 内のテキストは image ではなく actual text なので問題なし
+- Color alone：状態表示が color alone に依存している部分あり（改善方針を既述）
+
+**Operable（操作可能性）**：
+
+- Keyboard navigation：VoidInputBox2 は focus outline を `:focus-visible` で管理し、Tab キーナビゲーションに対応。ただし、ToolHeaderWrapper のクリッカブル title に `tabindex` が明示的に設定されていない。expand/collapse 操作が keyboard 単独では不可能な可能性あり
+- Target size：ボタンのサイズが小さい部分あり。Search results [15] によれば、pointer input target は「24x24 CSS pixels 以上」が推奨。现在の button（例：EditToolAcceptRejectButtonsHTML の小さなボタン）は 16-20px 程度で、この基準を下回る可能性あり
+
+**Understandable（理解可能性）**：
+
+- Readable text：form の label と input の関連付けが一部で曖昧。例えば VoidChatArea の children（input field）とその周囲の text description との論理的結びつきが HTML レベルで明確でない
+- Predictable：ツール実行結果のヘッダーが click で expand/collapse する仕様は一般的だが、hover 時の visual feedback（color change）が微細で、interaction affordance が低い
+
+**Robust（堅牢性）**：
+
+- 標準 HTML elements（button, input, など）を使用し、ARIA roles は適切に設定されている模様。ErrorBoundary も React 19 の built-in component を使用している
+
+### Keyboard Navigation と Focus Management
+
+Search results [7] に基づき、focus management の問題を指摘します。
+
+現在，VoidInputBox2（text input）は focus を受け取ると onFocus callback を発火しますが、UserMessageComponent edit mode では `textAreaRefState.focus()` を useEffect 内で明示的に呼び出しており、focus management が imperative に行われています。
+
+ToolHeaderWrapper の expand/collapse は click handler により toggle されますが、keyboard（Space/Enter キー）での操作に対応していません。そのため、keyboard-only user は collapsible content にアクセスできない可能性があります。
+
+### 改善方針
+
+Search results [3][7][15] に基づき、以下を提案します。
+
+**Focus management の改善**：
+
+- すべての interactive element（ToolHeaderWrapper title など）に `tabindex="0"` を明示的に設定し，keyboard navigation に対応
+- Chevron icon や clickable title に対して、onKeyDown handler（`Space`, `Enter`）を追加し、keyboard activation に対応
+- Focus ring を custom CSS で明確に表示（デフォルト outline ではなく、thick border または background color change）
+
+**Button サイズの改善**：
+
+現在 16px 程度の small button は，24x24px 以上に拡大するか，複数ボタン間に十分な spacing を設定（Search results [15]）。例えば，accept/reject button を 20x28px 程度に拡大。
+
+**Contrast ratio の改善**：
+
+前述の色彩体系改善に加え、実装時に contrast checker tool（Search results [12] で言及されている online tools）で検証し、4.5:1 以上の対比を保証。
+
+**Screen reader 対応**：
+
+- ToolHeaderWrapper header に `role="button"` および `aria-expanded` を設定し，expanded/collapsed state を screen reader に伝達
+- Status icons（error, warning, etc.）に `aria-label` を設定（例：`<AlertTriangle aria-label="Error" />`）
+- Collapsible content の label を `aria-labelledby` で header title に連結
+
+## パフォーマンスと UI Responsiveness
+
+### 現行の responsiveness 機構
+
+SidebarChat では，ScrollToBottomContainer が ResizeObserver を使用して content height changes を監視し、streaming content の自動スクロールを実装しています。これは良い設計です。
+
+しかし，以下の潜在的問題があります：
+
+- **Expensive re-renders**：previousMessagesHTML は useMemo でメモ化されていますが，dependency array に `isRunning` が含まれており，isRunning が change するたびにすべてのメッセージが re-render されます。Search results [23] に基づけば，複数のメッセージが shallow re-render される場合，React.memo で各メッセージコンポーネントを wrap すべきです
+- **Large message list**：メッセージ数が増加（100+ messages）した場合，全メッセージを DOM に保持することは performance bottleneck になります。Search results [34] では virtualization（visible items only を render）を推奨しています
+
+### 改善方針
+
+- 各 ChatBubble component を `React.memo` で wrap し，unnecessary re-render を防止
+- メッセージ数が 50 を超える場合，`react-window` などの virtualization library を導入し，visible range のみを render
+- Animation の easing curve を最適化。Search results  では「easeOut for enter/exit transitions」を推奨し，duration は「0.3-0.4s」。SidebarChat 内の various collapse/expand animation も this guideline に align させる
+
+## 優先度付き改善施策リスト
+
+以下は，改善施策を impact と effort に基づいて優先度付けしたものです。
+
+### High Priority（P1：高い impact + 低-中程度 effort）
+
+1. **Contrast ratio の全面改善（Accessibility）**
+   - Impact：WCAG 準拠により legal risk 軽減，accessibility 向上で diverse user base 対応
+   - Effort：low-mid（color values update + spot checks）
+   - 実装方針：`--void-fg-4` 使用個所を洗い出し，`--void-fg-3` に統一。background + foreground color 組み合わせを contrast checker で検証
+   - 期待効果：視力障害者，color-blind users，低コントラスト環境ユーザーの usability 向上
+
+2. **Keyboard navigation と focus ring の実装（Accessibility）**
+   - Impact：keyboard-only user の操作可能性確保，screen reader usability 向上
+   - Effort：mid（onKeyDown handlers 追加，tabindex 設定，ARIA roles 追加）
+   - 実装方針：ToolHeaderWrapper，UserMessageComponent edit button などすべての interactive elements に keyboard handlers + focus ring styling を追加
+   - 期待効果：motor disability users，assistive technology users の accessibility
+
+3. **Font size と weight の階層統一（Visual Design）**
+   - Impact：information scannability 大幅向上，cognitive load 低減
+   - Effort：low（Tailwind utility class 置換）
+   - 実装方針：font size を 3-4 段階（body, secondary, caption, tiny）に統一し，weight を consistent に適用。ToolHeaderWrapper・CommandBarInChat・メッセージコンテンツで統一
+   - 期待効果：UI の読みやすさ向上，ユーザー's learning curve 短縮
+
+4. **ToolHeaderWrapper header layout の再構成（Visual Design）**
+   - Impact：密集した header をスッキリさせ，重要情報へのfocus 強化
+   - Effort：mid-high（layout restructure + responsive behavior 追加）
+   - 実装方針：left/center/right の 3 section に分割。左に title + chevron，中央に desc1，右に controls（desc2, icons, badges）。responsive で items を wrap/hide
+   - 期待効果：compact device での usability 改善，information hierarchy 明確化
+
+5. **Command Bar（変更ファイル管理）の UI polish（Interaction Design）**
+   - Impact：file change management workflow の clarity 向上
+   - Effort：low-mid（styling + micro-interactions）
+   - 実装方針：ファイルリストを拡張時のアニメーション追加，各 file item の accept/reject button のサイズ拡大（24x24px），hover state の明確化
+   - 期待効果：誤操作低減，file management の効率向上
+
+### Medium Priority（P2：中程度 impact + 中-高程度 effort）
+
+6. **Whitespace scale の統一と padding consistency（Layout Design）**
+   - Impact：visual cohesion 向上，layout predictability 強化
+   - Effort：mid（utilities の再定義，existing classnames の置換）
+   - 実装方針：tailwind config で custom spacing scale を定義。`gap-x-0.5` などの fractional values を整数値（8px 単位）に統一
+   - 期待効果：layout の予測可能性，responsiveness across devices 改善
+
+7. **Message bubble gradient と border styling の refinement（Visual Design）**
+   - Impact：visual polish，brand coherence
+   - Effort：mid-high（CSS gradient tuning，cross-browser testing）
+   - 実装方針：user/assistant messages の gradient を現在より subtle に調整。border-left の accent color を status-based に細分化
+   - 期待効果：more polished appearance，status at-a-glance recognition
+
+8. **Collapsible component hierarchy の統一（Component Architecture）**
+   - Impact：nesting behavior の predictability，UI complexity reduction
+   - Effort：high（ToolHeaderWrapper と SimplifiedToolHeader の統合または abstraction）
+   - 実装方針：single Collapsible component abstraction を create，header/content/footer の 3 section を props で configure。BottomChildren も this component を use
+   - 期待効果：code maintainability 向上，visual consistency across nesting levels
+
+9. **Streaming content のアニメーション最適化（Performance + UX）**
+   - Impact：perceived performance 向上，smooth UX
+   - Effort：mid（easing function tuning，ResizeObserver optimization）
+   - 実装方針：streaming message の character-by-character append animation を smooth easing で制御。ResizeObserver callback debounce で browser reflow minimization
+   - 期待効果：smoother feeling，reduced jank，better perceived responsiveness
+
+### Lower Priority（P3：中-低 impact + 高 effort）
+
+10. **Message virtualization（Performance）**
+    - Impact：very large message list（100+ messages）での performance
+    - Effort：high（react-window or similar library integration，complex state management）
+    - 実装方針：visible range calculation + virtualization library implementation。Checkpoint feature と interaction した state synchronization
+    - 期待効果：deep conversation での smooth scrolling，memory efficiency
+
+11. **Dark mode color palette refinement（Visual Design）**
+    - Impact：dark mode user experience enhancement（多くの users）
+    - Effort：high（comprehensive color audit，perceptual testing）
+    - 実装方針：`--void-*` variables の dark mode specific values を細かく調整。background colors の brightness distribution を scientific に optimize
+    - 期待効果：reduced eye strain（dark mode users），improved color harmony
+
+12. **Localization 対応と RTL support（i18n）**
+    - Impact：international user base 対応
+    - Effort：high（layout direction flip，form handling，typography）
+    - 実装方針：Tailwind の RTL utilities を enable。form labels と inputs の logical order を確保
+    - 期待効果：right-to-left language users の accessibility，market expansion
+
+## 実装上の注意点
+
+### Tailwind CSS との統合
+
+SidebarChat は Tailwind CSS に強く依存しており，custom style override（`className=\`...\`` による inline Tailwind）が頻繁に使用されています。改善実装時は：
+
+- **Tailwind config 拡張**：custom spacing scale，color palette，animation easing を config に追加
+- **Component abstraction**：repeated utility patterns（例：`flex items-center gap-1.5`）をカスタムコンポーネント化
+- **Atomic utility hierarchy**：base utilities > composed utilities > component classes の hierarchy を明確化
+
+### VS Code theme variables との互換性
+
+`--vscode-focusBorder` など VS Code native color variables を使用しているため，改善施策の色変更時は VS Code theme との consistency を確保する必要があります。
+
+### Cross-browser テスト
+
+ResizeObserver，`:focus-visible` pseudo-class，CSS Custom Properties など modern features を使用しているため，target browsers での compatibility を確認必

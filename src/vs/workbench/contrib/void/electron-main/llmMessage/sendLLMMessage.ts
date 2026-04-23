@@ -16,6 +16,7 @@ export const sendLLMMessage = async ({
 	onFinalMessage: onFinalMessage_,
 	onError: onError_,
 	onFileOperation,
+	onCommandRun,
 	abortRef: abortRef_,
 	logging: { loggingName, loggingExtras },
 	settingsOfProvider,
@@ -29,6 +30,7 @@ export const sendLLMMessage = async ({
 	divisionProjectId,
 	divisionApiKey,
 	workspaceFolderPath,
+	takePendingInjection,
 }: SendLLMMessageParams,
 
 	metricsService: IMetricsService
@@ -113,7 +115,7 @@ export const sendLLMMessage = async ({
 		}
 		const { sendFIM, sendChat } = implementation
 		if (messagesType === 'chatMessages') {
-			await sendChat({ messages: messages_, onText, onFinalMessage, onError, onFileOperation, settingsOfProvider, modelSelectionOptions, overridesOfModel, modelName, _setAborter, providerName, separateSystemMessage, chatMode, mcpTools, divisionRoleAssignments, divisionProjectId, divisionApiKey, workspaceFolderPath })
+			await sendChat({ messages: messages_, onText, onFinalMessage, onError, onFileOperation, onCommandRun, settingsOfProvider, modelSelectionOptions, overridesOfModel, modelName, _setAborter, providerName, separateSystemMessage, chatMode, mcpTools, divisionRoleAssignments, divisionProjectId, divisionApiKey, workspaceFolderPath, takePendingInjection })
 			return
 		}
 		if (messagesType === 'FIMMessage') {
