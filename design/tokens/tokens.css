@@ -1,0 +1,112 @@
+/**
+ * Orchestra Design Tokens
+ * ------------------------------------------------------------------
+ * Electron デスクトップアプリ向けデザインシステムの基底トークン。
+ * 実装側（React/Vue/Svelte など）から @import して :root に展開する。
+ * テーマ切替は [data-theme="light"] のオーバーライドで対応。
+ */
+
+:root {
+  /* ---------- Color : Surface ---------- */
+  --color-bg-base: #0B0E14;
+  --color-bg-surface: #151A23;
+  --color-bg-surface-hover: #1E2430;
+  --color-border: #2A3241;
+
+  /* ---------- Color : Text ---------- */
+  --color-text-main: #E2E8F0;
+  --color-text-muted: #94A3B8;
+  --color-text-inverse: #0B0E14;
+
+  /* ---------- Color : Brand / Semantic ---------- */
+  --color-accent: #3B82F6;
+  --color-accent-hover: #2563EB;
+  --color-purple: #8B5CF6;
+  --color-success: #10B981;
+  --color-warning: #F59E0B;
+  --color-danger: #EF4444;
+
+  /* ---------- Typography ---------- */
+  --font-family-base: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-family-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, "Cascadia Code", monospace;
+
+  --font-size-caption: 11px;
+  --font-size-sm: 12px;
+  --font-size-base: 14px;
+  --font-size-md: 15px;
+  --font-size-lg: 16px;
+  --font-size-h3: 20px;
+  --font-size-h2: 24px;
+  --font-size-h1: 28px;
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --line-height-tight: 1.2;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.75;
+
+  /* ---------- Spacing (4pt / 8pt grid) ---------- */
+  --space-0: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ---------- Radius ---------- */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+
+  /* ---------- Shadow ---------- */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.2), 0 4px 6px -2px rgba(0, 0, 0, 0.1);
+
+  /* ---------- Motion ---------- */
+  --motion-duration-fast: 120ms;
+  --motion-duration-base: 200ms;
+  --motion-duration-slow: 320ms;
+  --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --motion-ease-emphasized: cubic-bezier(0.2, 0, 0, 1.2);
+
+  /* ---------- Z-index ---------- */
+  --z-dropdown: 1000;
+  --z-modal: 1100;
+  --z-toast: 1200;
+  --z-tooltip: 1300;
+  --z-drag-region: 9000;
+
+  /* ---------- Electron-specific ---------- */
+  --titlebar-height: 40px;
+  --sidebar-width: 260px;
+  --topbar-height: 72px;
+}
+
+/* ------------- Light Theme Override ------------- */
+[data-theme="light"] {
+  --color-bg-base: #F8FAFC;
+  --color-bg-surface: #FFFFFF;
+  --color-bg-surface-hover: #F1F5F9;
+  --color-border: #E2E8F0;
+  --color-text-main: #0F172A;
+  --color-text-muted: #64748B;
+  --color-text-inverse: #FFFFFF;
+}
+
+/* ------------- Reduced Motion ------------- */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-duration-fast: 0ms;
+    --motion-duration-base: 0ms;
+    --motion-duration-slow: 0ms;
+  }
+}

@@ -10,7 +10,7 @@
         {
           "role": "leader",
           "provider": "OpenAI",
-          "model": "gpt-5.4-pro"
+          "model": "gpt-5.4-mini"
         },
         {
           "role": "reviewer",
