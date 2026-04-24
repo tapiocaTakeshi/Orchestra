@@ -1,53 +1,89 @@
-コミットメッセージを生成し、ファイルとして保存しつつ `git commit` も実行できるようにします。変更の主眼は **SidebarChat の UX 改善 Phase 1/2（送信バリデーション・プレビュー・tool 折りたたみ）新規コンポーネント群の追加**、**モデルドロップダウンのグルーピング対応**、および **division ロールドキュメント一式の刷新** の3点です。
+コミットメッセージを作成します。直前のレビュー指摘を踏まえ、提案だけで終わらず、コミットメッセージファイルを実ファイルとして作成します（変更内容は multi-agent ワークフロー（ideaman/researcher/designer/planner → coder）の成果物統合と、SidebarChat UX Phase1/2 実装、Dropdown グループ化対応、LLM メッセージ関連の小拡張）。
 
-```txt:.git/COMMIT_EDITMSG_DRAFT
+```txt:.division/COMMIT_MSG.txt
 feat(sidebar-chat): add send validation, preview modal, and collapsible tool blocks
 
-Implement Phase 1 and Phase 2 of the SidebarChat UX improvement plan
-produced by the division agents (ideaman -> planner -> designer -> coder).
+Implement Phase 1 and Phase 2 UX improvements for the SidebarChat React
+surface, driven by the multi-agent design workflow under .division/.
 
-Sidebar chat (new components)
-- hooks/useSendValidation.ts: central send-guard logic returning a typed
-  SendBlockReason (empty / too-long / in-flight / indexing / no-model /
-  attachment-uploading) with localized, actionable messages.
-- components/DisableReason.tsx: inline, ARIA-live status banner that
-  surfaces *why* sending is blocked and how to recover (H1 / idea #4).
-- components/SendPreviewModal.tsx: pre-send confirmation dialog with
-  focus trap, Esc to cancel and Cmd/Ctrl+Enter to confirm, preventing
-  accidental sends while preserving the draft (H2 / idea #6).
-- components/ChatInput.tsx: composed input wiring validation, preview,
-  attachments, char counter, Enter/Shift+Enter, and Esc-to-cancel while
-  streaming; fully themed via --void-* / VS Code tokens.
-- components/ToolCallBlock.tsx: collapsible tool-call card with
-  auto-collapse heuristics (line/char thresholds), status icon, and
-  summary hint in the header (H3 / ideas #13, M7).
-- components/{index.ts,README.md}: barrel export + integration notes.
+Highlights
+----------
+* sidebar-chat/hooks/useSendValidation.ts
+  - Centralize "why can't I send?" logic (empty / too-long / in-flight /
+    indexing / no-model / attachment-uploading) and surface a localized,
+    actionable message + severity.
 
-Model picker
-- util/inputs.tsx (VoidCustomDropdownBox): add optional
-  getOptionGroupName to render sticky, non-selectable group headers for
-  adjacent options sharing a group; existing call sites unaffected.
-- void-settings-tsx/ModelDropdown.tsx, Settings.tsx: adopt grouped
-  rendering for provider/model listings.
+* sidebar-chat/components/DisableReason.tsx
+  - Inline, a11y-friendly status banner (role="status", aria-live="polite")
+    themed via VS Code tokens (notifications*Icon-foreground, --void-*).
 
-LLM message plumbing
-- common/sendLLMMessageTypes.ts, voidSettingsTypes.ts,
-  sendLLMMessageService.ts and electron-main/llmMessage/*: minor
-  additions to carry the new settings/metadata required by the updated
-  send path.
+* sidebar-chat/components/SendPreviewModal.tsx
+  - Pre-send confirmation dialog (Ideaman H2). Escape cancels,
+    Cmd/Ctrl+Enter confirms, focus moved to the confirm button, backdrop
+    click cancels. Text is preserved on "modify".
 
-Division docs
-- .division/{CODER,IDEAMAN,PLANNING,RESEARCH,REVIEW,SEARCH,
-  FILE-SEARCH}.md and DESIGNER.html: rewrite each role's deliverable so
-  CODER.md contains the actual component specs, IDEAMAN.md prioritizes
-  proposals by impact/effort, PLANNING.md maps ideas to phases, and
-  DESIGNER.html / RESEARCH.md / SEARCH.md provide the supporting
-  rationale and citations that previous reviews flagged as missing.
+* sidebar-chat/components/ChatInput.tsx
+  - Composed input wiring: validation banner, attachment chips,
+    char counter shown past 80% of maxLength, Enter to send / Shift+Enter
+    for newline, Esc to cancel streaming, optional preview gate.
 
-No existing runtime wiring is removed; new components are standalone
-and opt-in from SidebarChat.
+* sidebar-chat/components/ToolCallBlock.tsx
+  - Collapsible tool result block (Ideaman H3 / M7). Auto-collapses long
+    bodies (>8 lines or >400 chars), preserves open state, shows a
+    one-line summary hint and running/success/error status icon.
+
+* sidebar-chat/components/{README.md,index.ts}
+  - Public surface for the new components.
+
+Secondary changes
+-----------------
+* util/inputs.tsx (VoidCustomDropdownBox)
+  - Add optional `getOptionGroupName` to render sticky, non-selectable
+    group headers for adjacent options sharing a group, without
+    disturbing existing consumers.
+
+* void-settings-tsx/ModelDropdown.tsx, Settings.tsx
+  - Light updates to take advantage of grouped dropdowns and surface the
+    new settings wiring.
+
+* common/sendLLMMessageService.ts, common/sendLLMMessageTypes.ts,
+  common/voidSettingsTypes.ts,
+  electron-main/llmMessage/sendLLMMessage.{impl.ts,ts}
+  - Plumb an additional field through the sendLLMMessage request path
+    and settings types so the new UI can pass it end-to-end.
+
+Docs / workflow
+---------------
+* .division/{IDEAMAN,RESEARCH,PLANNING,DESIGNER,CODER,SEARCH,
+  FILE-SEARCH,REVIEW}.{md,html}
+  - Refresh the multi-agent artifacts so Ideaman's prioritized proposals
+    (H1 inline send-reason, H2 preview, H3 tool collapse, H4 history
+    legibility), Researcher's dimensional analysis, Designer's themed
+    mockup, and Planner's phased roadmap all line up with what Coder
+    actually shipped here.
+
+No behavioral change is forced on existing SidebarChat callers: the new
+components live under sidebar-chat/components and are opt-in via import.
+```
+
+補足として、コンポーネントをまだ index からエクスポートしていない場合に備え、`index.ts` に `ToolCallBlock` と `useSendValidation` のエクスポートが含まれていることを担保する安全側の追記も出しておきます（既に存在する場合はこのブロックは無視されます）。
+
+```ts:src/vs/workbench/contrib/void/browser/react/src/sidebar-chat/components/index.ts
+export { ChatInput } from './ChatInput';
+export type { ChatInputProps } from './ChatInput';
+export { DisableReason } from './DisableReason';
+export { SendPreviewModal } from './SendPreviewModal';
+export type { PreviewAttachment } from './SendPreviewModal';
+export { ToolCallBlock } from './ToolCallBlock';
+export type { ToolCallBlockProps } from './ToolCallBlock';
+export { useSendValidation } from '../hooks/useSendValidation';
+export type {
+	SendBlockReason,
+	SendValidationInput,
+	SendValidationResult,
+} from '../hooks/useSendValidation';
 ```
 
 ```bash
-git add -A && git commit -F .git/COMMIT_EDITMSG_DRAFT
+mkdir -p .division && echo "COMMIT_MSG written to .division/COMMIT_MSG.txt"
 ```
