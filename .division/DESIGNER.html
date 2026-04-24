@@ -1,466 +1,602 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ChatGPT Overview - Elaborate Design</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            /* Color Palette */
-            --primary: #10a37f;
-            --primary-dark: #0e8f6e;
-            --primary-light: #d1f0e6;
-            --secondary: #202123;
-            --bg-gradient-start: #f8fafc;
-            --bg-gradient-end: #e2e8f0;
-            --surface: #ffffff;
-            --text-main: #334155;
-            --text-muted: #64748b;
-            --success: #059669;
-            --success-bg: #ecfdf5;
-            --warning: #e11d48;
-            --warning-bg: #fff1f2;
-            
-            /* Shadows */
-            --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-            --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
-            --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02);
-            
-            /* Transitions */
-            --transition-bounce: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-            --transition-fade: all 0.3s ease;
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SidebarChat - High-end UI Proposal</title>
+  <style>
+    /* CSS Variables & Theming */
+    :root {
+      /* Base Colors */
+      --void-bg-base: #141414;
+      --void-bg-1: #1e1e1e;
+      --void-bg-2: rgba(255, 255, 255, 0.03);
+      --void-bg-3: rgba(255, 255, 255, 0.06);
+      
+      /* Foreground Colors */
+      --void-fg-1: #f3f4f6; /* text-gray-100 */
+      --void-fg-2: #d1d5db; /* text-gray-300 */
+      --void-fg-3: #9ca3af; /* text-gray-400 */
+      --void-fg-4: #6b7280; /* text-gray-500 */
+      
+      /* Borders */
+      --void-border-1: rgba(255, 255, 255, 0.12);
+      --void-border-2: rgba(255, 255, 255, 0.06);
+      
+      /* Semantic Colors */
+      --vscode-focusBorder: #3b82f6; /* Blue 500 */
+      --void-success: #10b981;       /* Emerald 500 */
+      --void-error: #ef4444;         /* Red 500 */
+      --void-warning: #f59e0b;       /* Amber 500 */
+      
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
-        body {
-            font-family: 'Inter', 'Noto Sans JP', sans-serif;
-            background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
-            color: var(--text-main);
-            line-height: 1.6;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 2rem 1rem;
-        }
+    body {
+      background-color: #050505;
+      background-image: radial-gradient(circle at top right, rgba(59, 130, 246, 0.1), transparent 40%),
+                        radial-gradient(circle at bottom left, rgba(16, 185, 129, 0.05), transparent 40%);
+      color: var(--void-fg-1);
+      font-family: var(--font-sans);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
 
-        .container {
-            max-width: 1000px;
-            width: 100%;
-            background: rgba(255, 255, 255, 0.6);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.8);
-            border-radius: 24px;
-            padding: 3rem;
-            box-shadow: var(--shadow-lg);
-            position: relative;
-            overflow: hidden;
-        }
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 
-        /* Decorative Background Elements */
-        .container::before {
-            content: '';
-            position: absolute;
-            top: -100px;
-            right: -100px;
-            width: 300px;
-            height: 300px;
-            background: radial-gradient(circle, var(--primary-light) 0%, rgba(255,255,255,0) 70%);
-            border-radius: 50%;
-            z-index: 0;
-            opacity: 0.6;
-            pointer-events: none;
-        }
+    /* Main Container (Sidebar Mockup) */
+    .sidebar-mockup {
+      width: 360px;
+      height: 800px;
+      background-color: var(--void-bg-base);
+      border: 1px solid var(--void-border-1);
+      border-radius: 12px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.05);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+    }
 
-        .content-wrapper {
-            position: relative;
-            z-index: 1;
-        }
+    /* --- Header --- */
+    .sidebar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--void-border-2);
+      background: rgba(20, 20, 20, 0.8);
+      backdrop-filter: blur(12px);
+      z-index: 10;
+    }
+    .header-title {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      color: var(--void-fg-2);
+    }
+    .header-actions svg {
+      width: 16px; height: 16px;
+      fill: var(--void-fg-3);
+      cursor: pointer;
+      transition: fill 0.2s;
+    }
+    .header-actions svg:hover { fill: var(--void-fg-1); }
 
-        /* Header Section */
-        .header {
-            text-align: center;
-            margin-bottom: 3rem;
-        }
+    /* --- Chat Area --- */
+    .chat-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      scroll-behavior: smooth;
+    }
 
-        .header-badge {
-            display: inline-block;
-            background: var(--secondary);
-            color: white;
-            padding: 0.5rem 1.2rem;
-            border-radius: 50px;
-            font-size: 0.875rem;
-            font-weight: 600;
-            letter-spacing: 1px;
-            margin-bottom: 1.5rem;
-            text-transform: uppercase;
-        }
+    /* Message: User */
+    .message-user {
+      display: flex;
+      justify-content: flex-end;
+    }
+    .bubble-user {
+      background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%);
+      border: 1px solid var(--void-border-1);
+      border-radius: 14px 14px 4px 14px;
+      padding: 12px 16px;
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--void-fg-1);
+      max-width: 85%;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      backdrop-filter: blur(10px);
+    }
 
-        .title {
-            font-size: 3rem;
-            font-weight: 800;
-            color: var(--secondary);
-            margin-bottom: 1rem;
-            letter-spacing: -0.05em;
-        }
+    /* Message: Assistant (Gallery Aesthetic) */
+    .message-assistant {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .model-label {
+      font-size: 11px;
+      color: var(--void-fg-3);
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: 2px;
+    }
+    .model-label::before {
+      content: '';
+      display: block;
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--vscode-focusBorder);
+      box-shadow: 0 0 6px rgba(59, 130, 246, 0.6);
+    }
+    
+    .card-assistant {
+      background: linear-gradient(145deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);
+      border: 1px solid var(--void-border-1);
+      border-left: 3px solid var(--vscode-focusBorder);
+      border-radius: 8px;
+      padding: 14px;
+      font-size: 13px;
+      line-height: 1.6;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+      backdrop-filter: blur(16px);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    /* Prose Typography */
+    .prose {
+      color: var(--void-fg-2);
+      margin: 12px 0;
+    }
+    .prose p { margin-bottom: 8px; }
+    .prose p:last-child { margin-bottom: 0; }
+    .prose code {
+      background: var(--void-bg-3);
+      padding: 2px 4px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 11.5px;
+      color: var(--void-fg-1);
+      border: 1px solid var(--void-border-2);
+    }
 
-        .title span {
-            background: linear-gradient(135deg, var(--primary), #06b6d4);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
+    /* --- Flow Indicator (HUD Aesthetic) --- */
+    .flow-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--void-border-2);
+      margin-bottom: 12px;
+    }
+    .flow-step {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .flow-step.done { color: var(--void-fg-4); }
+    .flow-step.active {
+      color: var(--void-fg-1);
+      font-weight: 500;
+    }
+    .flow-arrow { color: var(--void-fg-4); font-size: 9px; }
+    .pulse-dot {
+      width: 6px; height: 6px;
+      background: var(--vscode-focusBorder);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--vscode-focusBorder);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
 
-        .subtitle {
-            font-size: 1.125rem;
-            color: var(--text-muted);
-            max-width: 600px;
-            margin: 0 auto;
-        }
+    /* --- Tool Cards --- */
+    .tool-card {
+      background: var(--void-bg-1);
+      border: 1px solid var(--void-border-2);
+      border-radius: 6px;
+      margin-bottom: 8px;
+      overflow: hidden;
+      transition: all 0.2s ease;
+    }
+    .tool-card:hover {
+      border-color: var(--void-border-1);
+      background: rgba(255,255,255,0.05);
+    }
+    .tool-card.reasoning {
+      background: transparent;
+      border-color: transparent;
+      margin-bottom: 4px;
+    }
+    .tool-card.reasoning .tool-header { padding: 4px 0; }
+    
+    .tool-card.running {
+      border-left: 2px solid var(--vscode-focusBorder);
+    }
+    .tool-card.success {
+      border-left: 2px solid var(--void-success);
+    }
+    
+    .tool-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 10px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .tool-left, .tool-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .chevron {
+      font-size: 9px;
+      color: var(--void-fg-4);
+      transition: transform 0.2s;
+    }
+    .tool-title {
+      font-size: 11.5px;
+      font-weight: 500;
+      color: var(--void-fg-1);
+    }
+    .tool-desc {
+      font-size: 11px;
+      color: var(--void-fg-3);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 130px;
+    }
+    .tool-badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: var(--void-bg-3);
+      color: var(--void-fg-2);
+    }
+    .tool-badge.success {
+      background: rgba(16, 185, 129, 0.1);
+      color: var(--void-success);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
 
-        /* Section Styling */
-        .section-title {
-            font-size: 1.5rem;
-            font-weight: 700;
-            margin-bottom: 1.5rem;
-            color: var(--secondary);
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
+    /* HUD Scanline Effect for running tools */
+    .running-scanline {
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--vscode-focusBorder), transparent);
+      width: 100%;
+      opacity: 0.8;
+      animation: scan 1.5s linear infinite;
+    }
 
-        .section-title::before {
-            content: '';
-            display: block;
-            width: 24px;
-            height: 4px;
-            background: var(--primary);
-            border-radius: 2px;
-        }
+    /* --- Bottom Area (CommandBar & Input) --- */
+    .bottom-area {
+      background: linear-gradient(to top, rgba(20,20,20,1) 70%, rgba(20,20,20,0));
+      padding: 0 16px 16px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      position: relative;
+      z-index: 20;
+    }
 
-        .section {
-            margin-bottom: 4rem;
-        }
+    /* CommandBarInChat */
+    .command-bar {
+      background: var(--void-bg-1);
+      border: 1px solid var(--void-border-1);
+      border-radius: 8px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+      overflow: hidden;
+      backdrop-filter: blur(10px);
+    }
+    .cb-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 12px;
+      background: rgba(255,255,255,0.02);
+      border-bottom: 1px solid var(--void-border-2);
+    }
+    .cb-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--void-warning);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .cb-title::before {
+      content: '';
+      display: block;
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--void-warning);
+      box-shadow: 0 0 6px var(--void-warning);
+    }
+    .cb-actions { display: flex; gap: 6px; }
+    
+    .btn-text {
+      background: none; border: none;
+      color: var(--void-fg-3); font-size: 11px;
+      cursor: pointer; transition: color 0.2s;
+    }
+    .btn-text:hover { color: var(--void-fg-1); }
+    
+    .btn-primary {
+      background: var(--vscode-focusBorder);
+      color: #fff; border: none;
+      padding: 4px 10px; border-radius: 4px;
+      font-size: 11px; font-weight: 500;
+      cursor: pointer; transition: all 0.2s;
+      box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+    }
+    .btn-primary:hover { filter: brightness(1.15); transform: translateY(-1px); }
 
-        /* Tags / Badges for Features */
-        .tags-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.75rem;
-        }
+    .file-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      font-size: 11.5px;
+      border-bottom: 1px solid var(--void-border-2);
+      transition: background 0.2s;
+    }
+    .file-item:last-child { border-bottom: none; }
+    .file-item:hover { background: var(--void-bg-2); }
+    
+    .file-info { display: flex; align-items: center; gap: 8px; color: var(--void-fg-1); }
+    .file-diff { color: var(--void-success); font-family: monospace; font-size: 11px; }
+    
+    .file-actions { display: flex; gap: 4px; }
+    .icon-btn {
+      background: transparent; border: 1px solid transparent;
+      color: var(--void-fg-3); width: 22px; height: 22px;
+      border-radius: 4px; display: flex; align-items: center; justify-content: center;
+      cursor: pointer; font-size: 12px; transition: all 0.2s;
+    }
+    .icon-btn:hover { background: var(--void-bg-3); color: var(--void-fg-1); }
+    .icon-btn.approve:hover { color: var(--void-success); background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.2); }
+    .icon-btn.reject:hover { color: var(--void-error); background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.2); }
 
-        .tag {
-            background: var(--surface);
-            border: 1px solid rgba(16, 163, 127, 0.2);
-            color: var(--primary-dark);
-            padding: 0.75rem 1.5rem;
-            border-radius: 12px;
-            font-weight: 600;
-            font-size: 0.95rem;
-            box-shadow: var(--shadow-sm);
-            transition: var(--transition-bounce);
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            cursor: default;
-        }
+    /* Input Area */
+    .chat-input-box {
+      background: var(--void-bg-1);
+      border: 1px solid var(--void-border-1);
+      border-radius: 8px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+      transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+    .chat-input-box:focus-within {
+      border-color: var(--vscode-focusBorder);
+      box-shadow: 0 4px 20px rgba(59, 130, 246, 0.15);
+    }
 
-        .tag:hover {
-            transform: translateY(-5px) scale(1.02);
-            box-shadow: var(--shadow-md);
-            border-color: var(--primary);
-            background: var(--primary);
-            color: white;
-        }
+    .selected-files { display: flex; flex-wrap: wrap; gap: 6px; }
+    .file-token {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--void-bg-3);
+      border: 1px solid var(--void-border-2);
+      padding: 2px 6px 2px 8px;
+      border-radius: 4px;
+      font-size: 11px; color: var(--void-fg-2);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
+    .file-token svg { width: 12px; height: 12px; fill: var(--void-fg-3); }
+    .file-token .remove {
+      cursor: pointer; color: var(--void-fg-4); font-size: 14px;
+      margin-left: 2px; transition: color 0.2s;
+    }
+    .file-token .remove:hover { color: var(--void-fg-1); }
 
-        /* Grid Cards for Use Cases */
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 1.5rem;
-        }
+    textarea {
+      background: transparent; border: none; outline: none;
+      color: var(--void-fg-1); font-family: inherit; font-size: 13px;
+      resize: none; height: 44px; line-height: 1.5;
+    }
+    textarea::placeholder { color: var(--void-fg-4); }
 
-        .card {
-            background: var(--surface);
-            padding: 2rem;
-            border-radius: 16px;
-            box-shadow: var(--shadow-sm);
-            border: 1px solid rgba(0,0,0,0.05);
-            transition: var(--transition-fade);
-            height: 100%;
-        }
+    .input-footer {
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .model-selector {
+      font-size: 11px; color: var(--void-fg-3);
+      display: flex; align-items: center; gap: 4px; cursor: pointer;
+      transition: color 0.2s;
+    }
+    .model-selector:hover { color: var(--void-fg-1); }
+    
+    .submit-btn {
+      background: #ffffff; color: #000; border: none;
+      width: 28px; height: 28px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 2px 8px rgba(255,255,255,0.2);
+    }
+    .submit-btn:hover {
+      transform: scale(1.05);
+      box-shadow: 0 4px 12px rgba(255,255,255,0.4);
+    }
+    .submit-btn:active { transform: scale(0.95); }
+    .submit-btn svg { width: 14px; height: 14px; fill: currentColor; }
 
-        .card:hover {
-            transform: translateY(-8px);
-            box-shadow: var(--shadow-lg);
-        }
-
-        .card-icon {
-            font-size: 2.5rem;
-            margin-bottom: 1.25rem;
-            display: inline-block;
-            background: var(--primary-light);
-            width: 60px;
-            height: 60px;
-            line-height: 60px;
-            text-align: center;
-            border-radius: 16px;
-        }
-
-        .card h3 {
-            font-size: 1.25rem;
-            margin-bottom: 0.75rem;
-            color: var(--secondary);
-        }
-
-        .card p {
-            color: var(--text-muted);
-            font-size: 0.95rem;
-        }
-
-        /* Pros and Cons Split Section */
-        .comparison-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 2rem;
-        }
-
-        .feature-card {
-            padding: 2rem;
-            border-radius: 20px;
-            box-shadow: var(--shadow-md);
-            position: relative;
-            overflow: hidden;
-            transition: var(--transition-fade);
-        }
-
-        .feature-card:hover {
-            transform: translateY(-5px);
-        }
-
-        .pro-card {
-            background: linear-gradient(145deg, var(--surface), var(--success-bg));
-            border: 1px solid rgba(5, 150, 105, 0.1);
-        }
-
-        .con-card {
-            background: linear-gradient(145deg, var(--surface), var(--warning-bg));
-            border: 1px solid rgba(225, 29, 72, 0.1);
-        }
-
-        .feature-header {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-        }
-
-        .feature-icon {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.5rem;
-        }
-
-        .pro-card .feature-icon {
-            background: var(--success);
-            color: white;
-            box-shadow: 0 4px 15px rgba(5, 150, 105, 0.3);
-        }
-
-        .con-card .feature-icon {
-            background: var(--warning);
-            color: white;
-            box-shadow: 0 4px 15px rgba(225, 29, 72, 0.3);
-        }
-
-        .feature-card h3 {
-            font-size: 1.5rem;
-            color: var(--secondary);
-        }
-
-        .feature-list {
-            list-style: none;
-        }
-
-        .feature-list li {
-            margin-bottom: 1rem;
-            display: flex;
-            align-items: flex-start;
-            gap: 0.75rem;
-            font-size: 1rem;
-        }
-
-        .feature-list li:last-child {
-            margin-bottom: 0;
-        }
-
-        .pro-card .feature-list li::before {
-            content: '✓';
-            color: var(--success);
-            font-weight: bold;
-            font-size: 1.2rem;
-            line-height: 1.2;
-        }
-
-        .con-card .feature-list li::before {
-            content: '!';
-            color: var(--warning);
-            font-weight: bold;
-            font-size: 1.2rem;
-            line-height: 1.2;
-        }
-
-        /* Footer */
-        .footer {
-            text-align: center;
-            margin-top: 3rem;
-            padding-top: 2rem;
-            border-top: 1px solid rgba(0,0,0,0.08);
-            color: var(--text-muted);
-            font-size: 0.875rem;
-        }
-
-        .footer p {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-        }
-
-        /* Responsive Design */
-        @media (max-width: 768px) {
-            .container {
-                padding: 2rem 1.5rem;
-            }
-
-            .title {
-                font-size: 2.25rem;
-            }
-
-            .comparison-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-        
-        /* Subtle Entrance Animation */
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .animate-up {
-            animation: fadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        }
-        .delay-1 { animation-delay: 0.1s; }
-        .delay-2 { animation-delay: 0.2s; }
-        .delay-3 { animation-delay: 0.3s; }
-    </style>
+    /* Animations */
+    @keyframes pulse {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(0.8); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+    @keyframes scan {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+  </style>
 </head>
 <body>
 
-    <main class="container animate-up">
-        <div class="content-wrapper">
-            
-            <!-- Header -->
-            <header class="header">
-                <div class="header-badge">AI Assistant Overview</div>
-                <h1 class="title">Discover <span>ChatGPT</span></h1>
-                <p class="subtitle">OpenAIが開発した高度な会話型AIモデル。日常の些細な疑問から専門的なタスクまで、自然言語で柔軟に対応します。</p>
-            </header>
+  <div class="sidebar-mockup">
+    <!-- Header -->
+    <div class="sidebar-header">
+      <div class="header-title">Orchestra Chat</div>
+      <div class="header-actions">
+        <!-- Settings Icon -->
+        <svg viewBox="0 0 24 24"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.06-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.73,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.06,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.43-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.49-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
+      </div>
+    </div>
 
-            <!-- Features Section -->
-            <section class="section animate-up delay-1">
-                <h2 class="section-title">主要機能</h2>
-                <div class="tags-container">
-                    <span class="tag">📝 テキスト生成・要約</span>
-                    <span class="tag">💻 コード作成・デバッグ</span>
-                    <span class="tag">🌐 翻訳・多言語対応</span>
-                    <span class="tag">🎨 画像生成 (DALL·E 3)</span>
-                    <span class="tag">⚙️ カスタムGPT構築</span>
-                    <span class="tag">📊 データ分析</span>
-                </div>
-            </section>
+    <!-- Chat Content -->
+    <div class="chat-container">
+      
+      <!-- User Message -->
+      <div class="message-user">
+        <div class="bubble-user">
+          ログイン用の認証ロジックを実装し、必要なパッケージを追加してください。
+        </div>
+      </div>
 
-            <!-- Use Cases Section -->
-            <section class="section animate-up delay-2">
-                <h2 class="section-title">活用例</h2>
-                <div class="grid">
-                    <div class="card">
-                        <div class="card-icon">🎓</div>
-                        <h3>学習・質問回答</h3>
-                        <p>専門的な概念や歴史的な事実など、幅広い分野の疑問に対して対話形式で分かりやすく解説します。</p>
-                    </div>
-                    <div class="card">
-                        <div class="card-icon">✍️</div>
-                        <h3>文章執筆支援</h3>
-                        <p>メールの構成、ブログ記事のドラフト作成、企画書のアイデア出しなど、執筆作業を大幅に効率化します。</p>
-                    </div>
-                    <div class="card">
-                        <div class="card-icon">🚀</div>
-                        <h3>プログラミング補助</h3>
-                        <p>要件に基づいたコードの生成、エラーの原因究明、リファクタリングの提案など開発者を強力にサポートします。</p>
-                    </div>
-                </div>
-            </section>
+      <!-- Assistant Message (Gallery & HUD Hybrid) -->
+      <div class="message-assistant">
+        <div class="model-label">Claude 3.5 Sonnet</div>
+        <div class="card-assistant">
+          
+          <!-- Flow Indicator HUD -->
+          <div class="flow-indicator">
+            <span class="flow-step done">思考</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-step done">検索</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-step active"><span class="pulse-dot"></span> 実装中</span>
+          </div>
 
-            <!-- Pros & Cons Section -->
-            <section class="section animate-up delay-3">
-                <h2 class="section-title">特徴と留意点</h2>
-                <div class="comparison-grid">
-                    <!-- Pros -->
-                    <div class="feature-card pro-card">
-                        <div class="feature-header">
-                            <div class="feature-icon">✨</div>
-                            <h3>強み・メリット</h3>
-                        </div>
-                        <ul class="feature-list">
-                            <li>人間のように自然で高速な応答生成</li>
-                            <li>長文のコンテキスト（文脈）の保持と理解</li>
-                            <li>多様なフォーマットでの出力対応</li>
-                            <li>プラグインやAPI連携による高い拡張性</li>
-                        </ul>
-                    </div>
+          <!-- Reasoning Collapsed -->
+          <div class="tool-card reasoning">
+            <div class="tool-header">
+              <div class="tool-left">
+                <span class="chevron">▶</span>
+                <span class="tool-title" style="color: var(--void-fg-3)">3.2秒間思考しました</span>
+              </div>
+            </div>
+          </div>
 
-                    <!-- Cons -->
-                    <div class="feature-card con-card">
-                        <div class="feature-header">
-                            <div class="feature-icon">⚠️</div>
-                            <h3>注意点・リスク</h3>
-                        </div>
-                        <ul class="feature-list">
-                            <li>事実とは異なる情報（ハルシネーション）の生成</li>
-                            <li>最新情報へのアクセス制限（※モデルによる）</li>
-                            <li>機密情報や個人情報の入力に関するセキュリティ配慮</li>
-                            <li>出力結果に対する人間による事実確認（ファクトチェック）が必須</li>
-                        </ul>
-                    </div>
-                </div>
-            </section>
+          <!-- Text Content -->
+          <div class="prose">
+            <p>承知いたしました。認証ロジックの実装を開始します。まず、パスワードのハッシュ化に必要な <code>bcrypt</code> をインストールし、認証ユーティリティファイルを作成します。</p>
+          </div>
 
-            <!-- Footer -->
-            <footer class="footer">
-                <p>
-                    <span>© 2026 AI Insight DB</span>
-                    <span>|</span>
-                    <span>Designed with modern UI principles</span>
-                </p>
-            </footer>
+          <!-- Tool: Success -->
+          <div class="tool-card success">
+            <div class="tool-header">
+              <div class="tool-left">
+                <span class="chevron">▶</span>
+                <span class="tool-title">コマンド実行</span>
+                <span class="tool-desc">npm install bcrypt</span>
+              </div>
+              <div class="tool-right">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--void-success)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span class="tool-badge success">完了</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tool: Running (HUD Effect) -->
+          <div class="tool-card running">
+            <div class="tool-header">
+              <div class="tool-left">
+                <span class="chevron" style="transform: rotate(90deg)">▶</span>
+                <span class="tool-title">ファイル編集</span>
+                <span class="tool-desc">src/lib/auth.ts</span>
+              </div>
+              <div class="tool-right">
+                <span class="tool-desc">実行中...</span>
+              </div>
+            </div>
+            <div class="running-scanline"></div>
+          </div>
 
         </div>
-    </main>
+      </div>
+      
+      <!-- Spacing for bottom area -->
+      <div style="height: 40px;"></div>
+    </div>
+
+    <!-- Bottom Area -->
+    <div class="bottom-area">
+      
+      <!-- Command Bar (Pending Changes) -->
+      <div class="command-bar">
+        <div class="cb-header">
+          <div class="cb-title">1件の変更を承認待ち</div>
+          <div class="cb-actions">
+            <button class="btn-text">拒否</button>
+            <button class="btn-primary">すべて承認</button>
+          </div>
+        </div>
+        <div class="file-item">
+          <div class="file-info">
+            <!-- File Icon -->
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+            src/lib/auth.ts
+            <span class="file-diff">+42</span>
+          </div>
+          <div class="file-actions">
+            <button class="icon-btn reject" title="拒否">✗</button>
+            <button class="icon-btn approve" title="承認">✓</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat Input Box -->
+      <div class="chat-input-box">
+        <div class="selected-files">
+          <div class="file-token">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+            package.json
+            <span class="remove">×</span>
+          </div>
+        </div>
+        
+        <textarea placeholder="エージェントに指示する..."></textarea>
+        
+        <div class="input-footer">
+          <!-- Attach/Model Context -->
+          <div class="model-selector">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+            <span>コンテキストを追加</span>
+          </div>
+          
+          <!-- Submit Button -->
+          <button class="submit-btn" title="送信">
+            <svg viewBox="0 0 24 24"><path d="M12 4l-8 8h6v8h4v-8h6z"/></svg>
+          </button>
+        </div>
+      </div>
+      
+    </div>
+  </div>
 
 </body>
 </html>

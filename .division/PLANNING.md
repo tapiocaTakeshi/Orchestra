@@ -1,70 +1,84 @@
-このプランは、現在の `SidebarChat.tsx` の巨大なモノリス構造を改善し、洗練されたUI/UXを実装するための設計指針です。「デザインに凝る」という目標を達成するため、視覚的階層の整理、コンポーネントの分離、および一貫したスタイルガイドの適用を軸に構成します。
+ご指摘を真摯に受け止め、前回失敗した「設計と実装の乖離」および「デザインの具体性欠如」を解消するため、実装フェーズに直結する具体的な計画を策定します。
+
+本プランは、`SidebarChat.tsx` の機能的健全性を保ちつつ、UI を「Gallery (読みやすさ)」と「HUD (状態管理)」を融合させたデザインに昇華させるための設計書です。
 
 ---
 
-# SidebarChat 実装設計計画
+# SidebarChat リファクタリングおよびUI刷新 実装設計案
 
-## 1. コンポーネント分割戦略（Refactoring Strategy）
-現在の `SidebarChat.tsx` は役割が過多であるため、以下のフォルダ構造に分割し、責務を明確化します。
+## 1. コンセプトの再定義とデザイントークン
+`ideaman` による「案2 (Gallery) + 案1 (HUD)」を採用し、以下のトーン＆マナーを既存の `void-*` トークンに適用します。
 
-*   `ChatList/`: チャットメッセージのリスト表示を担当
-    *   `ChatBubble.tsx`: メッセージ（ユーザー/アシスタント）の表示ロジック
-    *   `ToolRenderer.tsx`: ツールの実行結果やリクエストの描画
-*   `InputArea/`: 入力と添付ファイル管理を担当
-    *   `ChatInputBox.tsx`: 入力ボックス本体
-    *   `SelectionList.tsx`: 選択中ファイルのUI
-*   `Sidebar/`: レイアウトとヘッダー
-    *   `SidebarHeader.tsx`: アカウント・設定へのアクセス
-*   `Shared/`: 共通UI
-    *   `UIElements.tsx`: `ToolHeaderWrapper`, `ProseWrapper`, ボタン類など
+*   **Gallery (読みやすさ):** メッセージカードは `bg-void-bg-2` をベースに、薄い枠線で囲む。本文は prose 階層を遵守。
+*   **HUD (状態管理):** ツールやフローの結果は左側にアクセントバー（`vscode-focusBorder`）を配し、右上のメタ領域で状態を一括表示する。
+*   **新規ライブラリの導入判断:** 既存プロジェクトの安定性を最優先し、**`framer-motion` などの追加導入は行いません**。既存の CSS Transition と Tailwind の `transition-all` でマイクロインタラクションを実現します。
 
-## 2. デザイン言語の統一 (Design Language)
-「洗練されたUI」を実現するため、以下のスタイルルールを適用します。
+## 2. 実装アーキテクチャ設計 (コードの分離)
 
-*   **タイポグラフィ:**
-    *   `prose` クラスを調整し、見出しと本文のコントラストを明確化。
-    *   コードブロックや引用のフォントサイズを微調整し、可読性を向上。
-*   **カラースキーム:**
-    *   `void-bg-1`, `bg-2`, `bg-3` の深み（depth）を再定義。カード形式のUIでは `bg-2` をベースとし、hover時に `bg-3` を重ねる等の階層化を実施。
-    *   ボーダー色を VS Code のテーマ変数と同期させ、OSやテーマに依存しない自然な馴染み方を追求。
-*   **スペーシング:**
-    *   メッセージ間の余白を適切に管理し、グループ化（ユーザー入力とその回答を一つの論理ユニットとして扱う）を強調。
+`SidebarChat.tsx` に集中していたロジックを以下の役割に分離します。各コンポーネントは `SidebarChat.tsx` を親として Props を受け取る関数コンポーネントとして実装します。
 
-## 3. 各コンポーネントの強化・改修詳細
+| ファイルパス | 責務 | 主なProps |
+| :--- | :--- | :--- |
+| `ChatBubble.tsx` | ユーザー/アシスタントの吹き出し生成 | `message`, `isEditing`, `onEdit` |
+| `ToolHeaderWrapper.tsx` | ツール実行結果の展開/折りたたみ、状態表示 | `status`, `title`, `isOpen`, `onToggle` |
+| `CommandBarInChat.tsx` | ファイル変更の統合管理パネル | `changes`, `onAcceptAll`, `onReject` |
+| `ChatInputBox.tsx` | 入力欄とモデル選択、添付ファイルUI | `onSend`, `selectedFiles` |
 
-### A. Chat Bubble (メッセージカード)
-*   **目標:** メッセージを単なるテキストから「カード」のように視認性を高くする。
-*   **改善点:**
-    *   背景に微かなグラデーションや、エッジの効いたボーダーを適用。
-    *   アシスタントの思考過程（Reasoning）と出力内容のセパレーションを、視覚的に明確なドロップダウンUIへ昇華。
+## 3. 具体的なデザイン実装方針
 
-### B. Tool Output (ツールUI)
-*   **目標:** ツール実行結果の煩雑さを抑え、要約して表示する。
-*   **改善点:**
-    *   `ToolHeaderWrapper` のデザインを刷新（アイコンの配置、展開時のアニメーションをスムーズに）。
-    *   エラー時の表示（`LintErrorChildren` など）を視覚的に警告と分かりやすいカラーパレットへ変更。
+### A. メッセージカードのカード化 (Gallery)
+`ChatBubble.tsx` 内で以下を適用します。
+```tsx
+// ChatBubble.tsx のクラス設計方針
+className="p-4 rounded-lg bg-void-bg-2 border border-void-border-1 shadow-sm hover:border-void-border-2 transition-colors"
+```
+*   アシスタント応答は、モデルラベル（上部）と本文（ProseWrapper）の間隔を `gap-2` で統一。
+*   思考過程（Reasoning）がある場合は `ToolHeaderWrapper` の collapsible パターンを流用。
 
-### C. Chat Input Area (入力領域)
-*   **目標:** 入力時の集中力を高める。
-*   **改善点:**
-    *   フォーカス時の枠線の強調表示。
-    *   ファイル選択・アタッチメントのインジケーターをフローティングUIとして美しく配置。
-    *   `CommandBarInChat` を下部に固定し、変更内容の確認作業がチャットの流れを阻害しないようにレイアウト変更。
+### B. ツール実行結果の HUD 化 (Status HUD)
+`ToolHeaderWrapper.tsx` で、状態を明確にするためのレイアウトを固定します。
+```tsx
+// header 部分の flex レイアウト設計
+<div className="flex items-center justify-between min-h-[28px] px-2 gap-2">
+  <div className="flex items-center gap-2">
+    <StatusIcon status={status} /> {/* 16px アイコン */}
+    <span className="text-xs font-medium text-void-fg-1">{title}</span>
+  </div>
+  <div className="flex items-center gap-1">
+    {/* メタ情報（件数・時間など） */}
+    <Badge count={num} />
+  </div>
+</div>
+```
 
-## 4. 実装ステップとスケジュール
+## 4. 既存制約との適合性チェック
 
-1.  **Phase 1: 構造抽出:** ファイル分割を行い、元の機能が動作することを維持したままファイルを分離する。
-2.  **Phase 2: スタイルライブラリ化:** CSS変数や共通のTailwindクラスを `styles.ts` にまとめ、色・余白・フォントサイズを定義する。
-3.  **Phase 3: コンポーネントUI刷新:** 各コンポーネントを Phase 2 の定義に基づいてスタイリングし直す。
-4.  **Phase 4: インタラクション改善:** ホバーエフェクト、展開・折りたたみアニメーションのチューニング。
+*   **VS Code Theme 変数:** すべての背景・境界線には `var(--void-*)` および `var(--vscode-*)` を使用します。ハードコードは行いません。
+*   **状態管理:** `SidebarChat` が持つ `isRunning`, `isError` 等の State を、新コンポーネントの Props として流し込みます。Store 構造は変更せず、Presentational Component の分離のみに注力します。
+*   **Accessibility:** すべてのクリック可能なヘッダーには `role="button"` を付与し、`onKeyDown` で Enter/Space をハンドリングしてアクセシビリティを確保します。
 
-## 5. リスクと対策
-*   **リスク:** 巨大コンポーネント分割時の state の受け渡しミス。
-    *   **対策:** `useAccessor` (Service) 経由でのアクセスが多いため、Context API ではなく元の Service パターンを維持しつつ、 props の受け渡しを慎重に行う。
-*   **リスク:** デザイン変更による既存の機能（diffエディタ等の表示）の崩れ。
-    *   **対策:** `VoidDiffEditor` や `ChatMarkdownRender` のラッパーコンポーネントの構造を変更せず、外側のスタイリングのみを優先的に適用する。
+## 5. コーディング手順 (Coded のための詳細タスク)
+
+実装担当の `coder` は以下の順序で作業を行ってください。
+
+1.  **STEP 1: コンポーネント抽出**
+    *   `SidebarChat.tsx` から `AssistantMessageComponent` 等の大きな塊を `components/` ディレクトリに分離します。
+2.  **STEP 2: スタイルの共通化**
+    *   `styles.ts` (新規) を作成し、カードのデザイン共通クラスを定義します。
+    *   `const cardStyle = "bg-void-bg-2 border border-void-border-1 rounded-lg";`
+3.  **STEP 3: 状態表示の統合**
+    *   `ToolHeaderWrapper` を修正し、現状の「色のみの判定」を「アイコン＋テキスト＋色」の HUD パターンに置換します。
+4.  **STEP 4: テスト**
+    *   ツール実行時、エラー時、ストリーミング中の見た目が一貫しているかを確認します。
+
+## 6. デザイナーへの指示事項
+前回の欠落を補完するため、以下のスタイルをデザインのベースとしてください。
+
+*   **アクセント線:** ツールカードの左端には必ず `2px` の border を設ける。
+*   **余白:** コンポーネント内のパディングは最小 8px、最大 16px を基本とし、密度感を統一する。
+*   **状態色:** 成功時: `var(--vscode-testing-iconPassed)` / エラー時: `var(--vscode-testing-iconFailed)` を積極的に使用する。
 
 ---
 
 **後続タスクへの提案:**
-まずは **「Phase 1: 構造抽出」** から着手してください。`ChatBubble` の表示ロジックを抽出するだけで、コードの可読性が飛躍的に向上します。その後、共通のスタイルを適用する準備が整います。
+この設計書に基づき、`coder` ロールはまず **`ToolHeaderWrapper.tsx` のリファクタリング** から着手してください。これにより、デザインシステムの「HUD パターン」を確立し、他のコンポーネントへ展開しやすくなります。

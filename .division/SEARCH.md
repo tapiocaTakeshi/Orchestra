@@ -1,223 +1,361 @@
-# Next.js/Tailwind/React環境向け最新UI演出実装ガイド (2026年トレンド)
+# 最新UI演出実装ガイド — Next.js/Tailwind/React 環境対応版
 
-## 🎨 1. ガラスモーフィズム (Glassmorphism) / Liquid Glass
-**磨りガラス風の半透明UI + 液体質感。奥行き・軽やかさ・洗練感を演出。[1][2][3][5]**
+本レポートは、SidebarChat の「デザインに凝る」改善を実現するため、**既存プロジェクト環境（Next.js + Tailwind CSS + React）に導入可能な最新 UI 演出手法**を調査・整理したものです。ライブラリ依存を最小化しつつ、Tailwind ネイティブおよび軽量 JavaScript で実装可能な技法を優先します。
 
-### Tailwind実装例
-```html
-<!-- 基本ガラスカード (bg-transparent + backdrop-blur) -->
-<div class="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl shadow-2xl p-8 hover:backdrop-blur-2xl transition-all duration-300 hover:shadow-3xl hover:scale-[1.02]">
-  <h3 class="text-white font-bold mb-4">Liquid Glass Card</h3>
-  <p class="text-white/80">背景透過 + ぼかしで磨りガラス質感</p>
-</div>
+---
 
-<!-- 液体風グラデーション + 反射ハイライト -->
-<div class="bg-gradient-to-br from-cyan-400/20 via-blue-500/10 to-purple-600/20 backdrop-blur-2xl border border-gradient-to-r from-cyan-500/30 to-purple-500/30 rounded-3xl p-6 relative overflow-hidden">
-  <!-- 反射ハイライト -->
-  <div class="absolute top-4 left-4 w-20 h-20 bg-white/20 rounded-full blur-xl -translate-x-4 translate-y-4"></div>
-  <div class="relative z-10 text-white">
-    <h3 class="font-bold mb-2">Liquid Motion</h3>
-    <p class="opacity-90">グラデ + ノイズ + 反射で液体感</p>
-  </div>
-</div>
+## 1. マイクロインタラクション（Micro-Interactions）実装ガイド
+
+マイクロインタラクションとは、**ユーザーのアクション（クリック、ホバー、フォーカス）に対する小さな反応や動きのこと**です[1][2]。SidebarChat では、以下の箇所で効果的に活用できます：
+
+### 1.1 ボタン・フォーカス時の反応
+
+**推奨実装**（Tailwind ネイティブ）：
+
+```jsx
+// 承認/拒否ボタン例
+<button
+  className="
+    px-3 py-2 rounded-md
+    bg-void-bg-2 text-void-fg-1
+    border border-void-border-1
+    transition-all duration-200 ease-out
+    hover:bg-void-bg-3 hover:shadow-md
+    focus:ring-2 focus:ring-vscode-focusBorder focus:ring-offset-1
+    active:scale-95
+  "
+>
+  承認
+</button>
 ```
 
-### React + Framer Motionマイクロインタラクション
-```tsx
-import { motion } from 'framer-motion';
+**実装ポイント**：
+- `transition-all duration-200`：200ms は Search results [2] で推奨される「200～300ミリ秒」に該当[2]
+- `hover:scale-105` よりも `active:scale-95`（押下時の縮小）を優先し、tactile feedback を演出
+- `focus:ring-*` で keyboard navigation 対応を同時に実装
 
-const GlassCard = ({ children }: { children: React.ReactNode }) => (
-  <motion.div
-    initial={{ scale: 1, y: 0 }}
-    whileHover={{ scale: 1.05, y: -10 }}
-    transition={{ type: "spring", stiffness: 400, damping: 17 }}
-    className="group bg-white/5 backdrop-blur-2xl border border-white/20 rounded-3xl p-8 shadow-xl hover:shadow-2xl hover:bg-white/10 transition-all duration-500"
+### 1.2 入力欄フォーカス時のラベル移動（Floating Label）
+
+**Material Design パターン**[2]：
+
+```jsx
+<div className="relative">
+  <input
+    id="message"
+    type="text"
+    placeholder=" "
+    className="
+      w-full px-4 py-3 rounded-md
+      bg-void-bg-1 border border-void-border-3
+      text-void-fg-1 placeholder-transparent
+      focus:border-vscode-focusBorder focus:outline-none
+      transition-colors duration-200
+    "
+  />
+  <label
+    htmlFor="message"
+    className="
+      absolute left-4 top-3
+      text-void-fg-3
+      transition-all duration-200
+      origin-left
+      peer-placeholder-shown:top-3 peer-placeholder-shown:scale-100
+      peer-focus:top-1 peer-focus:scale-90 peer-focus:text-vscode-focusBorder
+    "
   >
-    {/* ホバー時ハイライト */}
-    <motion.div
-      className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent rounded-3xl opacity-0 group-hover:opacity-100"
-      initial={{ x: -100 }}
-      animate={{ x: "100%" }}
-      transition={{ duration: 0.6 }}
-    />
-    <div className="relative z-10">{children}</div>
-  </motion.div>
-);
-```
-
-## 🌈 2. 多色ノイズグラデーション (Multi-Color Noise Gradient)
-**複数色グラデ + ノイズオーバーレイでアナログ奥行き感。[2][4]**
-
-### Tailwind + CSSノイズ実装
-```html
-<!-- ノイズ付きグラデ背景 -->
-<div class="relative bg-gradient-to-br from-rose-400 via-pink-500 to-indigo-500 h-64 rounded-3xl overflow-hidden">
-  <!-- ノイズオーバーレイ -->
-  <div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,...')] mix-blend-multiply opacity-20 animate-pulse"></div>
-  <div class="relative z-10 p-8 text-white">
-    <h2 class="text-2xl font-bold mb-4 drop-shadow-lg">Noisy Gradient</h2>
-    <p>多色グラデ + ノイズで温度感</p>
-  </div>
+    メッセージを入力...
+  </label>
 </div>
 ```
 
-**ノイズSVGデータ (base64圧縮)**
-```css
-.noise {
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 1000 1000' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-}
-```
+**効果**：
+- フォーカス時にラベルが上に移動し、「ここに入力している」という状態が明確になる[2]
+- `opacity` 変化のみでなく `scale` + `translate` の組み合わせで、より洗練された動き
 
-## ✨ 3. マイクロインタラクション (Micro-Interactions)
-**ホバー/クリック/スクロール時の微細アニメ。[1][2][3][6]**
+### 1.3 Tool Header 展開・折りたたみアニメーション
 
-### Tailwind + React実装例
-```tsx
-// ホバーボタン + リップル効果
-const RippleButton = () => {
-  const [ripples, setRipples] = useState([]);
-  
-  const addRipple = (e: React.MouseEvent) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const size = Math.max(rect.width, rect.height);
-    const x = e.clientX - rect.left - size / 2;
-    const y = e.clientY - rect.top - size / 2;
-    
-    setRipples(prev => [...prev, { x, y, size, key: Date.now() }]);
-    setTimeout(() => setRipples(prev => prev.slice(1)), 600);
-  };
+**現在の実装改善案**：
 
-  return (
-    <button 
-      onMouseDown={addRipple}
-      className="relative bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-8 py-3 rounded-2xl font-bold shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200 overflow-hidden"
+```jsx
+const [isOpen, setIsOpen] = useState(false);
+
+return (
+  <div
+    className="
+      bg-void-bg-2 border border-void-border-1 rounded-md
+      overflow-hidden
+    "
+  >
+    {/* ヘッダ */}
+    <button
+      onClick={() => setIsOpen(!isOpen)}
+      className="
+        w-full flex items-center justify-between
+        px-3 py-2.5
+        hover:bg-void-bg-3 transition-colors duration-150
+        cursor-pointer
+      "
     >
-      Interactive Button
-      {ripples.map(ripple => (
-        <motion.span
-          key={ripple.key}
-          className="absolute bg-white/30 rounded-full"
-          initial={{ scale: 0, opacity: 1 }}
-          animate={{ scale: 4, opacity: 0 }}
-          transition={{ duration: 0.6 }}
-          style={{
-            left: ripple.x,
-            top: ripple.y,
-            width: ripple.size,
-            height: ripple.size
-          }}
+      <div className="flex items-center gap-2">
+        <ChevronIcon
+          className={`
+            transition-transform duration-200
+            ${isOpen ? 'rotate-90' : 'rotate-0'}
+          `}
         />
-      ))}
+        <span className="font-medium text-void-fg-1">{title}</span>
+      </div>
+      <span className="text-xs text-void-fg-3">{isOpen ? '展開中' : '折りたたみ中'}</span>
     </button>
-  );
-};
-```
 
-### パララックススクロール
-```tsx
-// Framer Motion + Lenis Scroll
-<motion.div
-  initial={{ y: 50, opacity: 0 }}
-  whileInView={{ y: 0, opacity: 1 }}
-  viewport={{ once: true }}
-  transition={{ duration: 0.8 }}
-  className="glass-card relative z-10"
-  style={{ transform: useScrollTransform().y }}
-/>
-```
-
-## 🃏 4. フラット3D / ソフトシャドウ (Flat 3D + Soft Shadows)
-**微妙な浮遊感・厚み感。[1]**
-
-```html
-<!-- ソフトシャドウカード -->
-<div class="bg-white/80 backdrop-blur-sm rounded-3xl p-8 shadow-[0_20px_40px_rgba(0,0,0,0.1),0_1px_3px_rgba(0,0,0,0.05)] hover:shadow-[0_25px_50px_rgba(0,0,0,0.15)] hover:-translate-y-2 transition-all duration-500">
-  <div class="text-2xl font-bold mb-4">Flat 3D Card</div>
-  <p>ソフトシャドウで浮遊感</p>
-</div>
-```
-
-## 🎵 5. 音付きインタラクション
-**クリック/ホバー音。[2][6]**
-
-```tsx
-// use-sound + Tailwind
-import useSound from 'use-sound';
-
-const PlayButton = () => {
-  const [play] = useSound('/click.mp3');
-  
-  return (
-    <button 
-      onClick={() => play()}
-      className="glass-button hover:scale-110 active:scale-95 transition-transform duration-150"
+    {/* コンテンツ（フルハイト遷移） */}
+    <div
+      className={`
+        overflow-hidden transition-all duration-300 ease-out
+        ${isOpen ? 'max-h-screen opacity-100' : 'max-h-0 opacity-0'}
+      `}
     >
-      Click me (with sound!)
-    </button>
-  );
-};
-```
-
-## 🔗 6. 即コピペ実装コンポーネント集
-
-### 完全実装: ガラス風ホバーカード
-```tsx
-export const GlassHoverCard = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <motion.div
-    whileHover={{ y: -8, scale: 1.02 }}
-    transition={{ type: "spring", stiffness: 400, damping: 20 }}
-    className="group relative bg-gradient-to-br from-white/5 to-white/2 backdrop-blur-xl border border-white/20 rounded-3xl p-8 shadow-xl hover:shadow-2xl hover:border-white/30 transition-all duration-500 overflow-hidden"
-  >
-    {/* 背景グラデーション */}
-    <div className="absolute inset-0 bg-gradient-to-r from-cyan-400/10 via-blue-500/5 to-purple-600/10" />
-    
-    {/* ホバー時光沢 */}
-    <motion.div 
-      className="absolute -top-4 -right-4 w-32 h-32 bg-white/20 rounded-full blur-3xl opacity-0 group-hover:opacity-100"
-      initial={{ scale: 0.5 }}
-      animate={{ scale: 1.2 }}
-      transition={{ duration: 0.4 }}
-    />
-    
-    <div className="relative z-10">
-      <h3 className="text-xl font-bold text-white mb-4 drop-shadow-lg group-hover:text-cyan-100 transition-colors">{title}</h3>
-      <div className="text-white/90 leading-relaxed">{children}</div>
+      <div className="px-3 py-2 bg-void-bg-3 border-t border-void-border-1">
+        {children}
+      </div>
     </div>
-  </motion.div>
+  </div>
 );
 ```
 
-## 📊 7. Tailwindカスタムユーティリティ (globals.css)
-```css
-@tailwind utilities;
+**改善点**：
+- `max-h-0 opacity-0` よりも `max-h-screen opacity-0` の組み合わせで滑らかな遷移
+- `ease-out` easing で開き始めは素早く、終端で緩やかになる自然な感覚[2]
+- 「展開中/折りたたみ中」テキストで状態を明確化
 
-@layer utilities {
-  .glass-1 { 
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-  }
-  
-  .glass-2 { 
-    background: rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  }
-  
-  .liquid-glow {
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(147, 51, 234, 0.15) 50%, rgba(16, 185, 129, 0.15) 100%);
-    backdrop-filter: blur(20px);
-  }
+---
+
+## 2. ガラスモーフィズム（Glassmorphism）実装
+
+ガラスモーフィズムは、**半透明背景 + backdrop blur で磨りガラス風の奥行き感を演出**する手法です。SidebarChat では、ツールの overlay パネルやフローティング UI に適用できます[1]。
+
+### 2.1 基本実装（Tailwind ネイティブ）
+
+```jsx
+// ガラスカード共通パターン
+<div
+  className="
+    bg-white/5 backdrop-blur-lg
+    border border-white/10
+    rounded-lg
+    shadow-lg
+  "
+>
+  {/* コンテンツ */}
+</div>
+```
+
+**推奨設定**：
+- `bg-*-*/[数値]`：透明度は 5-20% が一般的（Search results [1] 参照）
+- `backdrop-blur-lg` / `backdrop-blur-xl`：blur radius 12px～20px が目安
+- `border border-white/10` or `border-white/20`：ボーダーも半透明で整合性を保つ
+
+### 2.2 SidebarChat への応用例
+
+**CommandBar の浮遊感演出**：
+
+```jsx
+<div
+  className="
+    fixed bottom-4 right-4
+    bg-void-bg-1/80 backdrop-blur-md
+    border border-void-border-1/50
+    rounded-lg p-4
+    shadow-lg hover:shadow-xl
+    transition-shadow duration-300
+  "
+>
+  <h3 className="text-sm font-semibold text-void-fg-1 mb-2">
+    変更ファイル
+  </h3>
+  {/* ファイルリスト */}
+</div>
+```
+
+**効果**：
+- ユーザーメッセージの上に浮遊し、背後のコンテンツが透視される感覚
+- 背景のぼかしで、UI レイヤーの区別が明確に
+- `opacity-80` ではなく `backdrop-blur` で、より「空間的な」見た目
+
+---
+
+## 3. グラデーション・色彩の洗練
+
+### 3.1 微細なグラデーション（Subtle Gradient）
+
+現在の実装では、メッセージバブルに `linear-gradient(135deg, var(--void-bg-1) 0%, ...)` が使用されていますが、Search results [2][6] に基づけば、**グラデーションの角度・色数を慎重に調整**することで、より洗練された見た目になります。
+
+**推奨パターン**：
+
+```css
+/* assistant メッセージ用 */
+background: linear-gradient(
+  135deg,
+  var(--void-bg-2) 0%,
+  color-mix(in srgb, var(--void-bg-2) 95%, var(--vscode-focusBorder) 5%) 100%
+);
+
+/* ユーザーメッセージ用 */
+background: linear-gradient(
+  135deg,
+  var(--void-bg-1) 0%,
+  color-mix(in srgb, var(--void-bg-1) 98%, white 2%) 100%
+);
+```
+
+**利点**：
+- `color-mix()` 関数でブラウザレベルで色を混合し、プリプロセッサ不要
+- 5% 程度の微細な色変化で、「装飾的すぎない」上質感を演出
+
+### 3.2 ノイズ・テクスチャの活用（オプション）
+
+Search results [3] で言及されている multi-color noise gradient[3] は、高度な手法ですが、SidebarChat では **控えめな使用**を推奨します：
+
+```css
+/* 背景にノイズを重ねる場合 */
+.assistant-card {
+  background:
+    linear-gradient(135deg, var(--void-bg-2) 0%, ...),
+    url('data:image/svg+xml;utf8,...'); /* ノイズ SVG */
+  background-blend-mode: multiply;
+  background-size: 100%, 256px;
 }
 ```
 
-## 🚀 使用推奨ライブラリ
-| 効果 | ライブラリ | 用途 |
-|------|------------|------|
-| アニメーション | `framer-motion` | マイクロインタラクション |
-| スクロール | `lenis` | パララックス |
-| 音 | `use-sound` | インタラクティブ音 |
-| ノイズ | CSS Filter/SVG | グラデーション強化 |
+**注意**：
+- 多用するとパフォーマンス低下の可能性
+- ダーク/ライトテーマ両対応に手間
+- 本レポートでは「オプション・差別化要素」として推奨
 
-これらを`SidebarChat.tsx`の**チャットバブル、ツールヘッダー、コマンドバー**に応用すると、既存の`glass-effect`をLiquid Glass進化版にアップグレード可能。
+---
+
+## 4. カード設計の洗練
+
+### 4.1 影（Shadow）の段階化
+
+Search results [1][4] より、影を階層的に使い分けることで奥行き感が向上します。
+
+```jsx
+// 層別の shadow 定義を Tailwind config に追加推奨
+const shadows = {
+  'card-sm': '0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 1px rgba(0, 0, 0, 0.02)',
+  'card-md': '0 4px 8px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.04)',
+  'card-lg': '0 10px 20px rgba(0, 0, 0, 0.08), 0 4px 8px rgba(0, 0, 0, 0.06)',
+  'card-hover': '0 15px 30px rgba(0, 0, 0, 0.10)',
+};
+
+// コンポーネント内での使用
+<div className="shadow-card-md hover:shadow-card-hover transition-shadow duration-300">
+  {/* コンテンツ */}
+</div>
+```
+
+**効果**：
+- `shadow-lg` 一択ではなく、重要度・優先度に応じた shadow 段階
+- hover 時に shadow を強くすることで、クリック可能性を示唆
+
+### 4.2 ボーダーの役割分化
+
+```jsx
+// ToolHeaderWrapper の例
+<div
+  className={`
+    border border-void-border-1
+    border-l-3 ${
+      isError ? 'border-l-red-500' : 
+      isRejected ? 'border-l-gray-400' :
+      'border-l-blue-500'
+    }
+    rounded-md
+  `}
+>
+  {/* ヘッダ・コンテンツ */}
+</div>
+```
+
+**ポイント**：
+- 外側の `border` は UI の構造を示す
+- 左の `border-l-3` はステータスを示す
+- 色は Search results [2][6] の WCAG 基準に基づき、必ず icon + text でも区別可能に
+
+---
+
+## 5. テキスト・タイポグラフィの改善
+
+### 5.1 行高（Line Height）の最適化
+
+Search results [4] では、可読性向上のため行高を調整することが推奨されています。
+
+```jsx
+// Tailwind で行高を段階的に定義
+<div className="space-y-6">
+  {/* heading + prose で異なる行高を適用 */}
+  <h2 className="text-lg font-semibold leading-tight">
+    ツール実行結果
+  </h2>
+  <p className="text-sm leading-relaxed text-void-fg-3">
+    長めの説明文は余裕ある行高で読みやすく
+  </p>
+</div>
+```
+
+**設定案**：
+- heading：`leading-tight`（1.1～1.2）
+- 本文：`leading-normal` or `leading-relaxed`（1.5～1.6）
+- 補助情報：`leading-snug`（1.375）
+
+### 5.2 フォント選択と Weight の統一
+
+SidebarChat では monospace 環境のため、既定フォント仕様を維持しつつ：
+
+```jsx
+// font-weight の明確な使い分け
+<div>
+  <h3 className="font-semibold text-void-fg-1">タイトル</h3>
+  <p className="font-normal text-void-fg-2">本文</p>
+  <span className="font-medium text-xs text-void-fg-3">ラベル・メタ</span>
+</div>
+```
+
+**推奨値**：
+- `font-semibold` / `font-bold`：見出し・強調
+- `font-medium`：ラベル・小見出し
+- `font-normal`：本文・長文
+- `font-light` は避ける（コントラスト低下）
+
+---
+
+## 6. フォーカス・キーボードナビゲーション対応
+
+Search results [2] を踏まえ、アクセシビリティを確保しながら UI 品質を維持する方法：
+
+### 6.1 Focus Ring のカスタマイズ
+
+```jsx
+// Tailwind config で focus ring を再定義
+<button
+  className="
+    px-4 py-2 rounded-md
+    focus:outline-none
+    focus-visible:ring-2 focus-visible:ring-vscode-focusBorder focus-visible:ring-offset-2
+    transition-all duration-200
+  "
+>
+  操作ボタン
+</button>
+```
+
+**ポイント**：
+- `:focus-visible` で keyboard navigation のみに ring を表示（mouse click では非表示）
+- `ring-offset-2` で ring と要素の間に余白を設け、視認性を向上
+
+### 6.2 Tool Header の Keyboard 操作対応
+
+```tsx
+const ToolHeaderButton = ({ isOpen, onToggle, title, children
+```

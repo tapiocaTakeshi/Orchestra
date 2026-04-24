@@ -1,574 +1,549 @@
-# SidebarChat デザイン仕様書
-
+# SidebarChat デザイン仕様書 改訂版
 対象: `src/vs/workbench/contrib/void/browser/react/src/sidebar-tsx/SidebarChat.tsx`
 
-目的: `SidebarChat` 周辺 UI の見た目・文言・状態表現を統一し、実装後の認識ズレを防ぐ。
+---
+
+## 0. この改訂版の目的
+
+本書は、先行仕様書を**実装可能な形に補正**し、以下を明確に分離するための改訂版です。
+
+- **採用したUIコンセプト**
+- **必須仕様**
+- **任意提案（optional）**
+- **未確定事項 / 要確認事項**
+- **文言方針の適用範囲**
+
+特に、前版で混在していた
+- コンセプト案
+- 実装必須事項
+- 日本語化提案
+- 将来改善案
+
+を切り分け、後続の `designer` / `planner` / `coder` が迷わず利用できる状態にすることを目的とします。
 
 ---
 
-## 1. デザイン方針
+# 1. 採用コンセプト
 
-### 1.1 全体コンセプト
-`SidebarChat` は単なる入力欄ではなく、以下 3 つを同時に扱う UI とする。
+## 1.1 採用方針
+本UIは、先行案のうち以下を採用します。
 
-- **会話**: user / assistant のやり取り
-- **作業進行**: reasoning, tool, flow, checkpoint の進捗可視化
-- **編集承認**: apply / reject / file changes の確認導線
+- **ベースコンセプト:** 案2 `Gallery “カードキュレーション” 美学`
+- **部分採用:** 案1 `Operational “ステータスHUD” 美学` の一部
 
-そのためデザインは以下を満たす。
+## 1.2 採用理由
+`SidebarChat` は文章表示だけでなく、以下を同時に扱います。
 
-- **可読性優先**  
-  派手さよりも、長時間見ても疲れにくいコントラストと密度にする。
-- **状態の可視化**  
-  「実行中 / 承認待ち / 完了 / エラー / 却下」が一目でわかること。
-- **カード化された情報整理**  
-  assistant 出力、tool 結果、review、変更一覧をカード単位で分離する。
-- **VS Code サイドバー文脈との整合**  
-  `void-*` / `vscode-*` トークンをベースにし、独自色は最小限にする。
+- 会話本文
+- 推論や進行状況
+- ツール実行結果
+- 承認 / 却下
+- ファイル変更の確認
 
----
+そのため、全体は**読みやすく整理されたカード中心UI**にしつつ、進行中の状態だけは**HUD的に即読可能**にするのが最も適しています。
 
-## 2. 画面構成のデザインルール
+## 1.3 この採用方針が意味すること
+### 全体として採用する性格
+- 本文は読みやすい
+- カード単位で整理される
+- 余白と階層で高級感を出す
+- アニメーションは控えめ
+- 状態表示だけ少し強めに見せる
 
----
+### 採用しない方向
+以下は本改修の主軸にはしません。
 
-## 3. レイアウト仕様
-
-### 3.1 画面の縦構造
-Sidebar 全体は 3 層構成。
-
-1. **Header**
-   - ログイン状態 / アカウントメニュー / 設定ボタン
-2. **Content**
-   - ランディング時: 入力欄 + 過去スレッド or おすすめ質問
-   - スレッド時: メッセージ一覧
-3. **Input Area**
-   - CommandBar
-   - Selected files
-   - Textarea
-   - モデル/モード選択
-   - 送信/停止
-
-### 3.2 パディング・余白基準
-基本は 4px グリッドで統一。
-
-- 外側余白:
-  - Header: `px-4 pt-2 pb-1`
-  - Thread content: `px-4 py-4`
-  - Input wrapper: `px-2 pb-2`
-- カード内余白:
-  - 小カード: `8px`
-  - 標準カード: `12px`
-  - 強調カード: `12px 14px`
-- 要素間:
-  - 密な行間: `gap-1` / `4px`
-  - 標準: `gap-2` / `8px`
-  - セクション間: `gap-4` / `16px`
+- 強いガラス演出を全体にかける
+- 立体感や押下感を主役にする
+- 音や派手な視差演出を入れる
+- 全体を雑誌風タイポグラフィに振り切る
 
 ---
 
-## 4. カラートークン仕様
+# 2. スコープ定義
 
-既存トークンを優先利用し、新規色は意味付きで限定使用する。
+## 2.1 本改修で扱う必須スコープ
+以下は**今回のデザイン仕様に含まれる必須範囲**です。
 
-### 4.1 ベーストークン
-- `var(--void-bg-1)`  
-  メイン面、入力欄、基本カード面
-- `var(--void-bg-2)`  
-  assistantカード、ツールカードヘッダ面、セカンダリ面
-- `var(--void-bg-3)`  
-  補助パネル、展開コンテンツ、コード背景、command bar
+1. `SidebarChat` の視覚構造整理
+2. `user / assistant / tool / review / command bar` のカード表現統一
+3. 状態表現の整理
+   - running
+   - done
+   - pending
+   - error
+   - rejected
+4. 余白・タイポグラフィ・境界線の統一
+5. 入力エリアの見た目調整
+6. 折りたたみUIの見た目と挙動統一
+7. 既存トークンベースでの配色整理
 
-- `var(--void-fg-1)`  
-  主本文字
-- `var(--void-fg-2)`  
-  見出し・強めの補助本文字
-- `var(--void-fg-3)`  
-  サブ文字、メタ情報
-- `var(--void-fg-4)`  
-  最も弱い補助文字、状態注記
+## 2.2 今回は含めないもの
+以下は**今回の必須実装スコープ外**です。
 
-- `var(--void-border-1)`  
-  主境界線
-- `var(--void-border-2)`  
-  弱い境界線
-- `var(--void-border-3)`  
-  入力欄などの外周初期枠
-
-- `var(--vscode-focusBorder)`  
-  アクティブ状態、assistantアクセント、review強調、進行中強調
-- `var(--void-warning)`  
-  エラー・警告
-
-### 4.2 意味色
-以下は意味が明確な箇所に限定。
-
-- **Success / Approved**
-  - `green-500 / green-400`
-- **Error / Rejected**
-  - `red-500 / red-400`
-- **Running / Attention**
-  - `orange` 系または `focusBorder`
-- **Drop target**
-  - `blue-400`, `bg-blue-500/10`
-
-### 4.3 使用ルール
-- カード面は **bg + border + 左アクセント線** で識別する。
-- 強調は原則 **色面ベタ塗りではなく淡い tint** で表現する。
-- user バブルは assistant よりやや軽く、assistant は情報主体として少し強めに見せる。
-- エラーは本文全体を赤くしすぎず、**アイコン + border + 補助領域** で示す。
+- 新規アニメーションライブラリの導入
+- 音付きインタラクション
+- パララックスやLenis系スクロール演出
+- UI全面の再構築を伴う大規模なファイル分割
+- IAそのものを大きく変える仕様変更
+- 文言の全面再設計
+- 多言語化対応の新規実装
+- ライトテーマ向け全面再設計
+- メッセージ仮想化などの大規模性能最適化
 
 ---
 
-## 5. タイポグラフィ仕様
+# 3. 文言方針
 
-### 5.1 基本
+## 3.1 必須方針
+文言については、**今回は既存文言を基本維持**します。  
+理由は、今回の主目的が**デザイン改善**であり、文言全面改修はスコープを広げすぎるためです。
+
+したがって、今回の必須方針は以下です。
+
+- 既存文言を基本維持
+- デザイン変更に伴い**新しく追加するラベル**のみ、既存UI言語に合わせる
+- 既存英語文言を一括で日本語化することは**必須ではない**
+
+## 3.2 最低限許容される文言修正
+以下のような、**UI整合性のための軽微な修正**は許容します。
+
+- 明らかな重複や不自然なラベルの調整
+- 状態表示に必要な短い補助ラベル追加
+- 折りたたみや状態バッジの短縮表記
+
+## 3.3 Optional: 日本語化提案
+前版で記載していた「ユーザー向け文言は原則日本語統一」は、**本仕様では任意提案**に格下げします。
+
+### Optional とする理由
+- 元のユーザー要求に明示されていない
+- プロダクト全体の言語方針と整合確認が必要
+- このファイル単体で決めるべき内容ではない
+
+### Optional 提案内容
+- 将来的に、ユーザー向け文言を日本語へ統一する
+- ただし以下の確認が必要
+  1. プロダクト全体の言語ポリシー
+  2. 他画面との一貫性
+  3. 翻訳キー管理方針
+
+---
+
+# 4. デザイン原則
+
+## 4.1 基本原則
+1. **可読性優先**
+2. **状態が一目でわかる**
+3. **カード単位で整理されている**
+4. **装飾より整列と余白を重視**
+5. **VS Code サイドバー文脈から浮きすぎない**
+
+## 4.2 視覚的な優先順位
+UIの視線誘導は以下順で設計します。
+
+1. 入力中・実行中の主要状態
+2. assistant本文
+3. tool / review の見出し
+4. 補助情報（model, meta, counts, info）
+5. 装飾要素
+
+## 4.3 演出ルール
+- 通常状態は静か
+- hover は軽く
+- active / running / error のみ視認性を強める
+- 遷移は 100〜200ms 中心
+- 点滅の多用は禁止
+
+---
+
+# 5. 必須仕様と任意仕様の区分
+
+---
+
+## 5.1 必須仕様一覧
+
+### A. カード構造
+- `user / assistant / tool / review / command bar` をカード単位で視覚的に分離する
+- 各カードは
+  - 背景面
+  - 境界線
+  - 角丸
+  - 必要に応じた左アクセント線
+  で構成する
+
+### B. 状態表現
+- 状態は**色だけに依存しない**
+- 少なくとも以下の2つ以上で伝える
+  - 色
+  - アイコン
+  - テキスト
+  - 形状差
+
+### C. 余白の統一
+- 4pxグリッドベース
+- 要素間の spacing を整理する
+- 同種コンポーネントの header/body/footer で padding を揃える
+
+### D. タイポグラフィ整理
+- サイズ段階を絞る
+- 見出し / 本文 / 補助情報 の階層を明確にする
+- 補助情報を薄くしすぎない
+
+### E. 入力欄デザイン
+- トークンベースの背景・枠線に統一
+- 純粋な `bg-black/80` 依存を避ける
+- focus / drag-over / disabled を見分けられるようにする
+
+### F. 折りたたみUI
+- 開閉可能であることが視覚的にわかる
+- 開閉時の余白変化が破綻しない
+- chevron / body の変化に一貫性を持たせる
+
+---
+
+## 5.2 任意仕様一覧
+
+### Optional 1. 日本語化
+- 既存UI文言の統一翻訳
+- ツールチップや補助文言の日本語化
+
+### Optional 2. ガラス感の追加
+- 軽い半透明 / blur / 微小なハイライト
+- ただしテーマとの整合確認が前提
+
+### Optional 3. 微細アニメーションの追加強化
+- ステータスバッジの軽いパルス
+- hover時の光量変化
+- scroll to bottom ボタンの出現演出強化
+
+### Optional 4. コンポーネント分割の大規模整理
+- `SidebarChat.tsx` の分割
+- 抽象コンポーネント化
+- 共通スタイルユーティリティ化
+
+---
+
+# 6. 未確定事項 / 要確認事項
+
+以下はこの仕様書だけで断定しない事項です。  
+実装前または実装中に確認が必要です。
+
+## 6.1 文言言語
+- UI言語は英語維持か、日本語へ寄せるか
+- 本件では決め打ちしない
+
+## 6.2 ライトテーマ対応の粒度
+- ダークテーマ中心で調整するか
+- ライトテーマまで厳密に詰めるか
+- 本仕様ではトークン準拠のみ必須とする
+
+## 6.3 依存ライブラリ追加
+- `framer-motion`
+- `lenis`
+- `use-sound`
+などの新規導入は**本仕様の対象外**。導入可否は別判断とする。
+
+## 6.4 コンポーネント分割範囲
+- 今回は見た目修正を優先
+- 大規模分割は必須ではない
+
+## 6.5 review/flow 系 UI の文言詳細
+- `FlowReviewComponent`
+- `DivisionOrchestrationComponent`
+の見出しを既存のままにするか、調整するかは別確認
+
+---
+
+# 7. デザイントークン方針
+
+## 7.1 使用原則
+既存トークンを優先使用します。
+
+### Surface
+- `var(--void-bg-1)` : ベース面 / 入力欄 / user系の軽い面
+- `var(--void-bg-2)` : assistant / tool header / 主カード面
+- `var(--void-bg-3)` : 補助面 / 展開部 / コード系 / command bar系
+
+### Text
+- `var(--void-fg-1)` : 主本文
+- `var(--void-fg-2)` : 見出し・やや強い補助
+- `var(--void-fg-3)` : メタ情報
+- `var(--void-fg-4)` : 最弱い補助  
+  ※ 常用しない。コントラスト不足に注意
+
+### Border
+- `var(--void-border-1)` : 主境界
+- `var(--void-border-2)` : 弱い境界
+- `var(--void-border-3)` : 入力欄外周など
+
+### Semantic
+- `var(--vscode-focusBorder)` : active / running / assistant accent
+- `var(--void-warning)` : warning / error 系
+
+## 7.2 新規意味色の扱い
+新規の success / error / warning を追加する場合は、**最小限**とします。
+
+推奨:
+- Success: 緑系
+- Error: 赤系
+- Warning: 既存 warning 系
+- Pending: focusBorder または黄系弱色
+
+ただし、**新規CSS変数追加は必須ではない**です。既存トークンで成立するなら優先します。
+
+---
+
+# 8. レイアウト仕様
+
+## 8.1 全体の縦構造
+1. Header
+2. Message / Content area
+3. Input area
+
+この基本構造は維持します。
+
+## 8.2 余白スケール
+4pxグリッドで統一します。
+
+- 4px: 密な要素間
+- 8px: 標準の要素間
+- 12px: カード内の標準padding
+- 16px: セクション間
+- 20px以上: 特別な強調領域のみ
+
+## 8.3 基本padding指針
+- Header: `px-4 pt-2 pb-1`
+- Thread content: `px-4 py-4`
+- Input wrapper: `px-2 pb-2`
+
+## 8.4 カード内部
+- compact card: `p-2`
+- standard card: `p-3`
+- emphasized card: `px-3.5 py-3`
+
+---
+
+# 9. タイポグラフィ仕様
+
+## 9.1 サイズ段階
+サイズはむやみに増やさず、原則以下に寄せます。
+
 - 本文: `13px`
-- 補助本文 / tool body: `12px`
-- メタ情報 / バッジ / 状態: `10px ~ 11px`
-- ラベル見出し: `11px ~ 12px`
+- 補助本文: `12px`
+- メタ情報: `11px`
+- 極小ラベル: `10px`
 
-### 5.2 重み
-- セクションタイトル: `font-medium` or `font-semibold`
-- モデル名・状態名: `font-medium`
-- 長文本文: 通常ウェイト
+## 9.2 ウェイト
+- 見出し: `font-medium` 〜 `font-semibold`
+- 状態名: `font-medium`
+- 本文: regular
+- メタ情報: regular
 
-### 5.3 行間
-- 長文 markdown: `leading-normal`
-- compact prose / reasoning / tool result: `leading-snug`
-
----
-
-## 6. 角丸・境界線・影
-
-### 6.1 角丸
-- 入力欄外枠: `rounded-md`
-- assistant / tool / flow review card: `6px ~ 8px`
-- user bubble: `12px`
-- 小バッジ / token: `3px ~ 6px`
-- FAB / 丸ボタン: `full`
-
-### 6.2 影
-- 通常カード: `0 1px 3px rgba(0,0,0,0.04 ~ 0.08)`
-- assistant card: `0 1px 4px rgba(0,0,0,0.06)`
-- hover/floating button: `shadow-md` → `shadow-lg`
-
-### 6.3 境界線
-- 標準: `1px solid var(--void-border-1)`
-- 強調カード: 左に `2px` または `3px` のアクセント線
-- 展開部は背景色差 + 上境界線で分離
+## 9.3 可読性ルール
+- 本文は `fg-1`
+- 見出しは `fg-1` か `fg-2`
+- メタ情報は `fg-3`
+- `fg-4` は本当に弱い注釈のみ
 
 ---
 
-## 7. コンポーネント別デザイン仕様
+# 10. コンポーネント別 必須仕様
 
-### 7.1 SidebarHeader
-#### 構造
-- 右寄せ
-- 要素: ログイン or アバター、設定
+---
 
-#### スタイル
-- 高さは詰めすぎず、クリック領域 20px 以上
-- 設定アイコン:
-  - 通常: `text-void-fg-3`
-  - hover: `text-void-fg-1`
+## 10.1 `VoidChatArea` 入力エリア
 
-#### アカウントメニュー
-- 背景: `bg-void-bg-1`
-- border: `border-void-border-2`
+### 必須
+- 背景は `bg-void-bg-1` 系
+- 枠線は `border-void-border-3` を基準にし、hover/focus で強める
+- 下段操作バーは**純黒ベタ依存を避ける**
+- drag-over 時は通常状態との差が明確であること
+
+### 推奨見た目
+- background: `var(--void-bg-1)`
+- border: `1px solid var(--void-border-3)`
+- focus: `var(--void-border-1)` または `var(--vscode-focusBorder)`
 - radius: `rounded-md`
-- shadow: `shadow-lg`
-- メニュー項目 hover: `bg-void-bg-3`
+- padding: `p-2`
+
+### Optional
+- 軽い backdrop / color-mix による質感追加
 
 ---
 
-### 7.2 ランディング画面
-#### 表示内容
-- 入力欄を上部中央寄り
-- 下部に
-  - 過去チャット
-  - またはおすすめ質問
+## 10.2 `SelectedFiles`
 
-#### おすすめ質問チップ
-- 背景は極薄
-- hover で少し濃く
-- `text-sm`
-- クリック可能性を明示するため opacity を hover で上げる
+### 必須
+- token 表示の高さ・角丸・境界を揃える
+- remove ボタンが誤タップしにくいこと
+- 画像添付のサムネイル表示を既存より整える
+- prospective 状態は通常状態と判別できること
 
----
-
-### 7.3 入力エリア `VoidChatArea`
-#### 役割
-最重要 UI。以下を一体化する。
-- 添付ファイル表示
-- テキスト入力
-- モデル関連設定
-- 送信/停止
-- DnD
-
-#### 見た目
+### 視覚ルール
 - 背景: `bg-void-bg-1`
-- border: `border-void-border-3`
-- focus/hover: `border-void-border-1`
-- radius: `rounded-md`
-- 内側 padding: `p-2`
-- 最大高: `80vh`
-
-#### Drag & Drop 状態
-- 通常からの変化:
-  - border: `blue-400`
-  - background: `blue-500/10`
-- overlay:
-  - `absolute inset-0`
-  - `border-2 border-dashed`
-  - 中央に `Paperclip + "ここにファイルをドロップ"`
-
-#### 下段操作バー
-現状 `bg-black/80` になっているが、採用方針は以下。
-- 背景はテーマ非依存の真っ黒ではなく、**トークンベースに寄せる**
-- 推奨:
-  - `bg-void-bg-2`
-  - `border border-void-border-1`
-  - または `bg-[color-mix(...)]`
-- 理由:
-  - ダーク/ライト両対応
-  - 浮きすぎ防止
-  - assistant/tool card と一貫性を持たせる
-
-#### 添付ボタン
-- アイコン: `Paperclip`
-- 通常: `text-void-fg-3`
-- hover:
-  - `text-void-fg-1`
-  - `bg-void-bg-2`
-
----
-
-### 7.4 送信/停止ボタン
-#### Submit
-- 形: 白の円形
-- アイコン: 上向き矢印
-- disabled:
-  - `bg-vscode-disabled-fg`
-  - `cursor-default`
-- enabled:
-  - `bg-white`
-  - `cursor-pointer`
-
-#### Stop
-- 形: 白の円形
-- アイコン: 四角
-- 実行中のみ表示
-
-#### 改善ルール
-- クリック領域は最低 `28x28` を推奨
-- 白背景は維持しつつ、hover 時に少し暗くする
-- キーボードフォーカスリング対応推奨
-
----
-
-### 7.5 SelectedFiles
-#### 目的
-選択済みファイル、コード範囲、フォルダ、画像を token 化して表示する。
-
-#### token 仕様
-- 高さ: compact
 - border: `border-void-border-1`
-- 背景: `bg-void-bg-1`
-- 文字: `text-xs`
-- radius: `rounded-sm`
-- prospective:
-  - `border-void-border-2`
-  - `text-void-fg-3`
-  - `opacity-80`
+- radius: `rounded-sm` 〜 `rounded-md`
+- text: `text-xs`
 
-#### hover / click
-- hover で `brightness-95`
-- staging 選択は click で:
-  - prospective の確定
-  - file/code selection の open
-
-#### 画像添付
-- サムネイル: `24x24`
-- `object-cover`
-- ファイル名は `max-w-[80px] truncate`
-
-#### 削除ボタン
-- token 右端に小さく表示
-- click で remove
-- 本体 click と競合しないよう stopPropagation
+### Optional
+- hover時の微小なハイライト
+- サムネイル影の微調整
 
 ---
 
-### 7.6 UserMessageComponent
-#### display モード
-- 右寄せ
-- 最大幅は広めだが本文に合わせて縮む
-- 背景:
-  - `void-bg-1` ベースの薄いグラデーション
-- border:
-  - `void-border-1` と `focusBorder` をミックス
+## 10.3 `UserMessageComponent`
+
+### 必須
+- 右寄せ構造は維持
+- assistantより軽いカード表現にする
+- edit affordance を見つけやすくする
+- 編集時の見た目が display 時と大きく乖離しない
+
+### 視覚ルール
+- 背景: `void-bg-1` ベースの薄いトーン差
+- border: `void-border-1` ベース
 - radius: `12px`
-- shadow: 薄く
-
-#### edit モード
-- 入力欄全幅化
-- 元の message selections を引き継ぐ
-- Escape で閉じる
-- Enter 送信
-
-#### 編集アイコン
-- hover/focus 時のみ表示
-- 背景: `bg-void-bg-1`
-- border: `border-void-border-1`
-- radius: `rounded-md`
+- 影は薄く
 
 ---
 
-### 7.7 AssistantMessageComponent
-#### 基本方針
-assistant は「返答本文」と「その前後の思考/構造情報」をまとめる中核カード。
+## 10.4 `AssistantMessageComponent`
 
-#### カード仕様
-- 背景:
-  - `void-bg-2` ベースの薄いグラデーション
-- border:
-  - `1px solid var(--void-border-1)`
-- 左アクセント:
-  - `3px solid var(--vscode-focusBorder)`
+### 必須
+- 本文を主役にする
+- model や補助情報は弱く整理
+- userカードより一段強い主カードにする
+- 左アクセント線を維持可能
+
+### 視覚ルール
+- 背景: `void-bg-2`
+- border: `1px solid var(--void-border-1)`
+- 左アクセント: `3px solid var(--vscode-focusBorder)`
 - radius: `8px`
 - padding: `12px 14px`
 
-#### モデルラベル
-- 上部ヘッダに小さく表示
-- ドット + モデル名
-- 11px、fg-3
+---
 
-#### 本文
-- markdown は `ProseWrapper`
-- 行間をやや広くし、説明文の読みやすさを優先
+## 10.5 Reasoning 表示
+
+### 必須
+- assistant本文の下位階層であることがわかる
+- 折りたたみ可能であること
+- running 時のみやや目立たせる
+- 完了後は本文の邪魔をしない
+
+### 視覚ルール
+- `ToolHeaderWrapper` と同系列の構造を使ってよい
+- body は本文より低コントラスト
+- header は compact
 
 ---
 
-### 7.8 Reasoning 表示
-#### 方針
-思考は「本文より一段下の情報」として折りたたみ可能にする。
+## 10.6 `ToolHeaderWrapper`
 
-#### 表示仕様
-- タイトル:
-  - 実行中: `思考中`
-  - 完了後:
-    - `X.X 秒間思考しました`
-    - 取得不可時は `思考`
-- 実行中は初期オープン
-- 完了後は自動クローズ
+### 必須
+- 共通カード構造として統一する
+- header は情報過密になりすぎない
+- title / desc1 / status / counts の優先順位を整理
+- open/close がわかる
+- error / rejected / normal が判別できる
 
-#### 見た目
-- ToolHeaderWrapper 構造を流用
-- body は `SmallProseWrapper`
-- 本文よりコントラストを少し落とす
-
----
-
-### 7.9 ToolHeaderWrapper
-#### 役割
-すべての tool 表示の共通カード。
-
-#### 標準仕様
+### 視覚ルール
 - 背景: `var(--void-bg-2)`
 - border: `1px solid var(--void-border-1)`
 - 左アクセント:
-  - 通常: `var(--vscode-focusBorder)`
-  - error: `var(--void-warning)`
-  - rejected: `var(--void-fg-4)`
+  - normal: `focusBorder`
+  - error: warning/error color
+  - rejected: muted系
 - radius: `6px`
 
-#### ヘッダ
-- 高さ: 最低 `28px`
-- 左:
-  - 開閉矢印
-  - タイトル
-  - desc1
-- 右:
-  - info
-  - error/rejected icon
-  - desc2
-  - 件数 badge
+### header構造の優先順
+左:
+- chevron
+- title
+- desc1
 
-#### 状態表現
-- `isRejected`
-  - `line-through opacity-50`
-- `isError`
-  - warning icon
-- 展開部
-  - `transition-all duration-200`
+右:
+- desc2
+- info
+- status icon
+- count badge
+
+### 禁止
+- 右側に情報を詰め込みすぎる
+- 補助情報を本文より強く見せる
 
 ---
 
-### 7.10 Tool body
-#### 共通
-- 背景は `bg-void-bg-3` を基本
-- コード/結果は本文と視覚階層を分ける
-- コピー、適用、移動系ボタンは右上のメタ行に集約
+## 10.7 Tool body
 
-#### 一覧結果
-- `ListableToolItem`
-- hover で明るく
-- クリック可能な行はポインタ化
-
-#### エラー下部
-- `BottomChildren`
-- 左 warning border
-- 初期は閉じる
-- 文言:
-  - `Error` は日本語統一で `エラー` 推奨
+### 必須
+- header と body の階層差を明確にする
+- body は `bg-void-bg-3` ベースでよい
+- コード / 結果 / メタ操作を分離する
+- copy / apply / jump などはまとまりを持って配置する
 
 ---
 
-### 7.11 FlowIndicator
-#### 目的
-エージェント進行を一行で示す。
+## 10.8 `FlowIndicator`
 
-#### 表示ルール
-- `isRunning` 時のみ表示
-- `thinking → searching → reading → coding → running`
-- 非 Division では左に単一モデルラベル
+### 必須
+- 実行中の状態把握を助ける
+- 通常時は静か
+- active のみやや強く見せる
+- done は薄く残すか、必要最小限に抑える
 
-#### 見た目
-- 横並び compact
-- phase:
-  - active: fg-1, semibold
-  - done: opacity 0.5
-  - idle: 非表示
-- 矢印区切り: `→`
-- モデル名は 9px
+### 視覚ルール
+- compactな横並び
+- active: `fg-1` + medium
+- done: `opacity` を下げるが消しすぎない
+- idle: 極力主張しない
 
-#### 文言
-- `思考中`
-- `検索中`
-- `読み込み`
-- `実装中`
-- `実行中`
+### Optional
+- activeに軽いパルス / opacity変化
 
 ---
 
-### 7.12 DivisionOrchestrationComponent
-#### 方針
-JSON 由来の orchestration 結果を「システムフローの監査カード」として可視化。
+## 10.9 `CommandBarInChat`
 
-#### セクション
-1. Task Generation Flow
-2. Task Execution Flow n
+### 必須
+- 変更ファイルの集約パネルとして独立性を持たせる
+- 入力欄より目立ちすぎない
+- file list / bulk action / status の3役割を整理する
+- 承認待ちかどうかがわかる
 
-#### カード仕様
-- 背景: `bg-void-bg-1`
-- border: `border-void-border-1`
-- radius: `8px`
-- padding: `12px`
-- shadow: 薄く
-
-#### 左アクセント
-Task execution card のみ左に 3px アクセント
-
-#### 文言変更方針
-英語見出しはできれば日本語化する。
-- `Task Generation Flow` → `タスク生成フロー`
-- `Task Execution Flow` → `タスク実行フロー`
-- `Hide/Show Context Input` → `コンテキスト入力を表示/非表示`
-- `No output` → `出力はありません`
-
----
-
-### 7.13 FlowReviewComponent
-#### 役割
-文書ベースの中間レビュー UI。承認/差し戻しが主導線。
-
-#### コンテナ状態
-- pending:
-  - `focusBorder` 系
-- approved:
-  - 緑系 tint
-- rejected:
-  - 赤系 tint + opacity 少し低下
-
-#### 構成
-1. ヘッダ
-2. 進行ステッパー
-3. ドキュメントプレビュー
-4. タスク進捗バー
-5. アクションボタン
-
-#### ステッパー
-- 各 phase は丸アイコン + 短いラベル
-- current:
-  - scale 少し拡大
-  - focusBorder
-- completed:
-  - 緑チェック
-- upcoming:
-  - 弱い色
-
-#### アクション
-- Primary: 承認して次へ進む
-  - 緑塗り
-  - 白文字
-- Secondary: やり直す
-  - 薄いボーダー
-
-#### 文言
-- `ドキュメントレビュー`
-- `レビュー待ち`
-- `承認済み`
-- `却下`
-- `承認して次へ進む`
-- `やり直す`
-
----
-
-### 7.14 CommandBarInChat
-#### 役割
-このスレッドで発生したファイル変更の集約パネル。
-
-#### 上部パネル
+### 視覚ルール
 - 背景: `bg-void-bg-3`
-- border:
-  - `border-t border-l border-r border-zinc-300/10`
-- rounded top
+- border: `border-void-border-1` 系
+- rounded top を維持可能
+- file row は一覧性を優先
 
-#### 表示内容
-- 左:
-  - 変更ファイル数
-  - 開閉ボタン
-- 右:
-  - Reject all / Accept all
-  - thread status indicator
-
-#### ステータス色
-- 承認待ち: yellow
-- 実行中: orange
-- 完了: dark
-
-#### ファイル詳細
-- 各行:
-  - ファイル名
-  - diff 数
-  - 個別承認/拒否
-  - file status indicator
-
-#### 文言変更
-- `変更されたファイルはありません`
-- `n件の変更されたファイル`
-- tooltip:
-  - `すべて拒否`
-  - `すべて承認`
-  - `ファイルを拒否`
-  - `ファイルを承認`
+### Optional
+- bulk action ボタンの hover強化
+- thread status indicator の視認性改善
 
 ---
 
-## 8. 状態仕様
+## 10.10 `FlowReviewComponent` / `DivisionOrchestrationComponent`
 
-### 8.1 入力欄
+### 必須
+- 他のカード群と同じデザイン言語に寄せる
+- レビュー系であること、通常toolでないことがわかる
+- 状態
+  - pending
+  - approved
+  - rejected
+  を見分けられる
+
+### Optional
+- 見出しの文言整理
+- ステッパー表示の演出強化
+
+---
+
+# 11. 状態仕様
+
+## 11.1 入力欄
 - default
 - hover
 - focus-within
@@ -576,223 +551,189 @@ Task execution card のみ左に 3px アクセント
 - drag-over
 - streaming
 
-### 8.2 メッセージ
+## 11.2 メッセージ
 - committed
 - streaming
-- checkpoint ghost
 - editing
+- ghost / checkpoint
 
-### 8.3 tool
-- tool_request
-- running_now
+## 11.3 tool
+- pending
+- running
 - success
 - rejected
-- tool_error
-- invalid_params
+- error
+- invalid params
 
-### 8.4 review
+## 11.4 review
 - pending
 - approved
 - rejected
 
-### 8.5 thread
+## 11.5 thread
 - idle
 - LLM running
 - tool running
-- awaiting_user
+- awaiting user
 
 ---
 
-## 9. アニメーション仕様
+# 12. アニメーション仕様
 
-### 9.1 基本方針
-- 速く、短く、主張しすぎない
-- 100ms〜200ms を基本
-- streaming/loading は 300ms 周期程度
+## 12.1 必須方針
+- 速い
+- 短い
+- 控えめ
+- レイアウト破綻を起こさない
 
-### 9.2 個別
-#### Hover / border
-- `transition-all duration-150 ~ 200`
+## 12.2 推奨値
+- hover: `150ms`
+- accordion: `200ms`
+- chevron rotate: `100ms`
+- status pulse: 任意、使う場合のみ `250ms〜400ms` 程度
 
-#### Accordion 開閉
-- `transition-all duration-200 ease-in-out`
-
-#### Chevron 回転
-- `duration-100`
-- cubic-bezier は現状踏襲可
-
-#### Loading dots
-- `300ms` 周期
-- ただし今後は text 切替より CSS アニメ化が望ましい
-
-#### Scroll to bottom button
-- ふわっと出る:
-  - `opacity`
-  - `shadow`
-  - `duration-200`
+## 12.3 禁止
+- 常時大きく動く装飾
+- 複数箇所の同時点滅
+- 可読性を下げる過剰モーション
 
 ---
 
-## 10. 文言変更ルール
+# 13. アクセシビリティ方針
 
-現コードは日本語と英語が混在しているため、**ユーザー向け文言は原則日本語統一** とする。
+## 13.1 必須
+- 状態を色だけで伝えない
+- 補助情報のコントラストを落としすぎない
+- 小さすぎるクリックターゲットを避ける
+- hover のみで意味を伝えない
 
-### 10.1 日本語化対象
-以下は変更推奨。
+## 13.2 推奨
+- focus-visible の見た目強化
+- 展開UIに `aria-expanded` を付与
+- 状態アイコンへ補助ラベル付与
 
-| 現在 | 変更案 |
-|---|---|
-| Send | 送信 |
-| Scroll to bottom | 一番下へスクロール |
-| Attach image | 画像を添付 |
-| Error | エラー |
-| Approve | 承認 |
-| Cancel | キャンセル |
-| Copy | コピー |
-| Open settings | 設定を開く |
-| Current File | 現在のファイル |
-| Checkpoint | チェックポイント |
-| Disabled when running | 実行中は無効です |
-| because another thread is running | 他のスレッド実行中のため無効です |
-| Generating | 生成中 |
-| Results truncated | 結果は省略されています |
-| No lint errors found. | lint エラーはありません |
-| No output | 出力はありません |
-
-### 10.2 用語統一
-- `チャット`
-- `ギャザー`
-- `エージェント`
-- `思考中`
-- `承認待ち`
-- `実行中`
-- `完了`
-- `却下`
-- `エラー`
-
-### 10.3 トーン
-- 説明的で簡潔
-- 機械翻訳調を避ける
-- ボタンは動詞で統一
-  - `承認`
-  - `拒否`
-  - `設定を開く`
-  - `ログイン`
+※ ただし本書はデザイン仕様書であり、完全なアクセシビリティ実装仕様ではありません。ARIA詳細は実装設計側で補完します。
 
 ---
 
-## 11. 実装変更ポイント一覧
+# 14. 実装優先順位
 
-### 11.1 すぐ反映すべき見た目調整
-1. `VoidChatArea` 下段バーの `bg-black/80` をトークンベースへ変更
-2. 英語文言の日本語統一
-3. `Error` / `Lint errors` / `Task Generation Flow` 等の見出し統一
-4. Submit/Stop ボタンの hover/focus 強化
-5. Tool card の右上メタ情報サイズ統一
+## P0
+1. 入力欄下段バーの黒ベース解消
+2. assistant / tool / command bar のカード整理
+3. ToolHeaderWrapper の header情報整理
+4. 余白・タイポの段階整理
+5. running / error / rejected の状態表現強化
 
-### 11.2 実装後に確認すること
-- ダーク/ライトテーマでコントラスト破綻がないか
-- 長いファイル名、コマンド、パスの省略表示
-- streaming 中の高さ揺れ
-- FlowReview の pending/approved/rejected の視認性
-- assistant card と tool card の区別が十分か
+## P1
+1. reasoning 表示の整理
+2. selected files token の統一
+3. flow indicator の微調整
+4. review系カードの統一感改善
 
----
-
-## 12. QA チェックリスト
-
-### 12.1 視覚
-- [ ] user / assistant / tool / review が見分けられる
-- [ ] 実行中 / 完了 / エラー / 却下が即判別できる
-- [ ] 長文 markdown が詰まりすぎていない
-- [ ] command bar が入力欄より強くなりすぎていない
-
-### 12.2 文言
-- [ ] 英語 UI が残っていない
-- [ ] tooltip 文言が日本語で統一されている
-- [ ] ボタンラベルが命令形で統一されている
-
-### 12.3 操作感
-- [ ] hover が効く場所と効かない場所が明確
-- [ ] 展開 UI のアニメーションが自然
-- [ ] スクロール最下部ボタンが邪魔すぎない
-- [ ] 添付・削除・編集アイコンのクリック領域が十分
+## P2
+1. optionalな文言整理
+2. 微細演出の追加
+3. ガラス感の軽微な付与
+4. 将来的なコンポーネント分割の準備
 
 ---
 
-## 13. 参考実装ポリシー
+# 15. 実装者向け判断ルール
 
-### 13.1 優先順位
-1. 情報設計の明確化
-2. 状態の視認性
-3. テーマ整合
-4. 細かな装飾
+実装中に迷った場合、以下で判断します。
 
-### 13.2 禁止寄りルール
-- 純黒背景の常用
-- 意味のないグラデーション多用
-- 重要状態を opacity のみで表現
-- 英日混在ラベルの放置
+## 15.1 優先順位
+1. 情報が読みやすいか
+2. 状態がわかるか
+3. 既存トークンで整合するか
+4. 既存構造を壊しすぎないか
+5. 装飾が過剰でないか
 
----
-
-## 14. 推奨デザイントークン早見表
-
-```ts
-const designSpec = {
-  surfaces: {
-    primary: 'var(--void-bg-1)',
-    secondary: 'var(--void-bg-2)',
-    tertiary: 'var(--void-bg-3)',
-  },
-  text: {
-    primary: 'var(--void-fg-1)',
-    secondary: 'var(--void-fg-2)',
-    muted: 'var(--void-fg-3)',
-    subtle: 'var(--void-fg-4)',
-  },
-  border: {
-    strong: 'var(--void-border-1)',
-    default: 'var(--void-border-2)',
-    outer: 'var(--void-border-3)',
-  },
-  semantic: {
-    accent: 'var(--vscode-focusBorder)',
-    warning: 'var(--void-warning)',
-    success: 'rgb(34 197 94)', // green-500
-    error: 'rgb(239 68 68)',   // red-500
-    infoDrop: 'rgb(96 165 250)', // blue-400
-  },
-  radius: {
-    sm: '4px',
-    md: '6px',
-    lg: '8px',
-    xl: '12px',
-    full: '9999px',
-  },
-  motion: {
-    fast: '100ms',
-    normal: '200ms',
-    loading: '300ms',
-  }
-}
-```
+## 15.2 迷ったら採用する方向
+- 派手さより整理
+- 強い色面より境界と余白
+- 新規ライブラリより既存CSS/Tailwind
+- 文言改修より視覚整理
 
 ---
 
-## 15. 最終要約
+# 16. 非目標
 
-この `SidebarChat` で採用するデザインは、以下を核とする。
+今回の改修では、以下を成果基準にしません。
 
-- **入力欄は作業ハブとして落ち着いたカード表現**
-- **assistant/tool/review をカードとアクセント線で明確に分離**
-- **状態は色・アイコン・文言の 3 点で伝える**
-- **文言は日本語に統一**
-- **黒ベタではなくテーマトークン中心**
-- **アニメーションは短く控えめ**
+- UI言語の完全統一
+- 新規モーションライブラリ導入
+- 完全なコンポーネント分割
+- 全テーマ完全最適化
+- IA再設計
+- 全文言の再翻訳
 
-必要であれば次に、
-1. **実装用の差分ガイド**
-2. **文言置換一覧（grep しやすい形式）**
-3. **Tailwind/className 単位の修正案**
-まで落とし込めます。
+---
+
+# 17. QAチェックリスト
+
+## 視覚
+- [ ] user / assistant / tool / review / command bar が見分けられる
+- [ ] 本文が最も読みやすい
+- [ ] 進行中状態が埋もれない
+- [ ] 補助情報がうるさすぎない
+- [ ] 入力欄が黒ベタから浮きすぎず改善されている
+
+## 状態表現
+- [ ] error / rejected / running / done が判別できる
+- [ ] 色だけで状態を判断させていない
+- [ ] open/close可能要素が開閉可能に見える
+
+## レイアウト
+- [ ] 同種カードでpaddingが揃っている
+- [ ] headerとbodyの区切りが明確
+- [ ] 長いタイトルやファイル名でも破綻しにくい
+
+## 文言
+- [ ] 新規追加ラベルが既存UI文脈と矛盾しない
+- [ ] 日本語化を行った場合、それが任意提案であることを逸脱していない
+
+## 実装方針
+- [ ] 新規依存導入なしでも成立している
+- [ ] 既存のテーマトークンを優先利用している
+- [ ] 既存動作を壊していない
+
+---
+
+# 18. 付録: Optional 提案の扱いルール
+
+以下は**採用してもよいが、今回の完了条件には含めない**提案です。
+
+## Optional A: 日本語化
+- 実施する場合は、別PRまたは別タスク扱いが望ましい
+
+## Optional B: ガラス演出
+- 背景 / blur / ハイライトはごく弱く
+- 可読性を下げるなら不採用
+
+## Optional C: 強めのHUD演出
+- active flow に限定
+- 常時点滅は避ける
+
+## Optional D: 大規模リファクタ
+- UI差分が安定してから着手
+
+---
+
+# 19. 最終要約
+
+今回の `SidebarChat` デザイン改修は、以下を正式採用とします。
+
+- **Gallery型の読みやすいカードUI**をベースにする
+- **進行状態だけHUD的に少し強く**見せる
+- **文言全面日本語化は必須ではない**
+- **optional提案と必須仕様を分離**する
+- **既存トークンと既存構造を優先**する
+- **新規ライブラリ導入は前提にしない**
+
+この仕様書は、後続エージェントが
+- 何を実装すべきか
+- 何を勝手に広げてはいけないか
+- 何が任意提案か
+を判断できるように整理した改訂版です。

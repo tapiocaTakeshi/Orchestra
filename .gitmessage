@@ -1,0 +1,23 @@
+refactor(sidebar-chat): extract design tokens and add Electron Forge packaging
+
+- Split SidebarChat styling into dedicated modules under
+  react/src/sidebar-tsx/styles/ (designTokens, sidebarChatStyles,
+  sidebarChat.css, sidebarChatStrings) to centralize color/spacing/
+  typography tokens aligned with VS Code theme variables.
+- Wire SidebarChat.tsx and chatThreadService.ts to the new tokens; no
+  behavioral changes to chat flow.
+- Enhance sendLLMMessage workspace file search: add JP->EN synonym
+  expansion, baseline manifest/entry inclusion, directory tree output,
+  and pending-injection hook for mid-phase user interrupts.
+- Tune sendLLMMessage channel/impl/types to plumb the injection getter
+  through the IPC boundary.
+- Add Electron Forge packaging setup (forge.config.js, makers,
+  publishers, fuses, squirrel-startup) and refresh package.json /
+  package-lock.json accordingly.
+- Redesign chatgpt-info.html landing with Inter/Noto Sans JP,
+  glassmorphism hero, animated ambient gradients, and responsive grid.
+- Refresh light/dark theme JSON tokens for better contrast.
+- Overhaul .division/* role docs (CODER, DESIGNER, WRITING, RESEARCH,
+  PLANNING, IDEAMAN, SEARCH, FILE-SEARCH, REVIEW) to the SidebarChat-
+  focused spec and add .orchestration-state.json snapshot.
+- Update .vscode/settings.json and open-remote-ssh extension metadata.
