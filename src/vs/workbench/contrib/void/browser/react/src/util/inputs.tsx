@@ -1293,6 +1293,7 @@ export const VoidCustomDropdownBox = <T extends NonNullable<any>>({
 	getOptionDropdownName,
 	getOptionDropdownDetail,
 	getOptionDisplayName,
+	getOptionGroupName,
 	getOptionsEqual,
 	className,
 	arrowTouchesText = true,
@@ -1306,6 +1307,10 @@ export const VoidCustomDropdownBox = <T extends NonNullable<any>>({
 	getOptionDropdownName: (option: T) => string;
 	getOptionDropdownDetail?: (option: T) => string;
 	getOptionDisplayName: (option: T) => string;
+	// Optional: when provided, adjacent options sharing the same non-empty
+	// group name are rendered under a non-selectable group header row.
+	// Return undefined / '' to opt an option out of grouping (rendered as-is).
+	getOptionGroupName?: (option: T) => string | undefined;
 	getOptionsEqual: (a: T, b: T) => boolean;
 	className?: string;
 	arrowTouchesText?: boolean;
@@ -1466,43 +1471,58 @@ export const VoidCustomDropdownBox = <T extends NonNullable<any>>({
 					onWheel={(e) => e.stopPropagation()}
 				><div className='overflow-auto max-h-80'>
 
-						{options.map((option) => {
-							const thisOptionIsSelected = getOptionsEqual(option, selectedOption);
-							const optionName = getOptionDropdownName(option);
-							const optionDetail = getOptionDropdownDetail?.(option) || '';
+						{(() => {
+							let lastGroup: string | undefined = undefined;
+							return options.map((option, idx) => {
+								const thisOptionIsSelected = getOptionsEqual(option, selectedOption);
+								const optionName = getOptionDropdownName(option);
+								const optionDetail = getOptionDropdownDetail?.(option) || '';
+								const groupName = getOptionGroupName?.(option);
+								const showHeader = !!groupName && groupName !== lastGroup;
+								lastGroup = groupName || undefined;
 
-							return (
-								<div
-									key={optionName}
-									className={`flex items-center px-2 py-1 pr-4 cursor-pointer whitespace-nowrap
+								return (
+									<div key={`opt-${idx}-${optionName}`}>
+										{showHeader && (
+											<div
+												className='sticky top-0 z-[1] bg-void-bg-1 px-2 pt-2 pb-1 text-[10px] uppercase tracking-wider text-void-fg-4 select-none cursor-default'
+												onClick={(e) => e.stopPropagation()}
+											>
+												{groupName}
+											</div>
+										)}
+										<div
+											className={`flex items-center px-2 py-1 pr-4 cursor-pointer whitespace-nowrap
 									transition-all duration-100
 									${thisOptionIsSelected ? 'bg-blue-500 text-white/80' : 'hover:bg-blue-500 hover:text-white/80'}
 								`}
-									onClick={() => {
-										onChangeOption(option);
-										setIsOpen(false);
-									}}
-								>
-									<div className="w-4 flex justify-center flex-shrink-0">
-										{thisOptionIsSelected && (
-											<svg className="size-3" viewBox="0 0 12 12" fill="none">
-												<path
-													d="M10 3L4.5 8.5L2 6"
-													stroke="currentColor"
-													strokeWidth="1.5"
-													strokeLinecap="round"
-													strokeLinejoin="round"
-												/>
-											</svg>
-										)}
+											onClick={() => {
+												onChangeOption(option);
+												setIsOpen(false);
+											}}
+										>
+											<div className="w-4 flex justify-center flex-shrink-0">
+												{thisOptionIsSelected && (
+													<svg className="size-3" viewBox="0 0 12 12" fill="none">
+														<path
+															d="M10 3L4.5 8.5L2 6"
+															stroke="currentColor"
+															strokeWidth="1.5"
+															strokeLinecap="round"
+															strokeLinejoin="round"
+														/>
+													</svg>
+												)}
+											</div>
+											<span className="flex justify-between items-center w-full gap-x-1">
+												<span>{optionName}</span>
+												<span className='opacity-60'>{optionDetail}</span>
+											</span>
+										</div>
 									</div>
-									<span className="flex justify-between items-center w-full gap-x-1">
-										<span>{optionName}</span>
-										<span className='opacity-60'>{optionDetail}</span>
-									</span>
-								</div>
-							);
-						})}
+								);
+							});
+						})()}
 					</div>
 
 				</div>

@@ -169,6 +169,11 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 		const divisionApiKey = modelSelection.providerName === 'divisionAPI'
 			? globalSettings.divisionApiKey
 			: undefined;
+		const divisionMaxReviewIterations = modelSelection.providerName === 'divisionAPI'
+			? (Number.isFinite(globalSettings.maxReviewIterations) && globalSettings.maxReviewIterations > 0
+				? Math.floor(globalSettings.maxReviewIterations)
+				: 10)
+			: undefined;
 		if (modelSelection.providerName === 'divisionAPI') {
 			console.log(`[LLMMessageService] Division API key present: ${!!divisionApiKey}, length: ${divisionApiKey?.length ?? 0}`);
 		}
@@ -187,6 +192,7 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 			divisionRoleAssignments,
 			divisionProjectId,
 			divisionApiKey,
+			divisionMaxReviewIterations,
 			workspaceFolderPath,
 		} satisfies MainSendLLMMessageParams);
 

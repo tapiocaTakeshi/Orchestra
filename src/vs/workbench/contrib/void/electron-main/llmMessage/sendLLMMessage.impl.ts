@@ -61,6 +61,7 @@ type SendChatParams_Internal = InternalCommonMessageParams & {
 	divisionRoleAssignments?: RoleAssignment[];
 	divisionProjectId?: string;
 	divisionApiKey?: string;
+	divisionMaxReviewIterations?: number;
 	workspaceFolderPath?: string;
 }
 type SendFIMParams_Internal = InternalCommonMessageParams & { messages: LLMFIMMessage; separateSystemMessage: string | undefined; }
@@ -1392,11 +1393,11 @@ const MAX_SEARCH_FILES = 30;
 const MAX_FILE_SIZE_BYTES = 100 * 1024; // 100KB
 const MAX_TOTAL_OUTPUT_CHARS = 60000;
 
-// レビューサイクル（Coder → Reviewer → 不合格ならもう一度）の最大反復回数。
-// ユーザーは「OK が出るまでずっとループ」を要求したが、API コスト暴走と
-// 無応答対策として安全弁のハードキャップを設ける。ユーザーは AbortController
-// 経由でいつでも中断できる。
-const MAX_REVIEW_ITERATIONS = 10;
+// レビューサイクル（Coder → Reviewer → 不合格ならもう一度）の最大反復回数のデフォルト値。
+// 実際の値はユーザー設定 (`globalSettings.maxReviewIterations`) から
+// sendChat 呼び出し時に `divisionMaxReviewIterations` として渡される。
+// ユーザーは AbortController 経由でいつでも中断できる。
+const DEFAULT_MAX_REVIEW_ITERATIONS = 10;
 
 // レビュアー出力が「合格」かどうかを判定する。
 // 日本語/英語の典型的な合否表現と、明示的な不合格マーカーの両方を見る。
@@ -2303,12 +2304,21 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		separateSystemMessage,
 		divisionProjectId: divisionProjectIdParam,
 		divisionApiKey,
+		divisionMaxReviewIterations,
 		workspaceFolderPath,
 		modelName: selectedModel,
 		chatMode,
 		settingsOfProvider,
 		takePendingInjection,
 	} = params
+
+	// ユーザー設定のレビュー最大反復回数を解釈（安全側に clamp）
+	const maxReviewIterations: number = (() => {
+		const raw = divisionMaxReviewIterations;
+		if (typeof raw !== 'number' || !Number.isFinite(raw)) return DEFAULT_MAX_REVIEW_ITERATIONS;
+		if (raw < 1) return 1;
+		return Math.floor(raw);
+	})();
 
 	try {
 		const endpointBase = settingsOfProvider.divisionAPI.endpoint || 'https://api.division.he-ro.jp';
@@ -2946,8 +2956,8 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					break;
 				}
 
-				if (iteration >= MAX_REVIEW_ITERATIONS - 1) {
-					appendText(`\n\n⚠️ **最大反復回数 (${MAX_REVIEW_ITERATIONS}) に到達** — レビュー合格に至らなかったためここで終了します。最新のレビュー指摘は REVIEW.md を参照してください。\n`);
+				if (iteration >= maxReviewIterations - 1) {
+					appendText(`\n\n⚠️ **最大反復回数 (${maxReviewIterations}) に到達** — レビュー合格に至らなかったためここで終了します。最新のレビュー指摘は REVIEW.md を参照してください。\n`);
 					break;
 				}
 

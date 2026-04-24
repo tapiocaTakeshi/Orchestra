@@ -1132,8 +1132,43 @@ const DivisionSettings = () => {
 		divisionProjectService.save({ ...project, agents: updated });
 	};
 
+	// Coder ↔ Reviewer ループの最大反復回数（ユーザー設定）
+	const maxReviewIterations = settingsState.globalSettings.maxReviewIterations;
+	const [maxReviewIterationsInput, setMaxReviewIterationsInput] = useState<string>(String(maxReviewIterations ?? 10));
+	useEffect(() => {
+		setMaxReviewIterationsInput(String(settingsState.globalSettings.maxReviewIterations ?? 10));
+	}, [settingsState.globalSettings.maxReviewIterations]);
+	const commitMaxReviewIterations = (raw: string) => {
+		const n = parseInt(raw, 10);
+		const clamped = Number.isFinite(n) && n > 0 ? Math.min(n, 100) : 10;
+		voidSettingsService.setGlobalSetting('maxReviewIterations', clamped);
+		setMaxReviewIterationsInput(String(clamped));
+	};
+
 	return (
 		<div className="flex flex-col gap-4">
+			{/* Review loop iteration cap */}
+			<div className="flex items-center justify-between gap-4 border border-void-border-2 bg-void-bg-2 rounded-sm px-3 py-2">
+				<div className="flex flex-col">
+					<span className="text-xs text-void-fg-2 font-medium">レビュー最大反復回数</span>
+					<span className="text-[11px] text-void-fg-4">
+						Coder ↔ Reviewer のループ上限。Reviewer が合格を出さない場合はこの回数に達した時点で終了します（1〜100）。
+					</span>
+				</div>
+				<input
+					type="number"
+					min={1}
+					max={100}
+					step={1}
+					value={maxReviewIterationsInput}
+					onChange={(e) => setMaxReviewIterationsInput(e.target.value)}
+					onBlur={(e) => commitMaxReviewIterations(e.target.value)}
+					onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+					className="w-20 bg-void-bg-1 border border-void-border-3 rounded-sm px-2 py-1 text-xs text-void-fg-1 focus:outline-none focus:border-[#0e70c0]"
+					aria-label="Max review iterations"
+				/>
+			</div>
+
 			{/* agents.json section header with Update All + Supabase Sync buttons */}
 			<div className="flex items-center justify-between">
 				<span className="text-xs text-void-fg-3 uppercase font-semibold tracking-wide">Configured Projects</span>

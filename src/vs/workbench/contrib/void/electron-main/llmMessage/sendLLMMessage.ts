@@ -29,6 +29,7 @@ export const sendLLMMessage = async ({
 	divisionRoleAssignments,
 	divisionProjectId,
 	divisionApiKey,
+	divisionMaxReviewIterations,
 	workspaceFolderPath,
 	takePendingInjection,
 }: SendLLMMessageParams,
@@ -115,7 +116,7 @@ export const sendLLMMessage = async ({
 		}
 		const { sendFIM, sendChat } = implementation
 		if (messagesType === 'chatMessages') {
-			await sendChat({ messages: messages_, onText, onFinalMessage, onError, onFileOperation, onCommandRun, settingsOfProvider, modelSelectionOptions, overridesOfModel, modelName, _setAborter, providerName, separateSystemMessage, chatMode, mcpTools, divisionRoleAssignments, divisionProjectId, divisionApiKey, workspaceFolderPath, takePendingInjection })
+			await sendChat({ messages: messages_, onText, onFinalMessage, onError, onFileOperation, onCommandRun, settingsOfProvider, modelSelectionOptions, overridesOfModel, modelName, _setAborter, providerName, separateSystemMessage, chatMode, mcpTools, divisionRoleAssignments, divisionProjectId, divisionApiKey, divisionMaxReviewIterations, workspaceFolderPath, takePendingInjection })
 			return
 		}
 		if (messagesType === 'FIMMessage') {

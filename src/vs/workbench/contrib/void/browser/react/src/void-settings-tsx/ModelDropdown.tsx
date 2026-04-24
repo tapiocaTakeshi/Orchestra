@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FeatureName, featureNames, isFeatureNameDisabled, ModelSelection, modelSelectionsEqual, ProviderName, providerNames, SettingsOfProvider } from '../../../../../../../workbench/contrib/void/common/voidSettingsTypes.js'
+import { displayInfoOfProviderName, FeatureName, featureNames, isFeatureNameDisabled, ModelSelection, modelSelectionsEqual, ProviderName, providerNames, SettingsOfProvider } from '../../../../../../../workbench/contrib/void/common/voidSettingsTypes.js'
 import { useSettingsState, useRefreshModelState, useAccessor, useDivisionProjectConfig, useDivisionProjects } from '../util/services.js'
 import { _VoidSelectBox, VoidCustomDropdownBox } from '../util/inputs.js'
 import { SelectBox } from '../../../../../../../base/browser/ui/selectBox/selectBox.js'
@@ -51,8 +51,19 @@ const ModelSelectBox = ({ options, featureName, className }: { options: ModelOpt
 			const suffix = divisionProjects.length > 1 ? ` (${divisionProjects.length})` : ''
 			return divisionProjectConfig.name + suffix
 		}
-		return option.selection.providerName
+		// プロバイダ名は group header で表示するので、行内では詳細を出さない
+		return ''
 	}, [divisionProjectConfig, divisionProjects])
+
+	const getGroupName = useCallback((option: ModelOption) => {
+		// Division Project はグループ化しない（トップ固定の特別項目）
+		if (isDivisionProjectOption(option.selection)) return undefined
+		try {
+			return displayInfoOfProviderName(option.selection.providerName).title
+		} catch {
+			return option.selection.providerName
+		}
+	}, [])
 
 	return <VoidCustomDropdownBox
 		options={options}
@@ -61,6 +72,7 @@ const ModelSelectBox = ({ options, featureName, className }: { options: ModelOpt
 		getOptionDisplayName={getDisplayName}
 		getOptionDropdownName={getDisplayName}
 		getOptionDropdownDetail={getDropdownDetail}
+		getOptionGroupName={getGroupName}
 		getOptionsEqual={(a, b) => optionsEqual([a], [b])}
 		className={className}
 		matchInputWidth={false}
@@ -81,29 +93,44 @@ const MemoizedModelDropdown = ({ featureName, className }: { featureName: Featur
 		let newOptions = settingsState._modelOptions.filter((o) => filter(o.selection, { chatMode: settingsState.globalSettings.chatMode, overridesOfModel: settingsState.overridesOfModel }))
 
 		// Inject Division Project option at the top if project config exists and not already in list
+		let divisionOption: ModelOption | null = null
 		if (divisionProjectConfig && featureName === 'Chat') {
-			const hasDivisionOption = newOptions.some(o => isDivisionProjectOption(o.selection))
-			if (!hasDivisionOption) {
-				const divisionOption: ModelOption = {
+			const existingIdx = newOptions.findIndex(o => isDivisionProjectOption(o.selection))
+			if (existingIdx >= 0) {
+				divisionOption = newOptions.splice(existingIdx, 1)[0]
+			} else {
+				divisionOption = {
 					name: `Division Project`,
 					selection: DIVISION_PROJECT_SELECTION,
 				}
-				newOptions = [divisionOption, ...newOptions]
-			} else {
-				// Move existing Division option to top
-				const divIdx = newOptions.findIndex(o => isDivisionProjectOption(o.selection))
-				if (divIdx > 0) {
-					const [divOption] = newOptions.splice(divIdx, 1)
-					newOptions = [divOption, ...newOptions]
-				}
 			}
+		} else {
+			// Ensure no stray Division option leaks into non-Chat feature dropdowns
+			const strayIdx = newOptions.findIndex(o => isDivisionProjectOption(o.selection))
+			if (strayIdx >= 0) newOptions.splice(strayIdx, 1)
 		}
+
+		// プロバイダごとに隣接させて並べ替え（グループヘッダ表示のため）
+		// 同プロバイダ内は元の順序を安定保持する。
+		const providerOrder = new Map<ProviderName, number>()
+		for (let i = 0; i < newOptions.length; i++) {
+			const p = newOptions[i].selection.providerName
+			if (!providerOrder.has(p)) providerOrder.set(p, providerOrder.size)
+		}
+		newOptions.sort((a, b) => {
+			const ao = providerOrder.get(a.selection.providerName) ?? 0
+			const bo = providerOrder.get(b.selection.providerName) ?? 0
+			return ao - bo
+		})
+
+		// Division Project があれば必ず先頭に据える
+		if (divisionOption) newOptions = [divisionOption, ...newOptions]
 
 		if (!optionsEqual(oldOptions, newOptions)) {
 			setMemoizedOptions(newOptions)
 		}
 		oldOptionsRef.current = newOptions
-	}, [settingsState._modelOptions, filter, divisionProjectConfig, featureName])
+	}, [settingsState._modelOptions, settingsState.globalSettings.chatMode, settingsState.overridesOfModel, filter, divisionProjectConfig, featureName])
 
 	if (memoizedOptions.length === 0) { // Pretty sure this will never be reached unless filter is enabled
 		return <WarningBox text={emptyMessage?.message || 'No models available'} />

@@ -529,6 +529,9 @@ export type GlobalSettings = {
 	divisionProjectId: string;
 	divisionApiKey: string;
 	isLoggedIn: boolean;
+	// Coder ↔ Reviewer ループの最大反復回数（Division API orchestration 用）。
+	// 1 以上の整数。0 / 負数は 1 に丸められる。
+	maxReviewIterations: number;
 }
 
 // Default role assignments for Division API
@@ -566,6 +569,7 @@ export const defaultGlobalSettings: GlobalSettings = {
 	divisionProjectId: '',
 	divisionApiKey: '',
 	isLoggedIn: false,
+	maxReviewIterations: 10,
 }
 
 export type GlobalSettingName = keyof GlobalSettings
