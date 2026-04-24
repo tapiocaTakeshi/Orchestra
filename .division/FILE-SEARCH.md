@@ -1,65 +1,174 @@
-6 件のファイルが見つかりました（キーワード: 既存, ui, 要約再調査）。
+## ワークスペース: `/Volumes/T7/Program/Orchestra`
 
-### `.build/extensions/theme-quietlight/themes/quietlight-color-theme.json`
-```json
-{"name":"Quiet Light","tokenColors":[{"settings":{"foreground":"#333333"}},{"scope":["meta.embedded","source.groovy.embedded","string meta.image.inline.markdown","variable.legacy.builtin.python"],"settings":{"foreground":"#333333"}},{"name":"Comments","scope":["comment","punctuation.definition.comment"],"settings":{"fontStyle":"italic","foreground":"#AAAAAA"}},{"name":"Comments: Preprocessor","scope":"comment.block.preprocessor","settings":{"fontStyle":"","foreground":"#AAAAAA"}},{"name":"Comments: Documentation","scope":["comment.documentation","comment.block.documentation","comment.block.documentation punctuation.definition.comment "],"settings":{"foreground":"#448C27"}},{"name":"Invalid","scope":"invalid","settings":{"foreground":"#cd3131"}},{"name":"Invalid - Illegal","scope":"invalid.illegal","settings":{"foreground":"#660000"}},{"name":"Operators","scope":"keyword.operator","settings":{"foreground":"#777777"}},{"name":"Keywords","scope":["keyword","storage"],"settings":{"foreground":"#4B69C6"}},{"name":"Types","scope":["storage.type","support.type"],"settings":{"foreground":"#7A3E9D"}},{"name":"Language Constants","scope":["constant.language","support.constant","variable.language"],"settings":{"foreground":"#9C5D27"}},{"name":"Variables","scope":["variable","support.variable"],"settings":{"foreground":"#7A3E9D"}},{"name":"Functions","scope":["entity.name.function","support.function"],"settings":{"fontStyle":"bold","foreground":"#AA3731"}},{"name":"Classes","scope":["entity.name.type","entity.name.namespace","entity.name.scope-resolution","entity.other.inherited-class","punctuation.separator.namespace.ruby","support.class"],"settings":{"fontStyle":"bold","foreground":"#7A3E9D"}},{"name":"Exceptions","scope":"entity.name.exception","settings":{"foreground":"#660000"}},{"name":"Sections","scope":"entity.name.section","settings":{"fontStyle":"bold"}},{"name":"Numbers, Characters","scope":["constant.numeric","constant.character","constant"],"settings":{"foreground":"#9C5D27"}},{"name":"Strings","scope":"string","settings":{"foreground":"#448C27"}},{"name":"Strings: Escape Sequences","scope":"constant.character.escape","settings":{"foreground":"#777777"}},{"name":"Strings: Regular Expressions","scope":"string.regexp","settings":{"foreground":"#4B69C6"}},{"name":"Strings: Symbols","scope":"constant.other.symbol","settings":{"foreground":"#9C5D27"}},{"name":"Punctuation","scope":"punctuation","settings":{"foreground":"#777777"}},{"name":"HTML: Doctype Declaration","scope":["meta.tag.sgml.doctype","meta.tag.sgml.doctype string","meta.tag.sgml.doctype entity.name.tag","meta.tag.sgml punctuation.definition.tag.html"],"settings":{"foreground":"#AAAAAA"}},{"name":"HTML: Tags","scope":["meta.tag","punctuation.definition.tag.html","punctuation.definition.tag.begin.html","punctuation.definition.tag.end.html"],"settings":{"foreground":"#91B3E0"}},{"name":"HTML: Tag Names","scope":"entity.name.tag","settings":{"foreground":"#4B69C6"}},{"name":"HTML: Attribute Names","scope":["meta.tag entity.other.attribute-name","entity.other.attribute-name.html"],"settings":{"fontStyle":"italic","foreground":"#8190A0"}},{"name":"HTML: Entities","scope":["constant.character.entity","punctuation.definition.entity"],"settings":{"foreground":"#9C5D27"}},{"name":"CSS: Selectors","scope":["meta.selector","meta.selector entity","meta.selector entity punctuation","entity.name.tag.css","entity.name.tag.less"],"settings":{"foreground":"#7A3E9D"}},{"name":"CSS: Property Names","scope":["meta.property-name","support.type.property-name"],"settings":{"foreground":"#9C5D27"}},{"name":"CSS: Property Values","scope":["meta.property-value","meta.property-value constant.other","support.constant.property-value"],"settings":{"foreground":"#448C27"}},{"name":"CSS: Important Keyword","scope":"keyword.other.important","settings":{"fontStyle":"bold"}},{"name":"Markup: Changed","scope":"markup.changed","settings":{"foreground":"#000000"}},{"name":"Markup: Deletion","scope":"markup.deleted","settings":{"foreground":"#000000"}},{"name":"Markup: Emphasis","scope":"markup.italic","settings":{"fontStyle":"italic"}},{"scope":"markup.strikethrough","settings":{"fontStyle":"strikethrough"}},{"name":"Markup: Error","scope":"markup.error","settings":{"foreground":"#660000"}},{"name":"Markup: Insertion","scope":"markup.inserted","settings":{"foreground":"#000000"}},{"name":"Markup: Link","scope":"meta.link","settings":{"foreground":"#4B69C6"}},{"name":"Markup: Output","scope":["markup.output","markup.raw"],"settings":{"foreground":"#777777"}},{"name":"Markup: Prompt","scope":"markup.prompt","settings":{"foreground":"#777777"}},{"name":"Markup: Heading","scope":"markup.heading","settings":{"foreground":"#AA3731"}},{"name":"Markup: Strong","scope":"markup.bold","settings":{"fontStyle":"bold"}},{"name":"Markup: Traceback","scope":"markup.traceback","settings":{"foreground":"#660000"}},{"name":"Markup: Underline","scope":"markup.underline","settings":{"fontStyle":"underline"}},{"name":"Markup Quote","scope":"markup.quote","settings":{"foreground":"#7A3E9D"}},{"name":"Markup Lists","scope":"markup.list","settings":{"foreground":"#4B69C6"}},{"name":"Markup Styling","scope":["markup.bold","markup.italic"],"settings":{"foreground":"#448C27"}},{"name":"Markup Inline","scope":"markup.inline.raw","settings":{"fontStyle":"","foreground":"#9C5D27"}},{"name":"Extra: Diff Range","scope":["meta.diff.range","meta.diff.index","meta.separator"],"settings":{"foreground":"#434343"}},{"name":"Extra: Diff From","scope":["meta.diff.header.from-file","punctuation.definition.from-file.diff"],"settings":{"foreground":"#4B69C6"}},{"name":"Extra: Diff To","scope":["meta.diff.header.to-file","punctuation.definition.to-file.diff"],"settings":{"foreground":"#4B69C6"}},{"name":"diff: deleted","scope":"markup.deleted.diff","settings":{"foreground":"#C73D20"}},{"name":"diff: changed","scope":"markup.changed.diff","settings":{"foreground":"#9C5D27"}},{"name":"diff: inserted","scope":"markup.inserted.diff","settings":{"foreground":"#448C27"}},{"name":"JSX: Tags","scope":["punctuation.definition.tag.js","punctuation.definition.tag.begin.js","punctuation.definition.tag.end.js"],"settings":{"foreground":"#91B3E0"}},{"name":"JSX: InnerText","scope":"meta.jsx.c
+3 件のファイルを読み込みました（キーワード: 既存ファイル確認、合計 37,304 文字）。 ベースラインとして主要マニフェスト/エントリを常に含めています。
 
-... [中略 52931 文字省略] ...
+### ディレクトリツリー（関連ファイルの追加読取が必要ならパスを明示してください）
 
-nnelApplicationConfig" => {
-				if let Value::Object(v) = value {
-					set_env_vars_from_map_keys(&format!("{}_{}", prefix, "TUNNEL"), v);
-				}
-				continue;
-			}
-			_ => value,
+- ._.env
+- ._package-lock.json
+- ._package.json
+- .build/electron/Orchestra.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Libraries/vk_swiftshader_icd.json
+- .build/electron/Orchestra.app/Contents/Resources/LICENSES.chromium.html
+- .build/extensions/bat/language-configuration.json
+- .build/extensions/bat/package.json
+- .build/extensions/bat/package.nls.json
+- .build/extensions/bat/syntaxes/batchfile.tmLanguage.json
+- .build/extensions/clojure/language-configuration.json
+- .build/extensions/clojure/package.json
+- .build/extensions/clojure/package.nls.json
+- .build/extensions/clojure/syntaxes/clojure.tmLanguage.json
+- .build/extensions/coffeescript/language-configuration.json
+- .build/extensions/coffeescript/package.json
+- .build/extensions/coffeescript/package.nls.json
+- .build/extensions/coffeescript/syntaxes/coffeescript.tmLanguage.json
+- .build/extensions/configuration-editing/package.json
+- .build/extensions/configuration-editing/package.nls.json
+- .build/extensions/configuration-editing/schemas/attachContainer.schema.json
+- .build/extensions/cpp/language-configuration.json
+- .build/extensions/cpp/package.json
+- .build/extensions/cpp/package.nls.json
+- .build/extensions/cpp/syntaxes/c.tmLanguage.json
+- .build/extensions/cpp/syntaxes/cpp.embedded.macro.tmLanguage.json
+- .build/extensions/cpp/syntaxes/cpp.tmLanguage.json
+- .build/extensions/cpp/syntaxes/cuda-cpp.tmLanguage.json
+- .build/extensions/cpp/syntaxes/platform.tmLanguage.json
+- .build/extensions/csharp/language-configuration.json
+- .build/extensions/csharp/package.json
+- .build/extensions/csharp/package.nls.json
+- .build/extensions/csharp/syntaxes/csharp.tmLanguage.json
+- .build/extensions/css-language-features/README.md
+- .build/extensions/css-language-features/package.json
+- .build/extensions/css-language-features/package.nls.json
+- .build/extensions/css-language-features/schemas/package.schema.json
+- .build/extensions/css-language-features/server/package.json
+- .build/extensions/css/language-configuration.json
+- .build/extensions/css/package.json
+- .build/extensions/css/package.nls.json
+- .build/extensions/css/syntaxes/css.tmLanguage.json
+- .build/extensions/dart/language-configuration.json
+- .build/extensions/dart/package.json
+- .build/extensions/dart/package.nls.json
+- .build/extensions/dart/syntaxes/dart.tmLanguage.json
+- .build/extensions/debug-auto-launch/package.json
+- .build/extensions/debug-auto-launch/package.nls.json
+- .build/extensions/debug-server-ready/package.json
+- .build/extensions/debug-server-ready/package.nls.json
+- .build/extensions/diff/language-configuration.json
+- .build/extensions/diff/package.json
+- .build/extensions/diff/package.nls.json
+- .build/extensions/diff/syntaxes/diff.tmLanguage.json
+- .build/extensions/docker/language-configuration.json
+- .build/extensions/docker/package.json
+- .build/extensions/docker/package.nls.json
+- .build/extensions/docker/syntaxes/docker.tmLanguage.json
+- .build/extensions/emmet/README.md
+- .build/extensions/emmet/package.json
+- .build/extensions/emmet/package.nls.json
+- .build/extensions/extension-editing/package.json
+- .build/extensions/extension-editing/package.nls.json
+- .build/extensions/fsharp/language-configuration.json
+- .build/extensions/fsharp/package.json
+- .build/extensions/fsharp/package.nls.json
+- .build/extensions/fsharp/syntaxes/fsharp.tmLanguage.json
+- .build/extensions/git-base/README.md
+- .build/extensions/git-base/languages/git-commit.language-configuration.json
+- .build/extensions/git-base/languages/git-rebase.language-configuration.json
+- .build/extensions/git-base/languages/ignore.language-configuration.json
+- .build/extensions/git-base/package.json
+- .build/extensions/git-base/package.nls.json
+- .build/extensions/git-base/syntaxes/git-commit.tmLanguage.json
+- .build/extensions/git-base/syntaxes/git-rebase.tmLanguage.json
+- .build/extensions/git-base/syntaxes/ignore.tmLanguage.json
+- .build/extensions/git/README.md
+- .build/extensions/git/package.json
+- .build/extensions/git/package.nls.json
+- .build/extensions/git/resources/emojis.json
+- .build/extensions/github-authentication/README.md
+- .build/extensions/github-authentication/media/auth.css
+- .build/extensions/github-authentication/media/index.html
+- .build/extensions/github-authentication/package.json
+- .build/extensions/github-authentication/package.nls.json
+- .build/extensions/github/README.md
+- .build/extensions/github/markdown.css
+- .build/extensions/github/package.json
+- .build/extensions/github/package.nls.json
+- .build/extensions/github/testWorkspace/.github/PULL_REQUEST_TEMPLATE.md
+- .build/extensions/github/testWorkspace/.github/PULL_REQUEST_TEMPLATE/a.md
+- .build/extensions/github/testWorkspace/.github/PULL_REQUEST_TEMPLATE/b.md
+- .build/extensions/github/testWorkspace/.github/PULL_REQUEST_TEMPLATE/x.txt
+- .build/extensions/github/testWorkspace/PULL_REQUEST_TEMPLATE.md
+- .build/extensions/github/testWorkspace/PULL_REQUEST_TEMPLATE/a.md
+- .build/extensions/github/testWorkspace/PULL_REQUEST_TEMPLATE/b.md
+- .build/extensions/github/testWorkspace/PULL_REQUEST_TEMPLATE/x.txt
+- .build/extensions/github/testWorkspace/docs/PULL_REQUEST_TEMPLATE.md
+- .build/extensions/github/testWorkspace/docs/PULL_REQUEST_TEMPLATE/a.md
+- .build/extensions/github/testWorkspace/docs/PULL_REQUEST_TEMPLATE/b.md
+- .build/extensions/github/testWorkspace/docs/PULL_REQUEST_TEMPLATE/x.txt
+- .build/extensions/github/testWorkspace/some-markdown.md
+- .build/extensions/github/testWorkspace/x.txt
+- .build/extensions/go/language-configuration.json
+- .build/extensions/go/package.json
+- .build/extensions/go/package.nls.json
+- .build/extensions/go/syntaxes/go.tmLanguage.json
+- .build/extensions/groovy/language-configuration.json
+- .build/extensions/groovy/package.json
+- .build/extensions/groovy/package.nls.json
+- .build/extensions/groovy/syntaxes/groovy.tmLanguage.json
+- .build/extensions/grunt/README.md
+- .build/extensions/grunt/package.json
+- .build/extensions/grunt/package.nls.json
+- .build/extensions/gulp/README.md
+- .build/extensions/gulp/package.json
+- .build/extensions/gulp/package.nls.json
+- .build/extensions/handlebars/language-configuration.json
+- .build/extensions/handlebars/package.json
+- .build/extensions/handlebars/
+
+... [中略 46129 文字省略] ...
+
+et userLocale = app.getLocale();
+	if (!userLocale) {
+		return {
+			userLocale: 'en',
+			osLocale,
+			resolvedLanguage: 'en',
+			defaultMessagesFile: path.join(__dirname, 'nls.messages.json'),
+
+			// NLS: below 2 are a relic from old times only used by vscode-nls and deprecated
+			locale: 'en',
+			availableLanguages: {}
 		};
-		if key.contains("win32") && key.contains("AppId") {
-			if let Value::String(s) = value {
-				win32_app_ids.push(s);
-				continue;
-			}
-		}
-		//#endregion
-
-		if let Value::String(s) = value {
-			println!(
-				"cargo:rustc-env={}_{}={}",
-				prefix,
-				camel_case_to_constant_case(&key),
-				s
-			);
-		}
 	}
 
-	if !win32_app_ids.is_empty() {
-		println!(
-			"cargo:rustc-env=VSCODE_CLI_WIN32_APP_IDS={}",
-			win32_app_ids.join(",")
-		);
+	// See above the comment about the loader and case sensitiveness
+	userLocale = processZhLocale(userLocale.toLowerCase());
+
+	return resolveNLSConfiguration({
+		userLocale,
+		osLocale,
+		commit: product.commit,
+		userDataPath,
+		nlsMetadataPath: __dirname
+	});
+}
+
+/**
+ * Language tags are case insensitive however an ESM loader is case sensitive
+ * To make this work on case preserving & insensitive FS we do the following:
+ * the language bundles have lower case language tags and we always lower case
+ * the locale we receive from the user or OS.
+ */
+function getUserDefinedLocale(argvConfig: IArgvConfig): string | undefined {
+	const locale = args['locale'];
+	if (locale) {
+		return locale.toLowerCase(); // a directly provided --locale always wins
 	}
+
+	return typeof argvConfig?.locale === 'string' ? argvConfig.locale.toLowerCase() : undefined;
 }
 
-fn read_json_from_path<T>(path: &Path) -> T
-where
-	T: DeserializeOwned,
-{
-	let mut file = fs::File::open(path).expect("failed to open file");
-	serde_json::from_reader(&mut file).expect("failed to deserialize JSON")
-}
+//#endregion
 
-fn apply_build_from_product_json(path: &Path) {
-	let json: HashMap<String, Value> = read_json_from_path(path);
-	set_env_vars_from_map_keys("VSCODE_CLI", json);
-}
+```
 
-#[derive(Deserialize)]
-struct PackageJson {
-	pub version: String,
-}
-
-fn apply_build_environment_variables() {
-	let repo_dir = env::current_dir().unwrap().join("..");
-	let pa
-... (truncated)
 ```

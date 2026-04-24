@@ -11,6 +11,8 @@
  *   2. ツールカードのコンテナを `ChatCard variant="tool" status={...}` に置換する
  *   3. 状態表示（Error / Running / Rejected）を `StatusBadge` に置換する
  *   4. 英語ラベルを `labels.*` 参照に置換する
+ *
+ * このファイルは .tsx — .tsx を再エクスポートするため外側 tsc（--jsx 無効）の対象外にする必要がある。
  */
 
 export { ChatCard, ChatCardHeader } from './ChatCard.js';

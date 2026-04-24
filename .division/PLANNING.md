@@ -1,84 +1,83 @@
-ご指摘を真摯に受け止め、前回失敗した「設計と実装の乖離」および「デザインの具体性欠如」を解消するため、実装フェーズに直結する具体的な計画を策定します。
-
-本プランは、`SidebarChat.tsx` の機能的健全性を保ちつつ、UI を「Gallery (読みやすさ)」と「HUD (状態管理)」を融合させたデザインに昇華させるための設計書です。
+このたび、`SidebarChat.tsx` の UI/UX をより洗練されたものにするための改修方針を設計しました。現状の「神コンポーネント（God Component）」状態を解消し、デザインシステムを意識した保守性の高い構造へと移行します。
 
 ---
 
-# SidebarChat リファクタリングおよびUI刷新 実装設計案
+## 1. コンポーネント分割設計
 
-## 1. コンセプトの再定義とデザイントークン
-`ideaman` による「案2 (Gallery) + 案1 (HUD)」を採用し、以下のトーン＆マナーを既存の `void-*` トークンに適用します。
+現状の単一ファイル構造から、役割ごとにコンポーネントを分離し、可読性と再利用性を高めます。
 
-*   **Gallery (読みやすさ):** メッセージカードは `bg-void-bg-2` をベースに、薄い枠線で囲む。本文は prose 階層を遵守。
-*   **HUD (状態管理):** ツールやフローの結果は左側にアクセントバー（`vscode-focusBorder`）を配し、右上のメタ領域で状態を一括表示する。
-*   **新規ライブラリの導入判断:** 既存プロジェクトの安定性を最優先し、**`framer-motion` などの追加導入は行いません**。既存の CSS Transition と Tailwind の `transition-all` でマイクロインタラクションを実現します。
-
-## 2. 実装アーキテクチャ設計 (コードの分離)
-
-`SidebarChat.tsx` に集中していたロジックを以下の役割に分離します。各コンポーネントは `SidebarChat.tsx` を親として Props を受け取る関数コンポーネントとして実装します。
-
-| ファイルパス | 責務 | 主なProps |
-| :--- | :--- | :--- |
-| `ChatBubble.tsx` | ユーザー/アシスタントの吹き出し生成 | `message`, `isEditing`, `onEdit` |
-| `ToolHeaderWrapper.tsx` | ツール実行結果の展開/折りたたみ、状態表示 | `status`, `title`, `isOpen`, `onToggle` |
-| `CommandBarInChat.tsx` | ファイル変更の統合管理パネル | `changes`, `onAcceptAll`, `onReject` |
-| `ChatInputBox.tsx` | 入力欄とモデル選択、添付ファイルUI | `onSend`, `selectedFiles` |
-
-## 3. 具体的なデザイン実装方針
-
-### A. メッセージカードのカード化 (Gallery)
-`ChatBubble.tsx` 内で以下を適用します。
-```tsx
-// ChatBubble.tsx のクラス設計方針
-className="p-4 rounded-lg bg-void-bg-2 border border-void-border-1 shadow-sm hover:border-void-border-2 transition-colors"
+### 新ディレクトリ構造案
+```text
+src/vs/workbench/contrib/void/browser/react/src/sidebar-tsx/
+├── SidebarChat.tsx            # メインエントリ（状態管理とレイアウト）
+├── components/
+│   ├── ChatContainer.tsx      # メッセージリストのスクロール・レンダリング
+│   ├── bubbles/
+│   │   ├── UserMessage.tsx
+│   │   ├── AssistantMessage.tsx
+│   │   └── ToolMessage.tsx    # 各ツールに応じたレンダリング分岐
+│   ├── input/
+│   │   ├── ChatInputArea.tsx  # 入力フォーム全体
+│   │   └── AttachmentList.tsx # 選択済みファイルリスト
+│   └── layout/
+│       ├── SidebarHeader.tsx
+│       └── FlowStatus.tsx     # 思考・実行中ステータス
 ```
-*   アシスタント応答は、モデルラベル（上部）と本文（ProseWrapper）の間隔を `gap-2` で統一。
-*   思考過程（Reasoning）がある場合は `ToolHeaderWrapper` の collapsible パターンを流用。
-
-### B. ツール実行結果の HUD 化 (Status HUD)
-`ToolHeaderWrapper.tsx` で、状態を明確にするためのレイアウトを固定します。
-```tsx
-// header 部分の flex レイアウト設計
-<div className="flex items-center justify-between min-h-[28px] px-2 gap-2">
-  <div className="flex items-center gap-2">
-    <StatusIcon status={status} /> {/* 16px アイコン */}
-    <span className="text-xs font-medium text-void-fg-1">{title}</span>
-  </div>
-  <div className="flex items-center gap-1">
-    {/* メタ情報（件数・時間など） */}
-    <Badge count={num} />
-  </div>
-</div>
-```
-
-## 4. 既存制約との適合性チェック
-
-*   **VS Code Theme 変数:** すべての背景・境界線には `var(--void-*)` および `var(--vscode-*)` を使用します。ハードコードは行いません。
-*   **状態管理:** `SidebarChat` が持つ `isRunning`, `isError` 等の State を、新コンポーネントの Props として流し込みます。Store 構造は変更せず、Presentational Component の分離のみに注力します。
-*   **Accessibility:** すべてのクリック可能なヘッダーには `role="button"` を付与し、`onKeyDown` で Enter/Space をハンドリングしてアクセシビリティを確保します。
-
-## 5. コーディング手順 (Coded のための詳細タスク)
-
-実装担当の `coder` は以下の順序で作業を行ってください。
-
-1.  **STEP 1: コンポーネント抽出**
-    *   `SidebarChat.tsx` から `AssistantMessageComponent` 等の大きな塊を `components/` ディレクトリに分離します。
-2.  **STEP 2: スタイルの共通化**
-    *   `styles.ts` (新規) を作成し、カードのデザイン共通クラスを定義します。
-    *   `const cardStyle = "bg-void-bg-2 border border-void-border-1 rounded-lg";`
-3.  **STEP 3: 状態表示の統合**
-    *   `ToolHeaderWrapper` を修正し、現状の「色のみの判定」を「アイコン＋テキスト＋色」の HUD パターンに置換します。
-4.  **STEP 4: テスト**
-    *   ツール実行時、エラー時、ストリーミング中の見た目が一貫しているかを確認します。
-
-## 6. デザイナーへの指示事項
-前回の欠落を補完するため、以下のスタイルをデザインのベースとしてください。
-
-*   **アクセント線:** ツールカードの左端には必ず `2px` の border を設ける。
-*   **余白:** コンポーネント内のパディングは最小 8px、最大 16px を基本とし、密度感を統一する。
-*   **状態色:** 成功時: `var(--vscode-testing-iconPassed)` / エラー時: `var(--vscode-testing-iconFailed)` を積極的に使用する。
 
 ---
 
-**後続タスクへの提案:**
-この設計書に基づき、`coder` ロールはまず **`ToolHeaderWrapper.tsx` のリファクタリング** から着手してください。これにより、デザインシステムの「HUD パターン」を確立し、他のコンポーネントへ展開しやすくなります。
+## 2. スタイル方針（UI/UX デザイン）
+
+VS Code のネイティブ UI に馴染みつつ、モダンなチャットアプリケーションらしい直感的なUIを目指します。
+
+*   **タイポグラフィの整理**:
+    *   階層化されたフォントサイズ（H1-H4, Body, Small, Caption）を CSS 変数で定義。
+    *   Markdown レンダリングの余白（prose）を均一化。
+*   **スペーシングシステム**:
+    *   4px / 8px / 12px / 16px のベースライングリッドを徹底し、視覚的な安定感を出す。
+*   **カラーパレットの最適化**:
+    *   `var(--void-bg-1)` などの既存変数に加え、状態に応じたアクセントカラー（Success: Green, Error: Red, Warning: Amber）を明示的に定義する。
+    *   「思考中」「実行中」のステータスに、落ち着いたアニメーション・パルス効果を与える。
+*   **カードスタイルの刷新**:
+    *   アシスタントのメッセージやツールの結果を、柔らかい境界線（Border: 1px, Border-radius: 8px）と微細なドロップシャドウで浮かび上がらせ、階層構造を明確にする。
+
+---
+
+## 3. アニメーション方針
+
+ユーザーの操作感に直結するレスポンス性を高めます。`framer-motion` の導入を推奨します。
+
+*   **メッセージ登場アニメーション**:
+    *   新しいメッセージは下からスライドしつつ、`opacity` を 0 から 1 にフェードインさせる（Staggered animation）。
+*   **入力エリアのインタラクション**:
+    *   ファイル添付時、ドラッグ＆ドロップ時のオーバーレイ遷移をスムーズにする。
+*   **思考中・実行中アニメーション**:
+    *   `IconLoading` を単なるドットではなく、流れるような微細な回転やパルスアニメーションに差し替え、動作していることを自然に伝達する。
+*   **インタラクション**:
+    *   `hover` 時にボタンが少し浮き上がるような微細な `scale` 変化を加える。
+
+---
+
+## 4. 改修手順（ステップ・バイ・ステップ）
+
+1.  **インフラ整備**:
+    *   `framer-motion` のインストール。
+    *   共通スタイルの定義（CSS 変数の集約）。
+2.  **コンポーネント分離（リファクタリング）**:
+    *   機能はそのままで、ファイルを上記ディレクトリ構造に分割。
+3.  **UI 強化**:
+    *   各コンポーネントにスタイルを適用。カードデザイン、パディング、タイポグラフィの修正。
+4.  **アニメーション実装**:
+    *   `AnimatePresence` を用いて、メッセージの追加・削除、ツールの展開をアニメーション化。
+5.  **テストと微調整**:
+    *   特にオーケストレーション画面（`DivisionOrchestrationComponent`）やエディタ連動部分の挙動を確認。
+
+---
+
+## 5. 後続エージェントへの申し送り
+
+*   **優先順位**: まず「コンポーネント分離」を行い、動作に影響が出ないことを確認してから「デザイン適用」へ進んでください。
+*   **依存関係**: `IVoidSettingsService`, `IChatThreadService` などのサービス注入には変更を加えないよう注意してください。
+*   **注力ポイント**: ツール実行結果のカードデザインは、VS Code の他のパネル（検索や出力）と調和しつつ、Void の独自性が感じられるように調整してください。
+
+この設計図に基づき、具体的なコード改修に着手します。

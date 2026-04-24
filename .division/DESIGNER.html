@@ -1,602 +1,815 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SidebarChat - High-end UI Proposal</title>
-  <style>
-    /* CSS Variables & Theming */
-    :root {
-      /* Base Colors */
-      --void-bg-base: #141414;
-      --void-bg-1: #1e1e1e;
-      --void-bg-2: rgba(255, 255, 255, 0.03);
-      --void-bg-3: rgba(255, 255, 255, 0.06);
-      
-      /* Foreground Colors */
-      --void-fg-1: #f3f4f6; /* text-gray-100 */
-      --void-fg-2: #d1d5db; /* text-gray-300 */
-      --void-fg-3: #9ca3af; /* text-gray-400 */
-      --void-fg-4: #6b7280; /* text-gray-500 */
-      
-      /* Borders */
-      --void-border-1: rgba(255, 255, 255, 0.12);
-      --void-border-2: rgba(255, 255, 255, 0.06);
-      
-      /* Semantic Colors */
-      --vscode-focusBorder: #3b82f6; /* Blue 500 */
-      --void-success: #10b981;       /* Emerald 500 */
-      --void-error: #ef4444;         /* Red 500 */
-      --void-warning: #f59e0b;       /* Amber 500 */
-      
-      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    }
-
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    body {
-      background-color: #050505;
-      background-image: radial-gradient(circle at top right, rgba(59, 130, 246, 0.1), transparent 40%),
-                        radial-gradient(circle at bottom left, rgba(16, 185, 129, 0.05), transparent 40%);
-      color: var(--void-fg-1);
-      font-family: var(--font-sans);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
-      -webkit-font-smoothing: antialiased;
-    }
-
-    /* Scrollbar */
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
-
-    /* Main Container (Sidebar Mockup) */
-    .sidebar-mockup {
-      width: 360px;
-      height: 800px;
-      background-color: var(--void-bg-base);
-      border: 1px solid var(--void-border-1);
-      border-radius: 12px;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.05);
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      position: relative;
-    }
-
-    /* --- Header --- */
-    .sidebar-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 12px 16px;
-      border-bottom: 1px solid var(--void-border-2);
-      background: rgba(20, 20, 20, 0.8);
-      backdrop-filter: blur(12px);
-      z-index: 10;
-    }
-    .header-title {
-      font-size: 13px;
-      font-weight: 600;
-      letter-spacing: 0.5px;
-      color: var(--void-fg-2);
-    }
-    .header-actions svg {
-      width: 16px; height: 16px;
-      fill: var(--void-fg-3);
-      cursor: pointer;
-      transition: fill 0.2s;
-    }
-    .header-actions svg:hover { fill: var(--void-fg-1); }
-
-    /* --- Chat Area --- */
-    .chat-container {
-      flex: 1;
-      overflow-y: auto;
-      padding: 20px 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 24px;
-      scroll-behavior: smooth;
-    }
-
-    /* Message: User */
-    .message-user {
-      display: flex;
-      justify-content: flex-end;
-    }
-    .bubble-user {
-      background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%);
-      border: 1px solid var(--void-border-1);
-      border-radius: 14px 14px 4px 14px;
-      padding: 12px 16px;
-      font-size: 13px;
-      line-height: 1.5;
-      color: var(--void-fg-1);
-      max-width: 85%;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-      backdrop-filter: blur(10px);
-    }
-
-    /* Message: Assistant (Gallery Aesthetic) */
-    .message-assistant {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    .model-label {
-      font-size: 11px;
-      color: var(--void-fg-3);
-      font-weight: 500;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      margin-left: 2px;
-    }
-    .model-label::before {
-      content: '';
-      display: block;
-      width: 6px; height: 6px;
-      border-radius: 50%;
-      background: var(--vscode-focusBorder);
-      box-shadow: 0 0 6px rgba(59, 130, 246, 0.6);
-    }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Void Sidebar Chat - UI Design</title>
+<style>
+  :root {
+    --void-bg-base: #0B0C10;
+    --void-bg-surface: #14161C;
+    --void-bg-elevated: #1D2029;
     
-    .card-assistant {
-      background: linear-gradient(145deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);
-      border: 1px solid var(--void-border-1);
-      border-left: 3px solid var(--vscode-focusBorder);
-      border-radius: 8px;
-      padding: 14px;
-      font-size: 13px;
-      line-height: 1.6;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-      backdrop-filter: blur(16px);
-      position: relative;
-      overflow: hidden;
-    }
+    --void-border-subtle: rgba(255, 255, 255, 0.06);
+    --void-border-active: rgba(255, 255, 255, 0.15);
     
-    /* Prose Typography */
-    .prose {
-      color: var(--void-fg-2);
-      margin: 12px 0;
-    }
-    .prose p { margin-bottom: 8px; }
-    .prose p:last-child { margin-bottom: 0; }
-    .prose code {
-      background: var(--void-bg-3);
-      padding: 2px 4px;
-      border-radius: 4px;
-      font-family: monospace;
-      font-size: 11.5px;
-      color: var(--void-fg-1);
-      border: 1px solid var(--void-border-2);
-    }
-
-    /* --- Flow Indicator (HUD Aesthetic) --- */
-    .flow-indicator {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 10px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid var(--void-border-2);
-      margin-bottom: 12px;
-    }
-    .flow-step {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-    .flow-step.done { color: var(--void-fg-4); }
-    .flow-step.active {
-      color: var(--void-fg-1);
-      font-weight: 500;
-    }
-    .flow-arrow { color: var(--void-fg-4); font-size: 9px; }
-    .pulse-dot {
-      width: 6px; height: 6px;
-      background: var(--vscode-focusBorder);
-      border-radius: 50%;
-      box-shadow: 0 0 8px var(--vscode-focusBorder);
-      animation: pulse 1.5s ease-in-out infinite;
-    }
-
-    /* --- Tool Cards --- */
-    .tool-card {
-      background: var(--void-bg-1);
-      border: 1px solid var(--void-border-2);
-      border-radius: 6px;
-      margin-bottom: 8px;
-      overflow: hidden;
-      transition: all 0.2s ease;
-    }
-    .tool-card:hover {
-      border-color: var(--void-border-1);
-      background: rgba(255,255,255,0.05);
-    }
-    .tool-card.reasoning {
-      background: transparent;
-      border-color: transparent;
-      margin-bottom: 4px;
-    }
-    .tool-card.reasoning .tool-header { padding: 4px 0; }
+    --void-text-primary: #EDEDED;
+    --void-text-secondary: #9CA3AF;
+    --void-text-muted: #6B7280;
     
-    .tool-card.running {
-      border-left: 2px solid var(--vscode-focusBorder);
-    }
-    .tool-card.success {
-      border-left: 2px solid var(--void-success);
-    }
+    --void-accent-primary: #6366F1;
+    --void-accent-secondary: #8B5CF6;
+    --void-accent-gradient: linear-gradient(135deg, var(--void-accent-primary) 0%, var(--void-accent-secondary) 100%);
     
-    .tool-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 8px 10px;
-      cursor: pointer;
-      user-select: none;
-    }
-    .tool-left, .tool-right {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .chevron {
-      font-size: 9px;
-      color: var(--void-fg-4);
-      transition: transform 0.2s;
-    }
-    .tool-title {
-      font-size: 11.5px;
-      font-weight: 500;
-      color: var(--void-fg-1);
-    }
-    .tool-desc {
-      font-size: 11px;
-      color: var(--void-fg-3);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      max-width: 130px;
-    }
-    .tool-badge {
-      font-size: 10px;
-      padding: 2px 6px;
-      border-radius: 4px;
-      background: var(--void-bg-3);
-      color: var(--void-fg-2);
-    }
-    .tool-badge.success {
-      background: rgba(16, 185, 129, 0.1);
-      color: var(--void-success);
-      border: 1px solid rgba(16, 185, 129, 0.2);
-    }
+    --void-success: #10B981;
+    --void-warning: #F59E0B;
+    --void-error: #EF4444;
+    --void-info: #3B82F6;
 
-    /* HUD Scanline Effect for running tools */
-    .running-scanline {
-      height: 2px;
-      background: linear-gradient(90deg, transparent, var(--vscode-focusBorder), transparent);
-      width: 100%;
-      opacity: 0.8;
-      animation: scan 1.5s linear infinite;
-    }
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
 
-    /* --- Bottom Area (CommandBar & Input) --- */
-    .bottom-area {
-      background: linear-gradient(to top, rgba(20,20,20,1) 70%, rgba(20,20,20,0));
-      padding: 0 16px 16px 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      position: relative;
-      z-index: 20;
-    }
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
 
-    /* CommandBarInChat */
-    .command-bar {
-      background: var(--void-bg-1);
-      border: 1px solid var(--void-border-1);
-      border-radius: 8px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.3);
-      overflow: hidden;
-      backdrop-filter: blur(10px);
-    }
-    .cb-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 10px 12px;
-      background: rgba(255,255,255,0.02);
-      border-bottom: 1px solid var(--void-border-2);
-    }
-    .cb-title {
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--void-warning);
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .cb-title::before {
-      content: '';
-      display: block;
-      width: 6px; height: 6px;
-      border-radius: 50%;
-      background: var(--void-warning);
-      box-shadow: 0 0 6px var(--void-warning);
-    }
-    .cb-actions { display: flex; gap: 6px; }
-    
-    .btn-text {
-      background: none; border: none;
-      color: var(--void-fg-3); font-size: 11px;
-      cursor: pointer; transition: color 0.2s;
-    }
-    .btn-text:hover { color: var(--void-fg-1); }
-    
-    .btn-primary {
-      background: var(--vscode-focusBorder);
-      color: #fff; border: none;
-      padding: 4px 10px; border-radius: 4px;
-      font-size: 11px; font-weight: 500;
-      cursor: pointer; transition: all 0.2s;
-      box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
-    }
-    .btn-primary:hover { filter: brightness(1.15); transform: translateY(-1px); }
+  body {
+    background-color: #050508;
+    background-image: 
+      radial-gradient(circle at 15% 50%, rgba(99, 102, 241, 0.05), transparent 25%),
+      radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.05), transparent 25%);
+    color: var(--void-text-primary);
+    font-family: var(--font-sans);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    overflow: hidden;
+  }
 
-    .file-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 8px 12px;
-      font-size: 11.5px;
-      border-bottom: 1px solid var(--void-border-2);
-      transition: background 0.2s;
-    }
-    .file-item:last-child { border-bottom: none; }
-    .file-item:hover { background: var(--void-bg-2); }
-    
-    .file-info { display: flex; align-items: center; gap: 8px; color: var(--void-fg-1); }
-    .file-diff { color: var(--void-success); font-family: monospace; font-size: 11px; }
-    
-    .file-actions { display: flex; gap: 4px; }
-    .icon-btn {
-      background: transparent; border: 1px solid transparent;
-      color: var(--void-fg-3); width: 22px; height: 22px;
-      border-radius: 4px; display: flex; align-items: center; justify-content: center;
-      cursor: pointer; font-size: 12px; transition: all 0.2s;
-    }
-    .icon-btn:hover { background: var(--void-bg-3); color: var(--void-fg-1); }
-    .icon-btn.approve:hover { color: var(--void-success); background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.2); }
-    .icon-btn.reject:hover { color: var(--void-error); background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.2); }
+  /* Mockup Container */
+  .sidebar-container {
+    width: 420px;
+    height: 90vh;
+    background-color: var(--void-bg-base);
+    border: 1px solid var(--void-border-subtle);
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7),
+                0 0 0 1px rgba(255,255,255,0.05) inset;
+    position: relative;
+    overflow: hidden;
+  }
 
-    /* Input Area */
-    .chat-input-box {
-      background: var(--void-bg-1);
-      border: 1px solid var(--void-border-1);
-      border-radius: 8px;
-      padding: 10px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.4);
-      transition: border-color 0.3s ease, box-shadow 0.3s ease;
-    }
-    .chat-input-box:focus-within {
-      border-color: var(--vscode-focusBorder);
-      box-shadow: 0 4px 20px rgba(59, 130, 246, 0.15);
-    }
+  /* Header */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    background: rgba(11, 12, 16, 0.8);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--void-border-subtle);
+    z-index: 10;
+  }
 
-    .selected-files { display: flex; flex-wrap: wrap; gap: 6px; }
-    .file-token {
-      display: flex; align-items: center; gap: 6px;
-      background: var(--void-bg-3);
-      border: 1px solid var(--void-border-2);
-      padding: 2px 6px 2px 8px;
-      border-radius: 4px;
-      font-size: 11px; color: var(--void-fg-2);
-      box-shadow: 0 1px 2px rgba(0,0,0,0.2);
-    }
-    .file-token svg { width: 12px; height: 12px; fill: var(--void-fg-3); }
-    .file-token .remove {
-      cursor: pointer; color: var(--void-fg-4); font-size: 14px;
-      margin-left: 2px; transition: color 0.2s;
-    }
-    .file-token .remove:hover { color: var(--void-fg-1); }
+  .header-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 0.5px;
+  }
 
-    textarea {
-      background: transparent; border: none; outline: none;
-      color: var(--void-fg-1); font-family: inherit; font-size: 13px;
-      resize: none; height: 44px; line-height: 1.5;
-    }
-    textarea::placeholder { color: var(--void-fg-4); }
+  .header-brand-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    background: var(--void-accent-gradient);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 10px rgba(99, 102, 241, 0.4);
+  }
 
-    .input-footer {
-      display: flex; justify-content: space-between; align-items: center;
-    }
-    .model-selector {
-      font-size: 11px; color: var(--void-fg-3);
-      display: flex; align-items: center; gap: 4px; cursor: pointer;
-      transition: color 0.2s;
-    }
-    .model-selector:hover { color: var(--void-fg-1); }
-    
-    .submit-btn {
-      background: #ffffff; color: #000; border: none;
-      width: 28px; height: 28px; border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-      box-shadow: 0 2px 8px rgba(255,255,255,0.2);
-    }
-    .submit-btn:hover {
-      transform: scale(1.05);
-      box-shadow: 0 4px 12px rgba(255,255,255,0.4);
-    }
-    .submit-btn:active { transform: scale(0.95); }
-    .submit-btn svg { width: 14px; height: 14px; fill: currentColor; }
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
 
-    /* Animations */
-    @keyframes pulse {
-      0% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.6; transform: scale(0.8); }
-      100% { opacity: 1; transform: scale(1); }
-    }
-    @keyframes scan {
-      0% { transform: translateX(-100%); }
-      100% { transform: translateX(100%); }
-    }
-  </style>
+  .btn-icon {
+    background: none;
+    border: none;
+    color: var(--void-text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+  }
+
+  .btn-icon:hover {
+    color: var(--void-text-primary);
+    background: var(--void-bg-elevated);
+  }
+
+  /* Chat Area */
+  .chat-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    scroll-behavior: smooth;
+  }
+
+  .chat-area::-webkit-scrollbar {
+    width: 6px;
+  }
+  .chat-area::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .chat-area::-webkit-scrollbar-thumb {
+    background: var(--void-border-subtle);
+    border-radius: 10px;
+  }
+  .chat-area::-webkit-scrollbar-thumb:hover {
+    background: var(--void-border-active);
+  }
+
+  /* Messages */
+  .message-row {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .message-user {
+    align-items: flex-end;
+  }
+
+  .message-ai {
+    align-items: flex-start;
+  }
+
+  .bubble-user {
+    background: var(--void-accent-gradient);
+    color: #fff;
+    padding: 12px 16px;
+    border-radius: 16px 16px 4px 16px;
+    font-size: 13px;
+    line-height: 1.5;
+    max-width: 85%;
+    box-shadow: 0 4px 15px rgba(99, 102, 241, 0.25);
+    position: relative;
+  }
+
+  .attached-file-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    margin-bottom: 8px;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+
+  /* AI Message Complex Structure */
+  .ai-content-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-width: 95%;
+  }
+
+  /* Flow Indicator */
+  .flow-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--void-text-secondary);
+    background: var(--void-bg-surface);
+    padding: 6px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--void-border-subtle);
+    width: fit-content;
+  }
+  
+  .flow-step {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .flow-step.active {
+    color: var(--void-text-primary);
+    font-weight: 500;
+  }
+
+  .pulse-dot {
+    width: 6px;
+    height: 6px;
+    background-color: var(--void-accent-primary);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--void-accent-primary);
+    animation: pulse 1.5s infinite alternate;
+  }
+
+  .flow-arrow {
+    color: var(--void-text-muted);
+  }
+
+  /* Reasoning Block */
+  .reasoning-card {
+    background: linear-gradient(180deg, var(--void-bg-surface) 0%, rgba(20, 22, 28, 0.5) 100%);
+    border: 1px solid var(--void-border-subtle);
+    border-left: 3px solid var(--void-accent-secondary);
+    border-radius: 8px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+
+  .reasoning-card:hover {
+    border-color: var(--void-border-active);
+  }
+
+  .reasoning-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 12px;
+    color: var(--void-text-secondary);
+  }
+
+  .reasoning-header:hover {
+    color: var(--void-text-primary);
+    background: rgba(255,255,255,0.02);
+  }
+
+  .reasoning-header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .reasoning-content {
+    padding: 0 12px 12px 12px;
+    font-size: 12px;
+    color: var(--void-text-muted);
+    font-style: italic;
+    line-height: 1.6;
+    border-top: 1px solid transparent;
+  }
+
+  /* Tool Execution Card */
+  .tool-card {
+    background: var(--void-bg-surface);
+    border: 1px solid var(--void-border-subtle);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .tool-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.02);
+    border-bottom: 1px solid var(--void-border-subtle);
+  }
+
+  .tool-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .tool-icon {
+    color: var(--void-success);
+    display: flex;
+  }
+
+  .tool-icon.running {
+    color: var(--void-info);
+    animation: spin 2s linear infinite;
+  }
+
+  .tool-meta {
+    font-size: 11px;
+    color: var(--void-text-muted);
+    font-family: var(--font-mono);
+  }
+
+  .tool-body {
+    padding: 12px;
+    background: var(--void-bg-base);
+    font-size: 12px;
+    color: var(--void-text-secondary);
+  }
+
+  /* Diff / Code Block */
+  .code-block {
+    background: #0D0D12;
+    border: 1px solid var(--void-border-subtle);
+    border-radius: 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.5;
+    overflow: hidden;
+  }
+
+  .code-header {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid var(--void-border-subtle);
+    color: var(--void-text-muted);
+  }
+
+  .code-content {
+    padding: 10px 12px;
+    overflow-x: auto;
+  }
+
+  .diff-add { color: #34D399; background: rgba(16, 185, 129, 0.1); }
+  .diff-remove { color: #F87171; background: rgba(239, 68, 68, 0.1); }
+  
+  .code-line {
+    display: flex;
+    white-space: pre;
+  }
+  .line-num {
+    color: #4B5563;
+    padding-right: 12px;
+    user-select: none;
+    text-align: right;
+    min-width: 30px;
+  }
+
+  /* Division Tasks Orchestration */
+  .orchestration-card {
+    background: var(--void-bg-elevated);
+    border: 1px solid var(--void-border-subtle);
+    border-left: 3px solid var(--void-accent-primary);
+    border-radius: 8px;
+    padding: 12px;
+    position: relative;
+  }
+
+  .orch-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--void-border-subtle);
+  }
+
+  .orch-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--void-text-primary);
+  }
+
+  .orch-badge {
+    margin-left: auto;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(99, 102, 241, 0.1);
+    color: var(--void-accent-primary);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+  }
+
+  /* Regular AI Bubble */
+  .bubble-ai {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--void-text-primary);
+    padding: 0 4px;
+  }
+
+  .bubble-ai p {
+    margin-bottom: 10px;
+  }
+
+  .bubble-ai code {
+    background: rgba(255, 255, 255, 0.08);
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    color: #E2E8F0;
+  }
+
+  /* Input Area */
+  .input-wrapper {
+    padding: 12px;
+    background: rgba(11, 12, 16, 0.85);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid var(--void-border-subtle);
+    z-index: 10;
+  }
+
+  .input-container {
+    background: var(--void-bg-surface);
+    border: 1px solid var(--void-border-subtle);
+    border-radius: 12px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+
+  .input-container:focus-within {
+    border-color: var(--void-accent-primary);
+    box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.3),
+                0 4px 20px rgba(0, 0, 0, 0.4);
+  }
+
+  /* Staged Files */
+  .staged-files {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding: 0 4px;
+  }
+
+  .staged-file {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--void-bg-elevated);
+    border: 1px solid var(--void-border-active);
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    color: var(--void-text-primary);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .staged-file:hover {
+    border-color: var(--void-accent-primary);
+    background: rgba(99, 102, 241, 0.05);
+  }
+
+  .staged-file .remove-btn {
+    opacity: 0.5;
+  }
+  .staged-file:hover .remove-btn {
+    opacity: 1;
+    color: var(--void-error);
+  }
+
+  /* Textarea */
+  .textarea-mock {
+    width: 100%;
+    min-height: 44px;
+    max-height: 120px;
+    background: transparent;
+    border: none;
+    color: var(--void-text-primary);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    resize: none;
+    padding: 4px;
+    outline: none;
+    line-height: 1.5;
+  }
+  .textarea-mock::placeholder {
+    color: var(--void-text-muted);
+  }
+
+  /* Input Footer Toolbar */
+  .input-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 4px;
+  }
+
+  .toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .model-selector {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--void-text-secondary);
+    background: var(--void-bg-base);
+    border: 1px solid var(--void-border-subtle);
+    padding: 4px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .model-selector:hover {
+    background: var(--void-bg-elevated);
+    color: var(--void-text-primary);
+  }
+  .model-highlight {
+    background: -webkit-linear-gradient(0deg, #A78BFA, #818CF8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-weight: 600;
+  }
+
+  .toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--void-text-secondary);
+    cursor: pointer;
+    border-radius: 6px;
+    padding: 6px;
+    transition: all 0.2s;
+  }
+  .action-btn:hover {
+    color: var(--void-text-primary);
+    background: var(--void-bg-elevated);
+  }
+
+  .submit-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--void-text-primary);
+    color: var(--void-bg-base);
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 0 10px rgba(255,255,255,0.1);
+    transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .submit-btn:hover {
+    transform: scale(1.05);
+    background: #fff;
+    box-shadow: 0 0 15px rgba(255,255,255,0.2);
+  }
+
+  /* SVGs */
+  svg {
+    display: block;
+  }
+
+  /* Animations */
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes pulse {
+    from { opacity: 0.6; transform: scale(0.9); }
+    to { opacity: 1; transform: scale(1.1); }
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+</style>
 </head>
 <body>
 
-  <div class="sidebar-mockup">
-    <!-- Header -->
-    <div class="sidebar-header">
-      <div class="header-title">Orchestra Chat</div>
-      <div class="header-actions">
-        <!-- Settings Icon -->
-        <svg viewBox="0 0 24 24"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.06-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.73,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.06,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.43-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.49-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
+<div class="sidebar-container">
+  
+  <!-- Header -->
+  <header class="header">
+    <div class="header-brand">
+      <div class="header-brand-icon">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+        </svg>
+      </div>
+      Void
+    </div>
+    <div class="header-actions">
+      <button class="btn-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+          <circle cx="12" cy="7" r="4"></circle>
+        </svg>
+      </button>
+      <button class="btn-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Chat Area -->
+  <div class="chat-area">
+    
+    <!-- User Message -->
+    <div class="message-row message-user">
+      <div class="bubble-user">
+        <div class="attached-file-tag">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+          </svg>
+          SidebarChat.tsx (140-165)
+        </div>
+        <br>
+        このファイルのスタイルを洗練させてください。モダンダークなテーマにしたいです。
       </div>
     </div>
 
-    <!-- Chat Content -->
-    <div class="chat-container">
-      
-      <!-- User Message -->
-      <div class="message-user">
-        <div class="bubble-user">
-          ログイン用の認証ロジックを実装し、必要なパッケージを追加してください。
+    <!-- AI Wrapper -->
+    <div class="message-row message-ai">
+      <div class="ai-content-wrapper">
+        
+        <!-- Flow Indicator -->
+        <div class="flow-indicator">
+          <span class="flow-step">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 14.66V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5.34"></path>
+              <polygon points="18 2 22 6 12 16 8 16 8 12 18 2"></polygon>
+            </svg>
+            Design
+          </span>
+          <span class="flow-arrow">→</span>
+          <span class="flow-step active">
+            <div class="pulse-dot"></div>
+            Coding...
+            <span style="font-size: 9px; color: var(--void-text-muted);">Claude 3.5</span>
+          </span>
         </div>
-      </div>
 
-      <!-- Assistant Message (Gallery & HUD Hybrid) -->
-      <div class="message-assistant">
-        <div class="model-label">Claude 3.5 Sonnet</div>
-        <div class="card-assistant">
-          
-          <!-- Flow Indicator HUD -->
-          <div class="flow-indicator">
-            <span class="flow-step done">思考</span>
-            <span class="flow-arrow">→</span>
-            <span class="flow-step done">検索</span>
-            <span class="flow-arrow">→</span>
-            <span class="flow-step active"><span class="pulse-dot"></span> 実装中</span>
-          </div>
-
-          <!-- Reasoning Collapsed -->
-          <div class="tool-card reasoning">
-            <div class="tool-header">
-              <div class="tool-left">
-                <span class="chevron">▶</span>
-                <span class="tool-title" style="color: var(--void-fg-3)">3.2秒間思考しました</span>
-              </div>
+        <!-- Reasoning Block -->
+        <div class="reasoning-card">
+          <div class="reasoning-header">
+            <div class="reasoning-header-left">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2v20"></path>
+                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+              </svg>
+              <span>4.2 秒間思考しました</span>
             </div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
           </div>
-
-          <!-- Text Content -->
-          <div class="prose">
-            <p>承知いたしました。認証ロジックの実装を開始します。まず、パスワードのハッシュ化に必要な <code>bcrypt</code> をインストールし、認証ユーティリティファイルを作成します。</p>
+          <!-- Visually collapsed but showing peek for mockup -->
+          <div class="reasoning-content" style="display: none;">
+            ユーザーはSidebarChat.tsxのスタイル変更を求めている。モダンダークなテーマにするため、Deep Spaceを意識したカラーリング、Glassmorphism、そしてホバーアニメーションを実装する。まずはファイルの構造を読み取る。
           </div>
-
-          <!-- Tool: Success -->
-          <div class="tool-card success">
-            <div class="tool-header">
-              <div class="tool-left">
-                <span class="chevron">▶</span>
-                <span class="tool-title">コマンド実行</span>
-                <span class="tool-desc">npm install bcrypt</span>
-              </div>
-              <div class="tool-right">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--void-success)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                <span class="tool-badge success">完了</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Tool: Running (HUD Effect) -->
-          <div class="tool-card running">
-            <div class="tool-header">
-              <div class="tool-left">
-                <span class="chevron" style="transform: rotate(90deg)">▶</span>
-                <span class="tool-title">ファイル編集</span>
-                <span class="tool-desc">src/lib/auth.ts</span>
-              </div>
-              <div class="tool-right">
-                <span class="tool-desc">実行中...</span>
-              </div>
-            </div>
-            <div class="running-scanline"></div>
-          </div>
-
         </div>
+
+        <!-- Tool Card (Success) -->
+        <div class="tool-card">
+          <div class="tool-header">
+            <div class="tool-title">
+              <span class="tool-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                  <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+              </span>
+              ファイルを読み込みました
+            </div>
+            <div class="tool-meta">SidebarChat.tsx</div>
+          </div>
+        </div>
+
+        <!-- Division Orchestration Card -->
+        <div class="orchestration-card">
+          <div class="orch-header">
+            <div class="orch-title">Task Execution Flow 1</div>
+            <div class="orch-badge">1240ms</div>
+          </div>
+          <div class="tool-card" style="border: none; border-radius: 4px;">
+            <div class="tool-header" style="background: rgba(0,0,0,0.2);">
+              <div class="tool-title">
+                <span class="tool-icon">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="16 18 22 12 16 6"></polyline>
+                    <polyline points="8 6 2 12 8 18"></polyline>
+                  </svg>
+                </span>
+                ファイルを編集しました
+              </div>
+              <div class="tool-meta">SidebarChat.tsx</div>
+            </div>
+            <div class="code-block" style="border-top: none; border-radius: 0 0 4px 4px;">
+              <div class="code-header">
+                <span>Diff Viewer</span>
+                <span>Copied!</span>
+              </div>
+              <div class="code-content">
+                <div class="code-line"><span class="line-num">142</span><span class="diff-remove">-   background: #fff;</span></div>
+                <div class="code-line"><span class="line-num">142</span><span class="diff-add">+   background: var(--void-bg-surface);</span></div>
+                <div class="code-line"><span class="line-num">143</span><span class="diff-add">+   backdrop-filter: blur(10px);</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Text Answer -->
+        <div class="bubble-ai">
+          <p>指定された範囲を中心に、コンポーネント全体をモダンダークな <code>Glass & Deep Tech</code> テーマに合わせたスタイルへと書き換えました。</p>
+          <p>主に <strong>backdrop-filter</strong> によるガラス効果と、アクセントカラーとしてのネオンブルーグラデーションを適用しています。</p>
+        </div>
+
       </div>
-      
-      <!-- Spacing for bottom area -->
-      <div style="height: 40px;"></div>
     </div>
+  </div>
 
-    <!-- Bottom Area -->
-    <div class="bottom-area">
+  <!-- Input Area -->
+  <div class="input-wrapper">
+    <div class="input-container">
       
-      <!-- Command Bar (Pending Changes) -->
-      <div class="command-bar">
-        <div class="cb-header">
-          <div class="cb-title">1件の変更を承認待ち</div>
-          <div class="cb-actions">
-            <button class="btn-text">拒否</button>
-            <button class="btn-primary">すべて承認</button>
-          </div>
-        </div>
-        <div class="file-item">
-          <div class="file-info">
-            <!-- File Icon -->
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-            src/lib/auth.ts
-            <span class="file-diff">+42</span>
-          </div>
-          <div class="file-actions">
-            <button class="icon-btn reject" title="拒否">✗</button>
-            <button class="icon-btn approve" title="承認">✓</button>
-          </div>
+      <!-- Staged Files -->
+      <div class="staged-files">
+        <div class="staged-file">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+          </svg>
+          colors.ts
+          <svg class="remove-btn" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
         </div>
       </div>
 
-      <!-- Chat Input Box -->
-      <div class="chat-input-box">
-        <div class="selected-files">
-          <div class="file-token">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-            package.json
-            <span class="remove">×</span>
-          </div>
-        </div>
-        
-        <textarea placeholder="エージェントに指示する..."></textarea>
-        
-        <div class="input-footer">
-          <!-- Attach/Model Context -->
+      <!-- Text input -->
+      <textarea class="textarea-mock" placeholder="Enter instructions..."></textarea>
+      
+      <!-- Toolbar -->
+      <div class="input-toolbar">
+        <div class="toolbar-left">
           <div class="model-selector">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
-            <span>コンテキストを追加</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2v20"></path>
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+            </svg>
+            <span class="model-highlight">Claude 3.5 Sonnet</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
           </div>
-          
-          <!-- Submit Button -->
-          <button class="submit-btn" title="送信">
-            <svg viewBox="0 0 24 24"><path d="M12 4l-8 8h6v8h4v-8h6z"/></svg>
+        </div>
+        <div class="toolbar-right">
+          <button class="action-btn" title="Attach file">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+            </svg>
+          </button>
+          <button class="submit-btn" title="Send message">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="19" x2="12" y2="5"></line>
+              <polyline points="5 12 12 5 19 12"></polyline>
+            </svg>
           </button>
         </div>
       </div>
-      
+
     </div>
   </div>
+
+</div>
 
 </body>
 </html>
