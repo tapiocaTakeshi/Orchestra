@@ -1,42 +1,37 @@
-feat(sidebar-chat): redesign SidebarChat UI and bootstrap Electron Forge packaging
+feat(sidebar-chat): add send validation, preview modal, and collapsible tool blocks
 
-Summary
--------
-Overhaul the Void SidebarChat look-and-feel around a shared design-token
-system, harden the LLM message pipeline against mid-flight user
-injections, and add Electron Forge so the app can be packaged/published.
+Implement Phase 1 (H1/H2) and Phase 2 (H3) of the SidebarChat UX
+improvement plan produced by the multi-agent pipeline (ideaman →
+researcher → designer → planner → coder).
 
-SidebarChat redesign
-- Introduce design tokens, style helpers and copy strings under
-  src/vs/workbench/contrib/void/browser/react/src/sidebar-tsx/styles/
-  (designTokens.ts, sidebarChatStyles.ts, sidebarChatStrings.ts,
-  sidebarChat.css) so every surface/border/status color flows through a
-  single source of truth aligned with --void-* / --vscode-* variables.
-- Wire the new styles into SidebarChat.tsx and refresh the VS Code
-  color themes (themes/*.json) to match the new palette.
-- Expand chatThreadService.ts with the hooks required by the new UI
-  (status/accent handling) without changing existing behavior.
+New React components and hook under
+`src/vs/workbench/contrib/void/browser/react/src/sidebar-chat/`:
+- hooks/useSendValidation.ts — centralizes send-blocking reasons
+  (empty / too-long / in-flight / indexing / no-model / uploading)
+  and renders actionable messages with severity.
+- components/DisableReason.tsx — inline, ARIA-live reason banner
+  shown near the input (案H1).
+- components/SendPreviewModal.tsx — pre-send confirmation dialog
+  with Esc to cancel and Cmd/Ctrl+Enter to confirm (案H2).
+- components/ChatInput.tsx — wires validation + preview + cancel
+  flow, char counter, and accessible send button.
+- components/ToolCallBlock.tsx — collapsible tool result block
+  with auto-collapse for long output, status icon, and summary
+  hint in the header (案H3 / M7).
+- components/index.ts, components/README.md — barrel + usage notes.
 
-LLM pipeline
-- sendLLMMessage.impl.ts: add a takePendingInjection hook on the
-  internal common params so orchestration can inject user text at
-  phase boundaries; improve workspace file search with a JP→EN
-  synonym map, a baseline manifest/entry allow-list, and a directory
-  tree fallback when no keywords hit.
-- sendLLMMessageService.ts / sendLLMMessageTypes.ts /
-  sendLLMMessageChannel.ts / sendLLMMessage.ts: propagate the new
-  injection channel end-to-end.
+Supporting changes:
+- util/inputs.tsx: extend `VoidCustomDropdownBox` with an optional
+  `getOptionGroupName` so adjacent options can render under a
+  sticky, non-selectable group header.
+- void-settings-tsx/ModelDropdown.tsx, Settings.tsx: use the new
+  grouping API and expose the related settings entry.
+- common/sendLLMMessageService.ts, sendLLMMessageTypes.ts,
+  voidSettingsTypes.ts, electron-main/llmMessage/sendLLMMessage*.ts:
+  thread a new option through the sendLLMMessage pipeline so the
+  sidebar-chat can drive the updated flow end-to-end.
 
-Packaging / tooling
-- Add forge.config.js and the @electron-forge/* + electron-squirrel-startup
-  dependencies (package.json, package-lock.json, forge.config.js).
-- Bump extensions/open-remote-ssh to pick up the matching tooling.
-- Update .vscode/settings.json for the new workflow.
-
-Docs / assets
-- Rewrite .division/*.md (CODER, DESIGNER, FILE-SEARCH, IDEAMAN,
-  PLANNING, RESEARCH, REVIEW, SEARCH, WRITING) to describe the new
-  SidebarChat spec and agent workflow; add
-  .division/.orchestration-state.json.
-- Replace src/chatgpt-info.html with a modern landing page using
-  the new design language.
+Docs (.division/*.md): refresh CODER / DESIGNER / PLANNING /
+RESEARCH / IDEAMAN / SEARCH / REVIEW / FILE-SEARCH to reflect the
+final plan, rationale, and traceability between roles addressed in
+the previous review round.
