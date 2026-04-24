@@ -2746,8 +2746,9 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		};
 
 		// Shared helper: run the final (synthesis + review) flow given intermediate outputs.
-		// On review failure, re-invoke runIntermediateCycle with review feedback and loop
-		// until the reviewer approves or MAX_REVIEW_ITERATIONS is reached.
+		// On review failure, feed the review feedback back to the Coder (synthesis step)
+		// directly and loop until the reviewer approves or MAX_REVIEW_ITERATIONS is reached.
+		// （Leader による再分解は行わず、Coder ↔ Reviewer のタイトループ）
 		const runFinalFlow = async (
 			initialFinalRole: string,
 			initialSessionId: string,
@@ -2759,7 +2760,8 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			let iteration = 0;
 			let lastReviewFeedback = '';
 
-			// Loop: Coder → Reviewer → （不合格なら Leader に再分解依頼して） Coder → Reviewer...
+			// Loop: Coder → Reviewer → （不合格なら同じ flowOutputs + レビュー指摘で）Coder → Reviewer...
+			// Leader へは戻らず、Coder ↔ Reviewer のみでループする。
 			while (true) {
 				// Coder（synthesis）実行前の割り込み取り込み
 				drainInjections();
@@ -2949,33 +2951,13 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					break;
 				}
 
-				// Failed → retry: Leader に再分解させて Coder/Reviewer をもう一度回す
+				// Failed → Coder に前回レビュー指摘を添えて再生成（Leader への再分解は行わない）
 				iteration++;
-				// 再分解前の割り込み取り込み
+				// 次 Coder iteration 前の割り込み取り込み
 				drainInjections();
-				appendText(`\n\n🔄 **レビュー不合格** — Leader に再分解を依頼して ${iteration + 1} 回目を実行します...\n\n`);
-
-				const retryInput = [
-					currentInput,
-					``,
-					`---`,
-					``,
-					`## 前回実行のレビュー指摘（必ず解決してください）`,
-					truncateForContext(reviewOutput, 6000),
-					``,
-					`上記の指摘事項を解消するようタスクを再分解し、各ロールで実装してください。`,
-				].join('\n');
-
-				const retryCycle = await runIntermediateCycle(retryInput, `retry-${iteration}`);
-				if (retryCycle.aborted) {
-					appendText(`\n❌ **再試行の中間フロー実行に失敗しました** — ループを終了します。\n`);
-					break;
-				}
-
-				// Update state for next synthesis/review round
-				finalRoleArg = retryCycle.finalRole || finalRoleArg;
-				sessionIdArg = retryCycle.sessionId || sessionIdArg;
-				flowOutputs = retryCycle.flowOutputs;
+				appendText(`\n\n🔄 **レビュー不合格** — 指摘を踏まえて Coder を再実行します（${iteration + 1} 回目）...\n\n`);
+				// finalRoleArg / sessionIdArg / flowOutputs はそのまま流用。
+				// lastReviewFeedback は次ループ冒頭で synthesisContextHistory に積まれる。
 			}
 
 			if (workspaceFolderPath) clearOrchestrationState(workspaceFolderPath);

@@ -42,6 +42,19 @@ import { LoginScreen } from '../void-login-tsx/LoginScreen.js';
 
 
 
+// Inject shared keyframes for the refined design (pulse used by FlowIndicator / ReasoningWrapper)
+if (typeof document !== 'undefined' && !document.getElementById('void-sidebar-chat-keyframes')) {
+	const style = document.createElement('style')
+	style.id = 'void-sidebar-chat-keyframes'
+	style.textContent = `
+@keyframes pulse {
+	0%, 100% { opacity: 1; transform: scale(1); }
+	50% { opacity: 0.55; transform: scale(0.85); }
+}
+`
+	document.head.appendChild(style)
+}
+
 export const IconX = ({ size, className = '', ...props }: { size: number, className?: string } & React.SVGProps<SVGSVGElement>) => {
 	return (
 		<svg
@@ -129,7 +142,7 @@ export const IconLoading = ({ className = '' }: { className?: string }) => {
 	const [loadingText, setLoadingText] = useState('.');
 
 	useEffect(() => {
-		let intervalId;
+		let intervalId: ReturnType<typeof setInterval> | undefined;
 
 		// Function to handle the animation
 		const toggleLoadingText = () => {
@@ -545,12 +558,16 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 			className={`
 				gap-x-1
                 flex flex-col p-2 relative input text-left shrink-0
-                rounded-md
-                bg-void-bg-1
-				transition-all duration-200
-				border border-void-border-3 focus-within:border-void-border-1 hover:border-void-border-1
+                rounded-xl
+                bg-gradient-to-b from-void-bg-1 to-[color-mix(in_srgb,var(--void-bg-1)_92%,var(--vscode-focusBorder)_8%)]
+				backdrop-blur-sm
+				transition-all duration-300 ease-out
+				border border-void-border-3
+				focus-within:border-[color-mix(in_srgb,var(--vscode-focusBorder)_60%,var(--void-border-1)_40%)]
+				focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--vscode-focusBorder)_15%,transparent),0_8px_24px_-8px_rgba(0,0,0,0.4)]
+				hover:border-void-border-1
 				max-h-[80vh] overflow-y-auto
-				${isDragOver ? 'border-blue-400 bg-blue-500/10' : ''}
+				${isDragOver ? '!border-blue-400 bg-blue-500/10 shadow-[0_0_0_3px_rgba(59,130,246,0.2)]' : ''}
                 ${className}
             `}
 			onClick={(e) => {
@@ -563,9 +580,9 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 		>
 			{/* Drag & drop overlay */}
 			{isDragOver && (
-				<div className='absolute inset-0 z-10 flex items-center justify-center bg-blue-500/10 border-2 border-dashed border-blue-400 rounded-md pointer-events-none'>
-					<div className='flex items-center gap-2 text-blue-300 text-sm font-medium'>
-						<Paperclip size={16} />
+				<div className='absolute inset-0 z-10 flex items-center justify-center bg-gradient-to-br from-blue-500/15 to-blue-600/10 backdrop-blur-[2px] border-2 border-dashed border-blue-400 rounded-lg pointer-events-none animate-in fade-in duration-150'>
+					<div className='flex items-center gap-2 text-blue-200 text-sm font-semibold px-3 py-1.5 bg-blue-500/20 rounded-full border border-blue-400/40 shadow-lg'>
+						<Paperclip size={16} className='animate-pulse' />
 						ここにファイルをドロップ
 					</div>
 				</div>
@@ -611,7 +628,14 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 			/>
 
 			{/* Bottom row */}
-			<div className='flex flex-row justify-between items-end gap-1 bg-black/80 p-1 rounded-md -mx-1 mb-[-4px]'>
+			<div
+				className='flex flex-row justify-between items-end gap-1 p-1.5 rounded-lg -mx-1 mb-[-4px] mt-1'
+				style={{
+					background: 'linear-gradient(180deg, color-mix(in srgb, var(--void-bg-3) 40%, transparent) 0%, color-mix(in srgb, var(--void-bg-3) 70%, transparent) 100%)',
+					backdropFilter: 'blur(8px)',
+					border: '1px solid color-mix(in srgb, var(--void-border-2) 40%, transparent)',
+				}}
+			>
 				{showModelDropdown && (
 					<div className='flex flex-col gap-y-1'>
 						<ReasoningOptionSlider featureName={featureName} />
@@ -667,7 +691,11 @@ export const ButtonSubmit = ({ className, disabled, ...props }: ButtonProps & Re
 	return <button
 		type='button'
 		className={`rounded-full flex-shrink-0 flex-grow-0 flex items-center justify-center
-			${disabled ? 'bg-vscode-disabled-fg cursor-default' : 'bg-white cursor-pointer'}
+			transition-all duration-200 ease-out
+			${disabled
+				? 'bg-vscode-disabled-fg cursor-default opacity-50'
+				: 'bg-gradient-to-br from-white via-white to-zinc-200 cursor-pointer shadow-[0_2px_8px_rgba(255,255,255,0.25),inset_0_1px_0_rgba(255,255,255,0.8)] hover:shadow-[0_4px_14px_rgba(255,255,255,0.4),inset_0_1px_0_rgba(255,255,255,0.9)] hover:scale-[1.06] active:scale-95'
+			}
 			${className}
 		`}
 		// data-tooltip-id='void-tooltip'
@@ -682,13 +710,19 @@ export const ButtonSubmit = ({ className, disabled, ...props }: ButtonProps & Re
 export const ButtonStop = ({ className, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => {
 	return <button
 		className={`rounded-full flex-shrink-0 flex-grow-0 cursor-pointer flex items-center justify-center
-			bg-white
+			bg-gradient-to-br from-white via-white to-zinc-200
+			shadow-[0_2px_8px_rgba(255,255,255,0.25),inset_0_1px_0_rgba(255,255,255,0.8)]
+			hover:shadow-[0_4px_14px_rgba(255,255,255,0.4)]
+			hover:scale-[1.06] active:scale-95
+			transition-all duration-200 ease-out
+			relative
+			before:absolute before:inset-0 before:rounded-full before:animate-pulse before:bg-white/10 before:pointer-events-none
 			${className}
 		`}
 		type='button'
 		{...props}
 	>
-		<IconSquare size={DEFAULT_BUTTON_SIZE} className="stroke-[3] p-[7px]" />
+		<IconSquare size={DEFAULT_BUTTON_SIZE} className="stroke-[3] p-[7px] relative z-10" />
 	</button>
 }
 
@@ -752,7 +786,7 @@ const ScrollToBottomContainer = ({ children, className, style, scrollContainerRe
 		};
 		const onWheel = () => markPinnedIfAway();
 		const onTouchMove = () => markPinnedIfAway();
-		const onKeyDown = (e: KeyboardEvent) => {
+		const onKeyDown = (e: globalThis.KeyboardEvent) => {
 			if (['ArrowUp', 'PageUp', 'Home', 'ArrowDown', 'PageDown', 'End'].includes(e.key)) {
 				markPinnedIfAway();
 			}
@@ -2118,12 +2152,21 @@ const ReasoningWrapper = ({ isDoneReasoning, isStreaming, reasoningDuration, chi
 	const isWriting = !isDone
 	const [isOpen, setIsOpen] = useState(isWriting)
 
-	let title = '思考'
+	let titleText = '思考'
 	if (isWriting) {
-		title = '思考中'
+		titleText = '思考中'
 	} else if (reasoningDuration !== undefined) {
-		title = `${reasoningDuration.toFixed(1)} 秒間思考しました`
+		titleText = `${reasoningDuration.toFixed(1)} 秒間思考しました`
 	}
+	const title = (
+		<span className='inline-flex items-center gap-1.5'>
+			<span
+				className={`inline-block w-1.5 h-1.5 rounded-full ${isWriting ? 'bg-[var(--vscode-focusBorder)]' : 'bg-void-fg-4 opacity-50'}`}
+				style={isWriting ? { boxShadow: '0 0 6px var(--vscode-focusBorder)', animation: 'pulse 1.4s ease-in-out infinite' } : {}}
+			/>
+			{titleText}
+		</span>
+	)
 
 	useEffect(() => {
 		if (!isWriting) setIsOpen(false) // if just finished reasoning, close
@@ -3207,17 +3250,20 @@ const Checkpoint = ({ message, threadId, messageIdx, isCheckpointGhost, threadIs
 	}, [isRunning, streamState])
 
 	return <div
-		className={`flex items-center justify-center px-2 `}
+		className={`flex items-center justify-center gap-2 px-2 my-1 group`}
 	>
+		<div className={`h-px flex-1 bg-gradient-to-r from-transparent to-void-border-2 ${isCheckpointGhost ? 'opacity-50' : ''}`} />
 		<div
 			className={`
-                    text-xs
-                    text-void-fg-3
-                    select-none
-                    ${isCheckpointGhost ? 'opacity-50' : 'opacity-100'}
-					${isDisabled ? 'cursor-default' : 'cursor-pointer'}
-                `}
-			style={{ position: 'relative', display: 'inline-block' }} // allow absolute icon
+					inline-flex items-center gap-1.5
+					text-[10px] tracking-wide uppercase font-medium
+					text-void-fg-3
+					px-2 py-0.5 rounded-full
+					bg-void-bg-2 border border-void-border-2
+					select-none transition-all duration-200
+					${isCheckpointGhost ? 'opacity-50' : 'opacity-100'}
+					${isDisabled ? 'cursor-default' : 'cursor-pointer hover:border-[var(--vscode-focusBorder)]/50 hover:text-void-fg-2 hover:shadow-sm'}
+				`}
 			onClick={() => {
 				if (threadIsRunning) return
 				if (isDisabled) return
@@ -3233,8 +3279,10 @@ const Checkpoint = ({ message, threadId, messageIdx, isCheckpointGhost, threadIs
 				'data-tooltip-place': 'top',
 			} : {}}
 		>
+			<Flag size={10} className='opacity-70' />
 			Checkpoint
 		</div>
+		<div className={`h-px flex-1 bg-gradient-to-l from-transparent to-void-border-2 ${isCheckpointGhost ? 'opacity-50' : ''}`} />
 	</div>
 }
 
@@ -3331,6 +3379,7 @@ const _ChatBubble = ({ threadId, chatMessage, currCheckpointIdx, isCommitted, me
 		/>
 	}
 
+	return null
 }
 
 const FlowReviewComponent = ({ chatMessage, isCheckpointGhost }: {
@@ -3852,17 +3901,68 @@ const EditToolSoFar = ({ toolCallSoFar, }: { toolCallSoFar: RawToolCallObj }) =>
 
 const SignedOutChatOverlay = ({ onLoginClick }: { onLoginClick: () => void }) => {
 	return (
-		<div className="absolute inset-0 bg-void-bg-1/40 backdrop-blur-[1px] z-10 flex flex-col items-center justify-center p-4 text-center rounded-md border border-void-border-3 gap-3">
-			<div className="text-xs font-medium text-void-fg-1">チャットを開始するにはログインしてください</div>
-			<button
-				onClick={(e) => { e.stopPropagation(); onLoginClick(); }}
-				className="px-4 py-1.5 rounded bg-white text-black text-[11px] font-bold hover:bg-zinc-200 transition-all shadow-md"
-			>
-				ログイン
-			</button>
+		<div
+			className="absolute inset-0 z-10 flex flex-col items-center justify-center p-4 text-center rounded-xl border border-void-border-3 gap-3 overflow-hidden"
+			style={{
+				background: 'radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--vscode-focusBorder) 10%, transparent) 0%, color-mix(in srgb, var(--void-bg-1) 80%, transparent) 70%)',
+				backdropFilter: 'blur(6px)',
+				WebkitBackdropFilter: 'blur(6px)',
+			}}
+		>
+			<div className='absolute inset-0 pointer-events-none opacity-30'
+				style={{ background: 'repeating-linear-gradient(45deg, transparent, transparent 10px, color-mix(in srgb, var(--vscode-focusBorder) 8%, transparent) 10px, color-mix(in srgb, var(--vscode-focusBorder) 8%, transparent) 11px)' }}
+			/>
+			<div className='relative z-10 flex flex-col items-center gap-3'>
+				<div className='w-10 h-10 rounded-full flex items-center justify-center'
+					style={{
+						background: 'linear-gradient(135deg, var(--vscode-focusBorder), color-mix(in srgb, var(--vscode-focusBorder) 50%, transparent))',
+						boxShadow: '0 4px 16px color-mix(in srgb, var(--vscode-focusBorder) 40%, transparent)',
+					}}>
+					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+						<path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+						<path d="M8 11V7a4 4 0 118 0v4" />
+					</svg>
+				</div>
+				<div className="text-xs font-medium text-void-fg-1 tracking-wide">チャットを開始するにはログインしてください</div>
+				<button
+					onClick={(e) => { e.stopPropagation(); onLoginClick(); }}
+					className="px-5 py-1.5 rounded-full text-[11px] font-bold transition-all duration-200 hover:scale-105 active:scale-95"
+					style={{
+						background: 'linear-gradient(135deg, #ffffff 0%, #e4e4e7 100%)',
+						color: '#000',
+						boxShadow: '0 4px 14px rgba(255,255,255,0.25), inset 0 1px 0 rgba(255,255,255,0.9)',
+					}}
+				>
+					ログイン
+				</button>
+			</div>
 		</div>
 	)
 }
+
+// Reusable section label with decorative gradient line
+const SectionLabel = ({ label }: { label: string }) => {
+	return (
+		<div className='pt-8 mb-3 flex items-center gap-2 select-none pointer-events-none'>
+			<span className='text-[11px] uppercase tracking-[0.15em] font-semibold text-void-fg-3'>{label}</span>
+			<div className='flex-1 h-px bg-gradient-to-r from-void-border-1 via-void-border-2 to-transparent' />
+		</div>
+	)
+}
+
+// Inject keyframes once for landing page suggestion animations
+const SidebarChatGlobalStyles = () => (
+	<style>{`
+		@keyframes fadeInUp {
+			0% { opacity: 0; transform: translateY(6px); }
+			100% { opacity: 1; transform: translateY(0); }
+		}
+		@keyframes orchestraPulse {
+			0%, 100% { opacity: 0.6; transform: scale(1); }
+			50% { opacity: 1; transform: scale(1.15); }
+		}
+	`}</style>
+)
 
 
 const SidebarHeader = ({ onLoginClick, activeTab, onTabChange }: { onLoginClick: () => void; activeTab: import('./OrchestraLogoButton.js').SidebarTab; onTabChange: (tab: import('./OrchestraLogoButton.js').SidebarTab) => void }) => {
@@ -3873,7 +3973,7 @@ const SidebarHeader = ({ onLoginClick, activeTab, onTabChange }: { onLoginClick:
 	const isLoggedIn = settingsState.globalSettings.isLoggedIn
 
 	return (
-		<div className="shrink-0 px-4 pt-2 pb-1">
+		<div className="shrink-0 px-4 pt-2 pb-1.5 border-b border-void-border-3/60 bg-gradient-to-b from-void-bg-1 to-transparent">
 			<div className="flex items-center justify-end gap-2">
 
 				{!isLoggedIn ? (
@@ -3896,7 +3996,7 @@ const SidebarHeader = ({ onLoginClick, activeTab, onTabChange }: { onLoginClick:
 
 				<button
 					onClick={() => commandService.executeCommand(VOID_OPEN_SETTINGS_ACTION_ID)}
-					className="text-void-fg-3 hover:text-void-fg-1 transition-colors"
+					className="text-void-fg-3 hover:text-void-fg-1 hover:rotate-45 transition-all duration-300 ease-out p-1 rounded-md hover:bg-void-bg-3"
 					title="Settings"
 				>
 					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -3904,8 +4004,9 @@ const SidebarHeader = ({ onLoginClick, activeTab, onTabChange }: { onLoginClick:
 						<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
 					</svg>
 				</button>
+				</div>
 			</div>
-		</div>
+		
 	)
 }
 
@@ -4137,19 +4238,43 @@ export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTa
 	const isLandingPage = previousMessages.length === 0
 
 
-	const initiallySuggestedPromptsHTML = <div className='flex flex-col gap-2 w-full text-nowrap text-void-fg-3 select-none'>
-		{[
-			'Summarize my codebase',
-			'How do types work in Rust?',
-			'Create a .voidrules file for me'
-		].map((text, index) => (
-			<div
+	const suggestedPrompts: { text: string; icon: React.ReactNode; hint: string }[] = [
+		{ text: 'Summarize my codebase', icon: <Folder size={14} />, hint: 'プロジェクト全体を把握' },
+		{ text: 'How do types work in Rust?', icon: <Info size={14} />, hint: '技術的な疑問を解決' },
+		{ text: 'Create a .voidrules file for me', icon: <CirclePlus size={14} />, hint: 'ファイルを生成' },
+	]
+
+	const initiallySuggestedPromptsHTML = <div className='flex flex-col gap-2 w-full select-none'>
+		{suggestedPrompts.map(({ text, icon, hint }, index) => (
+			<button
 				key={index}
-				className='py-1 px-2 rounded text-sm bg-zinc-700/5 hover:bg-zinc-700/10 dark:bg-zinc-300/5 dark:hover:bg-zinc-300/10 cursor-pointer opacity-80 hover:opacity-100'
+				type='button'
 				onClick={() => onSubmit(text)}
+				className='group relative w-full text-left rounded-lg overflow-hidden
+					border border-void-border-2 hover:border-[color-mix(in_srgb,var(--vscode-focusBorder)_50%,var(--void-border-1)_50%)]
+					bg-gradient-to-br from-void-bg-2 to-[color-mix(in_srgb,var(--void-bg-2)_92%,var(--vscode-focusBorder)_8%)]
+					transition-all duration-300 ease-out
+					hover:shadow-[0_4px_16px_-4px_color-mix(in_srgb,var(--vscode-focusBorder)_40%,transparent)]
+					hover:-translate-y-[1px]
+					cursor-pointer'
+				style={{ animation: `fadeInUp 0.4s ease-out ${index * 80}ms both` }}
 			>
-				{text}
-			</div>
+				<div className='absolute inset-y-0 left-0 w-[3px] bg-gradient-to-b from-transparent via-[var(--vscode-focusBorder)] to-transparent opacity-0 group-hover:opacity-80 transition-opacity duration-300' />
+				<div className='flex items-center gap-3 px-3 py-2.5'>
+					<div className='flex-shrink-0 w-7 h-7 rounded-md flex items-center justify-center
+						bg-void-bg-3 text-void-fg-3
+						group-hover:bg-[color-mix(in_srgb,var(--vscode-focusBorder)_20%,var(--void-bg-3)_80%)]
+						group-hover:text-void-fg-1
+						transition-all duration-300'>
+						{icon}
+					</div>
+					<div className='flex flex-col min-w-0 flex-1'>
+						<span className='text-sm text-void-fg-2 group-hover:text-void-fg-1 transition-colors truncate'>{text}</span>
+						<span className='text-[10px] text-void-fg-4 opacity-70 truncate'>{hint}</span>
+					</div>
+					<ChevronRight size={14} className='flex-shrink-0 text-void-fg-4 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all duration-300' />
+				</div>
+			</button>
 		))}
 	</div>
 
@@ -4183,12 +4308,12 @@ export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTa
 
 		{Object.keys(chatThreadsState.allThreads).length > 1 ? // show if there are threads
 			<ErrorBoundary>
-				<div className='pt-8 mb-2 text-void-fg-3 text-root select-none pointer-events-none'>過去のチャット</div>
+				<SectionLabel label='過去のチャット' />
 				<PastThreadsList />
 			</ErrorBoundary>
 			:
 			<ErrorBoundary>
-				<div className='pt-8 mb-2 text-void-fg-3 text-root select-none pointer-events-none'>おすすめの質問</div>
+				<SectionLabel label='おすすめの質問' />
 				{initiallySuggestedPromptsHTML}
 			</ErrorBoundary>
 		}
@@ -4225,6 +4350,7 @@ export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTa
 
 	return (
 		<div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', overflow: 'hidden' }}>
+			<SidebarChatGlobalStyles />
 			<SidebarHeader onLoginClick={() => setShowLoginScreen(true)} activeTab={activeTab} onTabChange={onTabChange} />
 			{showLoginScreen && <LoginScreen onClose={() => setShowLoginScreen(false)} />}
 			<div style={{ flex: '1 1 0', minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
