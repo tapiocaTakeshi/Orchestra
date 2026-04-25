@@ -15,7 +15,7 @@ import { useAccessor } from './services.js';
 import { ITextModel } from '../../../../../../../editor/common/model.js';
 import { asCssVariable } from '../../../../../../../platform/theme/common/colorUtils.js';
 import { inputBackground, inputForeground } from '../../../../../../../platform/theme/common/colorRegistry.js';
-import { useFloating, autoUpdate, offset, flip, shift, size, autoPlacement } from '@floating-ui/react';
+import { useFloating, autoUpdate, offset, flip, shift, size, autoPlacement, FloatingPortal } from '@floating-ui/react';
 import { URI } from '../../../../../../../base/common/uri.js';
 import { getBasename, getFolderName } from '../sidebar-tsx/SidebarChat.js';
 import { ChevronRight, File, Folder, FolderClosed, LucideProps, Palette, Blocks, Tag } from 'lucide-react';
@@ -1452,24 +1452,25 @@ export const VoidCustomDropdownBox = <T extends NonNullable<any>>({
 				</svg>
 			</button>
 
-			{/* Dropdown Menu */}
+			{/* Dropdown Menu — render via Portal so ancestor backdrop-filter / transform don't clip it */}
 			{isOpen && (
-				<div
-					ref={refs.setFloating}
-					className="z-[100] bg-void-bg-1 border-void-border-3 border rounded shadow-lg"
-					style={{
-						position: strategy,
-						top: y ?? 0,
-						left: x ?? 0,
-						width: (matchInputWidth
-							? (refs.reference.current instanceof HTMLElement ? refs.reference.current.offsetWidth : 0)
-							: Math.max(
-								(refs.reference.current instanceof HTMLElement ? refs.reference.current.offsetWidth : 0),
-								(measureRef.current instanceof HTMLElement ? measureRef.current.offsetWidth : 0)
-							))
-					}}
-					onWheel={(e) => e.stopPropagation()}
-				><div className='overflow-auto max-h-80'>
+				<FloatingPortal>
+					<div
+						ref={refs.setFloating}
+						className="z-[100] bg-void-bg-1 border-void-border-3 border rounded shadow-lg"
+						style={{
+							position: strategy,
+							top: y ?? 0,
+							left: x ?? 0,
+							width: (matchInputWidth
+								? (refs.reference.current instanceof HTMLElement ? refs.reference.current.offsetWidth : 0)
+								: Math.max(
+									(refs.reference.current instanceof HTMLElement ? refs.reference.current.offsetWidth : 0),
+									(measureRef.current instanceof HTMLElement ? measureRef.current.offsetWidth : 0)
+								))
+						}}
+						onWheel={(e) => e.stopPropagation()}
+					><div className='overflow-auto max-h-80'>
 
 						{(() => {
 							let lastGroup: string | undefined = undefined;
@@ -1523,9 +1524,10 @@ export const VoidCustomDropdownBox = <T extends NonNullable<any>>({
 								);
 							});
 						})()}
-					</div>
+						</div>
 
-				</div>
+					</div>
+				</FloatingPortal>
 			)}
 		</div>
 	);

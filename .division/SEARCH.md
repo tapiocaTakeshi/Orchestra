@@ -1,73 +1,86 @@
-## UI/UX指針の補強調査：チャットUIのベストプラクティス
+# Next.js + TypeScript + CSS Modules エラー修正ガイド
 
-VS Code拡張の**SidebarChatコンポーネント**改善に向け、入力欄、エラー表示、状態フィードバック、アクセシビリティ、モバイル操作性のベストプラクティスを調査・整理。引用元を本文直後に明記し、末尾に完全な参考文献リストを追加。デザイナー・plannerへの直接活用を想定し、**具体的な適用例**（Tailwind CSS対応）と**SidebarChat特化の推奨**を記載。
+## 一般的なエラーと原因
 
-### 1. 入力欄のベストプラクティス
-チャット入力欄は直感的でエラーを防ぐ設計が必須。最小限の入力項目に抑え、送信前プレビューを追加。[2]
-- **サイズとタップ領域**: ボタン/入力領域を44px以上確保（iOS基準）。Tailwind例: `h-11 min-w-[44px]`。[2]
-- **プレビュー機能**: 送信前にメッセージ内容をリアルタイム表示（案6対応）。エディタ直下に`preview` divを追加し、`contenteditable`で編集可能に。[1]
-- **制限表示**: 文字数/送信不可理由をインライン表示（案4対応）。例: `placeholder="最大500文字（残り: 320)"`。[2]
+Next.js プロジェクトで CSS Modules をインポートする際に型エラーが発生する主な原因は以下の通りです：
 
-### 2. エラー表示のベストプラクティス
-エラーは具体的で解決法を示し、信頼感を損なわない。インライン/トースト併用。[2]
-- **具体性**: 「送信不可: 空メッセージ」ではなく「メッセージを入力してください（例: /help）」と解決策併記。[2]
-- **視覚強調**: 赤系ボーダー+アイコン（`border-red-500 text-red-400`）。一貫性を保つためデザインシステムの`--error-fg`トークン使用。[3]
-- **非侵襲性**: プログレッシブディスクロージャーでエラー時のみ表示。1画面1メッセージ原則遵守。[2]
+1. **型定義ファイルの欠落**：CSS Modules の型情報が TypeScript に認識されていない[1]
+2. **tsconfig.json の不適切な設定**：型定義ファイルやモジュール宣言が includeに含まれていない[1][2]
+3. **インポート方法の誤り**：named import（`import * as`）を使用している[1]
 
-### 3. 状態フィードバックのベストプラクティス
-操作結果を即時視覚化し、ユーザーの「今何が起きているか」を明確に。[2]
-- **ローディング**: 送信中はスピナー+グレーアウト（`animate-spin opacity-50`）。成功時はチェックアニメーション。[2]
-- **視覚変化**: ボタンタップで即時スケール/色変化（`hover:scale-105 active:scale-95`）。[2]
-- **段階開示**: toolセクションをデフォルト折りたたみ（案13対応）、reasoningヘッダー強調（`font-bold bg-gray-100`）。[1]
+## 推奨される修正パターン
 
-### 4. アクセシビリティのベストプラクティス
-WCAG準拠で全ユーザーをカバー。VS Codeのキーボード/スクリーンリーダー対応を強化。[2]
-- **コントラスト/フォーカス**: 4.5:1以上確認（`--void-fg-1`使用）。フォーカスリング: `focus:ring-2 ring-blue-500`。[2]
-- **ARIA属性追加**（VoidChatArea内）:
-  ```jsx
-  // 入力欄
-  <textarea
-    aria-label="チャット入力"
-    aria-describedby="input-error"
-    aria-invalid={hasError}
-    role="textbox"
-  />
-  // 送信ボタン
-  <button
-    aria-label="メッセージ送信 (Enter)"
-    aria-disabled={isDisabled}
-    disabled={isDisabled}
-  >
-    Send
-  </button>
-  // エラー
-  <div id="input-error" role="alert" aria-live="polite">
-    メッセージを入力してください
-  </div>
-  ```
-  キーボードナビ対応: `tabindex`と`onKeyDown`でEnter送信。[2]
-- **代替テキスト**: アイコンに`aria-hidden` or `alt`（例: スピナー`aria-label="送信中"`）。[1]
+### パターン1：型定義ファイルの作成（推奨）
 
-### 5. モバイル操作性のベストプラクティス（VS Code Sidebar考慮）
-VS Codeはデスクトップ中心だが、タッチデバイス（Remote-SSH等）対応。親指操作優先。[1]
-- **タップターゲット**: 主要操作（送信/ツール）を親指圏内（下部）に配置。`gap-4 p-4`で余白確保。[1]
-- **ブレークポイント**: Sidebar幅狭小時折りたたみ（`@media (max-width: 300px)`）。[1]
-- **チェックリスト**（UXプロセス統合）:
-  - コントラスト確認済み[1]
-  - フォーカス状態検証済み[1]
-  - キーボード/タッチ両対応[2]
+最も確実な解決方法は、**カスタム型定義ファイルを作成する**ことです[1]：
 
-### デザイナー・Plannerへの適用推奨
-- **Tailwind統合**: ハードコード色を避け、`--void-bg-main`/`--void-fg-1`等VS Codeトークン使用。デザインシステム: 4pxグリッド（`p-1=4px, gap-2=8px`）。[3]
-- **優先対応**: ideaman高優先（案4,6,13）を反映。テーブルでマッピング:
-  | ideaman案 | 適用箇所 | 根拠 |
-  |-----------|----------|------|
-  | 案4 (送信不可インライン) | Input下div | [2]エラー具体性 |
-  | 案6 (送信プレビュー) | Input直下preview | [1]ユーザビリティ |
-  | 案13 (tool折りたたみ) | Collapsible section | [2]情報過多対策 |
-- **一貫性確保**: 全コンポーネントにホバー/フォーカス統一（`transition-all duration-200`）。[3]
+**1. `types/cssModule.d.ts` を作成**
+```typescript
+declare module '*.module.css' {
+  const classes: Record<string, string>;
+  export default classes;
+}
+```
 
-## 参考文献リスト (Bibliography)
-- **[1]** ClickUpブログ: 「製品のUIとUXを改善する方法」 (https://clickup.com/ja/blog/566060/improve-product-ui-ux) – フィードバック/アクセシビリティチェックリスト、モバイルタップ基準。
-- **[2]** Monstarlab: 「【2026年最新版】UI/UXを改善｜アプリデザインの参考になる...」 (https://monstar-lab.com/dx/solution/uiuxdesign-reference/) – 原則（ユーザビリティ/フィードバック/アクセシビリティ）、エラー/状態表示、失敗対策。
-- **[3]** Qiita: 「【コピペOK】個人開発でApple風デザインルールを作ったら統一感...」 (https://qiita.com/tomada/items/decece613046a61b11a3) – デザインシステム/一貫性（色/余白/ホバー）。
+**2. `tsconfig.json` を更新**
+```json
+{
+  "compilerOptions": {
+    "typeRoots": ["./types", "./node_modules/@types"],
+    "baseUrl": "."
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    "types"
+  ]
+}
+```
+
+**3. CSS Modules は default import で読み込む**[1]
+```typescript
+// ✅ 正しい書き方
+import styles from './SidebarChat.module.css';
+<div className={styles.className}></div>
+```
+
+```typescript
+// ❌ 間違った書き方
+import * as styles from './SidebarChat.module.css';
+```
+
+**4. IDE を再起動**[1]
+- VSCode を完全に再起動、またはCtrl + Shift + P → `TypeScript: Restart TS Server` を実行
+
+### パターン2：シンプルな型宣言
+
+より簡潔な方法として、プロジェクトルートに型定義ファイルを作成する場合[2]：
+
+```typescript
+declare module "*.css";
+declare module "*.scss";
+```
+
+その後、`tsconfig.json` の `include` にそのファイルを追加します。
+
+### パターン3：自動生成ツール（SCSS/複数ファイル対応）
+
+より厳密な型情報が必要な場合、`typed-css-modules` で .d.ts を自動生成できます[1]：
+
+```bash
+npm install --save-dev typed-css-modules
+npx tcm '**/*.module.css' --watch
+```
+
+## あなたの場合の修正ステップ
+
+| ステップ | 実行内容 |
+|---------|---------|
+| 1 | `types/cssModule.d.ts` を作成して型定義を追加 |
+| 2 | `tsconfig.json` に `"typeRoots"` と `"include"` を設定 |
+| 3 | インポート文が `import styles from './SidebarChat.module.css'` であることを確認 |
+| 4 | VSCode/TS Server を再起動 |
+
+現在のインポート方法は正しい形式です。エラー解消の鍵は**型定義ファイルの設定と IDE の再起動**にあります[1]。

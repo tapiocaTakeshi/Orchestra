@@ -1,8 +1,3 @@
-直前のレビューと各エージェントの分析を踏まえると、エラーの最有力原因は **`SidebarChat.module.css` ファイルが存在しない** ことです。`SidebarChat.tsx` 9行目の `import styles from './SidebarChat.module.css'` が解決できずビルドが落ちています。
-
-対応として、(1) 欠落している CSS Module ファイルを作成し、(2) TypeScript が `*.module.css` を解決できるよう型宣言ファイルを追加します。デザイナー案のダークテーマ・洗練されたチャット項目スタイルを CSS Modules 形式に落とし込みます。
-
-```css:components/SidebarChat/SidebarChat.module.css
 /* =========================================================
    SidebarChat.module.css
    Dark theme, modern chat list item styling
@@ -265,39 +260,3 @@
     padding-left: 0;
   }
 }
-```
-
-CSS Modules を TypeScript で確実に解決できるよう、型宣言ファイルも追加します（既に存在する場合は `tsconfig.json` の `include` を確認してください）。
-
-```ts:types/cssModule.d.ts
-declare module '*.module.css' {
-  const classes: { readonly [key: string]: string };
-  export default classes;
-}
-
-declare module '*.module.scss' {
-  const classes: { readonly [key: string]: string };
-  export default classes;
-}
-```
-
-ビルド/型チェックを再実行して、`SidebarChat.tsx` 9行目のエラーが解消したことを確認します。
-
-```bash
-npm run build
-```
-
-もし `tsconfig.json` の `include` に `types` ディレクトリが含まれていない場合は、以下のように差分編集してください（実ファイル確認後に必要なら）:
-
-```json:tsconfig.json
-<<<SEARCH
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-===
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "types/**/*.d.ts"],
->>>REPLACE
-```
-
-これで以下が満たされます:
-- **エラー解消**: 欠落していた `SidebarChat.module.css` を作成し、import が解決可能に
-- **型安全性**: `*.module.css` の TypeScript 型宣言を追加
-- **デザイン改善**: designer 案のモダンなダークテーマ、ホバー/アクティブ状態、テキスト省略、レスポンシブ対応をすべて反映

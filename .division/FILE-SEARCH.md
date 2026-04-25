@@ -1,6 +1,6 @@
 ## ワークスペース: `/Volumes/T7/Program/Orchestra`
 
-3 件のファイルを読み込みました（キーワード: 既存実装の精査、合計 37,579 文字）。 ベースラインとして主要マニフェスト/エントリを常に含めています。
+3 件のファイルを読み込みました（キーワード: 既存ファイル確認、合計 37,579 文字）。 ベースラインとして主要マニフェスト/エントリを常に含めています。
 
 ### ディレクトリツリー（関連ファイルの追加読取が必要ならパスを明示してください）
 
@@ -122,9 +122,9 @@
 - .build/extensions/gulp/package.nls.json
 - .build/extensions/handlebars/language-configuration.json
 - .build/extensions/handlebars/package.json
-- .build/extensions/handlebars/p
+- .build/extensions/handlebars/
 
-... [中略 46403 文字省略] ...
+... [中略 46404 文字省略] ...
 
 et userLocale = app.getLocale();
 	if (!userLocale) {

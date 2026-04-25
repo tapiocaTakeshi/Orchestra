@@ -13,9 +13,12 @@
 		"esModuleInterop": true,
 	},
 	"include": [
-		// this is just for type checking, so src/ is the correct dir
+		// src2/ is generated from src/ for bundling, but including it keeps
+		// editor diagnostics on opened generated files using this JSX config.
 		"./src/**/*.ts",
-		"./src/**/*.tsx"
+		"./src/**/*.tsx",
+		"./src2/**/*.ts",
+		"./src2/**/*.tsx"
 	],
 	"plugins": [
       {

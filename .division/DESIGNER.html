@@ -1,635 +1,455 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Void AI - SidebarChat UI</title>
+<title>SidebarChat Design Mockup</title>
 <style>
-/* VS Code Theme Tokens Mock */
-:root {
-  --void-bg-main: #181818;
-  --void-bg-2: #242424;
-  --void-bg-3: #2d2d30;
-  --void-bg-hover: #2a2d2e;
-  --void-fg-1: #cccccc;
-  --void-fg-2: #999999;
-  --void-fg-3: #666666;
-  --void-border: #383838;
-  --void-border-focus: #007acc;
-  --void-accent: #007acc;
-  --void-accent-hover: #1f8ad2;
-  --void-accent-disabled: rgba(0, 122, 204, 0.4);
-  --void-error: #f48771;
-  --void-error-bg: rgba(244, 135, 113, 0.1);
-  --void-warning: #cca700;
-  --void-warning-bg: rgba(204, 167, 0, 0.1);
-  --void-success: #89d185;
-  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  --font-mono: 'SF Mono', Consolas, 'Courier New', monospace;
-}
+  :root {
+    /* Color Palette - Modern Dark Theme */
+    --bg-app: #0f1115;
+    --bg-sidebar: #17191e;
+    --bg-sidebar-hover: #22252b;
+    --bg-sidebar-active: #2a2d35;
+    
+    --text-primary: #f1f3f5;
+    --text-secondary: #a0a4b0;
+    --text-muted: #626775;
+    
+    --accent-color: #5c7cfa;
+    --accent-hover: #4c6ef5;
+    --danger-color: #ff6b6b;
+    --danger-hover: #fa5252;
+    
+    --border-color: #2b2e38;
 
-* {
-  box-sizing: border-box;
-}
+    --radius-md: 8px;
+    --radius-sm: 6px;
+    
+    --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
 
-body {
-  margin: 0;
-  padding: 0;
-  background-color: var(--void-bg-main);
-  color: var(--void-fg-1);
-  font-family: var(--font-family);
-  height: 100vh;
-  display: flex;
-  font-size: 13px;
-  overflow: hidden;
-}
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
 
-svg {
-  width: 14px;
-  height: 14px;
-  fill: currentColor;
-}
+  body {
+    font-family: var(--font-family);
+    background-color: var(--bg-app);
+    color: var(--text-primary);
+    height: 100vh;
+    display: flex;
+    overflow: hidden;
+  }
 
-/* --- Layout --- */
-.layout-wrapper {
-  display: flex;
-  width: 100%;
-  height: 100%;
-}
+  /* App Layout */
+  .app-container {
+    display: flex;
+    width: 100%;
+    height: 100%;
+  }
 
-/* --- History Panel (Visibility Improvement) --- */
-.history-panel {
-  width: 240px;
-  border-right: 1px solid var(--void-border);
-  background-color: var(--void-bg-main);
-  display: flex;
-  flex-direction: column;
-}
+  /* Sidebar Styles */
+  .sidebar {
+    width: 300px;
+    background-color: var(--bg-sidebar);
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    flex-shrink: 0;
+  }
 
-.sidebar-header {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--void-border);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
+  .sidebar-header {
+    padding: 16px;
+  }
 
-.sidebar-header h2 {
-  margin: 0;
-  font-size: 11px;
-  text-transform: uppercase;
-  color: var(--void-fg-2);
-  font-weight: 600;
-  letter-spacing: 0.5px;
-}
+  .new-chat-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background-color: var(--accent-color);
+    color: #fff;
+    border: none;
+    padding: 12px 16px;
+    border-radius: var(--radius-md);
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+  }
 
-.new-chat-btn {
-  background: transparent;
-  border: 1px solid var(--void-border);
-  color: var(--void-fg-1);
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
-}
+  .new-chat-btn:hover {
+    background-color: var(--accent-hover);
+  }
 
-.new-chat-btn:hover {
-  background: var(--void-bg-3);
-  color: #fff;
-}
+  .new-chat-btn svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
 
-.history-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
+  .sidebar-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 12px 16px 12px;
+  }
 
-.history-item {
-  padding: 8px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  border: 1px solid transparent;
-  transition: background-color 0.2s, border-color 0.2s;
-}
+  .sidebar-content::-webkit-scrollbar {
+    width: 6px;
+  }
+  .sidebar-content::-webkit-scrollbar-thumb {
+    background-color: var(--bg-sidebar-active);
+    border-radius: 4px;
+  }
 
-.history-item:hover {
-  background-color: var(--void-bg-hover);
-}
+  /* Time Category Grouping */
+  .time-category {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin: 20px 8px 8px 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
 
-.history-item.active {
-  background-color: var(--void-bg-2);
-  border-color: var(--void-border);
-  border-left: 3px solid var(--void-accent);
-}
+  /* SidebarChat Component Styling */
+  .sidebar-chat-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    margin-bottom: 4px;
+    border-radius: var(--radius-md);
+    text-decoration: none;
+    color: inherit;
+    position: relative;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+  }
 
-.history-title {
-  font-size: 13px;
-  color: var(--void-fg-1);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-weight: 500;
-}
+  .sidebar-chat-item:hover {
+    background-color: var(--bg-sidebar-hover);
+  }
 
-.history-meta {
-  font-size: 11px;
-  color: var(--void-fg-3);
-  display: flex;
-  justify-content: space-between;
-}
+  .sidebar-chat-item.active {
+    background-color: var(--bg-sidebar-active);
+    border-color: var(--border-color);
+  }
 
-/* --- Main Chat Panel --- */
-.main-panel {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  background-color: var(--void-bg-main);
-}
+  /* Chat Icon */
+  .chat-icon-wrapper {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background-color: #2b2e38;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+  }
 
-.chat-container {
-  flex: 1;
-  overflow-y: auto;
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
+  .sidebar-chat-item.active .chat-icon-wrapper {
+    background-color: var(--accent-color);
+    color: #fff;
+  }
 
-/* --- Messages --- */
-.message {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-width: 800px;
-  margin: 0 auto;
-  width: 100%;
-}
+  .chat-icon-wrapper svg {
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
 
-.message-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 13px;
-  color: var(--void-fg-1);
-  font-weight: 600;
-}
+  /* Chat Details */
+  .chat-details {
+    flex: 1;
+    min-width: 0; /* Important for text truncation */
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
 
-.message-avatar {
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  color: #fff;
-  font-weight: bold;
-}
+  .chat-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+  }
 
-.avatar-user {
-  background-color: var(--void-accent);
-}
+  .chat-title {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 
-.avatar-ai {
-  background-color: #512bc3;
-}
+  .chat-time {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
 
-.message-content {
-  line-height: 1.6;
-  color: var(--void-fg-1);
-  padding-left: 34px;
-}
+  .chat-preview {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 
-.message-content p {
-  margin: 0 0 12px 0;
-}
+  /* Action Buttons (visible on hover) */
+  .chat-actions {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    background: linear-gradient(90deg, transparent 0%, var(--bg-sidebar-hover) 20%);
+    padding-left: 16px;
+  }
 
-.message-content p:last-child {
-  margin-bottom: 0;
-}
+  .sidebar-chat-item.active .chat-actions {
+    background: linear-gradient(90deg, transparent 0%, var(--bg-sidebar-active) 20%);
+  }
 
-.context-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background-color: var(--void-bg-2);
-  border: 1px solid var(--void-border);
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  color: var(--void-fg-2);
-  margin-bottom: 12px;
-  font-family: var(--font-mono);
-}
+  .sidebar-chat-item:hover .chat-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
 
-/* --- Tool Execution (Foldable Control) --- */
-details.tool-call {
-  margin: 12px 0;
-  border: 1px solid var(--void-border);
-  border-radius: 6px;
-  background-color: var(--void-bg-2);
-  overflow: hidden;
-}
+  .action-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+  }
 
-details.tool-call summary {
-  padding: 8px 12px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--void-fg-2);
-  user-select: none;
-  background-color: var(--void-bg-3);
-  font-family: var(--font-mono);
-  outline: none;
-}
+  .action-btn:hover {
+    background-color: var(--border-color);
+    color: var(--text-primary);
+  }
 
-details.tool-call summary::-webkit-details-marker {
-  display: none;
-}
+  .action-btn.danger:hover {
+    color: var(--danger-color);
+  }
 
-details.tool-call summary:before {
-  content: "▶";
-  font-size: 10px;
-  display: inline-block;
-  transition: transform 0.2s;
-  color: var(--void-fg-3);
-}
+  .action-btn svg {
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
 
-details.tool-call[open] summary:before {
-  transform: rotate(90deg);
-}
+  /* Main Content Area */
+  .main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    text-align: center;
+  }
 
-details.tool-call summary:hover {
-  color: var(--void-fg-1);
-}
+  .mockup-info {
+    max-width: 600px;
+  }
 
-.tool-icon {
-  color: var(--void-accent);
-}
+  .mockup-info h1 {
+    font-size: 2rem;
+    margin-bottom: 16px;
+    color: var(--text-primary);
+  }
 
-.tool-status-icon {
-  margin-left: auto;
-}
+  .mockup-info p {
+    font-size: 1.1rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin-bottom: 24px;
+  }
 
-.tool-details {
-  padding: 12px;
-  border-top: 1px solid var(--void-border);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--void-fg-2);
-  white-space: pre-wrap;
-  background-color: #1e1e1e;
-  max-height: 200px;
-  overflow-y: auto;
-}
+  .features-list {
+    text-align: left;
+    display: inline-block;
+    color: var(--text-secondary);
+    background-color: var(--bg-sidebar);
+    padding: 24px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+  }
 
-.code-block {
-  background-color: #1e1e1e;
-  border: 1px solid var(--void-border);
-  border-radius: 6px;
-  padding: 12px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  overflow-x: auto;
-  margin-top: 12px;
-  color: #d4d4d4;
-}
-
-/* --- Input Area --- */
-.input-container {
-  padding: 16px 24px 24px 24px;
-  background-color: var(--void-bg-main);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  max-width: 800px;
-  margin: 0 auto;
-  width: 100%;
-}
-
-/* --- Disable Reason Inline Display --- */
-.disable-reason {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--void-warning);
-  padding: 8px 12px;
-  background-color: var(--void-warning-bg);
-  border: 1px solid var(--void-warning);
-  border-radius: 6px;
-  animation: slideIn 0.3s ease-out;
-}
-
-@keyframes slideIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* --- Input Box --- */
-.input-box {
-  background-color: var(--void-bg-2);
-  border: 1px solid var(--void-border);
-  border-radius: 8px;
-  display: flex;
-  flex-direction: column;
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-.input-box:focus-within:not(.disabled) {
-  border-color: var(--void-border-focus);
-  box-shadow: 0 0 0 1px var(--void-border-focus);
-}
-
-.input-box.disabled {
-  opacity: 0.7;
-  background-color: var(--void-bg-main);
-}
-
-/* --- Send Preview --- */
-.send-preview {
-  display: flex;
-  gap: 8px;
-  padding: 10px 14px 0 14px;
-  flex-wrap: wrap;
-}
-
-.preview-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background-color: var(--void-bg-3);
-  border: 1px solid var(--void-border);
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-size: 11px;
-  color: var(--void-fg-1);
-}
-
-.preview-item .remove-btn {
-  cursor: pointer;
-  color: var(--void-fg-3);
-  display: flex;
-  align-items: center;
-  border-radius: 50%;
-  padding: 2px;
-}
-
-.preview-item .remove-btn:hover {
-  color: var(--void-error);
-  background-color: var(--void-error-bg);
-}
-
-.textarea-wrapper {
-  display: flex;
-  padding: 12px 14px;
-  align-items: flex-end;
-  gap: 12px;
-}
-
-textarea {
-  flex: 1;
-  background: transparent;
-  border: none;
-  color: var(--void-fg-1);
-  font-family: inherit;
-  font-size: 14px;
-  resize: none;
-  outline: none;
-  min-height: 24px;
-  max-height: 200px;
-  line-height: 1.5;
-}
-
-textarea::placeholder {
-  color: var(--void-fg-3);
-}
-
-textarea:disabled {
-  cursor: not-allowed;
-}
-
-.action-buttons {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.icon-btn {
-  background: transparent;
-  border: none;
-  color: var(--void-fg-2);
-  cursor: pointer;
-  padding: 6px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background-color 0.2s, color 0.2s;
-}
-
-.icon-btn:hover:not(:disabled) {
-  background-color: var(--void-bg-3);
-  color: var(--void-fg-1);
-}
-
-.icon-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.send-btn {
-  background-color: var(--void-accent);
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  padding: 6px 12px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background-color 0.2s;
-}
-
-.send-btn:hover:not(:disabled) {
-  background-color: var(--void-accent-hover);
-}
-
-.send-btn:disabled {
-  background-color: var(--void-accent-disabled);
-  cursor: not-allowed;
-  color: rgba(255, 255, 255, 0.6);
-}
-
-.footer-hint {
-  font-size: 11px;
-  color: var(--void-fg-3);
-  text-align: center;
-  margin-top: 4px;
-}
-
+  .features-list li {
+    margin-bottom: 8px;
+    margin-left: 20px;
+  }
 </style>
 </head>
 <body>
-
-<div class="layout-wrapper">
-  <!-- History Panel -->
-  <div class="history-panel">
-    <div class="sidebar-header">
-      <h2>Chat History</h2>
-      <button class="new-chat-btn" title="New Chat">
-        <svg viewBox="0 0 16 16"><path fill-rule="evenodd" d="M7.75 2a.75.75 0 01.75.75V7h4.25a.75.75 0 010 1.5H8.5v4.25a.75.75 0 01-1.5 0V8.5H2.75a.75.75 0 010-1.5H7V2.75A.75.75 0 017.75 2z"></path></svg>
-      </button>
-    </div>
-    <div class="history-list">
-      <div class="history-item active">
-        <span class="history-title">Sidebar UI Improvements</span>
-        <div class="history-meta">
-          <span>Just now</span>
-          <span>3 msgs</span>
-        </div>
+  <div class="app-container">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <button class="new-chat-btn">
+          <svg viewBox="0 0 24 24">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          新しいチャット
+        </button>
       </div>
-      <div class="history-item">
-        <span class="history-title">Debug AST Parser Leak</span>
-        <div class="history-meta">
-          <span>2 hrs ago</span>
-          <span>12 msgs</span>
-        </div>
-      </div>
-      <div class="history-item">
-        <span class="history-title">Write Tests for Auth</span>
-        <div class="history-meta">
-          <span>Yesterday</span>
-          <span>8 msgs</span>
-        </div>
-      </div>
-      <div class="history-item">
-        <span class="history-title">Explain React Hooks</span>
-        <div class="history-meta">
-          <span>2 days ago</span>
-          <span>5 msgs</span>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Main Chat Panel -->
-  <div class="main-panel">
-    <div class="sidebar-header" style="border-bottom: none;">
-      <h2>Void AI</h2>
-    </div>
-    
-    <div class="chat-container">
-      <!-- User Message -->
-      <div class="message">
-        <div class="message-header">
-          <div class="message-avatar avatar-user">U</div>
-          <span>User</span>
-        </div>
-        <div class="message-content">
-          <div class="context-badge">
-            <svg viewBox="0 0 16 16"><path fill-rule="evenodd" d="M3.75 2h3.5a.75.75 0 010 1.5h-3.5a.25.25 0 00-.25.25v8.5c0 .138.112.25.25.25h8.5a.25.25 0 00.25-.25v-3.5a.75.75 0 011.5 0v3.5A1.75 1.75 0 0112.25 14h-8.5A1.75 1.75 0 012 12.25v-8.5C2 2.784 2.784 2 3.75 2zm6.854-1h4.146a.25.25 0 01.25.25v4.146a.25.25 0 01-.427.177L13.03 4.03 9.28 7.78a.75.75 0 01-1.06-1.06l3.75-3.75-1.543-1.543A.25.25 0 0110.604 1z"></path></svg>
-            src/components/SidebarChat.tsx
-          </div>
-          <p>Please review the current SidebarChat component and propose UI improvements based on the requested design tokens.</p>
-        </div>
-      </div>
-
-      <!-- AI Message -->
-      <div class="message">
-        <div class="message-header">
-          <div class="message-avatar avatar-ai">V</div>
-          <span>Void</span>
-        </div>
-        <div class="message-content">
-          <p>I will analyze the `SidebarChat.tsx` file and apply the requested UI improvements, including the send preview, disable reason inline display, and tool folding controls.</p>
-          
-          <!-- Tool Execution (Folded by Default) -->
-          <details class="tool-call">
-            <summary>
-              <svg class="tool-icon" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M11.5 7a4.499 4.499 0 11-8.998 0A4.499 4.499 0 0111.5 7zm-.82 4.74a6 6 0 111.06-1.06l3.04 3.04a.75.75 0 11-1.06 1.06l-3.04-3.04z"></path></svg>
-              <span>search_files: SidebarChat.tsx</span>
-              <span class="tool-status-icon" style="color: var(--void-success);">
-                <svg viewBox="0 0 16 16"><path fill-rule="evenodd" d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"></path></svg>
-              </span>
-            </summary>
-            <div class="tool-details">Found 1 match in src/components/SidebarChat.tsx. Analyzing file contents...</div>
-          </details>
-
-          <p>I have identified the areas for improvement. Here is the refactored layout structure using the correct CSS variables:</p>
-          <div class="code-block">
-&lt;div className="input-box"&gt;
-  &lt;SendPreview context={attachedFiles} /&gt;
-  &lt;textarea 
-    placeholder="Ask Void anything..." 
-    className="bg-[var(--void-bg-2)] text-[var(--void-fg-1)]"
-  /&gt;
-&lt;/div&gt;</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Input Area -->
-    <div class="input-container">
       
-      <!-- Inline Disable Reason -->
-      <div class="disable-reason">
-        <svg viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8.22 1.754a.25.25 0 00-.44 0L1.698 13.132a.25.25 0 00.22.368h12.164a.25.25 0 00.22-.368L8.22 1.754zm-1.763-.707c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0114.082 15H1.918a1.75 1.75 0 01-1.543-2.575L6.457 1.047zM9 11a1 1 0 11-2 0 1 1 0 012 0zm-.25-5.25a.75.75 0 00-1.5 0v2.5a.75.75 0 001.5 0v-2.5z"></path></svg>
-        <span>Project indexing is in progress. API requests are temporarily paused.</span>
-      </div>
-
-      <!-- Input Box -->
-      <div class="input-box disabled">
+      <div class="sidebar-content">
+        <div class="time-category">今日</div>
         
-        <!-- Send Preview Area -->
-        <div class="send-preview">
-          <div class="preview-item">
-            <svg viewBox="0 0 16 16"><path fill-rule="evenodd" d="M3.75 2h3.5a.75.75 0 010 1.5h-3.5a.25.25 0 00-.25.25v8.5c0 .138.112.25.25.25h8.5a.25.25 0 00.25-.25v-3.5a.75.75 0 011.5 0v3.5A1.75 1.75 0 0112.25 14h-8.5A1.75 1.75 0 012 12.25v-8.5C2 2.784 2.784 2 3.75 2zm6.854-1h4.146a.25.25 0 01.25.25v4.146a.25.25 0 01-.427.177L13.03 4.03 9.28 7.78a.75.75 0 01-1.06-1.06l3.75-3.75-1.543-1.543A.25.25 0 0110.604 1z"></path></svg>
-            <span>SidebarChat.tsx</span>
-            <span class="remove-btn">
-              <svg viewBox="0 0 16 16"><path fill-rule="evenodd" d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"></path></svg>
-            </span>
+        <!-- Active SidebarChat Item -->
+        <a href="#" class="sidebar-chat-item active">
+          <div class="chat-icon-wrapper">
+            <svg viewBox="0 0 24 24">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
           </div>
-          <div class="preview-item">
-            <svg viewBox="0 0 16 16"><path fill-rule="evenodd" d="M2 4a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V4zm2-1a1 1 0 00-1 1v8a1 1 0 001 1h8a1 1 0 001-1V4a1 1 0 00-1-1H4zm3.75 2a.75.75 0 000 1.5h4.5a.75.75 0 000-1.5h-4.5zm0 3a.75.75 0 000 1.5h4.5a.75.75 0 000-1.5h-4.5zm0 3a.75.75 0 000 1.5h2.5a.75.75 0 000-1.5h-2.5z"></path></svg>
-            <span>Lines 45-60</span>
-            <span class="remove-btn">
-              <svg viewBox="0 0 16 16"><path fill-rule="evenodd" d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"></path></svg>
-            </span>
+          <div class="chat-details">
+            <div class="chat-title-row">
+              <div class="chat-title">エラーを直して</div>
+              <div class="chat-time">14:23</div>
+            </div>
+            <div class="chat-preview">SidebarChat.tsx (lines 9:9) のCSSインポートエラー修正について</div>
           </div>
-        </div>
+          <div class="chat-actions">
+            <button class="action-btn" title="名前を変更">
+              <svg viewBox="0 0 24 24">
+                <path d="M12 20h9"></path>
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+              </svg>
+            </button>
+            <button class="action-btn danger" title="削除">
+              <svg viewBox="0 0 24 24">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+            </button>
+          </div>
+        </a>
 
-        <!-- Textarea and Actions -->
-        <div class="textarea-wrapper">
-          <textarea placeholder="Ask Void anything..." disabled>How can I implement these changes?</textarea>
-          
-          <div class="action-buttons">
-            <button class="icon-btn" title="Add Context" disabled>
-              <svg viewBox="0 0 16 16"><path fill-rule="evenodd" d="M7.75 2a.75.75 0 01.75.75V7h4.25a.75.75 0 010 1.5H8.5v4.25a.75.75 0 01-1.5 0V8.5H2.75a.75.75 0 010-1.5H7V2.75A.75.75 0 017.75 2z"></path></svg>
+        <!-- Hover SidebarChat Item -->
+        <a href="#" class="sidebar-chat-item">
+          <div class="chat-icon-wrapper">
+            <svg viewBox="0 0 24 24">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+          </div>
+          <div class="chat-details">
+            <div class="chat-title-row">
+              <div class="chat-title">見た目改善案の作成</div>
+              <div class="chat-time">10:05</div>
+            </div>
+            <div class="chat-preview">デザイン品質を高めるためのUIトーン具体化</div>
+          </div>
+          <div class="chat-actions">
+            <button class="action-btn" title="名前を変更">
+              <svg viewBox="0 0 24 24"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
             </button>
-            <button class="send-btn" disabled title="Cannot send while indexing">
-              <svg viewBox="0 0 16 16"><path d="M1.776 2.083l12.44 5.441c.642.28.642 1.155 0 1.436L1.776 14.4c-.652.285-1.32-.38-1.036-1.026l2.122-4.814a1.75 1.75 0 011.458-1.038l6.096-.452c.28-.02.28-.426 0-.447l-6.096-.452A1.75 1.75 0 012.862 5.13L.74 3.11c-.284-.647.384-1.31 1.036-1.027z"></path></svg>
+            <button class="action-btn danger" title="削除">
+              <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
             </button>
           </div>
-        </div>
+        </a>
+
+        <div class="time-category">過去7日間</div>
+
+        <!-- Normal SidebarChat Item -->
+        <a href="#" class="sidebar-chat-item">
+          <div class="chat-icon-wrapper">
+            <svg viewBox="0 0 24 24">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+          </div>
+          <div class="chat-details">
+            <div class="chat-title-row">
+              <div class="chat-title">プロジェクトのセットアップ</div>
+              <div class="chat-time">昨日</div>
+            </div>
+            <div class="chat-preview">Next.jsとTypeScriptを使用した新規構築</div>
+          </div>
+          <div class="chat-actions">
+            <button class="action-btn" title="名前を変更">
+              <svg viewBox="0 0 24 24"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+            </button>
+            <button class="action-btn danger" title="削除">
+              <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            </button>
+          </div>
+        </a>
+
+        <!-- Normal SidebarChat Item -->
+        <a href="#" class="sidebar-chat-item">
+          <div class="chat-icon-wrapper">
+            <svg viewBox="0 0 24 24">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+          </div>
+          <div class="chat-details">
+            <div class="chat-title-row">
+              <div class="chat-title">APIエンドポイントの追加</div>
+              <div class="chat-time">3日前</div>
+            </div>
+            <div class="chat-preview">ユーザー情報を取得するためのGETリクエスト</div>
+          </div>
+          <div class="chat-actions">
+            <button class="action-btn" title="名前を変更">
+              <svg viewBox="0 0 24 24"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+            </button>
+            <button class="action-btn danger" title="削除">
+              <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            </button>
+          </div>
+        </a>
       </div>
-      
-      <div class="footer-hint">Use ⇧ ⏎ to add a new line</div>
-    </div>
+    </aside>
+    
+    <main class="main-content">
+      <div class="mockup-info">
+        <h1>SidebarChat UI デザイン改善案</h1>
+        <p>
+          エラー修正後に適用するモダンで洗練されたサイドバーのコンポーネントデザインです。<br>
+          左側のサイドバーでホバーやアクティブな状態を確認できます。
+        </p>
+        <ul class="features-list">
+          <li><strong>視覚的階層の明確化:</strong> タイトル、プレビュー文、時間を異なる文字サイズと色で区別</li>
+          <li><strong>アクセシビリティとコントラスト:</strong> ダークテーマに合わせた読みやすい配色</li>
+          <li><strong>インタラクション:</strong> ホバー時の自然な背景変化と、アクションボタンのスムーズな出現</li>
+          <li><strong>レイアウト:</strong> テキストが長い場合は省略記号（...）で美しく切り詰め処理</li>
+        </ul>
+      </div>
+    </main>
   </div>
-</div>
-
 </body>
 </html>

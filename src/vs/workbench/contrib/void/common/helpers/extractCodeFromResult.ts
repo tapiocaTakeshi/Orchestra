@@ -121,7 +121,18 @@ export const extractCodeFromRegular = ({ text, recentlyAddedTextLen }: { text: s
 
 	const pm = new SurroundingsRemover(text)
 
-	pm.removeCodeBlock()
+	// Try removing code block from the start first
+	let foundCodeBlock = pm.removeCodeBlock()
+
+	// If that failed, the LLM may have included explanation text before the code block.
+	// Try to find ``` anywhere in the text and extract the code block from there.
+	if (!foundCodeBlock) {
+		const codeBlockStart = text.indexOf('```')
+		if (codeBlockStart !== -1) {
+			pm.i = codeBlockStart
+			foundCodeBlock = pm.removeCodeBlock()
+		}
+	}
 
 	const s = pm.value()
 	const [delta, ignoredSuffix] = pm.deltaInfo(recentlyAddedTextLen)
@@ -150,11 +161,27 @@ export const extractCodeFromFIM = ({ text, recentlyAddedTextLen, midTag, }: { te
 
 	pm.removeCodeBlock()
 
-	const foundMid = pm.removePrefix(`<${midTag}>`)
+	// First try removePrefix (handles clean output with no preamble)
+	let foundMid = pm.removePrefix(`<${midTag}>`)
+
+	// If removePrefix failed, the LLM may have included explanation text before the tag.
+	// Use removeFromStartUntilFullMatch to skip everything before <MID> tag.
+	if (!foundMid) {
+		foundMid = pm.removeFromStartUntilFullMatch(`<${midTag}>`, true)
+	}
 
 	if (foundMid) {
-		pm.removeSuffix(`\n`) // sometimes outputs \n
-		pm.removeSuffix(`</${midTag}>`)
+		// Remove closing tag and any trailing explanation text after it
+		const closingTag = `</${midTag}>`
+		const closingIdx = pm.value().indexOf(closingTag)
+		if (closingIdx !== -1) {
+			// Set j to just before the closing tag, stripping it and everything after
+			pm.j = pm.i + closingIdx - 1
+		} else {
+			// Closing tag not yet fully streamed - try partial suffix removal
+			pm.removeSuffix(`\n`) // sometimes outputs \n
+			pm.removeSuffix(`</${midTag}>`)
+		}
 	}
 	const s = pm.value()
 	const [delta, ignoredSuffix] = pm.deltaInfo(recentlyAddedTextLen)
