@@ -3,8 +3,8 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import React, { useState, useEffect, useCallback } from 'react'
-import { MCPUserState, RefreshableProviderName, SettingsOfProvider } from '../../../../../../../workbench/contrib/void/common/voidSettingsTypes.js'
+import { useState, useEffect, useCallback } from 'react'
+import { RefreshableProviderName } from '../../../../../../../workbench/contrib/void/common/voidSettingsTypes.js'
 import { DisposableStore, IDisposable } from '../../../../../../../base/common/lifecycle.js'
 import { VoidSettingsState } from '../../../../../../../workbench/contrib/void/common/voidSettingsService.js'
 import { ColorScheme } from '../../../../../../../platform/theme/common/theme.js'
@@ -106,12 +106,11 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 		themeService: accessor.get(IThemeService),
 		editCodeService: accessor.get(IEditCodeService),
 		voidCommandBarService: accessor.get(IVoidCommandBarService),
-		modelService: accessor.get(IModelService),
 		mcpService: accessor.get(IMCPService),
 		divisionProjectService: accessor.get(IDivisionProjectService),
 	}
 
-	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, voidCommandBarService, modelService, mcpService, divisionProjectService } = stateServices
+	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, voidCommandBarService, mcpService, divisionProjectService } = stateServices
 
 
 

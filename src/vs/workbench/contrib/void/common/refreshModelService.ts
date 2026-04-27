@@ -8,7 +8,7 @@ import { ILLMMessageService } from './sendLLMMessageService.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { Disposable, IDisposable } from '../../../../base/common/lifecycle.js';
 import { RefreshableProviderName, refreshableProviderNames, SettingsOfProvider } from './voidSettingsTypes.js';
-import { OllamaModelResponse, OpenaiCompatibleModelResponse } from './sendLLMMessageTypes.js';
+import { DivisionAPIModelResponse, OllamaModelResponse, OpenaiCompatibleModelResponse } from './sendLLMMessageTypes.js';
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 
@@ -47,6 +47,7 @@ const refreshBasedOn: { [k in RefreshableProviderName]: (keyof SettingsOfProvide
 	ollama: ['_didFillInProviderSettings', 'endpoint'],
 	vLLM: ['_didFillInProviderSettings', 'endpoint'],
 	lmStudio: ['_didFillInProviderSettings', 'endpoint'],
+	divisionAPI: ['_didFillInProviderSettings', 'endpoint'],
 	// openAICompatible: ['_didFillInProviderSettings', 'endpoint', 'apiKey'],
 }
 const REFRESH_INTERVAL = 5_000
@@ -144,6 +145,7 @@ export class RefreshModelService extends Disposable implements IRefreshModelServ
 		ollama: { state: 'init', timeoutId: null },
 		vLLM: { state: 'init', timeoutId: null },
 		lmStudio: { state: 'init', timeoutId: null },
+		divisionAPI: { state: 'init', timeoutId: null },
 	}
 
 
@@ -162,22 +164,35 @@ export class RefreshModelService extends Disposable implements IRefreshModelServ
 			}
 		}
 		const listFn = providerName === 'ollama' ? this.llmMessageService.ollamaList
-			: this.llmMessageService.openAICompatibleList
+			: providerName === 'divisionAPI' ? this.llmMessageService.divisionAPIList
+				: this.llmMessageService.openAICompatibleList
 
 		listFn({
 			providerName,
 			onSuccess: ({ models }) => {
 				// set the models to the detected models
-				this.voidSettingsService.setAutodetectedModels(
-					providerName,
-					models.map(model => {
-						if (providerName === 'ollama') return (model as OllamaModelResponse).name;
-						else if (providerName === 'vLLM') return (model as OpenaiCompatibleModelResponse).id;
-						else if (providerName === 'lmStudio') return (model as OpenaiCompatibleModelResponse).id;
-						else throw new Error('refreshMode fn: unknown provider', providerName);
-					}),
-					{ enableProviderOnSuccess: options.enableProviderOnSuccess, hideRefresh: options.doNotFire }
-				)
+				const modelNames = models.map(model => {
+					if (providerName === 'ollama') return (model as OllamaModelResponse).name;
+					else if (providerName === 'vLLM') return (model as OpenaiCompatibleModelResponse).id;
+					else if (providerName === 'lmStudio') return (model as OpenaiCompatibleModelResponse).id;
+					else if (providerName === 'divisionAPI') return (model as DivisionAPIModelResponse).name;
+					else throw new Error('refreshMode fn: unknown provider', providerName);
+				})
+
+				if (providerName === 'divisionAPI') {
+					this.voidSettingsService.setSettingOfProvider(
+						providerName,
+						'models',
+						modelNames.map(modelName => ({ modelName, type: 'autodetected', isHidden: false }))
+					)
+				}
+				else {
+					this.voidSettingsService.setAutodetectedModels(
+						providerName,
+						modelNames,
+						{ enableProviderOnSuccess: options.enableProviderOnSuccess, hideRefresh: options.doNotFire }
+					)
+				}
 
 				if (options.enableProviderOnSuccess) this.voidSettingsService.setSettingOfProvider(providerName, '_didFillInProviderSettings', true)
 

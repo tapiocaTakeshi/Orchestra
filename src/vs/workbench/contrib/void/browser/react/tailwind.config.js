@@ -3,8 +3,10 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
+import typography from '@tailwindcss/typography'
+
 /** @type {import('tailwindcss').Config} */
-module.exports = {
+export default {
 	darkMode: 'selector', // '{prefix-}dark' className is used to identify `dark:`
 	content: ['./src2/**/*.{jsx,tsx}'], // uses these files to decide how to transform the css file
 	theme: {
@@ -192,7 +194,7 @@ module.exports = {
 		},
 	},
 	plugins: [
-		require('@tailwindcss/typography')
+		typography
 	],
 	prefix: 'void-'
 }

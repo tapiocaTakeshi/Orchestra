@@ -181,6 +181,24 @@ function getRelativeWorkspacePath(accessor: ReturnType<typeof useAccessor>, uri:
 
 const numOptionsToShow = 100
 
+const portalDropdownColors = {
+	background: '#2b2b2b',
+	backgroundHover: '#343434',
+	border: '#555555',
+	foreground: '#f0f0f0',
+	mutedForeground: '#b8b8b8',
+	activeBackground: '#0e639c',
+	activeForeground: '#ffffff',
+} as const
+
+const portalDropdownBackgroundStyle = {
+	background: portalDropdownColors.background,
+	backgroundColor: portalDropdownColors.background,
+	opacity: 1,
+} satisfies React.CSSProperties
+
+const voidDropdownOpenedEventName = 'void-custom-dropdown-opened'
+
 
 
 // TODO make this unique based on other options
@@ -842,71 +860,91 @@ export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fun
 		/>
 		{/* <div>{`idx ${optionIdx}`}</div> */}
 		{isMenuOpen && (
-			<div
-				ref={refs.setFloating}
-				className="z-[100] border-void-border-3 bg-void-bg-2-alt border rounded shadow-lg flex flex-col overflow-hidden"
-				style={{
-					position: strategy,
-					top: y ?? 0,
-					left: x ?? 0,
-					width: refs.reference.current instanceof HTMLElement ? refs.reference.current.offsetWidth : 0
-				}}
-				onWheel={(e) => e.stopPropagation()}
-			>
-				{/* Breadcrumbs Header */}
-				{isBreadcrumbsShowing && <div className="px-2 py-1 text-void-fg-1 bg-void-bg-2-alt border-b border-void-border-3 sticky top-0 bg-void-bg-1 z-10 select-none pointer-events-none">
-					{optionText ?
-						<div className="flex items-center">
-							{/* {optionPath.map((path, index) => (
+			<FloatingPortal>
+				<div className="@@void-scope" style={portalDropdownBackgroundStyle}>
+					<div
+						ref={refs.setFloating}
+						className="z-[10000] border-void-border-3 bg-void-bg-2-alt border rounded shadow-lg flex flex-col overflow-hidden"
+						style={{
+							position: strategy,
+							top: y ?? 0,
+							left: x ?? 0,
+							zIndex: 100000,
+							background: portalDropdownColors.background,
+							backgroundColor: portalDropdownColors.background,
+							color: portalDropdownColors.foreground,
+							borderColor: portalDropdownColors.border,
+							width: refs.reference.current instanceof HTMLElement ? refs.reference.current.offsetWidth : 0
+						}}
+						onWheel={(e) => e.stopPropagation()}
+					>
+						{/* Breadcrumbs Header */}
+						{isBreadcrumbsShowing && <div className="px-2 py-1 text-void-fg-1 bg-void-bg-2-alt border-b border-void-border-3 sticky top-0 bg-void-bg-1 z-10 select-none pointer-events-none" style={{ background: portalDropdownColors.background, backgroundColor: portalDropdownColors.background, color: portalDropdownColors.foreground, borderColor: portalDropdownColors.border }}>
+							{optionText ?
+								<div className="flex items-center">
+									{/* {optionPath.map((path, index) => (
 								<React.Fragment key={index}>
 									<span>{path}</span>
 									<ChevronRight size={12} className="mx-1" />
 								</React.Fragment>
 							))} */}
-							<span>{optionText}</span>
-						</div>
-						: <div className='opacity-50'>Enter text to filter...</div>
-					}
-				</div>}
+									<span>{optionText}</span>
+								</div>
+								: <div className='opacity-50'>Enter text to filter...</div>
+							}
+						</div>}
 
 
-				{/* Options list */}
-				<div className='max-h-[400px] w-full max-w-full overflow-y-auto overflow-x-auto'>
-					<div className="w-max min-w-full flex flex-col gap-0 text-nowrap flex-nowrap">
-						{options.length === 0 ?
-							<div className="text-void-fg-3 px-3 py-0.5">No results found</div>
-							: options.map((o, oIdx) => {
+						{/* Options list */}
+						<div className='max-h-[400px] w-full max-w-full overflow-y-auto overflow-x-auto' style={{ background: portalDropdownColors.background, backgroundColor: portalDropdownColors.background }}>
+							<div className="w-max min-w-full flex flex-col gap-0 text-nowrap flex-nowrap">
+								{options.length === 0 ?
+									<div className="text-void-fg-3 px-3 py-0.5">No results found</div>
+									: options.map((o, oIdx) => {
 
-								return (
-									// Option
-									<div
-										ref={oIdx === optionIdx ? selectedOptionRef : null}
-										key={o.fullName}
-										className={`
+										return (
+											// Option
+											<div
+												ref={oIdx === optionIdx ? selectedOptionRef : null}
+												key={o.fullName}
+												style={{
+													background: oIdx === optionIdx
+														? portalDropdownColors.activeBackground
+														: portalDropdownColors.background,
+													backgroundColor: oIdx === optionIdx
+														? portalDropdownColors.activeBackground
+														: portalDropdownColors.background,
+													color: oIdx === optionIdx
+														? portalDropdownColors.activeForeground
+														: portalDropdownColors.foreground,
+												}}
+												className={`
 											flex items-center gap-2
 											px-3 py-1 cursor-pointer
 											${oIdx === optionIdx ? 'bg-blue-500 text-white/80' : 'bg-void-bg-2-alt text-void-fg-1'}
 										`}
-										onClick={() => { onSelectOption(); }}
-										onMouseMove={() => { setOptionIdx(oIdx) }}
-									>
-										{<o.iconInMenu size={12} />}
+												onClick={() => { onSelectOption(); }}
+												onMouseMove={() => { setOptionIdx(oIdx) }}
+											>
+												{<o.iconInMenu size={12} />}
 
-										<span>{o.abbreviatedName}</span>
+												<span>{o.abbreviatedName}</span>
 
-										{o.fullName && o.fullName !== o.abbreviatedName && <span className="opacity-60 text-sm">{o.fullName}</span>}
+												{o.fullName && o.fullName !== o.abbreviatedName && <span className="opacity-60 text-sm">{o.fullName}</span>}
 
-										{o.nextOptions || o.generateNextOptions ? (
-											<ChevronRight size={12} />
-										) : null}
+												{o.nextOptions || o.generateNextOptions ? (
+													<ChevronRight size={12} />
+												) : null}
 
-									</div>
-								)
-							})
-						}
+											</div>
+										)
+									})
+								}
+							</div>
+						</div>
 					</div>
 				</div>
-			</div>
+			</FloatingPortal>
 		)}
 	</>
 
@@ -1319,7 +1357,25 @@ export const VoidCustomDropdownBox = <T extends NonNullable<any>>({
 	offsetPx?: number;
 }) => {
 	const [isOpen, setIsOpen] = useState(false);
+	const dropdownInstanceId = useId();
 	const measureRef = useRef<HTMLDivElement>(null);
+
+	const openDropdown = useCallback(() => {
+		document.dispatchEvent(new CustomEvent(voidDropdownOpenedEventName, {
+			detail: { id: dropdownInstanceId },
+		}));
+		setIsOpen(true);
+	}, [dropdownInstanceId]);
+
+	const toggleDropdown = useCallback(() => {
+		setIsOpen((open) => {
+			if (open) return false;
+			document.dispatchEvent(new CustomEvent(voidDropdownOpenedEventName, {
+				detail: { id: dropdownInstanceId },
+			}));
+			return true;
+		});
+	}, [dropdownInstanceId]);
 
 	// Replace manual positioning with floating-ui
 	const {
@@ -1331,7 +1387,10 @@ export const VoidCustomDropdownBox = <T extends NonNullable<any>>({
 		update
 	} = useFloating({
 		open: isOpen,
-		onOpenChange: setIsOpen,
+		onOpenChange: (open) => {
+			if (open) openDropdown();
+			else setIsOpen(false);
+		},
 		placement: 'bottom-start',
 
 		middleware: [
@@ -1373,6 +1432,18 @@ export const VoidCustomDropdownBox = <T extends NonNullable<any>>({
 		if (selectedOption !== undefined) return
 		onChangeOption(options[0])
 	}, [selectedOption, onChangeOption, options])
+
+	useEffect(() => {
+		const handleDropdownOpened = (event: Event) => {
+			const openedId = (event as CustomEvent<{ id?: string }>).detail?.id;
+			if (openedId !== dropdownInstanceId) {
+				setIsOpen(false);
+			}
+		};
+
+		document.addEventListener(voidDropdownOpenedEventName, handleDropdownOpened);
+		return () => document.removeEventListener(voidDropdownOpenedEventName, handleDropdownOpened);
+	}, [dropdownInstanceId]);
 
 	// Handle clicks outside
 	useEffect(() => {
@@ -1432,7 +1503,18 @@ export const VoidCustomDropdownBox = <T extends NonNullable<any>>({
 				type='button'
 				ref={refs.setReference}
 				className="flex items-center h-4 bg-transparent whitespace-nowrap hover:brightness-90 w-full"
-				onClick={() => setIsOpen(!isOpen)}
+				onMouseDown={(e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					toggleDropdown();
+				}}
+				onClick={(e) => e.preventDefault()}
+				onKeyDown={(e) => {
+					if (e.key === 'Enter' || e.key === ' ') {
+						e.preventDefault();
+						toggleDropdown();
+					}
+				}}
 			>
 				<span className={`truncate ${arrowTouchesText ? 'mr-1' : ''}`}>
 					{getOptionDisplayName(selectedOption)}
@@ -1455,22 +1537,28 @@ export const VoidCustomDropdownBox = <T extends NonNullable<any>>({
 			{/* Dropdown Menu — render via Portal so ancestor backdrop-filter / transform don't clip it */}
 			{isOpen && (
 				<FloatingPortal>
-					<div
-						ref={refs.setFloating}
-						className="z-[100] bg-void-bg-1 border-void-border-3 border rounded shadow-lg"
-						style={{
-							position: strategy,
-							top: y ?? 0,
-							left: x ?? 0,
-							width: (matchInputWidth
-								? (refs.reference.current instanceof HTMLElement ? refs.reference.current.offsetWidth : 0)
-								: Math.max(
-									(refs.reference.current instanceof HTMLElement ? refs.reference.current.offsetWidth : 0),
-									(measureRef.current instanceof HTMLElement ? measureRef.current.offsetWidth : 0)
-								))
-						}}
-						onWheel={(e) => e.stopPropagation()}
-					><div className='overflow-auto max-h-80'>
+					<div className="@@void-scope" style={portalDropdownBackgroundStyle}>
+						<div
+							ref={refs.setFloating}
+							className="z-[10000] bg-void-bg-1 border-void-border-3 border rounded shadow-lg"
+							style={{
+								position: strategy,
+								top: y ?? 0,
+								left: x ?? 0,
+								zIndex: 100000,
+								background: portalDropdownColors.background,
+								backgroundColor: portalDropdownColors.background,
+								color: portalDropdownColors.foreground,
+								borderColor: portalDropdownColors.border,
+								width: (matchInputWidth
+									? (refs.reference.current instanceof HTMLElement ? refs.reference.current.offsetWidth : 0)
+									: Math.max(
+										(refs.reference.current instanceof HTMLElement ? refs.reference.current.offsetWidth : 0),
+										(measureRef.current instanceof HTMLElement ? measureRef.current.offsetWidth : 0)
+									))
+							}}
+							onWheel={(e) => e.stopPropagation()}
+						><div className='overflow-auto max-h-80' style={{ background: portalDropdownColors.background, backgroundColor: portalDropdownColors.background }}>
 
 						{(() => {
 							let lastGroup: string | undefined = undefined;
@@ -1487,12 +1575,24 @@ export const VoidCustomDropdownBox = <T extends NonNullable<any>>({
 										{showHeader && (
 											<div
 												className='sticky top-0 z-[1] bg-void-bg-1 px-2 pt-2 pb-1 text-[10px] uppercase tracking-wider text-void-fg-4 select-none cursor-default'
+												style={{ background: portalDropdownColors.background, backgroundColor: portalDropdownColors.background, color: portalDropdownColors.mutedForeground }}
 												onClick={(e) => e.stopPropagation()}
 											>
 												{groupName}
 											</div>
 										)}
 										<div
+											style={{
+												background: thisOptionIsSelected
+													? portalDropdownColors.activeBackground
+													: portalDropdownColors.background,
+												backgroundColor: thisOptionIsSelected
+													? portalDropdownColors.activeBackground
+													: portalDropdownColors.background,
+												color: thisOptionIsSelected
+													? portalDropdownColors.activeForeground
+													: portalDropdownColors.foreground,
+											}}
 											className={`flex items-center px-2 py-1 pr-4 cursor-pointer whitespace-nowrap
 									transition-all duration-100
 									${thisOptionIsSelected ? 'bg-blue-500 text-white/80' : 'hover:bg-blue-500 hover:text-white/80'}
@@ -1526,6 +1626,7 @@ export const VoidCustomDropdownBox = <T extends NonNullable<any>>({
 						})()}
 						</div>
 
+						</div>
 					</div>
 				</FloatingPortal>
 			)}

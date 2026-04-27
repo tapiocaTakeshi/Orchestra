@@ -3,7 +3,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { EventLLMMessageOnTextParams, EventLLMMessageOnErrorParams, EventLLMMessageOnFinalMessageParams, EventLLMMessageOnFileOperationParams, EventLLMMessageOnCommandRunParams, FileOperationItem, CommandOperationItem, ServiceSendLLMMessageParams, MainSendLLMMessageParams, MainLLMMessageAbortParams, MainLLMMessageInterjectParams, ServiceModelListParams, EventModelListOnSuccessParams, EventModelListOnErrorParams, MainModelListParams, OllamaModelResponse, OpenaiCompatibleModelResponse, } from './sendLLMMessageTypes.js';
+import { EventLLMMessageOnTextParams, EventLLMMessageOnErrorParams, EventLLMMessageOnFinalMessageParams, EventLLMMessageOnFileOperationParams, EventLLMMessageOnCommandRunParams, FileOperationItem, CommandOperationItem, ServiceSendLLMMessageParams, MainSendLLMMessageParams, MainLLMMessageAbortParams, MainLLMMessageInterjectParams, ServiceModelListParams, EventModelListOnSuccessParams, EventModelListOnErrorParams, MainModelListParams, OllamaModelResponse, OpenaiCompatibleModelResponse, DivisionAPIModelResponse, } from './sendLLMMessageTypes.js';
 
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
@@ -29,6 +29,7 @@ export interface ILLMMessageService {
 	interject: (requestId: string, text: string) => void;
 	ollamaList: (params: ServiceModelListParams<OllamaModelResponse>) => void;
 	openAICompatibleList: (params: ServiceModelListParams<OpenaiCompatibleModelResponse>) => void;
+	divisionAPIList: (params: ServiceModelListParams<DivisionAPIModelResponse>) => void;
 	registerFileOperationHandler: (handler: (operations: FileOperationItem[]) => Promise<void>) => void;
 	registerCommandOperationHandler: (handler: (commands: CommandOperationItem[]) => Promise<void>) => void;
 	approveOrchestration: (editedOutputs?: Array<{ mdFileName: string; mdContent: string }>) => Promise<void>;
@@ -63,9 +64,13 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 		openAICompat: {
 			success: {} as { [eventId: string]: ((params: EventModelListOnSuccessParams<OpenaiCompatibleModelResponse>) => void) },
 			error: {} as { [eventId: string]: ((params: EventModelListOnErrorParams<OpenaiCompatibleModelResponse>) => void) },
-		}
+		},
+		divisionAPI: {
+			success: {} as { [eventId: string]: ((params: EventModelListOnSuccessParams<DivisionAPIModelResponse>) => void) },
+			error: {} as { [eventId: string]: ((params: EventModelListOnErrorParams<DivisionAPIModelResponse>) => void) },
+		},
 	} satisfies {
-		[providerName in 'ollama' | 'openAICompat']: {
+		[providerName in 'ollama' | 'openAICompat' | 'divisionAPI']: {
 			success: { [eventId: string]: ((params: EventModelListOnSuccessParams<any>) => void) },
 			error: { [eventId: string]: ((params: EventModelListOnErrorParams<any>) => void) },
 		}
@@ -126,6 +131,12 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 		}))
 		this._register((this.channel.listen('onError_list_openAICompatible') satisfies Event<EventModelListOnErrorParams<OpenaiCompatibleModelResponse>>)(e => {
 			this.listHooks.openAICompat.error[e.requestId]?.(e)
+		}))
+		this._register((this.channel.listen('onSuccess_list_divisionAPI') satisfies Event<EventModelListOnSuccessParams<DivisionAPIModelResponse>>)(e => {
+			this.listHooks.divisionAPI.success[e.requestId]?.(e)
+		}))
+		this._register((this.channel.listen('onError_list_divisionAPI') satisfies Event<EventModelListOnErrorParams<DivisionAPIModelResponse>>)(e => {
+			this.listHooks.divisionAPI.error[e.requestId]?.(e)
 		}))
 
 	}
@@ -247,6 +258,22 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 		} satisfies MainModelListParams<OpenaiCompatibleModelResponse>)
 	}
 
+	divisionAPIList = (params: ServiceModelListParams<DivisionAPIModelResponse>) => {
+		const { onSuccess, onError, ...proxyParams } = params
+
+		const { settingsOfProvider } = this.voidSettingsService.state
+
+		const requestId_ = generateUuid();
+		this.listHooks.divisionAPI.success[requestId_] = onSuccess
+		this.listHooks.divisionAPI.error[requestId_] = onError
+
+		this.channel.call('divisionAPIList', {
+			...proxyParams,
+			settingsOfProvider,
+			requestId: requestId_,
+		} satisfies MainModelListParams<DivisionAPIModelResponse>)
+	}
+
 	private _clearChannelHooks(requestId: string) {
 		delete this.llmMessageHooks.onText[requestId]
 		delete this.llmMessageHooks.onFinalMessage[requestId]
@@ -257,6 +284,9 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 
 		delete this.listHooks.openAICompat.success[requestId]
 		delete this.listHooks.openAICompat.error[requestId]
+
+		delete this.listHooks.divisionAPI.success[requestId]
+		delete this.listHooks.divisionAPI.error[requestId]
 	}
 
 	registerFileOperationHandler(handler: (operations: FileOperationItem[]) => Promise<void>) {

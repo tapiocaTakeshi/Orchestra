@@ -164,7 +164,7 @@ export type SendLLMMessageParams = {
 	divisionRoleAssignments?: RoleAssignment[];
 	divisionProjectId?: string;
 	divisionApiKey?: string;
-	// Coder ↔ Reviewer ループの最大反復回数（divisionAPI のみ使用）
+	// File Search → Coder/Writer → Reviewer ループの最大反復回数（divisionAPI のみ使用）
 	divisionMaxReviewIterations?: number;
 	workspaceFolderPath?: string;
 	// main 側（channel）が注入する関数。IPC を越えないので BlockedMainLLMMessageParams に含める。
@@ -241,6 +241,10 @@ export type OpenaiCompatibleModelResponse = {
 	created: number;
 	object: 'model';
 	owned_by: string;
+}
+
+export type DivisionAPIModelResponse = {
+	name: string;
 }
 
 

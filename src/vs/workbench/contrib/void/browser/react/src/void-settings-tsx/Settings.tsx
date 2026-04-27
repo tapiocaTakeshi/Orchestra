@@ -17,7 +17,7 @@ import { os } from '../../../../common/helpers/systemInfo.js'
 import { IconLoading } from '../sidebar-tsx/SidebarChat.js'
 import { ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsServiceTypes.js'
 import Severity from '../../../../../../../base/common/severity.js'
-import { getModelCapabilities, modelOverrideKeys, ModelOverrides } from '../../../../common/modelCapabilities.js';
+import { defaultModelsOfProvider, getModelCapabilities, modelOverrideKeys, ModelOverrides } from '../../../../common/modelCapabilities.js';
 import { TransferEditorType, TransferFilesInfo } from '../../../extensionTransferTypes.js';
 import { MCPServer } from '../../../../common/mcpServiceTypes.js';
 import { useMCPServiceState } from '../util/services.js';
@@ -1113,7 +1113,6 @@ const DivisionSettings = () => {
 	const getModelsForProvider = (pn: import('../../../../common/voidSettingsTypes.js').ProviderName) => {
 		const rt = settingsState.settingsOfProvider[pn]?.models || [];
 		if (rt.length > 0) return rt.map(m => m.modelName);
-		const { defaultModelsOfProvider } = require('../../../../common/modelCapabilities.js');
 		return [...(defaultModelsOfProvider[pn] || [])];
 	};
 
@@ -1132,7 +1131,7 @@ const DivisionSettings = () => {
 		divisionProjectService.save({ ...project, agents: updated });
 	};
 
-	// Coder ↔ Reviewer ループの最大反復回数（ユーザー設定）
+	// File Search → Coder/Writer → Reviewer ループの最大反復回数（ユーザー設定）
 	const maxReviewIterations = settingsState.globalSettings.maxReviewIterations;
 	const [maxReviewIterationsInput, setMaxReviewIterationsInput] = useState<string>(String(maxReviewIterations ?? 10));
 	useEffect(() => {
@@ -1152,7 +1151,7 @@ const DivisionSettings = () => {
 				<div className="flex flex-col">
 					<span className="text-xs text-void-fg-2 font-medium">レビュー最大反復回数</span>
 					<span className="text-[11px] text-void-fg-4">
-						Coder ↔ Reviewer のループ上限。Reviewer が合格を出さない場合はこの回数に達した時点で終了します（1〜100）。
+						File Search → Coder/Writer → Reviewer のループ上限。Reviewer が合格を出さない場合はこの回数に達した時点で終了します（1〜100）。
 					</span>
 				</div>
 				<input

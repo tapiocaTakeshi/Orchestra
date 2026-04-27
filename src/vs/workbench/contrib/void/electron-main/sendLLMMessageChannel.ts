@@ -8,7 +8,7 @@
 
 import { IServerChannel } from '../../../../base/parts/ipc/common/ipc.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
-import { EventLLMMessageOnTextParams, EventLLMMessageOnErrorParams, EventLLMMessageOnFinalMessageParams, EventLLMMessageOnFileOperationParams, EventLLMMessageOnCommandRunParams, MainSendLLMMessageParams, AbortRef, SendLLMMessageParams, MainLLMMessageAbortParams, MainLLMMessageInterjectParams, ModelListParams, EventModelListOnSuccessParams, EventModelListOnErrorParams, OllamaModelResponse, OpenaiCompatibleModelResponse, MainModelListParams, } from '../common/sendLLMMessageTypes.js';
+import { EventLLMMessageOnTextParams, EventLLMMessageOnErrorParams, EventLLMMessageOnFinalMessageParams, EventLLMMessageOnFileOperationParams, EventLLMMessageOnCommandRunParams, MainSendLLMMessageParams, AbortRef, SendLLMMessageParams, MainLLMMessageAbortParams, MainLLMMessageInterjectParams, ModelListParams, EventModelListOnSuccessParams, EventModelListOnErrorParams, OllamaModelResponse, OpenaiCompatibleModelResponse, MainModelListParams, DivisionAPIModelResponse, } from '../common/sendLLMMessageTypes.js';
 import { sendLLMMessage } from './llmMessage/sendLLMMessage.js'
 import { IMetricsService } from '../common/metricsService.js';
 import { sendLLMMessageToProviderImplementation } from './llmMessage/sendLLMMessage.impl.js';
@@ -47,8 +47,12 @@ export class LLMMessageChannel implements IServerChannel {
 			success: new Emitter<EventModelListOnSuccessParams<OpenaiCompatibleModelResponse>>(),
 			error: new Emitter<EventModelListOnErrorParams<OpenaiCompatibleModelResponse>>(),
 		},
+		divisionAPI: {
+			success: new Emitter<EventModelListOnSuccessParams<DivisionAPIModelResponse>>(),
+			error: new Emitter<EventModelListOnErrorParams<DivisionAPIModelResponse>>(),
+		},
 	} satisfies {
-		[providerName in 'ollama' | 'openaiCompat']: {
+		[providerName in 'ollama' | 'openaiCompat' | 'divisionAPI']: {
 			success: Emitter<EventModelListOnSuccessParams<any>>,
 			error: Emitter<EventModelListOnErrorParams<any>>,
 		}
@@ -72,6 +76,8 @@ export class LLMMessageChannel implements IServerChannel {
 		else if (event === 'onError_list_ollama') return this.listEmitters.ollama.error.event;
 		else if (event === 'onSuccess_list_openAICompatible') return this.listEmitters.openaiCompat.success.event;
 		else if (event === 'onError_list_openAICompatible') return this.listEmitters.openaiCompat.error.event;
+		else if (event === 'onSuccess_list_divisionAPI') return this.listEmitters.divisionAPI.success.event;
+		else if (event === 'onError_list_divisionAPI') return this.listEmitters.divisionAPI.error.event;
 
 		else throw new Error(`Event not found: ${event}`);
 	}
@@ -93,6 +99,9 @@ export class LLMMessageChannel implements IServerChannel {
 			}
 			else if (command === 'openAICompatibleList') {
 				this._callOpenAICompatibleList(params)
+			}
+			else if (command === 'divisionAPIList') {
+				this._callDivisionAPIList(params)
 			}
 			else if (command === 'approveOrchestration') {
 				this._callApproveOrchestration(params)
@@ -189,6 +198,17 @@ export class LLMMessageChannel implements IServerChannel {
 			onError: (p) => { emitters.error.fire({ requestId, ...p }); },
 		}
 		sendLLMMessageToProviderImplementation[providerName].list(mainThreadParams as any)
+	}
+
+	_callDivisionAPIList = (params: MainModelListParams<DivisionAPIModelResponse>) => {
+		const { requestId } = params
+		const emitters = this.listEmitters.divisionAPI
+		const mainThreadParams: ModelListParams<DivisionAPIModelResponse> = {
+			...params,
+			onSuccess: (p) => { emitters.success.fire({ requestId, ...p }); },
+			onError: (p) => { emitters.error.fire({ requestId, ...p }); },
+		}
+		sendLLMMessageToProviderImplementation.divisionAPI.list?.(mainThreadParams as any)
 	}
 
 	private _callApproveOrchestration(params: { editedOutputs?: Array<{ mdFileName: string; mdContent: string }>; workspaceFolderPath?: string }) {

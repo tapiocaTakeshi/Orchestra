@@ -4,6 +4,10 @@
  *--------------------------------------------------------------------------------------*/
 
 import React, { ButtonHTMLAttributes, FormEvent, FormHTMLAttributes, Fragment, KeyboardEvent, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import './sidebar-chat-modern.css'
+// `.void-sidebar-modern` をサイドバーのルート要素に付与すると、
+// sidebar-chat-modern.css の Modern+Minimal スタイルが有効化されます。
+import './sidebar-chat-redesign.css';
 
 
 import { useAccessor, useChatThreadsState, useChatThreadsStreamState, useSettingsState, useActiveURI, useCommandBarState, useFullChatThreadsStreamState, useDivisionProjects, useDivisionProjectConfig } from '../util/services.js';
@@ -319,12 +323,13 @@ const DivisionProjectDropdown = ({ className }: { className: string }) => {
 	const isDivision = modelSelection?.providerName === 'divisionAPI'
 
 	if (!isDivision || projects.length === 0) return null
+	const selectedProject = activeConfig ?? projects[0]
 
 	return (
 		<VoidCustomDropdownBox
 			className={className}
 			options={projects || []}
-			selectedOption={activeConfig ?? undefined}
+			selectedOption={selectedProject}
 			onChangeOption={onChangeOption}
 			getOptionDisplayName={(p) => p.name || p.projectId || 'Unnamed'}
 			getOptionDropdownName={(p) => p.name || p.projectId || 'Unnamed'}

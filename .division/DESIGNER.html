@@ -1,455 +1,388 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SidebarChat Design Mockup</title>
-<style>
-  :root {
-    /* Color Palette - Modern Dark Theme */
-    --bg-app: #0f1115;
-    --bg-sidebar: #17191e;
-    --bg-sidebar-hover: #22252b;
-    --bg-sidebar-active: #2a2d35;
-    
-    --text-primary: #f1f3f5;
-    --text-secondary: #a0a4b0;
-    --text-muted: #626775;
-    
-    --accent-color: #5c7cfa;
-    --accent-hover: #4c6ef5;
-    --danger-color: #ff6b6b;
-    --danger-hover: #fa5252;
-    
-    --border-color: #2b2e38;
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Commit Message Design Proposal</title>
+    <style>
+        :root {
+            /* Colors */
+            --bg-page: #f1f5f9;
+            --bg-surface: #ffffff;
+            --bg-card: #f8fafc;
+            --border: #e2e8f0;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --primary: #3b82f6;
+            --primary-bg: #eff6ff;
+            --success: #10b981;
+            --danger: #ef4444;
+            
+            /* Terminal Colors */
+            --term-bg: #0f172a;
+            --term-header: #1e293b;
+            --term-text: #e2e8f0;
+            --term-green: #22c55e;
+            --term-blue: #60a5fa;
+            --term-muted: #94a3b8;
 
-    --radius-md: 8px;
-    --radius-sm: 6px;
-    
-    --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  }
+            /* Typography */
+            --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        }
 
-  * {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-  }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
-  body {
-    font-family: var(--font-family);
-    background-color: var(--bg-app);
-    color: var(--text-primary);
-    height: 100vh;
-    display: flex;
-    overflow: hidden;
-  }
+        body {
+            font-family: var(--font-sans);
+            background-color: var(--bg-page);
+            color: var(--text-main);
+            line-height: 1.6;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem;
+        }
 
-  /* App Layout */
-  .app-container {
-    display: flex;
-    width: 100%;
-    height: 100%;
-  }
+        .app-container {
+            width: 100%;
+            max-width: 840px;
+            background: var(--bg-surface);
+            border-radius: 16px;
+            box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.05), 0 8px 10px -6px rgb(0 0 0 / 0.01);
+            overflow: hidden;
+            border: 1px solid var(--border);
+            animation: fadeIn 0.5s ease-out;
+        }
 
-  /* Sidebar Styles */
-  .sidebar {
-    width: 300px;
-    background-color: var(--bg-sidebar);
-    border-right: 1px solid var(--border-color);
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    flex-shrink: 0;
-  }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
 
-  .sidebar-header {
-    padding: 16px;
-  }
+        .header {
+            padding: 1.75rem 2rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            background: var(--bg-surface);
+        }
 
-  .new-chat-btn {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background-color: var(--accent-color);
-    color: #fff;
-    border: none;
-    padding: 12px 16px;
-    border-radius: var(--radius-md);
-    font-size: 0.95rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background-color 0.2s ease;
-  }
+        .header-title h1 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            letter-spacing: -0.025em;
+            color: var(--text-main);
+            margin-bottom: 0.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
 
-  .new-chat-btn:hover {
-    background-color: var(--accent-hover);
-  }
+        .header-title p {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+        }
 
-  .new-chat-btn svg {
-    width: 18px;
-    height: 18px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
+        .branch-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.375rem;
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--text-main);
+            background: var(--bg-page);
+            padding: 0.375rem 0.75rem;
+            border-radius: 9999px;
+            border: 1px solid var(--border);
+        }
 
-  .sidebar-content {
-    flex: 1;
-    overflow-y: auto;
-    padding: 0 12px 16px 12px;
-  }
+        .content {
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 2.5rem;
+        }
 
-  .sidebar-content::-webkit-scrollbar {
-    width: 6px;
-  }
-  .sidebar-content::-webkit-scrollbar-thumb {
-    background-color: var(--bg-sidebar-active);
-    border-radius: 4px;
-  }
+        .section {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
 
-  /* Time Category Grouping */
-  .time-category {
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--text-muted);
-    margin: 20px 8px 8px 8px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
+        .section-header {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
 
-  /* SidebarChat Component Styling */
-  .sidebar-chat-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px;
-    margin-bottom: 4px;
-    border-radius: var(--radius-md);
-    text-decoration: none;
-    color: inherit;
-    position: relative;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    border: 1px solid transparent;
-  }
+        .section-header::after {
+            content: "";
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
 
-  .sidebar-chat-item:hover {
-    background-color: var(--bg-sidebar-hover);
-  }
+        /* Diff Stat Styling */
+        .diff-stat {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-family: var(--font-mono);
+            font-size: 0.8125rem;
+            color: var(--text-main);
+            background: var(--bg-card);
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            width: max-content;
+        }
 
-  .sidebar-chat-item.active {
-    background-color: var(--bg-sidebar-active);
-    border-color: var(--border-color);
-  }
+        .diff-stat .file-name {
+            font-weight: 500;
+        }
 
-  /* Chat Icon */
-  .chat-icon-wrapper {
-    flex-shrink: 0;
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background-color: #2b2e38;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-secondary);
-  }
+        .diff-stat .stats {
+            display: flex;
+            gap: 0.5rem;
+            font-size: 0.75rem;
+        }
 
-  .sidebar-chat-item.active .chat-icon-wrapper {
-    background-color: var(--accent-color);
-    color: #fff;
-  }
+        .stat-add { color: var(--success); font-weight: 600; }
+        .stat-rm { color: var(--danger); font-weight: 600; }
 
-  .chat-icon-wrapper svg {
-    width: 16px;
-    height: 16px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
+        /* Structure Grid */
+        .grid-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1rem;
+        }
 
-  /* Chat Details */
-  .chat-details {
-    flex: 1;
-    min-width: 0; /* Important for text truncation */
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
+        .card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.25rem;
+            transition: all 0.2s ease;
+            position: relative;
+            overflow: hidden;
+        }
 
-  .chat-title-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 8px;
-  }
+        .card:hover {
+            border-color: var(--primary);
+            box-shadow: 0 4px 12px rgb(59 130 246 / 0.08);
+            transform: translateY(-2px);
+        }
 
-  .chat-title {
-    font-size: 0.9rem;
-    font-weight: 500;
-    color: var(--text-primary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--border);
+            transition: background 0.2s ease;
+        }
 
-  .chat-time {
-    font-size: 0.7rem;
-    color: var(--text-muted);
-    flex-shrink: 0;
-  }
+        .card:hover::before {
+            background: var(--primary);
+        }
 
-  .chat-preview {
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
+        .card-label {
+            font-size: 0.6875rem;
+            font-weight: 700;
+            color: var(--primary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.75rem;
+            display: inline-block;
+            background: var(--primary-bg);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+        }
 
-  /* Action Buttons (visible on hover) */
-  .chat-actions {
-    position: absolute;
-    right: 8px;
-    top: 50%;
-    transform: translateY(-50%);
-    display: flex;
-    gap: 4px;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.2s ease;
-    background: linear-gradient(90deg, transparent 0%, var(--bg-sidebar-hover) 20%);
-    padding-left: 16px;
-  }
+        .card-value {
+            font-family: var(--font-mono);
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-main);
+            margin-bottom: 0.5rem;
+            line-height: 1.4;
+        }
 
-  .sidebar-chat-item.active .chat-actions {
-    background: linear-gradient(90deg, transparent 0%, var(--bg-sidebar-active) 20%);
-  }
+        .card-desc {
+            font-size: 0.8125rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
 
-  .sidebar-chat-item:hover .chat-actions {
-    opacity: 1;
-    pointer-events: auto;
-  }
+        /* Terminal Preview */
+        .terminal {
+            background: var(--term-bg);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgb(0 0 0 / 0.15);
+        }
 
-  .action-btn {
-    background: transparent;
-    border: none;
-    color: var(--text-muted);
-    cursor: pointer;
-    width: 28px;
-    height: 28px;
-    border-radius: var(--radius-sm);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s ease;
-  }
+        .terminal-header {
+            background: var(--term-header);
+            padding: 0.75rem 1rem;
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
 
-  .action-btn:hover {
-    background-color: var(--border-color);
-    color: var(--text-primary);
-  }
+        .dot { width: 12px; height: 12px; border-radius: 50%; }
+        .dot.red { background: #ff5f56; }
+        .dot.yellow { background: #ffbd2e; }
+        .dot.green { background: #27c93f; }
 
-  .action-btn.danger:hover {
-    color: var(--danger-color);
-  }
+        .terminal-body {
+            padding: 1.5rem;
+            font-family: var(--font-mono);
+            font-size: 0.875rem;
+            color: var(--term-text);
+            line-height: 1.6;
+            overflow-x: auto;
+        }
 
-  .action-btn svg {
-    width: 16px;
-    height: 16px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
+        .prompt {
+            display: flex;
+            margin-bottom: 1rem;
+        }
 
-  /* Main Content Area */
-  .main-content {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 40px;
-    text-align: center;
-  }
+        .prompt::before {
+            content: "$";
+            color: var(--term-green);
+            margin-right: 0.75rem;
+            font-weight: 700;
+        }
 
-  .mockup-info {
-    max-width: 600px;
-  }
+        .cmd-text { color: var(--term-text); }
+        .cmd-flag { color: var(--term-muted); }
+        .cmd-string { color: var(--term-blue); }
 
-  .mockup-info h1 {
-    font-size: 2rem;
-    margin-bottom: 16px;
-    color: var(--text-primary);
-  }
+        .term-output {
+            color: var(--term-muted);
+            white-space: pre-wrap;
+        }
 
-  .mockup-info p {
-    font-size: 1.1rem;
-    color: var(--text-secondary);
-    line-height: 1.6;
-    margin-bottom: 24px;
-  }
-
-  .features-list {
-    text-align: left;
-    display: inline-block;
-    color: var(--text-secondary);
-    background-color: var(--bg-sidebar);
-    padding: 24px;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--border-color);
-  }
-
-  .features-list li {
-    margin-bottom: 8px;
-    margin-left: 20px;
-  }
-</style>
+        .highlight {
+            color: #fbbf24;
+            font-weight: 600;
+        }
+    </style>
 </head>
 <body>
-  <div class="app-container">
-    <aside class="sidebar">
-      <div class="sidebar-header">
-        <button class="new-chat-btn">
-          <svg viewBox="0 0 24 24">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-          新しいチャット
-        </button>
-      </div>
-      
-      <div class="sidebar-content">
-        <div class="time-category">今日</div>
-        
-        <!-- Active SidebarChat Item -->
-        <a href="#" class="sidebar-chat-item active">
-          <div class="chat-icon-wrapper">
-            <svg viewBox="0 0 24 24">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-            </svg>
-          </div>
-          <div class="chat-details">
-            <div class="chat-title-row">
-              <div class="chat-title">エラーを直して</div>
-              <div class="chat-time">14:23</div>
-            </div>
-            <div class="chat-preview">SidebarChat.tsx (lines 9:9) のCSSインポートエラー修正について</div>
-          </div>
-          <div class="chat-actions">
-            <button class="action-btn" title="名前を変更">
-              <svg viewBox="0 0 24 24">
-                <path d="M12 20h9"></path>
-                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
-              </svg>
-            </button>
-            <button class="action-btn danger" title="削除">
-              <svg viewBox="0 0 24 24">
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-              </svg>
-            </button>
-          </div>
-        </a>
 
-        <!-- Hover SidebarChat Item -->
-        <a href="#" class="sidebar-chat-item">
-          <div class="chat-icon-wrapper">
-            <svg viewBox="0 0 24 24">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-            </svg>
-          </div>
-          <div class="chat-details">
-            <div class="chat-title-row">
-              <div class="chat-title">見た目改善案の作成</div>
-              <div class="chat-time">10:05</div>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-title">
+                <h1>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);">
+                        <circle cx="18" cy="18" r="3"></circle>
+                        <circle cx="6" cy="6" r="3"></circle>
+                        <path d="M13 6h3a2 2 0 0 1 2 2v7"></path>
+                        <line x1="6" y1="9" x2="6" y2="21"></line>
+                    </svg>
+                    Commit Message Design
+                </h1>
+                <p>Structured format for clear and consistent version history</p>
             </div>
-            <div class="chat-preview">デザイン品質を高めるためのUIトーン具体化</div>
-          </div>
-          <div class="chat-actions">
-            <button class="action-btn" title="名前を変更">
-              <svg viewBox="0 0 24 24"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
-            </button>
-            <button class="action-btn danger" title="削除">
-              <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-            </button>
-          </div>
-        </a>
-
-        <div class="time-category">過去7日間</div>
-
-        <!-- Normal SidebarChat Item -->
-        <a href="#" class="sidebar-chat-item">
-          <div class="chat-icon-wrapper">
-            <svg viewBox="0 0 24 24">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-            </svg>
-          </div>
-          <div class="chat-details">
-            <div class="chat-title-row">
-              <div class="chat-title">プロジェクトのセットアップ</div>
-              <div class="chat-time">昨日</div>
+            <div class="branch-badge">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="6" y1="3" x2="6" y2="15"></line>
+                    <circle cx="18" cy="6" r="3"></circle>
+                    <circle cx="6" cy="18" r="3"></circle>
+                    <path d="M18 9a9 9 0 0 1-9 9"></path>
+                </svg>
+                main2
             </div>
-            <div class="chat-preview">Next.jsとTypeScriptを使用した新規構築</div>
-          </div>
-          <div class="chat-actions">
-            <button class="action-btn" title="名前を変更">
-              <svg viewBox="0 0 24 24"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
-            </button>
-            <button class="action-btn danger" title="削除">
-              <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-            </button>
-          </div>
-        </a>
+        </header>
 
-        <!-- Normal SidebarChat Item -->
-        <a href="#" class="sidebar-chat-item">
-          <div class="chat-icon-wrapper">
-            <svg viewBox="0 0 24 24">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-            </svg>
-          </div>
-          <div class="chat-details">
-            <div class="chat-title-row">
-              <div class="chat-title">APIエンドポイントの追加</div>
-              <div class="chat-time">3日前</div>
-            </div>
-            <div class="chat-preview">ユーザー情報を取得するためのGETリクエスト</div>
-          </div>
-          <div class="chat-actions">
-            <button class="action-btn" title="名前を変更">
-              <svg viewBox="0 0 24 24"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
-            </button>
-            <button class="action-btn danger" title="削除">
-              <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-            </button>
-          </div>
-        </a>
-      </div>
-    </aside>
-    
-    <main class="main-content">
-      <div class="mockup-info">
-        <h1>SidebarChat UI デザイン改善案</h1>
-        <p>
-          エラー修正後に適用するモダンで洗練されたサイドバーのコンポーネントデザインです。<br>
-          左側のサイドバーでホバーやアクティブな状態を確認できます。
-        </p>
-        <ul class="features-list">
-          <li><strong>視覚的階層の明確化:</strong> タイトル、プレビュー文、時間を異なる文字サイズと色で区別</li>
-          <li><strong>アクセシビリティとコントラスト:</strong> ダークテーマに合わせた読みやすい配色</li>
-          <li><strong>インタラクション:</strong> ホバー時の自然な背景変化と、アクションボタンのスムーズな出現</li>
-          <li><strong>レイアウト:</strong> テキストが長い場合は省略記号（...）で美しく切り詰め処理</li>
-        </ul>
-      </div>
-    </main>
-  </div>
+        <main class="content">
+            <!-- Context Section -->
+            <section class="section">
+                <div class="section-header">Change Context</div>
+                <div class="diff-stat">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="12" y1="18" x2="12" y2="12"></line>
+                        <line x1="9" y1="15" x2="15" y2="15"></line>
+                    </svg>
+                    <span class="file-name">.gitignore</span>
+                    <div class="stats">
+                        <span class="stat-add">+2 insertions</span>
+                        <span class="stat-rm">-1 deletion</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Structure Breakdown Section -->
+            <section class="section">
+                <div class="section-header">Proposed Structure</div>
+                <div class="grid-cards">
+                    <div class="card">
+                        <span class="card-label">Type</span>
+                        <div class="card-value">chore</div>
+                        <div class="card-desc">Used for maintenance tasks, auxiliary tools, or configurations (e.g., ignoring files) that don't modify source code.</div>
+                    </div>
+                    <div class="card">
+                        <span class="card-label">Subject</span>
+                        <div class="card-value">ignore .dmg files</div>
+                        <div class="card-desc">A concise summary in the imperative mood, kept under 50 characters, explaining what the commit does.</div>
+                    </div>
+                    <div class="card">
+                        <span class="card-label">Body</span>
+                        <div class="card-value">Add *.dmg to .gitignore...</div>
+                        <div class="card-desc">Detailed explanation of <i>why</i> the change was made (to prevent tracking macOS disk images).</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Terminal Preview Section -->
+            <section class="section">
+                <div class="section-header">Final Preview</div>
+                <div class="terminal">
+                    <div class="terminal-header">
+                        <div class="dot red"></div>
+                        <div class="dot yellow"></div>
+                        <div class="dot green"></div>
+                    </div>
+                    <div class="terminal-body">
+                        <div class="prompt">
+                            <div>
+                                <span class="cmd-text">git commit</span> 
+                                <span class="cmd-flag">-m</span> 
+                                <span class="cmd-string">"chore: ignore .dmg files"</span> 
+                                <span class="cmd-flag">-m</span> 
+                                <span class="cmd-string">"Add *.dmg to .gitignore to prevent macOS disk image files from being tracked by git."</span>
+                            </div>
+                        </div>
+                        <div class="term-output">
+[main2 8f9a2b1] <span style="color: var(--term-text);">chore: ignore .dmg files</span>
+ 1 file changed, <span style="color: var(--term-green);">2 insertions(+)</span>, <span style="color: #ff5f56;">1 deletion(-)</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
 </body>
 </html>

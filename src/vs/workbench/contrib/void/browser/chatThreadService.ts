@@ -370,13 +370,14 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 							searchReplaceBlocks: op.searchReplaceBlocks,
 						});
 						// Division API からの変更は auto-approve 設定に関わらず自動承諾する。
-						this._editCodeService.acceptOrRejectAllDiffAreas({
+						await this._editCodeService.acceptOrRejectAllDiffAreas({
 							uri,
 							removeCtrlKs: false,
 							behavior: 'accept',
 							_addToHistory: true,
 						});
-						console.log(`[FileOperation] Applied + auto-accepted editor edit: ${op.filePath}`);
+						await this._voidModelService.saveModel(uri);
+						console.log(`[FileOperation] Applied + auto-accepted + saved editor edit: ${op.filePath}`);
 					} else if (op.action === 'create') {
 						// CREATE / OVERWRITE: route through editCodeService so the change is
 						// tracked as a diffZone. If the file doesn't exist yet, create an empty
@@ -384,6 +385,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 						const exists = await this._fileService.exists(uri);
 						if (!exists) {
 							try {
+								await this._fileService.createFolder(URI.joinPath(uri, '..'));
 								await this._fileService.createFile(uri);
 							} catch (createErr) {
 								console.error(`[FileOperation] Failed to create file ${op.filePath}:`, createErr);
@@ -397,13 +399,14 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 							newContent: op.content ?? '',
 						});
 						// Division API からの作成/上書きも auto-approve 設定に関わらず自動承諾する。
-						this._editCodeService.acceptOrRejectAllDiffAreas({
+						await this._editCodeService.acceptOrRejectAllDiffAreas({
 							uri,
 							removeCtrlKs: false,
 							behavior: 'accept',
 							_addToHistory: true,
 						});
-						console.log(`[FileOperation] Applied + auto-accepted create/overwrite: ${op.filePath}`);
+						await this._voidModelService.saveModel(uri);
+						console.log(`[FileOperation] Applied + auto-accepted + saved create/overwrite: ${op.filePath}`);
 					}
 				} catch (err) {
 					console.error(`[FileOperation] Error processing ${op.action} for ${op.filePath}:`, err);
@@ -431,11 +434,17 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 						continue;
 					}
 
-					this._runToolCall(threadId, toolName, toolId, undefined, {
+					const { interrupted } = await this._runToolCall(threadId, toolName, toolId, undefined, {
 						preapproved: true,
 						unvalidatedToolParams,
 						validatedParams,
 					});
+
+					const currentStreamState = this.streamState[threadId];
+					if (currentStreamState?.isRunning === 'tool' && currentStreamState.toolInfo.id === toolId) {
+						this._setStreamState(threadId, undefined);
+						if (!interrupted) this._addUserCheckpoint({ threadId });
+					}
 
 				} catch (err) {
 					console.error(`[CommandOperation] Error starting command ${cmd.command}:`, err);

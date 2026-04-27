@@ -1,3 +1,4 @@
+# Release artifacts
 .DS_Store
 .cache
 npm-debug.log
@@ -30,3 +31,4 @@ product.overrides.json
 src/vs/workbench/contrib/void/browser/react/out/**
 src/vs/workbench/contrib/void/browser/react/src2/**
 .*/
+*.dmg

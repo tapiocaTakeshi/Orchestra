@@ -362,44 +362,6 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 		this._resolver();
 		this._onDidChangeState.fire();
 
-		// Fetch Division API models asynchronously (non-blocking)
-		this._fetchDivisionAPIModels();
-
-	}
-
-	private async _fetchDivisionAPIModels() {
-		try {
-			const endpoint = this.state.settingsOfProvider.divisionAPI.endpoint || 'https://api.division.he-ro.jp'
-			const response = await fetch(`${endpoint}/api/models`)
-			if (!response.ok) {
-				console.warn(`[Division API] Failed to fetch models: ${response.status}`)
-				return
-			}
-			const data = await response.json()
-			if (!data.providers || !Array.isArray(data.providers)) {
-				console.warn('[Division API] Invalid response format')
-				return
-			}
-
-			// Extract model names from the API response, prepend 'division-orchestrator'
-			const modelNames: string[] = ['division-orchestrator']
-			for (const provider of data.providers) {
-				if (provider.name && !modelNames.includes(provider.name)) {
-					modelNames.push(provider.name)
-				}
-			}
-
-			// Update model list via autodetection mechanism
-			this.setAutodetectedModels('divisionAPI', modelNames, { source: 'division-api-fetch' })
-			// Ensure all Division API models are always visible
-			const currentModels = this.state.settingsOfProvider.divisionAPI.models
-			const updatedModels = currentModels.map(m => ({ ...m, isHidden: false }))
-			this.setSettingOfProvider('divisionAPI', 'models', updatedModels)
-
-			console.log(`[Division API] Loaded ${modelNames.length} models from API`)
-		} catch (e) {
-			console.warn('[Division API] Could not fetch models, using defaults:', e)
-		}
 	}
 
 

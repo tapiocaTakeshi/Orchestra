@@ -16,7 +16,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 /* eslint-enable */
 
-import { AnthropicLLMChatMessage, GeminiLLMChatMessage, LLMChatMessage, LLMFIMMessage, ModelListParams, OllamaModelResponse, OnError, OnFinalMessage, OnText, RawToolCallObj, RawToolParamsObj, FileOperationItem, CommandOperationItem, FlowOutputEntry, FlowReviewData } from '../../common/sendLLMMessageTypes.js';
+import { AnthropicLLMChatMessage, GeminiLLMChatMessage, LLMChatMessage, LLMFIMMessage, ModelListParams, OllamaModelResponse, OnError, OnFinalMessage, OnText, RawToolCallObj, RawToolParamsObj, FileOperationItem, CommandOperationItem, FlowOutputEntry, DivisionAPIModelResponse } from '../../common/sendLLMMessageTypes.js';
 import { ChatMode, displayInfoOfProviderName, ModelSelectionOptions, OverridesOfModel, ProviderName, RoleAssignment, SettingsOfProvider } from '../../common/voidSettingsTypes.js';
 import { getSendableReasoningInfo, getModelCapabilities, getProviderCapabilities, defaultProviderSettings, getReservedOutputTokenSpace } from '../../common/modelCapabilities.js';
 import { extractReasoningWrapper, extractXMLToolsWrapper } from './extractGrammar.js';
@@ -434,6 +434,64 @@ const _openaiCompatibleList = async ({ onSuccess: onSuccess_, onError: onError_,
 	}
 	catch (error) {
 		onError({ error: error + '' })
+	}
+}
+
+const getDivisionAPIModelNames = (data: any): string[] => {
+	const modelNames = new Set<string>(['division-orchestrator'])
+	const addName = (value: unknown) => {
+		if (typeof value === 'string' && value.trim()) {
+			modelNames.add(value.trim())
+		}
+	}
+	const addModel = (model: unknown) => {
+		if (typeof model === 'string') {
+			addName(model)
+		}
+		else if (model && typeof model === 'object') {
+			const m = model as { name?: unknown; id?: unknown; model?: unknown }
+			addName(m.name)
+			addName(m.id)
+			addName(m.model)
+		}
+	}
+
+	if (Array.isArray(data)) {
+		data.forEach(addModel)
+	}
+	if (Array.isArray(data?.providers)) {
+		data.providers.forEach(addModel)
+	}
+	if (Array.isArray(data?.models)) {
+		data.models.forEach(addModel)
+	}
+	if (Array.isArray(data?.data)) {
+		data.data.forEach(addModel)
+	}
+
+	return [...modelNames]
+}
+
+const divisionAPIList = async ({ onSuccess: onSuccess_, onError: onError_, settingsOfProvider }: ListParams_Internal<DivisionAPIModelResponse>) => {
+	try {
+		const endpoint = settingsOfProvider.divisionAPI.endpoint || defaultProviderSettings.divisionAPI.endpoint
+		const response = await fetch(`${endpoint.replace(/\/+$/, '')}/api/models`)
+		if (!response.ok) {
+			onError_({ error: `Division API model list failed: ${response.status} ${response.statusText}` })
+			return
+		}
+
+		const data = await response.json()
+		const models = getDivisionAPIModelNames(data).map(name => ({ name }))
+		if (models.length === 0) {
+			onError_({ error: 'Division API model list response did not contain any models.' })
+			return
+		}
+
+		onSuccess_({ models })
+	}
+	catch (error) {
+		onError_({ error: error + '' })
 	}
 }
 
@@ -943,15 +1001,6 @@ const readOrchestrationState = (workspaceFolderPath: string): OrchestrationState
 	} catch (_e) {
 		return null;
 	}
-};
-
-const writeOrchestrationState = (workspaceFolderPath: string, state: OrchestrationState): void => {
-	try {
-		const divisionDir = path.join(workspaceFolderPath, '.division');
-		fs.mkdirSync(divisionDir, { recursive: true });
-		const p = getOrchestrationStatePath(workspaceFolderPath);
-		fs.writeFileSync(p, JSON.stringify(state, null, 2), 'utf-8');
-	} catch (_e) { /* ignore */ }
 };
 
 const clearOrchestrationState = (workspaceFolderPath: string): void => {
@@ -2333,6 +2382,16 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			fullText += text;
 			onText({ fullText, fullReasoning: '' });
 		};
+		const pendingCommandRuns: CommandOperationItem[] = [];
+		const queueCommandRuns = (commands: CommandOperationItem[]) => {
+			if (commands.length === 0) return;
+			pendingCommandRuns.push(...commands);
+		};
+		const flushCommandRunsAfterFinalMessage = () => {
+			if (!onCommandRun || pendingCommandRuns.length === 0) return;
+			const commands = pendingCommandRuns.splice(0);
+			setTimeout(() => onCommandRun(commands), 0);
+		};
 
 		// =============================================
 		// DIRECT MODEL MODE: If user selected a specific model (not orchestrator),
@@ -2375,34 +2434,25 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 						if (fileOperations.length > 0 && onFileOperation) {
 							onFileOperation(fileOperations);
 						}
-						if (commands.length > 0 && onCommandRun) {
-							onCommandRun(commands);
-						}
 					}
+					queueCommandRuns(commands);
 				}
 			}
 
 			onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null });
+			flushCommandRunsAfterFinalMessage();
 			return;
 		}
 
 		// =============================================
 		// ORCHESTRATION MODE: /api/tasks/create + /api/tasks/execute
 		//
-		// Two-phase orchestration with a single consolidated flow_review:
+		// Diagrammed orchestration flow:
 		//
-		// Phase A (first invocation):
-		//   1. Call /api/tasks/create for task decomposition (Leader AI + Wave agents)
-		//   2. Execute all intermediate flows (design, search, planning, research, ...)
-		//      — save each output as .division/*.md
-		//   3. Emit ONE flow_review with all intermediate outputs, persist
-		//      orchestration state to .division/.orchestration-state.json, and return.
-		//
-		// Phase B (second invocation, after user approval):
-		//   4. Detect the approved state file, apply user-edited MD, then run the
-		//      final flow (synthesis/coder/writer) via /api/tasks/execute with the
-		//      edited context
-		//   5. Run the review step via /api/tasks/execute, clear state, and return.
+		// User → Leader → (Ideaman, Search, Research)
+		//      → (Designer, Image, Planner) → Leader(Todos)
+		//      → File Search → Coder/Writer → Reviewer
+		//      → OK: result / Not OK: File Search loop
 		// =============================================
 
 		const extractContent = (msg: LLMChatMessage): string => {
@@ -2516,12 +2566,49 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			return true;
 		};
 
+		type DivisionTask = {
+			taskId: string;
+			role: string;
+			title: string;
+			input?: string;
+			output?: string;
+			provider?: string;
+			dependsOn?: string[];
+			description?: string;
+			reason?: string;
+			mode?: string;
+		};
+
 		// Helper to recognize file-searcher variants (reused by runIntermediateCycle and elsewhere)
 		const isFileSearchRole = (r: string): boolean => {
 			const role = (r || '').toLowerCase();
 			return role === 'file-search' || role === 'filesearch' || role === 'file_search'
 				|| role === 'file-searcher' || role === 'filesearcher';
 		};
+
+		const normalizeFlowRole = (r: string): string => (r || '').toLowerCase().replace(/[_\s-]+/g, '');
+		const isFirstWaveRole = (r: string): boolean => {
+			const role = normalizeFlowRole(r);
+			return role === 'ideaman' || role === 'idea' || role === 'search' || role === 'searcher'
+				|| role === 'research' || role === 'researcher' || role === 'deepresearch' || role === 'deepresearcher';
+		};
+		const isSecondWaveRole = (r: string): boolean => {
+			const role = normalizeFlowRole(r);
+			return role === 'design' || role === 'designer' || role === 'image' || role === 'planner' || role === 'planning';
+		};
+		const flowStageRank = (task: DivisionTask): number => {
+			if (isFirstWaveRole(task.role)) return 0;
+			if (isSecondWaveRole(task.role)) return 1;
+			return 2;
+		};
+		const orderedTaskStages = (tasks: DivisionTask[]): DivisionTask[] =>
+			tasks
+				.map((task, index) => ({ task, index }))
+				.sort((a, b) => {
+					const rankDiff = flowStageRank(a.task) - flowStageRank(b.task);
+					return rankDiff !== 0 ? rankDiff : a.index - b.index;
+				})
+				.map(({ task }) => task);
 
 		// Shared helper: decompose user input via Leader AI and execute all intermediate
 		// (non-Coder/Reviewer) tasks, returning the collected flow outputs.
@@ -2574,26 +2661,15 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 
 			const { sessionId: cycleSessionId, tasks: rawTasks, finalRole: cycleFinalRole } = taskResult;
 
-			// Filter out server-side Coder/Reviewer tasks (we run those locally).
+			// Filter out server-side Coder/Reviewer/File Search tasks. Coder/Reviewer run
+			// locally, and File Search must run after Leader produces Todos from all
+			// Markdown outputs, so it can search with the final task list.
 			const EXCLUDED_SERVER_ROLES = new Set(['coder', 'coding', 'review', 'reviewer']);
-			const tasks = rawTasks.filter(t => !EXCLUDED_SERVER_ROLES.has((t.role || '').toLowerCase()));
+			const serverTasks = rawTasks.filter(t => !EXCLUDED_SERVER_ROLES.has((t.role || '').toLowerCase()) && !isFileSearchRole(t.role || ''));
+			const tasks = orderedTaskStages(serverTasks);
 			const droppedCount = rawTasks.length - tasks.length;
 			if (droppedCount > 0) {
-				console.log(`[DivisionAPI] Skipped ${droppedCount} server-side Coder/Reviewer task(s) — will run locally instead.`);
-			}
-
-			// SAFETY NET: ensure file-search task exists so Coder always sees existing files.
-			const hasFileSearch = tasks.some(t => isFileSearchRole(t.role));
-			if (!hasFileSearch && workspaceFolderPath) {
-				tasks.unshift({
-					taskId: 'local-file-search',
-					role: 'file-search',
-					title: '既存ワークスペースのスキャン',
-					input: cycleInput,
-					description: 'ユーザーの要求に関連する既存ファイルを読み込み、後続の Coder に現行プロジェクトの文脈を渡す。',
-					reason: 'Leader AI の分解に file-search が無かったため Orchestra 側で自動挿入。',
-				});
-				console.log('[DivisionAPI] Injected local file-search task (Leader did not include one).');
+				console.log(`[DivisionAPI] Repositioned/skipped ${droppedCount} server-side Coder/Reviewer/File Search task(s) — Coder/Reviewer run locally; File Search runs after Leader Todos.`);
 			}
 
 			// Display task decomposition
@@ -2638,7 +2714,13 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				const role = (task.role || '').toLowerCase();
 
 				if (isFileSearchRole(role)) {
-					const query = task.input || task.title || cycleInput;
+					const priorMarkdown = buildPriorContextHistory()
+						.map(entry => entry.content)
+						.join('\n\n');
+					const query = [
+						task.input || task.title || cycleInput,
+						priorMarkdown ? `\n\n## 先行 Markdown コンテキスト\n${priorMarkdown}` : '',
+					].join('\n');
 					appendText(`### ${i + 1}. file-search — ${task.title || ''}\n\nワークスペースのファイルを読み込み中...\n\n`);
 					try {
 						const rawOutput = workspaceFolderPath
@@ -2717,6 +2799,60 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				appendText(`\n\n`);
 			}
 
+			// The diagram returns all wave Markdown to Leader, then Leader emits Todos
+			// for File Search. Store this as LEADER.md so downstream File Search and
+			// Coder/Writer receive the final task list, not just raw wave outputs.
+			if (tasks.some(task => task.output && task.output.trim())) {
+				drainInjections();
+				appendText(`### ${tasks.length + 1}. leader — Todos 作成\n\n`);
+				const effectiveCycleInput = currentInput.length > cycleInput.length ? currentInput : cycleInput;
+				const leaderTodoPrompt = [
+					`## ユーザーの要求`,
+					effectiveCycleInput,
+					``,
+					`## あなたの役割`,
+					`あなたは Leader です。直前の assistant メッセージ群に、Ideaman / Search / Research / Designer / Image / Planner などの Markdown 出力が添付されています。`,
+					`それらを統合し、次の File Search と Coder/Writer が迷わず動ける Todo リストを作ってください。`,
+					``,
+					`## 出力要件`,
+					`- Markdown で出力してください。`,
+					`- 最終成果物がコード実装なら、調査すべき既存ファイル・編集対象・実装順・検証方法を Todo として具体化してください。`,
+					`- 最終成果物が文章なら、参照すべき情報・構成・執筆順・レビュー観点を Todo として具体化してください。`,
+					`- 後続の File Search に渡す検索観点を必ず含めてください。`,
+					`- 最後に「最終ロール: ${cycleFinalRole || 'coder'}」を明記してください。`,
+				].join('\n');
+
+				const leaderTodoResult = await callDivisionTaskExecute(
+					endpointBase, projectId, 'leader', leaderTodoPrompt, controller.signal,
+					(chunk) => appendText(chunk),
+					divisionApiKey, cycleSessionId,
+					withStackContext([...chatHistory, ...buildPriorContextHistory()]),
+					workspaceFolderPath,
+				);
+
+				if (leaderTodoResult.error) {
+					appendText(`\n\n⚠️ leader Todos 作成エラー: ${leaderTodoResult.error}\n\n`);
+					tasks.push({
+						taskId: 'leader-todos',
+						role: 'leader',
+						title: 'File Search / Coder Todos',
+						output: `(leader todo generation failed: ${leaderTodoResult.error})`,
+					});
+				}
+				else {
+					const output = leaderTodoResult.output || '';
+					tasks.push({
+						taskId: 'leader-todos',
+						role: 'leader',
+						title: 'File Search / Coder Todos',
+						output,
+					});
+					const fences = (output.match(/```/g) || []).length;
+					if (fences % 2 !== 0) appendText(`\n\`\`\`\n`);
+					appendText(`\n\n`);
+				}
+			}
+
 			// Build flowOutputs & persist MDs
 			const flowOutputs: FlowOutputEntry[] = [];
 			for (const task of tasks) {
@@ -2755,10 +2891,10 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			return { flowOutputs, sessionId: cycleSessionId, finalRole: cycleFinalRole, aborted: false };
 		};
 
-		// Shared helper: run the final (synthesis + review) flow given intermediate outputs.
-		// On review failure, feed the review feedback back to the Coder (synthesis step)
-		// directly and loop until the reviewer approves or MAX_REVIEW_ITERATIONS is reached.
-		// （Leader による再分解は行わず、Coder ↔ Reviewer のタイトループ）
+		// Shared helper: run the final File Search + synthesis + review flow given
+		// intermediate outputs. On review failure, feed the review feedback back to
+		// File Search first, then Coder/Writer, until approval or max iterations.
+		// （Leader による再分解は行わず、File Search → Coder/Writer → Reviewer のループ）
 		const runFinalFlow = async (
 			initialFinalRole: string,
 			initialSessionId: string,
@@ -2770,11 +2906,59 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			let iteration = 0;
 			let lastReviewFeedback = '';
 
-			// Loop: Coder → Reviewer → （不合格なら同じ flowOutputs + レビュー指摘で）Coder → Reviewer...
-			// Leader へは戻らず、Coder ↔ Reviewer のみでループする。
+			const runFileSearchBeforeCoder = (reason: string): void => {
+				if (!workspaceFolderPath) return;
+				const priorMarkdown = flowOutputs
+					.filter(o => !isFileSearchRole(o.role))
+					.map(o => `## ${o.role} の出力 (${o.mdFileName})\n\n${o.mdContent}`)
+					.join('\n\n');
+				const query = [
+					`## ユーザーの要求`,
+					currentInput,
+					priorMarkdown ? `\n\n## 先行 Markdown コンテキスト\n${priorMarkdown}` : '',
+					lastReviewFeedback.trim() ? `\n\n## 前回レビュー指摘\n${lastReviewFeedback}` : '',
+				].join('\n');
+
+				appendText(`\n---\n\n**File Search** (${reason}) 開始...\n\n`);
+				try {
+					const rawOutput = buildFileSearchOutput(workspaceFolderPath, query);
+					const capped = truncateForContext(rawOutput, MAX_CHARS_PER_CONTEXT);
+					const mdPath = saveFlowResultAsMd(workspaceFolderPath, 'file-search', reason, capped, sessionIdArg || 'file-search');
+					const fileSearchOutput: FlowOutputEntry = {
+						role: 'file-search',
+						mdFileName: FLOW_ROLE_TO_FILENAME['file-search'],
+						mdFilePath: mdPath || path.join(workspaceFolderPath, '.division', FLOW_ROLE_TO_FILENAME['file-search']),
+						mdContent: capped,
+					};
+					const existingIdx = flowOutputs.findIndex(o => isFileSearchRole(o.role));
+					if (existingIdx >= 0) {
+						flowOutputs = [
+							...flowOutputs.slice(0, existingIdx),
+							fileSearchOutput,
+							...flowOutputs.slice(existingIdx + 1),
+						];
+					} else {
+						flowOutputs = [...flowOutputs, fileSearchOutput];
+					}
+					const sizeMsg = rawOutput.length > capped.length
+						? `（${rawOutput.length.toLocaleString()} → ${capped.length.toLocaleString()} 文字に要約）`
+						: `（${capped.length.toLocaleString()} 文字）`;
+					appendText(`📂 File Search 完了 ${sizeMsg}\n\n`);
+				} catch (e: any) {
+					appendText(`⚠️ File Search エラー: ${e?.message || String(e)}\n\n`);
+				}
+			};
+
+			// Loop: File Search → Coder/Writer → Reviewer → （不合格ならレビュー指摘を持って File Search に戻る）...
+			// Leader へは戻らず、図の Not OK ループは File Search から再開する。
 			while (true) {
 				// Coder（synthesis）実行前の割り込み取り込み
 				drainInjections();
+				if (iteration > 0) {
+					runFileSearchBeforeCoder(`レビュー指摘反映 ${iteration + 1} 回目`);
+				} else if (!flowOutputs.some(o => isFileSearchRole(o.role))) {
+					runFileSearchBeforeCoder('Coder/Writer 前の既存ワークスペース確認');
+				}
 				// Build synthesis context from current flowOutputs
 				const synthesisContextHistory: { role: 'user' | 'assistant'; content: string }[] = [];
 				let totalContextChars = 0;
@@ -2893,7 +3077,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 						appendText(`\n`);
 						if (fileOperations.length > 0 && onFileOperation) onFileOperation(fileOperations);
 					}
-					if (commands.length > 0 && onCommandRun) onCommandRun(commands);
+					queueCommandRuns(commands);
 
 					if (FLOW_ROLE_TO_FILENAME[finalRoleArg.toLowerCase()]) {
 						saveFlowResultAsMd(workspaceFolderPath, finalRoleArg, '', synthesisOutput, sessionIdArg);
@@ -2961,17 +3145,18 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					break;
 				}
 
-				// Failed → Coder に前回レビュー指摘を添えて再生成（Leader への再分解は行わない）
+				// Failed → File Search に戻り、最新レビュー指摘を踏まえてから Coder/Writer を再実行
 				iteration++;
 				// 次 Coder iteration 前の割り込み取り込み
 				drainInjections();
-				appendText(`\n\n🔄 **レビュー不合格** — 指摘を踏まえて Coder を再実行します（${iteration + 1} 回目）...\n\n`);
+				appendText(`\n\n🔄 **レビュー不合格** — File Search に戻り、指摘を踏まえて Coder/Writer を再実行します（${iteration + 1} 回目）...\n\n`);
 				// finalRoleArg / sessionIdArg / flowOutputs はそのまま流用。
 				// lastReviewFeedback は次ループ冒頭で synthesisContextHistory に積まれる。
 			}
 
 			if (workspaceFolderPath) clearOrchestrationState(workspaceFolderPath);
 			onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null });
+			flushCommandRunsAfterFinalMessage();
 		};
 
 		// ---------- Phase B: resume after flow_review approval ----------
@@ -3019,40 +3204,8 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 
 		const { sessionId, finalRole, flowOutputs } = initialCycle;
 
-		// If there are no intermediate outputs at all, skip flow_review and go straight to synthesis.
-		if (flowOutputs.length === 0) {
-			await runFinalFlow(finalRole, sessionId, []);
-			return;
-		}
-
-		// Persist orchestration state so Phase B (resume) can pick it up after user approval.
-		if (workspaceFolderPath) {
-			writeOrchestrationState(workspaceFolderPath, {
-				approved: false,
-				sessionId,
-				finalRole,
-				currentInput,
-				allFlowOutputs: flowOutputs,
-				createdAt: Date.now(),
-			});
-		}
-
-		// Emit a single consolidated flow_review request and pause for user approval.
-		appendText(`\n---\n\n**承認待ち** — 全中間フロー (${flowOutputs.length} 件) が完了しました。内容を確認・編集して承認してください。\n\n`);
-
-		const primary = flowOutputs[0];
-		const flowReview: FlowReviewData = {
-			flowRole: 'all',
-			mdFileName: primary.mdFileName,
-			mdFilePath: primary.mdFilePath,
-			mdContent: primary.mdContent,
-			sessionId,
-			completedTaskIndex: flowOutputs.length,
-			totalTasks: flowOutputs.length + 1, // +1 for the pending final flow
-			allFlowOutputs: flowOutputs,
-		};
-
-		onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null, flowReview });
+		await runFinalFlow(finalRole, sessionId, flowOutputs);
+		return;
 
 	} catch (error: any) {
 		if (error?.name === 'AbortError') {
@@ -3076,7 +3229,7 @@ export const sendLLMMessageToProviderImplementation = {
 	divisionAPI: {
 		sendChat: sendDivisionAPIChat,
 		sendFIM: null,
-		list: null,
+		list: divisionAPIList,
 	},
 	anthropic: {
 		sendChat: sendAnthropicChat,

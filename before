@@ -1,0 +1,3 @@
+<div className="flex flex-col h-full ...">
+// after
+<div className="void-chat-redesign flex flex-col h-full ...">

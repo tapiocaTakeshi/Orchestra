@@ -407,7 +407,7 @@ export const displayInfoOfFeatureName = (featureName: FeatureName) => {
 
 
 // the models of these can be refreshed (in theory all can, but not all should)
-export const refreshableProviderNames = localProviderNames
+export const refreshableProviderNames = [...localProviderNames, 'divisionAPI'] as const satisfies readonly ProviderName[]
 export type RefreshableProviderName = typeof refreshableProviderNames[number]
 
 // models that come with download buttons
@@ -421,7 +421,7 @@ export const hasDownloadButtonsOnModelsProviderNames = ['ollama'] as const satis
 export const isProviderNameDisabled = (providerName: ProviderName, settingsState: VoidSettingsState) => {
 
 	const settingsAtProvider = settingsState.settingsOfProvider[providerName]
-	const isAutodetected = (refreshableProviderNames as string[]).includes(providerName)
+	const isAutodetected = (refreshableProviderNames as readonly string[]).includes(providerName)
 
 	const isDisabled = settingsAtProvider.models.length === 0
 	if (isDisabled) {
@@ -529,23 +529,23 @@ export type GlobalSettings = {
 	divisionProjectId: string;
 	divisionApiKey: string;
 	isLoggedIn: boolean;
-	// Coder ↔ Reviewer ループの最大反復回数（Division API orchestration 用）。
+	// File Search → Coder/Writer → Reviewer ループの最大反復回数（Division API orchestration 用）。
 	// 1 以上の整数。0 / 負数は 1 に丸められる。
 	maxReviewIterations: number;
 }
 
 // Default role assignments for Division API
 // Ordered to match the Orchestra flow:
-// User → Leader → (ideaman, search, filesearch, research) → (design, image, planner) → (coder or writing) → review → User
+// User → Leader → (ideaman, search, research) → (design, image, planner) → filesearch → (coder or writing) → review → User
 export const defaultRoleAssignments: RoleAssignment[] = [
 	{ role: 'leader', provider: 'openAI', model: 'gpt-5.2' },
 	{ role: 'ideaman', provider: 'openAI', model: 'gpt-5.2' },
 	{ role: 'search', provider: 'openAI', model: 'gpt-5.2-instant' },
-	{ role: 'filesearch', provider: 'openAI', model: 'gpt-5.2-instant' },
 	{ role: 'research', provider: 'perplexity', model: 'sonar-pro' },
 	{ role: 'design', provider: 'gemini', model: 'gemini-3-flash' },
 	{ role: 'image', provider: 'gemini', model: 'gemini-3-flash' },
 	{ role: 'planner', provider: 'gemini', model: 'gemini-3-pro' },
+	{ role: 'filesearch', provider: 'openAI', model: 'gpt-5.2-instant' },
 	{ role: 'coder', provider: 'anthropic', model: 'claude-opus-4-6' },
 	{ role: 'writing', provider: 'openAI', model: 'gpt-5.2' },
 	{ role: 'review', provider: 'anthropic', model: 'claude-opus-4-6' },
