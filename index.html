@@ -1,94 +1,74 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Minimal — シンプルで余白を活かしたデザイン</title>
-    <meta name="description" content="Minimal デザインのサンプル。装飾を最小限に、構造とタイポグラフィを際立たせます。" />
-    <link rel="preconnect" href="https://rsms.me/" />
-    <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
-    <link rel="stylesheet" href="styles/minimal.css" />
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+    <title>App</title>
+    <link rel="stylesheet" href="./src/styles/index.css" />
   </head>
   <body>
-    <header class="site-header">
-      <div class="container inner">
-        <a class="brand" href="#">Studio.</a>
-        <nav class="nav" aria-label="Primary">
-          <a href="#work">Work</a>
-          <a href="#about">About</a>
-          <a href="#contact">Contact</a>
-        </nav>
-      </div>
-    </header>
-
-    <main>
-      <section class="hero container">
-        <span class="eyebrow">Minimal Design</span>
-        <h1>余白が、本質を語る。</h1>
-        <p class="lede">
-          装飾を削ぎ落とし、コンテンツとタイポグラフィに集中する。
-          シンプルさは、最も洗練されたかたちです。
-        </p>
-        <div class="cta-row">
-          <a class="btn" href="#work">作品を見る →</a>
-          <a class="btn btn-secondary" href="#contact">お問い合わせ</a>
+    <div class="app">
+      <!-- Titlebar -->
+      <header class="titlebar">
+        <span class="titlebar__title">App</span>
+        <div class="titlebar__actions">
+          <button id="themeToggle" class="btn btn--ghost btn--icon" title="テーマ切替" aria-label="テーマ切替">
+            ◐
+          </button>
         </div>
-      </section>
+      </header>
 
-      <hr class="divider container" />
+      <!-- Main -->
+      <main class="main">
+        <div class="container stack-lg">
+          <section class="stack">
+            <span class="eyebrow">Overview</span>
+            <h1>シンプルに、必要なものだけを。</h1>
+            <p class="muted">
+              余白とタイポグラフィを主役にしたミニマルなデスクトップ体験。
+              装飾を削ぎ落とし、コンテンツに集中できる UI を提供します。
+            </p>
+            <div class="row">
+              <button class="btn btn--primary" id="primaryAction">はじめる</button>
+              <button class="btn" id="secondaryAction">詳細</button>
+            </div>
+          </section>
 
-      <section id="work" class="section container">
-        <header class="stack" style="margin-bottom: var(--space-7);">
-          <span class="eyebrow">Features</span>
-          <h2>必要なものだけを、丁寧に。</h2>
-          <p class="text-muted max-prose">
-            機能は少なく、体験は深く。Minimal は引き算の設計思想で構築されています。
-          </p>
-        </header>
+          <section class="stack">
+            <span class="eyebrow">Quick actions</span>
+            <div class="row" style="gap: var(--space-4); align-items: stretch; flex-wrap: wrap;">
+              <article class="card" style="flex: 1 1 220px;">
+                <h3 class="card__title">新規作成</h3>
+                <p class="card__desc">空のドキュメントから始めます。</p>
+              </article>
+              <article class="card" style="flex: 1 1 220px;">
+                <h3 class="card__title">開く</h3>
+                <p class="card__desc">既存のファイルを開いて続きから。</p>
+              </article>
+              <article class="card" style="flex: 1 1 220px;">
+                <h3 class="card__title">テンプレート</h3>
+                <p class="card__desc">用途別のテンプレートを利用。</p>
+              </article>
+            </div>
+          </section>
 
-        <div class="grid grid-2">
-          <article class="card">
-            <h3>Typography First</h3>
-            <p>読みやすさを最優先に、行間・字間・コントラストを整えました。</p>
-          </article>
-          <article class="card">
-            <h3>Whitespace</h3>
-            <p>要素同士の関係性を、余白で明確に表現します。</p>
-          </article>
-          <article class="card">
-            <h3>Monochrome</h3>
-            <p>色数を絞り、コンテンツそのものを主役に。</p>
-          </article>
-          <article class="card">
-            <h3>Responsive</h3>
-            <p>どの画面でも崩れない、流体的なレイアウト。</p>
-          </article>
+          <section class="stack">
+            <div class="row row--between">
+              <span class="eyebrow">Recent</span>
+              <span class="badge">0 items</span>
+            </div>
+            <ul class="list" id="recentList">
+              <li class="empty">
+                <div>まだ何もありません</div>
+                <div class="empty__hint">上のアクションから始められます</div>
+              </li>
+            </ul>
+          </section>
         </div>
-      </section>
+      </main>
+    </div>
 
-      <hr class="divider container" />
-
-      <section id="about" class="section container">
-        <div class="max-prose">
-          <span class="eyebrow">About</span>
-          <h2>少ないからこそ、強い。</h2>
-          <p class="text-muted">
-            私たちはデザインの引き算を信じています。
-            余白、タイポグラフィ、そして1色のアクセント。
-            それだけで、伝えたいことは十分に伝わります。
-          </p>
-          <p>
-            <a class="btn btn-accent" href="#contact">プロジェクトを始める</a>
-          </p>
-        </div>
-      </section>
-    </main>
-
-    <footer class="site-footer">
-      <div class="container inner">
-        <small>© 2025 Studio. All rights reserved.</small>
-        <small><a href="#">Privacy</a> · <a href="#">Terms</a></small>
-      </div>
-    </footer>
+    <script src="./src/renderer/renderer.js"></script>
   </body>
 </html>

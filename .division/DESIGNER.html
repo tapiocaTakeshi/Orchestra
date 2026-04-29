@@ -1,435 +1,492 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Void UI - Minimal Design</title>
-  <style>
-    :root {
-      /* Color Palette: Minimal & Clean */
-      --bg-primary: #ffffff;
-      --bg-secondary: #f9fafb;
-      --bg-tertiary: #f3f4f6;
-      --text-main: #111827;
-      --text-muted: #6b7280;
-      --border-color: #e5e7eb;
-      --accent-color: #000000;
-      --accent-hover: #374151;
-      --user-msg-bg: #f3f4f6;
-      --focus-ring: rgba(0, 0, 0, 0.08);
-      
-      /* Typography */
-      --font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      --font-size-base: 14px;
-      --font-size-sm: 12px;
-      --font-size-lg: 16px;
-      
-      /* Spacing */
-      --spacing-xs: 4px;
-      --spacing-sm: 8px;
-      --spacing-md: 16px;
-      --spacing-lg: 24px;
-      --spacing-xl: 32px;
-      
-      /* Border Radius */
-      --radius-sm: 6px;
-      --radius-md: 10px;
-      --radius-lg: 14px;
-    }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minimal Electron App UI</title>
+    <style>
+        :root {
+            /* Color Palette */
+            --bg-base: #fbfbfd;
+            --bg-sidebar: #f5f5f7;
+            --bg-hover: #e8e8ed;
+            --text-primary: #1d1d1f;
+            --text-secondary: #86868b;
+            --border-color: #d2d2d7;
+            --border-light: #e5e5ea;
+            --accent-color: #000000;
+            
+            /* Typography */
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            
+            /* Spacing */
+            --space-xs: 4px;
+            --space-sm: 8px;
+            --space-md: 16px;
+            --space-lg: 24px;
+            --space-xl: 32px;
+            --space-xxl: 48px;
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+            /* Borders */
+            --radius-sm: 6px;
+            --radius-md: 10px;
+            --radius-window: 12px;
+        }
 
-    body {
-      font-family: var(--font-family);
-      font-size: var(--font-size-base);
-      color: var(--text-main);
-      background-color: var(--bg-secondary);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-    }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
-    /* Main Container representing the extension panel */
-    .panel-container {
-      width: 420px;
-      height: 85vh;
-      max-height: 800px;
-      background-color: var(--bg-primary);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-lg);
-      display: flex;
-      flex-direction: column;
-      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
-      overflow: hidden;
-    }
+        body {
+            font-family: var(--font-family);
+            background-color: #e5e5e5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: var(--text-primary);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
 
-    /* Header */
-    .header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: var(--spacing-md) var(--spacing-lg);
-      border-bottom: 1px solid var(--border-color);
-      background-color: var(--bg-primary);
-    }
+        /* Application Window Mockup */
+        .window {
+            width: 960px;
+            height: 640px;
+            background-color: var(--bg-base);
+            border-radius: var(--radius-window);
+            box-shadow: 0 24px 48px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.05);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            animation: fadeIn 0.5s ease-out;
+        }
 
-    .header-title {
-      font-size: var(--font-size-lg);
-      font-weight: 600;
-      letter-spacing: -0.02em;
-    }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px) scale(0.99); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
 
-    .icon-btn {
-      background: none;
-      border: none;
-      color: var(--text-muted);
-      cursor: pointer;
-      padding: 6px;
-      border-radius: var(--radius-sm);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.2s ease;
-    }
+        /* Titlebar (Custom Electron Titlebar) */
+        .titlebar {
+            height: 48px;
+            background-color: var(--bg-sidebar);
+            display: flex;
+            align-items: center;
+            padding: 0 var(--space-md);
+            -webkit-app-region: drag; /* Electron Specific */
+            border-bottom: 1px solid var(--border-light);
+            user-select: none;
+        }
 
-    .icon-btn:hover {
-      background-color: var(--bg-tertiary);
-      color: var(--text-main);
-    }
+        .window-controls {
+            display: flex;
+            gap: var(--space-sm);
+            width: 70px;
+        }
 
-    .icon-btn svg {
-      width: 18px;
-      height: 18px;
-    }
+        .control-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 1px solid rgba(0,0,0,0.1);
+        }
 
-    /* Chat Area */
-    .chat-scroll-area {
-      flex: 1;
-      overflow-y: auto;
-      padding: var(--spacing-lg);
-      display: flex;
-      flex-direction: column;
-      gap: var(--spacing-lg);
-    }
+        .control-dot.close { background-color: #ff5f56; }
+        .control-dot.minimize { background-color: #ffbd2e; }
+        .control-dot.maximize { background-color: #27c93f; }
 
-    .chat-scroll-area::-webkit-scrollbar {
-      width: 6px;
-    }
-    .chat-scroll-area::-webkit-scrollbar-thumb {
-      background-color: var(--border-color);
-      border-radius: 10px;
-    }
+        .titlebar-text {
+            flex: 1;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            letter-spacing: 0.3px;
+        }
 
-    /* Message Layout */
-    .message {
-      display: flex;
-      flex-direction: column;
-      max-width: 85%;
-      animation: fadeIn 0.3s ease forwards;
-    }
+        .titlebar-spacer {
+            width: 70px; /* Balance for window controls */
+        }
 
-    .message.user {
-      align-self: flex-end;
-    }
+        /* App Layout */
+        .app-container {
+            display: flex;
+            flex: 1;
+            height: calc(100% - 48px);
+        }
 
-    .message.ai {
-      align-self: flex-start;
-      width: 100%;
-      max-width: 100%;
-    }
+        /* Sidebar */
+        .sidebar {
+            width: 240px;
+            background-color: var(--bg-sidebar);
+            border-right: 1px solid var(--border-light);
+            display: flex;
+            flex-direction: column;
+            padding: var(--space-lg) 0;
+            user-select: none;
+        }
 
-    .message-header {
-      display: flex;
-      align-items: center;
-      gap: var(--spacing-sm);
-      margin-bottom: var(--spacing-sm);
-      font-size: var(--font-size-sm);
-      color: var(--text-muted);
-      font-weight: 500;
-    }
+        .nav-group {
+            margin-bottom: var(--space-xl);
+        }
 
-    .avatar {
-      width: 22px;
-      height: 22px;
-      border-radius: 4px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 11px;
-      font-weight: 600;
-    }
+        .nav-label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            padding: 0 var(--space-lg);
+            margin-bottom: var(--space-sm);
+        }
 
-    .avatar-ai {
-      background-color: var(--accent-color);
-      color: white;
-    }
+        .nav-item {
+            display: flex;
+            align-items: center;
+            padding: 8px var(--space-lg);
+            margin: 2px var(--space-sm);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            color: var(--text-primary);
+            font-size: 14px;
+            transition: background-color 0.15s ease, color 0.15s ease;
+        }
 
-    .message-content {
-      line-height: 1.6;
-    }
+        .nav-item:hover:not(.active) {
+            background-color: rgba(0,0,0,0.04);
+        }
 
-    .user .message-content {
-      background-color: var(--user-msg-bg);
-      padding: 12px 16px;
-      border-radius: var(--radius-md);
-      border-bottom-right-radius: 4px;
-      color: var(--text-main);
-    }
+        .nav-item.active {
+            background-color: var(--bg-hover);
+            font-weight: 500;
+        }
 
-    .ai .message-content {
-      /* Minimal styling for AI: no background box, generous line-height */
-      padding: 0;
-      color: var(--text-main);
-    }
+        .nav-icon {
+            width: 18px;
+            height: 18px;
+            margin-right: var(--space-md);
+            fill: currentColor;
+            opacity: 0.6;
+            transition: opacity 0.15s ease;
+        }
 
-    .ai .message-content p {
-      margin-bottom: var(--spacing-sm);
-    }
+        .nav-item.active .nav-icon {
+            opacity: 1;
+        }
 
-    /* Code Block Minimal Design */
-    .code-block {
-      margin-top: var(--spacing-md);
-      background-color: var(--bg-secondary);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-md);
-      overflow: hidden;
-      font-family: "JetBrains Mono", "SF Mono", "Fira Code", monospace;
-      font-size: 13px;
-    }
+        /* Main Content */
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--bg-base);
+            overflow-y: auto;
+        }
 
-    .code-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 8px var(--spacing-md);
-      background-color: var(--bg-tertiary);
-      border-bottom: 1px solid var(--border-color);
-      font-size: 12px;
-      color: var(--text-muted);
-    }
+        .header {
+            padding: var(--space-xxl) var(--space-xxl) var(--space-lg) var(--space-xxl);
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+        }
 
-    .code-content {
-      padding: var(--spacing-md);
-      overflow-x: auto;
-      color: var(--text-main);
-      background-color: #fafafa;
-    }
+        .page-title {
+            font-size: 32px;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+            color: var(--text-primary);
+        }
 
-    .code-content span.keyword { color: #000; font-weight: 600; }
-    .code-content span.string { color: #4b5563; }
-    
-    /* Input Area */
-    .input-area {
-      padding: var(--spacing-md) var(--spacing-lg);
-      border-top: 1px solid var(--border-color);
-      background-color: var(--bg-primary);
-    }
+        .header-actions {
+            display: flex;
+            gap: var(--space-sm);
+        }
 
-    .context-chips {
-      display: flex;
-      gap: var(--spacing-sm);
-      margin-bottom: var(--spacing-sm);
-    }
+        .btn {
+            padding: 8px 16px;
+            border-radius: var(--radius-sm);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: all 0.2s ease;
+            outline: none;
+        }
 
-    .chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 11px;
-      font-weight: 500;
-      padding: 4px 10px;
-      background-color: var(--bg-primary);
-      border: 1px solid var(--border-color);
-      border-radius: 16px;
-      color: var(--text-muted);
-      transition: background-color 0.2s;
-      cursor: pointer;
-    }
+        .btn-primary {
+            background-color: var(--accent-color);
+            color: #ffffff;
+        }
 
-    .chip:hover {
-      background-color: var(--bg-secondary);
-      color: var(--text-main);
-    }
+        .btn-primary:hover {
+            opacity: 0.85;
+        }
 
-    .input-wrapper {
-      position: relative;
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-md);
-      background-color: var(--bg-primary);
-      transition: border-color 0.2s, box-shadow 0.2s;
-    }
+        .btn-outline {
+            background-color: transparent;
+            color: var(--text-primary);
+            border-color: var(--border-color);
+        }
 
-    .input-wrapper:focus-within {
-      border-color: #d1d5db;
-      box-shadow: 0 0 0 3px var(--focus-ring);
-    }
+        .btn-outline:hover {
+            background-color: rgba(0,0,0,0.03);
+        }
 
-    .chat-input {
-      width: 100%;
-      border: none;
-      background: transparent;
-      padding: 14px 16px;
-      padding-right: 50px;
-      font-family: inherit;
-      font-size: var(--font-size-base);
-      color: var(--text-main);
-      resize: none;
-      height: 60px;
-      outline: none;
-      line-height: 1.5;
-    }
+        .content {
+            padding: 0 var(--space-xxl) var(--space-xxl) var(--space-xxl);
+        }
 
-    .chat-input::placeholder {
-      color: #9ca3af;
-    }
+        /* Grid Layout */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: var(--space-lg);
+            margin-bottom: var(--space-xxl);
+        }
 
-    .send-btn {
-      position: absolute;
-      right: 8px;
-      bottom: 10px;
-      background-color: var(--accent-color);
-      color: white;
-      border: none;
-      width: 32px;
-      height: 32px;
-      border-radius: var(--radius-sm);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      transition: background-color 0.2s, transform 0.1s;
-    }
+        .card {
+            background: #ffffff;
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-md);
+            padding: var(--space-lg);
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-sm);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
 
-    .send-btn:hover {
-      background-color: var(--accent-hover);
-    }
-    
-    .send-btn:active {
-      transform: scale(0.95);
-    }
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.04);
+        }
 
-    .send-btn svg {
-      width: 14px;
-      height: 14px;
-      fill: currentColor;
-    }
+        .card-label {
+            font-size: 13px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
 
-    /* Animations */
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(8px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-  </style>
+        .card-value {
+            font-size: 28px;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+        }
+
+        /* List View */
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: var(--space-md);
+        }
+
+        .list {
+            background: #ffffff;
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-md);
+        }
+
+        .list-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: var(--space-md) var(--space-lg);
+            border-bottom: 1px solid var(--border-light);
+            transition: background-color 0.2s ease;
+        }
+
+        .list-item:last-child {
+            border-bottom: none;
+        }
+
+        .list-item:hover {
+            background-color: rgba(0,0,0,0.02);
+            cursor: pointer;
+        }
+
+        .item-main {
+            display: flex;
+            align-items: center;
+            gap: var(--space-md);
+        }
+
+        .item-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: var(--radius-sm);
+            background-color: var(--bg-sidebar);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .item-icon svg {
+            width: 20px;
+            height: 20px;
+            fill: var(--text-secondary);
+        }
+
+        .item-details h4 {
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 2px;
+        }
+
+        .item-details p {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .item-meta {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+            background-color: #f0f0f0;
+            color: var(--text-secondary);
+        }
+
+        .status-badge.active {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+    </style>
 </head>
 <body>
 
-  <div class="panel-container">
-    <!-- Header -->
-    <header class="header">
-      <div class="header-title">Void</div>
-      <div style="display: flex; gap: 4px;">
-        <button class="icon-btn" title="Settings">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="3"></circle>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-          </svg>
-        </button>
-        <button class="icon-btn" title="New Chat">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-        </button>
-      </div>
-    </header>
-
-    <!-- Chat Area -->
-    <div class="chat-scroll-area">
-      
-      <!-- User Message -->
-      <div class="message user">
-        <div class="message-content">
-          Refine the UI for the void editor extension. Make it extremely minimal, focus on typography and negative space.
-        </div>
-      </div>
-
-      <!-- AI Message -->
-      <div class="message ai" style="animation-delay: 0.1s;">
-        <div class="message-header">
-          <div class="avatar avatar-ai">V</div>
-          <span>Void</span>
-        </div>
-        <div class="message-content">
-          <p>I've simplified the interface. Borders are subtle, padding is generous, and the typography hierarchy clearly guides the eye without heavy background elements.</p>
-          
-          <div class="code-block">
-            <div class="code-header">
-              <span>layout.css</span>
-              <button class="icon-btn" title="Copy code" style="padding: 2px;">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                </svg>
-              </button>
+    <div class="window">
+        <!-- Electron Titlebar -->
+        <div class="titlebar">
+            <div class="window-controls">
+                <div class="control-dot close"></div>
+                <div class="control-dot minimize"></div>
+                <div class="control-dot maximize"></div>
             </div>
-            <div class="code-content">
-<pre style="margin:0;">
-<span class="keyword">.container</span> {
-  <span class="string">display</span>: flex;
-  <span class="string">flex-direction</span>: column;
-  <span class="string">padding</span>: 2rem;
-  <span class="string">background</span>: var(--bg-primary);
-  <span class="string">border</span>: 1px solid var(--border-light);
-}
+            <div class="titlebar-text">Workspace</div>
+            <div class="titlebar-spacer"></div>
+        </div>
 
-<span class="keyword">.typography-focus</span> {
-  <span class="string">font-family</span>: "Inter", sans-serif;
-  <span class="string">letter-spacing</span>: -0.02em;
-  <span class="string">line-height</span>: 1.6;
-}
-</pre>
+        <div class="app-container">
+            <!-- Sidebar -->
+            <div class="sidebar">
+                <div class="nav-group">
+                    <div class="nav-label">Menu</div>
+                    <div class="nav-item active">
+                        <svg class="nav-icon" viewBox="0 0 24 24">
+                            <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>
+                        </svg>
+                        Dashboard
+                    </div>
+                    <div class="nav-item">
+                        <svg class="nav-icon" viewBox="0 0 24 24">
+                            <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
+                        </svg>
+                        Projects
+                    </div>
+                    <div class="nav-item">
+                        <svg class="nav-icon" viewBox="0 0 24 24">
+                            <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
+                        </svg>
+                        Team
+                    </div>
+                </div>
+
+                <div class="nav-group">
+                    <div class="nav-label">Settings</div>
+                    <div class="nav-item">
+                        <svg class="nav-icon" viewBox="0 0 24 24">
+                            <path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.06-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.73,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.06,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.43-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.49-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/>
+                        </svg>
+                        Preferences
+                    </div>
+                </div>
             </div>
-          </div>
-        </div>
-      </div>
 
-    </div>
+            <!-- Main Content Area -->
+            <div class="main">
+                <div class="header">
+                    <h1 class="page-title">Overview</h1>
+                    <div class="header-actions">
+                        <button class="btn btn-outline">Export</button>
+                        <button class="btn btn-primary">New Project</button>
+                    </div>
+                </div>
 
-    <!-- Input Area -->
-    <div class="input-area">
-      <div class="context-chips">
-        <div class="chip">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px; height:12px;">
-            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
-            <polyline points="13 2 13 9 20 9"></polyline>
-          </svg>
-          layout.css
+                <div class="content">
+                    <!-- Cards -->
+                    <div class="grid">
+                        <div class="card">
+                            <div class="card-label">Active Projects</div>
+                            <div class="card-value">12</div>
+                        </div>
+                        <div class="card">
+                            <div class="card-label">Pending Tasks</div>
+                            <div class="card-value">34</div>
+                        </div>
+                        <div class="card">
+                            <div class="card-label">Overall Progress</div>
+                            <div class="card-value">68%</div>
+                        </div>
+                    </div>
+
+                    <!-- List -->
+                    <h2 class="section-title">Recent Activity</h2>
+                    <div class="list">
+                        <div class="list-item">
+                            <div class="item-main">
+                                <div class="item-icon">
+                                    <svg viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9H9V9h10v2zm-4 4H9v-2h6v2zm4-8H9V5h10v2z"/></svg>
+                                </div>
+                                <div class="item-details">
+                                    <h4>Q3 Marketing Campaign</h4>
+                                    <p>Updated by Sarah 2 hours ago</p>
+                                </div>
+                            </div>
+                            <div class="item-meta">
+                                <span class="status-badge active">In Progress</span>
+                            </div>
+                        </div>
+                        <div class="list-item">
+                            <div class="item-main">
+                                <div class="item-icon">
+                                    <svg viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9H9V9h10v2zm-4 4H9v-2h6v2zm4-8H9V5h10v2z"/></svg>
+                                </div>
+                                <div class="item-details">
+                                    <h4>Website Redesign</h4>
+                                    <p>Created by Mike yesterday</p>
+                                </div>
+                            </div>
+                            <div class="item-meta">
+                                <span class="status-badge">Planning</span>
+                            </div>
+                        </div>
+                        <div class="list-item">
+                            <div class="item-main">
+                                <div class="item-icon">
+                                    <svg viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9H9V9h10v2zm-4 4H9v-2h6v2zm4-8H9V5h10v2z"/></svg>
+                                </div>
+                                <div class="item-details">
+                                    <h4>Brand Guidelines 2024</h4>
+                                    <p>Reviewed by Emma 3 days ago</p>
+                                </div>
+                            </div>
+                            <div class="item-meta">
+                                <span class="status-badge">Completed</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="chip">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px; height:12px;">
-            <circle cx="11" cy="11" r="8"></circle>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-          </svg>
-          Search
-        </div>
-      </div>
-      <div class="input-wrapper">
-        <textarea class="chat-input" placeholder="Message Void..."></textarea>
-        <button class="send-btn" title="Send message">
-          <svg viewBox="0 0 24 24">
-            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
-          </svg>
-        </button>
-      </div>
     </div>
-  </div>
 
 </body>
 </html>

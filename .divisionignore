@@ -1,0 +1,50 @@
+# .divisionignore
+# Division (AI エージェント) が読み取りをスキップするファイル/フォルダのリスト。
+# 構文は .gitignore と同じです。
+# 機密情報、生成物、巨大なバイナリなどを AI に渡さないようにここで除外します。
+
+# --- シークレット / 認証情報 ---
+.env
+.env.*
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+secrets/
+.secrets/
+
+# --- 依存関係 / ビルド成果物 ---
+node_modules/
+dist/
+build/
+out/
+.next/
+.cache/
+.turbo/
+.parcel-cache/
+.vite/
+coverage/
+
+# --- VCS / IDE メタデータ ---
+.git/
+.svn/
+.hg/
+.idea/
+.vscode/
+.DS_Store
+
+# --- ログ / 一時ファイル ---
+*.log
+*.tmp
+*.swp
+tmp/
+.tmp/
+
+# --- ロックファイル（必要なら # を外してください） ---
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# --- Division 内部 ---
+.division/

@@ -1,13 +1,34 @@
 import { cn } from "@/lib/utils";
-import { HTMLAttributes, forwardRef } from "react";
+import type { HTMLAttributes } from "react";
 
-export const Container = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
+type Props = HTMLAttributes<HTMLDivElement> & {
+  size?: "sm" | "md" | "lg";
+};
+
+const sizeMap = {
+  sm: "max-w-2xl",
+  md: "max-w-4xl",
+  lg: "max-w-readable",
+};
+
+export function Container({
+  size = "lg",
+  className,
+  children,
+  ...rest
+}: Props) {
+  return (
     <div
-      ref={ref}
-      className={cn("mx-auto w-full max-w-[1040px] px-5 md:px-8 lg:px-12", className)}
-      {...props}
-    />
-  )
-);
-Container.displayName = "Container";
+      className={cn(
+        "mx-auto w-full px-5 md:px-8",
+        sizeMap[size],
+        className
+      )}
+      {...rest}
+    >
+      {children}
+    </div>
+  );
+}
+
+export default Container;
