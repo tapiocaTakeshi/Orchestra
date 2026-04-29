@@ -1,711 +1,517 @@
-デザイナーエージェントが提示した「Modern — モダンでトレンドに沿ったデザイン」プロトタイプを、指定パスの `DESIGNER.html` に反映します。これは `.division/` 配下のデザイナー成果物用ファイル（プロトタイプ全文ダンプ）であるため、全文を書き出します。
+### 1. 実装プラン
 
-```html:/Volumes/T7/Program/Orchestra/.division/DESIGNER.html
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <title>Orchestra AI Sidebar Chat - Modern Prototype</title>
-  <style>
-    /* 
-      Color Palette & Typography 
-      モダン・ミニマルなスレートとホワイトを基調
-    */
-    :root {
-      --bg-app: #f9fafb;
-      --bg-sidebar: #ffffff;
-      --bg-surface: #f3f4f6;
-      --bg-surface-hover: #e5e7eb;
-      
-      --text-primary: #111827;
-      --text-secondary: #4b5563;
-      --text-tertiary: #9ca3af;
-      
-      --border-color: #e5e7eb;
-      --border-focus: #cbd5e1;
-      
-      --accent-color: #0f172a;
-      
-      --user-msg-bg: #ffffff;
-      --user-msg-border: #e5e7eb;
-      --user-msg-text: #111827;
-      
-      --ai-msg-text: #111827;
-      
-      --status-yellow: #eab308;
-      --status-green: #22c55e;
-      --status-dark: #6b7280;
+直前のコンテキストに具体的な既存ファイル内容（file-searcher の出力）が添付されていない状況ですが、ユーザーの要求「デザインを改善して（Minimal — シンプルで余白を活かしたデザイン）」と作業ディレクトリ `src/vs/workbench/contrib/void` から、Void（VS Code フォーク）の sidepane / chat UI 周りに **Minimal テーマの CSS とユーティリティを追加** します。
 
-      --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      --font-size-base: 13px;
-      --font-size-sm: 12px;
-      --font-size-xs: 11px;
-    }
+- 方針: Tailwind / shadcn 風の token を使い、**余白・タイポグラフィ・境界の薄さ**を強調
+- 影響範囲: `void/browser/react/src2/` 以下の sidebar / chat コンポーネントが import する共通スタイル
+- 既存スタイルを全面置換せず、`minimal.css` を**新規追加**して `styles.css` から import する差分編集にとどめる
+- 主要トークン: `--void-spacing-*`, `--void-fg-muted`, `--void-border-subtle`、フォーカスリングを 1px 化、角丸を控えめに
 
-    /* Reset & Base */
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+前提:
+- ルートの styles エントリは `src/vs/workbench/contrib/void/browser/react/src2/styles.css`（Void の慣例）
+- 既存ファイルを破壊しないため、import 1 行だけ SEARCH/REPLACE で追記
 
-    body {
-      font-family: var(--font-family);
-      background-color: var(--bg-app);
-      color: var(--text-primary);
-      height: 100vh;
-      overflow: hidden;
-      display: flex;
-    }
+### 2. ファイル一覧
 
-    /* Main Workspace Dummy */
-    .main-content {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background-image: radial-gradient(var(--border-color) 1px, transparent 1px);
-      background-size: 24px 24px;
-    }
-    .main-content-text {
-      color: var(--text-tertiary);
-      font-size: 20px;
-      font-weight: 300;
-      letter-spacing: 0.05em;
-    }
+| ファイル | 操作 | 概要 |
+|---|---|---|
+| `src/vs/workbench/contrib/void/browser/react/src2/minimal.css` | 新規 | Minimal デザインのトークンとユーティリティ |
+| `src/vs/workbench/contrib/void/browser/react/src2/styles.css` | 変更（追記） | `minimal.css` を import |
+| `src/vs/workbench/contrib/void/browser/react/src2/sidebar/SidebarChat.tsx` の className 微調整 | 変更（任意） | minimal-* ユーティリティを適用 |
 
-    /* Sidebar Container */
-    .sidebar {
-      width: 400px;
-      height: 100vh;
-      background-color: var(--bg-sidebar);
-      border-left: 1px solid var(--border-color);
-      display: flex;
-      flex-direction: column;
-      box-shadow: -8px 0 32px rgba(0, 0, 0, 0.03);
-      z-index: 10;
-      font-size: var(--font-size-base);
-    }
+### 3. コード本体
 
-    /* Header */
-    .header {
-      padding: 10px 16px;
-      border-bottom: 1px solid rgba(229, 231, 235, 0.6);
-      display: flex;
-      justify-content: flex-end;
-      align-items: center;
-      gap: 12px;
-      background: linear-gradient(to bottom, var(--bg-sidebar), transparent);
-    }
-    .btn-text {
-      font-size: var(--font-size-xs);
-      font-weight: 500;
-      padding: 4px 8px;
-      border-radius: 4px;
-      background: transparent;
-      border: none;
-      color: var(--text-secondary);
-      cursor: pointer;
-      transition: color 0.2s, background-color 0.2s;
-    }
-    .btn-text:hover {
-      color: var(--text-primary);
-      background-color: var(--bg-surface);
-    }
-    .icon-btn {
-      width: 26px;
-      height: 26px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border: none;
-      background: transparent;
-      color: var(--text-tertiary);
-      border-radius: 6px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-    .icon-btn:hover {
-      background-color: var(--bg-surface);
-      color: var(--text-primary);
-    }
+#### 3-1. 新規: Minimal デザインの CSS トークン
 
-    /* History / Messages Area */
-    .history {
-      flex: 1;
-      overflow-y: auto;
-      padding: 20px 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 24px;
-    }
-    .history::-webkit-scrollbar { width: 4px; }
-    .history::-webkit-scrollbar-track { background: transparent; }
-    .history::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 10px; }
+```css:src/vs/workbench/contrib/void/browser/react/src2/minimal.css
+/*---------------------------------------------------------------------------------------------
+ *  Void — Minimal Design Layer
+ *  シンプルで余白を活かしたデザイン。既存のテーマ変数（--vscode-*）を尊重しつつ、
+ *  Void 独自の UI（Sidebar / Chat / Inline edits）に対して最小限のトークンと
+ *  ユーティリティクラスを提供する。
+ *  既存スタイルを上書きせず、`minimal-*` プレフィックスを通じて opt-in で適用する。
+ *--------------------------------------------------------------------------------------------*/
 
-    /* Sticky User Card Style */
-    .msg-user {
-      background: var(--user-msg-bg);
-      border: 1px solid var(--user-msg-border);
-      border-radius: 12px;
-      padding: 14px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 0 0 1px rgba(255,255,255,0.8) inset;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      position: relative;
-      transition: box-shadow 0.2s ease, border-color 0.2s ease;
-    }
-    .msg-user:hover {
-      border-color: var(--border-focus);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.05), 0 0 0 1px rgba(255,255,255,0.8) inset;
-    }
-    
-    /* File Selection Badges */
-    .file-badges {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-    .file-badge {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 3px 8px;
-      background: var(--bg-sidebar);
-      border: 1px solid var(--border-color);
-      border-radius: 6px;
-      font-size: var(--font-size-xs);
-      color: var(--text-primary);
-      cursor: pointer;
-      transition: all 0.15s ease;
-      user-select: none;
-    }
-    .file-badge:hover {
-      border-color: var(--border-focus);
-      background: var(--bg-surface);
-    }
-    .file-badge svg {
-      color: var(--text-secondary);
-    }
+:root,
+.void-root {
+	/* Spacing scale (4px base) */
+	--void-space-0: 0;
+	--void-space-1: 4px;
+	--void-space-2: 8px;
+	--void-space-3: 12px;
+	--void-space-4: 16px;
+	--void-space-5: 24px;
+	--void-space-6: 32px;
+	--void-space-7: 48px;
 
-    .msg-user .text {
-      color: var(--user-msg-text);
-      line-height: 1.5;
-      font-size: var(--font-size-base);
-    }
-    
-    .edit-icon {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      opacity: 0;
-      color: var(--text-tertiary);
-      cursor: pointer;
-      padding: 4px;
-      border-radius: 4px;
-      transition: all 0.2s ease;
-    }
-    .msg-user:hover .edit-icon {
-      opacity: 1;
-    }
-    .edit-icon:hover {
-      color: var(--text-primary);
-      background: var(--bg-surface);
-    }
+	/* Typography */
+	--void-font-size-xs: 11px;
+	--void-font-size-sm: 12px;
+	--void-font-size-md: 13px;
+	--void-font-size-lg: 15px;
+	--void-line-height-tight: 1.35;
+	--void-line-height-normal: 1.55;
+	--void-letter-spacing-tight: -0.005em;
 
-    /* AI Message */
-    .msg-ai {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      padding-left: 4px;
-    }
-    
-    /* Tool / Reasoning Headers */
-    .tool-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 4px 6px;
-      margin-left: -6px;
-      border-radius: 6px;
-      cursor: pointer;
-      user-select: none;
-      transition: background-color 0.15s ease;
-    }
-    .tool-header:hover {
-      background-color: var(--bg-surface);
-    }
-    .tool-header-left {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      overflow: hidden;
-    }
-    .chevron {
-      color: var(--text-tertiary);
-      transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-    .tool-header.open .chevron {
-      transform: rotate(90deg);
-    }
-    .tool-title {
-      font-size: var(--font-size-sm);
-      color: var(--text-secondary);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      white-space: nowrap;
-    }
-    
-    /* Flow indicator pulsing dot */
-    .dot-pulse {
-      width: 6px;
-      height: 6px;
-      background-color: var(--text-tertiary);
-      border-radius: 50%;
-      display: inline-block;
-      opacity: 0.5;
-    }
-    .dot-pulse.active {
-      background-color: #3b82f6;
-      box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
-      animation: pulse 1.5s ease-in-out infinite;
-      opacity: 1;
-    }
-    @keyframes pulse {
-      0%, 100% { transform: scale(1); opacity: 1; }
-      50% { transform: scale(0.85); opacity: 0.6; }
-    }
-    
-    .tool-desc {
-      font-size: var(--font-size-xs);
-      color: var(--text-tertiary);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      margin-left: 4px;
-    }
+	/* Surfaces — VSCode テーマ変数にフォールバック */
+	--void-bg: var(--vscode-sideBar-background, transparent);
+	--void-bg-subtle: color-mix(in srgb, var(--vscode-foreground) 4%, transparent);
+	--void-bg-hover: color-mix(in srgb, var(--vscode-foreground) 6%, transparent);
+	--void-bg-active: color-mix(in srgb, var(--vscode-foreground) 9%, transparent);
 
-    /* Tool details body (visible when open) */
-    .tool-body {
-      font-size: 12px;
-      color: var(--text-secondary);
-      padding: 8px 12px;
-      background: var(--bg-surface);
-      border-radius: 6px;
-      border: 1px solid var(--border-color);
-      margin-top: 2px;
-      margin-bottom: 6px;
-      display: none;
-    }
-    .tool-header.open + .tool-body {
-      display: block;
-      animation: slideDown 0.2s ease-out;
-    }
-    @keyframes slideDown {
-      from { opacity: 0; transform: translateY(-4px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
+	/* Foreground tones */
+	--void-fg: var(--vscode-foreground);
+	--void-fg-muted: color-mix(in srgb, var(--vscode-foreground) 65%, transparent);
+	--void-fg-subtle: color-mix(in srgb, var(--vscode-foreground) 45%, transparent);
 
-    /* Spinner */
-    .spinner {
-      animation: spin 1s linear infinite;
-      color: var(--text-tertiary);
-    }
-    @keyframes spin { 100% { transform: rotate(360deg); } }
+	/* Borders — 限りなく薄く */
+	--void-border-subtle: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+	--void-border: color-mix(in srgb, var(--vscode-foreground) 14%, transparent);
+	--void-border-strong: color-mix(in srgb, var(--vscode-foreground) 22%, transparent);
 
-    /* Markdown Text Simulation */
-    .msg-ai .text {
-      color: var(--ai-msg-text);
-      line-height: 1.6;
-      font-size: var(--font-size-base);
-    }
-    .msg-ai .text p {
-      margin-bottom: 12px;
-    }
-    .msg-ai .text p:last-child {
-      margin-bottom: 0;
-    }
-    .msg-ai .text code {
-      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-      font-size: 11px;
-      background: var(--bg-surface);
-      padding: 2px 5px;
-      border-radius: 4px;
-      color: var(--text-secondary);
-    }
+	/* Radius — 控えめ */
+	--void-radius-sm: 4px;
+	--void-radius-md: 6px;
+	--void-radius-lg: 10px;
 
-    /* Command Bar (File Changes Status) */
-    .command-bar {
-      background: var(--bg-surface);
-      border-top: 1px solid rgba(229,231,235, 0.5);
-      border-left: 1px solid rgba(229,231,235, 0.5);
-      border-right: 1px solid rgba(229,231,235, 0.5);
-      border-radius: 8px 8px 0 0;
-      padding: 8px 12px;
-      margin: 0 8px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      font-size: var(--font-size-xs);
-      color: var(--text-secondary);
-    }
-    .command-bar-left {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      cursor: pointer;
-      transition: color 0.15s ease;
-    }
-    .command-bar-left:hover {
-      color: var(--text-primary);
-    }
-    .command-bar-right {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    .action-icons {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-    .action-icons .icon-btn {
-      width: 22px;
-      height: 22px;
-    }
-    .status-indicator {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-weight: 500;
-    }
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-    }
-    .status-dot.yellow { background-color: var(--status-yellow); box-shadow: 0 0 6px rgba(234, 179, 8, 0.4); }
-    .status-dot.green { background-color: var(--status-green); }
-    .status-dot.dark { background-color: var(--status-dark); }
+	/* Focus ring */
+	--void-focus-ring: 0 0 0 1px var(--vscode-focusBorder, color-mix(in srgb, var(--vscode-foreground) 40%, transparent));
 
-    /* Input Container */
-    .input-container {
-      padding: 0 8px 12px;
-      background-color: var(--bg-sidebar);
-      display: flex;
-      flex-direction: column;
-    }
-    
-    .input-wrapper {
-      background: linear-gradient(to bottom, #ffffff, #fcfcfc);
-      border: 1px solid var(--border-color);
-      border-radius: 0 0 12px 12px;
-      display: flex;
-      flex-direction: column;
-      transition: border-color 0.2s ease, box-shadow 0.2s ease;
-      position: relative;
-    }
-    /* When command bar is not present, make top rounded */
-    .command-bar + .input-wrapper {
-      border-top: none;
-    }
-    .input-wrapper:focus-within {
-      border-color: var(--border-focus);
-      box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.04), 0 8px 24px -8px rgba(0,0,0,0.05);
-    }
+	/* Motion */
+	--void-ease: cubic-bezier(0.2, 0, 0, 1);
+	--void-duration-fast: 120ms;
+	--void-duration-base: 180ms;
+}
 
-    .input-inner {
-      font-size: var(--font-size-base);
-      line-height: 1.5;
-      color: var(--text-primary);
-      outline: none;
-      padding: 12px 12px 8px 12px;
-      min-height: 64px;
-      max-height: 200px;
-      overflow-y: auto;
-      cursor: text;
-    }
-    .input-inner[data-empty="true"]::before {
-      content: attr(data-placeholder);
-      color: var(--text-tertiary);
-      pointer-events: none;
-    }
+/* ---------- Layout ---------- */
 
-    .input-bottom {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-      padding: 4px 8px 8px 8px;
-    }
-    
-    .input-controls-left {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-    .model-dropdown {
-      font-size: 10px;
-      color: var(--text-secondary);
-      background: var(--bg-surface);
-      border: 1px solid var(--border-color);
-      border-radius: 4px;
-      padding: 2px 6px;
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      cursor: pointer;
-      width: fit-content;
-      transition: all 0.2s ease;
-    }
-    .model-dropdown:hover {
-      border-color: var(--text-tertiary);
-      color: var(--text-primary);
-    }
+.minimal-stack { display: flex; flex-direction: column; }
+.minimal-stack-1 > * + * { margin-top: var(--void-space-1); }
+.minimal-stack-2 > * + * { margin-top: var(--void-space-2); }
+.minimal-stack-3 > * + * { margin-top: var(--void-space-3); }
+.minimal-stack-4 > * + * { margin-top: var(--void-space-4); }
+.minimal-stack-5 > * + * { margin-top: var(--void-space-5); }
 
-    .input-controls-right {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .attach-btn {
-      background: transparent;
-      border: none;
-      color: var(--text-tertiary);
-      cursor: pointer;
-      padding: 6px;
-      border-radius: 6px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.15s ease;
-    }
-    .attach-btn:hover {
-      color: var(--text-secondary);
-      background: var(--bg-surface);
-    }
+.minimal-row { display: flex; align-items: center; gap: var(--void-space-2); }
+.minimal-row-tight { display: flex; align-items: center; gap: var(--void-space-1); }
+.minimal-row-loose { display: flex; align-items: center; gap: var(--void-space-3); }
 
-    .send-btn {
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, #ffffff, #e4e4e7);
-      color: #000;
-      border: 1px solid rgba(0,0,0,0.1);
-      box-shadow: 0 2px 6px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
-    }
-    .send-btn:hover {
-      transform: scale(1.06);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.9);
-    }
-    .send-btn:active {
-      transform: scale(0.95);
-    }
+.minimal-pad-3 { padding: var(--void-space-3); }
+.minimal-pad-4 { padding: var(--void-space-4); }
+.minimal-pad-x-4 { padding-left: var(--void-space-4); padding-right: var(--void-space-4); }
+.minimal-pad-y-3 { padding-top: var(--void-space-3); padding-bottom: var(--void-space-3); }
 
-  </style>
-</head>
-<body>
+/* ---------- Surfaces ---------- */
 
-  <!-- Workspace Area Dummy -->
-  <main class="main-content">
-    <div class="main-content-text">Editor Area</div>
-  </main>
+.minimal-surface {
+	background: var(--void-bg);
+	color: var(--void-fg);
+}
 
-  <!-- Sidebar Chat -->
-  <aside class="sidebar">
-    <!-- Header -->
-    <header class="header">
-      <button class="btn-text">ログイン</button>
-      <button class="icon-btn" title="設定">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="3" />
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-        </svg>
-      </button>
-    </header>
+.minimal-card {
+	background: var(--void-bg-subtle);
+	border: 1px solid var(--void-border-subtle);
+	border-radius: var(--void-radius-md);
+	padding: var(--void-space-4);
+}
 
-    <!-- Chat History -->
-    <div class="history">
-      
-      <!-- User Message (Pinned / Previous) -->
-      <div class="msg-user">
-        <div class="file-badges">
-          <div class="file-badge" title="src/vs/workbench/contrib/void/browser/react/src/sidebar-tsx/SidebarChat.tsx">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
-            </svg>
-            SidebarChat.tsx (10-45)
-          </div>
-        </div>
-        <div class="text">
-          このコンポーネントのデザインをモダンでミニマルな方針に沿って改善したいです。パディングやアクセントカラーを整理してください。
-        </div>
-        <div class="edit-icon" title="メッセージを編集">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
-          </svg>
-        </div>
-      </div>
+.minimal-divider {
+	height: 1px;
+	background: var(--void-border-subtle);
+	border: 0;
+	margin: var(--void-space-3) 0;
+}
 
-      <!-- AI Message -->
-      <div class="msg-ai">
-        
-        <!-- Reasoning Accordion -->
-        <div class="tool-header">
-          <div class="tool-header-left">
-            <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-            <span class="tool-title"><span class="dot-pulse"></span> 2.8 秒間思考しました</span>
-          </div>
-        </div>
-        
-        <!-- Tool Execution (Closed) -->
-        <div class="tool-header">
-          <div class="tool-header-left">
-            <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-            <span class="tool-title">ファイルを読み込みました</span>
-            <span class="tool-desc">SidebarChat.tsx</span>
-          </div>
-        </div>
+/* ---------- Typography ---------- */
 
-        <!-- Tool Execution (Open) -->
-        <div class="tool-header open">
-          <div class="tool-header-left">
-            <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-            <span class="tool-title">ファイルを検索しました</span>
-            <span class="tool-desc">"css variables"</span>
-          </div>
-        </div>
-        <div class="tool-body">
-          <code>Found matches in common/helpers/colors.ts</code>
-        </div>
-        
-        <!-- Text Response -->
-        <div class="text">
-          <p>承知いたしました。<code>SidebarChat.tsx</code>の構造を確認しました。</p>
-          <p>UIをより洗練させるために、以下の変更を加えることを提案します。</p>
-          <p>1. <b>余白の活用:</b> コンテナ内のパディングを広げ、窮屈さを解消<br>
-             2. <b>控えめなボーダー:</b> 極細で淡いグレー（<code>var(--border-color)</code>）を使用<br>
-             3. <b>視覚的階層:</b> 重要なアクション以外は控えめな色にする</p>
-        </div>
-      </div>
-      
-      <!-- User Message -->
-      <div class="msg-user">
-        <div class="text">
-          いいですね。さらに、入力欄の上にファイル変更の「ステータスバー（コマンドバー）」を追加してください。
-        </div>
-        <div class="edit-icon" title="メッセージを編集">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
-          </svg>
-        </div>
-      </div>
-      
-      <!-- AI Message (Streaming / Active) -->
-      <div class="msg-ai">
-        <div class="tool-header">
-          <div class="tool-header-left">
-            <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-            <span class="tool-title"><span class="dot-pulse active"></span> 思考中</span>
-          </div>
-        </div>
-        
-        <div class="tool-header">
-          <div class="tool-header-left">
-            <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-            <span class="tool-title">
-              ファイルを編集中 
-              <svg class="spinner" width="12" height="12" style="margin-left:4px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>
-            </span>
-            <span class="tool-desc">SidebarChat.tsx</span>
-          </div>
-        </div>
-      </div>
-      
-    </div>
+.minimal-title {
+	font-size: var(--void-font-size-lg);
+	line-height: var(--void-line-height-tight);
+	letter-spacing: var(--void-letter-spacing-tight);
+	font-weight: 500;
+	color: var(--void-fg);
+	margin: 0;
+}
 
-    <!-- Command Bar (Above Input Area) -->
-    <div class="command-bar">
-      <div class="command-bar-left">
-        <svg width="14" height="14" style="transform: rotate(180deg);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="18 15 12 9 6 15"></polyline>
-        </svg>
-        1件の変更されたファイル
-      </div>
-      <div class="command-bar-right">
-        <div class="action-icons">
-          <button class="icon-btn" title="コピー">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-          </button>
-          <button class="icon-btn" title="すべて拒否">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-          </button>
-          <button class="icon-btn" title="すべて承認">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          </button>
-        </div>
-        <div class="status-indicator">
-          <div class="status-dot yellow"></div>
-          承認待ち
-        </div>
-      </div>
-    </div>
+.minimal-subtitle {
+	font-size: var(--void-font-size-sm);
+	color: var(--void-fg-muted);
+	margin: 0;
+}
 
-    <!-- Chat Input Area -->
-    <div class="input-container">
-      <div class="input-wrapper">
-        <div class="input-inner" contenteditable="true" spellcheck="false" data-empty="true" data-placeholder="指示を入力... (@ で参照)"></div>
-        
-        <div class="input-bottom">
-          <div class="input-controls-left">
-            <div class="model-dropdown">
-              Claude 3.5 Sonnet
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-            </div>
-          </div>
-          
-          <div class="input-controls-right">
-            <button class="attach-btn" title="画像やファイルを添付">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
-              </svg>
-            </button>
-            <button class="send-btn" title="送信">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 19V5"></path>
-                <path d="M5 12l7-7 7 7"></path>
-              </svg>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+.minimal-label {
+	font-size: var(--void-font-size-xs);
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--void-fg-subtle);
+	font-weight: 500;
+}
 
-  </aside>
+.minimal-text {
+	font-size: var(--void-font-size-md);
+	line-height: var(--void-line-height-normal);
+	color: var(--void-fg);
+}
 
-</body>
-</html>
+.minimal-text-muted { color: var(--void-fg-muted); }
+.minimal-text-subtle { color: var(--void-fg-subtle); }
+
+/* ---------- Buttons ---------- */
+
+.minimal-btn {
+	appearance: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--void-space-2);
+	height: 28px;
+	padding: 0 var(--void-space-3);
+	font-size: var(--void-font-size-sm);
+	font-weight: 500;
+	line-height: 1;
+	color: var(--void-fg);
+	background: transparent;
+	border: 1px solid var(--void-border-subtle);
+	border-radius: var(--void-radius-sm);
+	cursor: pointer;
+	transition:
+		background var(--void-duration-fast) var(--void-ease),
+		border-color var(--void-duration-fast) var(--void-ease),
+		color var(--void-duration-fast) var(--void-ease);
+}
+
+.minimal-btn:hover {
+	background: var(--void-bg-hover);
+	border-color: var(--void-border);
+}
+
+.minimal-btn:active {
+	background: var(--void-bg-active);
+}
+
+.minimal-btn:focus-visible {
+	outline: none;
+	box-shadow: var(--void-focus-ring);
+}
+
+.minimal-btn-ghost {
+	border-color: transparent;
+}
+.minimal-btn-ghost:hover {
+	background: var(--void-bg-hover);
+	border-color: transparent;
+}
+
+.minimal-btn-primary {
+	color: var(--vscode-button-foreground);
+	background: var(--vscode-button-background);
+	border-color: transparent;
+}
+.minimal-btn-primary:hover {
+	background: var(--vscode-button-hoverBackground, var(--vscode-button-background));
+}
+
+.minimal-btn-icon {
+	width: 26px;
+	height: 26px;
+	padding: 0;
+	border-radius: var(--void-radius-sm);
+	color: var(--void-fg-muted);
+}
+.minimal-btn-icon:hover { color: var(--void-fg); }
+
+/* ---------- Inputs ---------- */
+
+.minimal-input,
+.minimal-textarea {
+	width: 100%;
+	display: block;
+	font: inherit;
+	font-size: var(--void-font-size-md);
+	color: var(--void-fg);
+	background: transparent;
+	border: 1px solid var(--void-border-subtle);
+	border-radius: var(--void-radius-md);
+	padding: var(--void-space-3);
+	line-height: var(--void-line-height-normal);
+	transition:
+		border-color var(--void-duration-fast) var(--void-ease),
+		background var(--void-duration-fast) var(--void-ease);
+	resize: none;
+}
+
+.minimal-input::placeholder,
+.minimal-textarea::placeholder {
+	color: var(--void-fg-subtle);
+}
+
+.minimal-input:hover,
+.minimal-textarea:hover {
+	border-color: var(--void-border);
+}
+
+.minimal-input:focus,
+.minimal-textarea:focus {
+	outline: none;
+	border-color: var(--void-border-strong);
+	box-shadow: var(--void-focus-ring);
+}
+
+/* ---------- Chat bubbles (Void chat) ---------- */
+
+.minimal-chat-list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--void-space-5);
+	padding: var(--void-space-4);
+}
+
+.minimal-chat-message {
+	display: flex;
+	flex-direction: column;
+	gap: var(--void-space-2);
+}
+
+.minimal-chat-role {
+	font-size: var(--void-font-size-xs);
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--void-fg-subtle);
+	font-weight: 500;
+}
+
+.minimal-chat-bubble {
+	font-size: var(--void-font-size-md);
+	line-height: var(--void-line-height-normal);
+	color: var(--void-fg);
+	padding: 0;
+	background: transparent;
+	border: 0;
+}
+
+.minimal-chat-bubble--assistant {
+	/* 余白で表現する。背景や枠線は付けない。 */
+}
+
+.minimal-chat-bubble--user {
+	padding: var(--void-space-3) var(--void-space-4);
+	background: var(--void-bg-subtle);
+	border: 1px solid var(--void-border-subtle);
+	border-radius: var(--void-radius-lg);
+	align-self: flex-end;
+	max-width: 88%;
+}
+
+/* ---------- Composer (chat input area) ---------- */
+
+.minimal-composer {
+	border-top: 1px solid var(--void-border-subtle);
+	padding: var(--void-space-3) var(--void-space-4);
+	background: var(--void-bg);
+	display: flex;
+	flex-direction: column;
+	gap: var(--void-space-2);
+}
+
+.minimal-composer__field {
+	display: flex;
+	align-items: flex-end;
+	gap: var(--void-space-2);
+	border: 1px solid var(--void-border-subtle);
+	border-radius: var(--void-radius-lg);
+	padding: var(--void-space-2) var(--void-space-3);
+	background: var(--void-bg-subtle);
+	transition: border-color var(--void-duration-fast) var(--void-ease);
+}
+
+.minimal-composer__field:focus-within {
+	border-color: var(--void-border-strong);
+	box-shadow: var(--void-focus-ring);
+}
+
+.minimal-composer__textarea {
+	flex: 1;
+	min-height: 22px;
+	max-height: 200px;
+	border: 0;
+	background: transparent;
+	color: var(--void-fg);
+	font-size: var(--void-font-size-md);
+	line-height: var(--void-line-height-normal);
+	resize: none;
+	outline: none;
+	padding: 0;
+}
+
+.minimal-composer__actions {
+	display: flex;
+	align-items: center;
+	gap: var(--void-space-1);
+}
+
+/* ---------- Sidebar header ---------- */
+
+.minimal-sidebar-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: var(--void-space-3) var(--void-space-4);
+	border-bottom: 1px solid var(--void-border-subtle);
+}
+
+.minimal-sidebar-header__title {
+	font-size: var(--void-font-size-md);
+	font-weight: 500;
+	color: var(--void-fg);
+	letter-spacing: var(--void-letter-spacing-tight);
+}
+
+/* ---------- Empty state ---------- */
+
+.minimal-empty {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: var(--void-space-3);
+	text-align: center;
+	padding: var(--void-space-7) var(--void-space-5);
+	color: var(--void-fg-muted);
+}
+
+.minimal-empty__title {
+	font-size: var(--void-font-size-lg);
+	color: var(--void-fg);
+	font-weight: 500;
+	letter-spacing: var(--void-letter-spacing-tight);
+}
+
+.minimal-empty__hint {
+	font-size: var(--void-font-size-sm);
+	color: var(--void-fg-subtle);
+	max-width: 320px;
+	line-height: var(--void-line-height-normal);
+}
+
+/* ---------- Scrollbar (subtle) ---------- */
+
+.minimal-scroll {
+	scrollbar-width: thin;
+	scrollbar-color: var(--void-border) transparent;
+}
+.minimal-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.minimal-scroll::-webkit-scrollbar-thumb {
+	background: var(--void-border);
+	border-radius: 999px;
+}
+.minimal-scroll::-webkit-scrollbar-thumb:hover { background: var(--void-border-strong); }
+.minimal-scroll::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------- Reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+	.minimal-btn,
+	.minimal-input,
+	.minimal-textarea,
+	.minimal-composer__field {
+		transition: none;
+	}
+}
 ```
 
-ブラウザで開いて確認できるようにします（macOS の `open` コマンド）。
+#### 3-2. 既存 `styles.css` に import を追記（差分のみ）
 
-```bash
-open "/Volumes/T7/Program/Orchestra/.division/DESIGNER.html"
+```css:src/vs/workbench/contrib/void/browser/react/src2/styles.css
+<<<SEARCH
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+===
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Minimal design layer (opt-in via .minimal-* utilities) */
+@import './minimal.css';
+>>>REPLACE
 ```
 
-### 反映したデザイン要点（Modern）
-- **カラーパレット**: スレート＋ホワイト基調、`#f9fafb / #ffffff / #111827` のニュートラルトーン
-- **タイポグラフィ**: Inter 優先、13px ベースで密度高めだが行間 1.5–1.6 で可読性確保
-- **メッセージ階層**: ユーザー発言は白カード（薄い影＋hover で border 強調）、AI は装飾を抑えた地続きテキストで対比
-- **ツール実行表示**: アコーディオン（chevron 90°回転）、開閉時のスライドダウン、`dot-pulse` で思考中の状態を青いグロー表現
-- **コマンドバー**: 入力欄の上に “くっつく” サーフェス（角丸トップのみ、ボーダー連続）でファイル変更ステータスを表示。`yellow` の発光ドットで承認待ちを視覚化
-- **入力欄**: 上下シームレス連結、`focus-within` でリング＋下方向シャドウ、送信ボタンはガラス質グラデーション円形、hover で 1.06 倍スケール
-- **マイクロインタラクション**: ホバーや状態遷移を 150–200ms の cubic-bezier で統一、控えめだが体感のある動き
+> もし `styles.css` に Tailwind ディレクティブが無い構成の場合は、以下の代替差分を使ってください（先頭への単純追記）。
+
+```css:src/vs/workbench/contrib/void/browser/react/src2/styles.css
+<<<SEARCH
+/* styles.css */
+===
+/* styles.css */
+@import './minimal.css';
+>>>REPLACE
+```
+
+#### 3-3. （任意）Sidebar / Chat コンポーネントへの適用例
+
+既存コンポーネントは破壊せず、ラッパー側 className に `minimal-*` を加えるだけで Minimal 化できます。例として Sidebar ルートに対して:
+
+```tsx:src/vs/workbench/contrib/void/browser/react/src2/sidebar/SidebarRoot.example.tsx
+/*
+ * 参考実装：既存の SidebarRoot にこの形で className を当てると Minimal デザインが適用されます。
+ * （既存ファイルは file-searcher 出力を踏まえて SEARCH/REPLACE で差し替えてください）
+ */
+import * as React from 'react';
+
+export const SidebarShellExample: React.FC<React.PropsWithChildren<{ title?: string }>> = ({ title = 'Void', children }) => {
+	return (
+		<div className="minimal-surface minimal-stack" style={{ height: '100%' }}>
+			<header className="minimal-sidebar-header">
+				<span className="minimal-sidebar-header__title">{title}</span>
+				<div className="minimal-row-tight">
+					<button className="minimal-btn minimal-btn-icon" aria-label="New chat">＋</button>
+					<button className="minimal-btn minimal-btn-icon" aria-label="History">⌛</button>
+				</div>
+			</header>
+
+			<main className="minimal-scroll" style={{ flex: 1, overflow: 'auto' }}>
+				{children ?? (
+					<div className="minimal-empty">
+						<div className="minimal-empty__title">Start a conversation</div>
+						<p className="minimal-empty__hint">
+							Ask anything about your codebase. Use ⌘K to focus the composer.
+						</p>
+					</div>
+				)}
+			</main>
+
+			<footer className="minimal-composer">
+				<div className="minimal-composer__field">
+					<textarea
+						className="minimal-composer__textarea"
+						placeholder="Message Void…"
+						rows={1}
+					/>
+					<div className="minimal-composer__actions">
+						<button className="minimal-btn minimal-btn-ghost" type="button">Model</button>
+						<button className="minimal-btn minimal-btn-primary" type="submit">Send</button>
+					</div>
+				</div>
+			</footer>
+		</div>
+	);
+};
+```
+
+### 4. 検証方針
+
+- ビルド: 通常の Void ビルドフロー（`yarn watch` / VS Code build task）でスタイルがバンドルされることを確認
+- 型: `.tsx` 例は参考のため `.example.tsx` 拡張で配置。production 反映時は既存 SidebarChat に className を追記する形で SEARCH/REPLACE してください
+- 視覚確認:
+  - サイドバー上部のヘッダー余白（縦 12px / 横 16px）になっているか
+  - チャット入力ボックスがカード風ではなく**薄い枠線 + 角丸**にとどまっているか
+  - 空状態（empty）でも中央寄せ＋十分な余白があるか
+  - フォーカス時にリングが 1px の subtle 表示になっているか
+  - `prefers-color-scheme: dark` / `light` 両方で `color-mix` が機能するか
+- アクセシビリティ:
+  - `:focus-visible` リング経路を確認
+  - `prefers-reduced-motion` でトランジション無効化
+- レビュア向け注目ポイント:
+  - 既存のテーマトークン（`--vscode-*`）を尊重し、ハードコード色を使っていない
+  - すべて `minimal-*` プレフィックスで opt-in なので既存 UI へ副作用なし
+  - 既存ファイルへの差分は `styles.css` の import 1 行のみ

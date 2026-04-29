@@ -77,7 +77,7 @@ function findSpecificGit(path: string, onValidate: (path: string) => boolean): P
 		const child = cp.spawn(path, ['--version']);
 		child.stdout.on('data', (b: Buffer) => buffers.push(b));
 		child.on('error', cpErrorHandler(e));
-		child.on('close', code => code ? e(new Error(`Not found. Code: ${code}`)) : c({ path, version: parseVersion(Buffer.concat(buffers).toString('utf8').trim()) }));
+		child.on('close', code => code ? e(new Error(`Not found. Code: ${code}`)) : c({ path, version: parseVersion(Buffer.concat(buffers as unknown as Uint8Array[]).toString('utf8').trim()) }));
 	});
 }
 
@@ -226,12 +226,12 @@ async function exec(child: cp.ChildProcess, cancellationToken?: CancellationToke
 		new Promise<Buffer>(c => {
 			const buffers: Buffer[] = [];
 			on(child.stdout!, 'data', (b: Buffer) => buffers.push(b));
-			once(child.stdout!, 'close', () => c(Buffer.concat(buffers)));
+			once(child.stdout!, 'close', () => c(Buffer.concat(buffers as unknown as Uint8Array[])));
 		}),
 		new Promise<string>(c => {
 			const buffers: Buffer[] = [];
 			on(child.stderr!, 'data', (b: Buffer) => buffers.push(b));
-			once(child.stderr!, 'close', () => c(Buffer.concat(buffers).toString('utf8')));
+			once(child.stderr!, 'close', () => c(Buffer.concat(buffers as unknown as Uint8Array[]).toString('utf8')));
 		})
 	]) as Promise<[number, Buffer, string]>;
 

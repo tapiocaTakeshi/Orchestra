@@ -1974,12 +1974,12 @@ export class Repository implements Disposable {
 		return await this.run(Operation.Show, async () => {
 			try {
 				const content = await this.repository.buffer(ref, filePath);
-				return await workspace.decode(content, Uri.file(filePath));
+				return await workspace.decode(content as unknown as Uint8Array, Uri.file(filePath));
 			} catch (err) {
 				if (err.gitErrorCode === GitErrorCodes.WrongCase) {
 					const gitFilePath = await this.repository.getGitFilePath(ref, filePath);
 					const content = await this.repository.buffer(ref, gitFilePath);
-					return await workspace.decode(content, Uri.file(filePath));
+					return await workspace.decode(content as unknown as Uint8Array, Uri.file(filePath));
 				}
 
 				throw err;

@@ -203,7 +203,7 @@ export class GitFileSystemProvider implements FileSystemProvider {
 		this.cache.set(uri.toString(), cacheValue);
 
 		try {
-			return await repository.buffer(sanitizeRef(ref, path, submoduleOf, repository), path);
+			return await repository.buffer(sanitizeRef(ref, path, submoduleOf, repository), path) as unknown as Uint8Array;
 		} catch {
 			// Empty tree
 			if (ref === await repository.getEmptyTree()) {

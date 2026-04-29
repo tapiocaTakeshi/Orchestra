@@ -7,6 +7,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Minimal design theme — シンプルで余白を活かしたデザイン */
+@import './styles/minimal.css';
+
+/* Void Minimal design overrides */
+@import './styles/minimal-theme.css';
+
 & {
 	--void-bg-1: var(--vscode-input-background);
 	--void-bg-1-alt: var(--vscode-badge-background);

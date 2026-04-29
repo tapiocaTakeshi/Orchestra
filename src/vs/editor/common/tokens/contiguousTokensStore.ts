@@ -71,7 +71,7 @@ export class ContiguousTokensStore {
 			const tokens = new Uint32Array(2);
 			tokens[0] = lineTextLength;
 			tokens[1] = getDefaultMetadata(topLevelLanguageId);
-			return tokens.buffer;
+			return tokens.buffer as ArrayBuffer;
 		}
 
 		// Ensure the last token covers the end of the text
@@ -79,7 +79,7 @@ export class ContiguousTokensStore {
 
 		if (tokens.byteOffset === 0 && tokens.byteLength === tokens.buffer.byteLength) {
 			// Store directly the ArrayBuffer pointer to save an object
-			return tokens.buffer;
+			return tokens.buffer as ArrayBuffer;
 		}
 		return tokens;
 	}

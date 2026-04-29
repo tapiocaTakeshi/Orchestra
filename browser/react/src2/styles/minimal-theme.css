@@ -1,0 +1,375 @@
+/* =========================================================
+ * Void Minimal Theme
+ * ---------------------------------------------------------
+ * シンプルで余白を活かしたデザイン。
+ * - VSCode のテーマトークン（--vscode-*）をベースにし、
+ *   独自のハードコードカラーは使用しない
+ * - 装飾（影 / グラデーション / 濃いボーダー）を排し、
+ *   余白・タイポ・1px ボーダーで階層を表現
+ * - 既存 Tailwind / void スタイルの「後段」で読み込み、
+ *   必要箇所だけを上書きする
+ * ========================================================= */
+
+:root,
+.void-scope,
+[data-void-root] {
+	/* ---- Spacing scale (4px grid) ---- */
+	--void-space-1: 4px;
+	--void-space-2: 8px;
+	--void-space-3: 12px;
+	--void-space-4: 16px;
+	--void-space-5: 20px;
+	--void-space-6: 24px;
+	--void-space-8: 32px;
+
+	/* ---- Radius (控えめに統一) ---- */
+	--void-radius-sm: 4px;
+	--void-radius-md: 6px;
+	--void-radius-lg: 8px;
+
+	/* ---- Border ---- */
+	--void-border-subtle: 1px solid var(--vscode-widget-border, var(--vscode-editorWidget-border, transparent));
+	--void-border-strong: 1px solid var(--vscode-focusBorder, var(--vscode-widget-border, transparent));
+
+	/* ---- Surface ---- */
+	--void-surface-0: transparent;
+	--void-surface-1: var(--vscode-sideBar-background, var(--vscode-editor-background));
+	--void-surface-2: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+
+	/* ---- Foreground ---- */
+	--void-fg-default: var(--vscode-foreground);
+	--void-fg-muted: var(--vscode-descriptionForeground);
+	--void-fg-subtle: var(--vscode-disabledForeground, var(--vscode-descriptionForeground));
+
+	/* ---- Hover overlay (色に依存しない 4% / 8%) ---- */
+	--void-hover-bg: color-mix(in srgb, var(--vscode-foreground) 4%, transparent);
+	--void-active-bg: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+
+	/* ---- Typography ---- */
+	--void-font-size-xs: 11px;
+	--void-font-size-sm: 12px;
+	--void-font-size-md: 13px;
+	--void-font-size-lg: 14px;
+	--void-line-height: 1.55;
+	--void-letter-spacing: 0.01em;
+}
+
+/* =========================================================
+ * Layout / container
+ * ========================================================= */
+
+.void-scope,
+.void-sidebar,
+[data-void-root] {
+	background: var(--void-surface-1);
+	color: var(--void-fg-default);
+	font-size: var(--void-font-size-md);
+	line-height: var(--void-line-height);
+	letter-spacing: var(--void-letter-spacing);
+}
+
+/* セクション間に呼吸を入れる */
+.void-sidebar > * + *,
+[data-void-root] > * + * {
+	margin-top: var(--void-space-4);
+}
+
+/* =========================================================
+ * Headings — 太字を抑え、余白で見出しを表現
+ * ========================================================= */
+
+.void-scope h1,
+.void-scope h2,
+.void-scope h3,
+.void-scope .void-title {
+	font-weight: 600;
+	letter-spacing: -0.005em;
+	margin: 0 0 var(--void-space-3) 0;
+}
+
+.void-scope h1,
+.void-scope .void-title-lg { font-size: 16px; }
+.void-scope h2,
+.void-scope .void-title-md { font-size: 14px; }
+.void-scope h3,
+.void-scope .void-title-sm {
+	font-size: var(--void-font-size-sm);
+	color: var(--void-fg-muted);
+	font-weight: 500;
+	text-transform: none; /* ALL CAPS をやめてミニマルに */
+	letter-spacing: 0;
+}
+
+/* =========================================================
+ * Buttons — 角丸控えめ・影なし・余白広め
+ * ========================================================= */
+
+.void-scope button,
+.void-scope .void-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--void-space-2);
+	padding: var(--void-space-2) var(--void-space-3);
+	min-height: 28px;
+	border-radius: var(--void-radius-md);
+	border: var(--void-border-subtle);
+	background: transparent;
+	color: var(--void-fg-default);
+	font-size: var(--void-font-size-sm);
+	font-weight: 500;
+	line-height: 1.2;
+	cursor: pointer;
+	box-shadow: none;
+	transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.void-scope button:hover,
+.void-scope .void-btn:hover {
+	background: var(--void-hover-bg);
+}
+
+.void-scope button:active,
+.void-scope .void-btn:active {
+	background: var(--void-active-bg);
+}
+
+.void-scope button:focus-visible,
+.void-scope .void-btn:focus-visible {
+	outline: none;
+	border-color: var(--vscode-focusBorder);
+}
+
+.void-scope button[disabled],
+.void-scope .void-btn[disabled] {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+/* Primary は塗りで一段だけ強調（影なし） */
+.void-scope .void-btn-primary {
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	border-color: transparent;
+}
+.void-scope .void-btn-primary:hover {
+	background: var(--vscode-button-hoverBackground, var(--vscode-button-background));
+}
+
+/* Ghost / Icon button */
+.void-scope .void-btn-ghost,
+.void-scope .void-icon-btn {
+	border-color: transparent;
+	padding: var(--void-space-1) var(--void-space-2);
+	min-height: 24px;
+	color: var(--void-fg-muted);
+}
+.void-scope .void-btn-ghost:hover,
+.void-scope .void-icon-btn:hover {
+	color: var(--void-fg-default);
+	background: var(--void-hover-bg);
+}
+
+/* =========================================================
+ * Inputs / textarea — 1px ボーダーのみ、影なし
+ * ========================================================= */
+
+.void-scope input[type="text"],
+.void-scope input[type="search"],
+.void-scope input[type="number"],
+.void-scope textarea,
+.void-scope select,
+.void-scope .void-input {
+	width: 100%;
+	padding: var(--void-space-2) var(--void-space-3);
+	border-radius: var(--void-radius-md);
+	border: var(--void-border-subtle);
+	background: var(--void-surface-2);
+	color: var(--void-fg-default);
+	font-size: var(--void-font-size-md);
+	line-height: var(--void-line-height);
+	box-shadow: none;
+	transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.void-scope input:focus,
+.void-scope textarea:focus,
+.void-scope select:focus,
+.void-scope .void-input:focus {
+	outline: none;
+	border-color: var(--vscode-focusBorder);
+}
+
+.void-scope textarea {
+	resize: vertical;
+	min-height: 72px;
+}
+
+/* チャット入力エリアは特に余白を広めに */
+.void-scope .void-chat-input,
+.void-scope [data-void-chat-input] {
+	padding: var(--void-space-3) var(--void-space-4);
+	border-radius: var(--void-radius-lg);
+	border: var(--void-border-subtle);
+	background: var(--void-surface-2);
+}
+
+.void-scope .void-chat-input:focus-within,
+.void-scope [data-void-chat-input]:focus-within {
+	border-color: var(--vscode-focusBorder);
+}
+
+/* =========================================================
+ * Chat messages — バブルではなく余白と細い区切りで表現
+ * ========================================================= */
+
+.void-scope .void-message,
+.void-scope [data-void-message] {
+	padding: var(--void-space-4) var(--void-space-4);
+	border-radius: 0;
+	background: transparent;
+	border: none;
+	border-top: var(--void-border-subtle);
+}
+
+.void-scope .void-message:first-child,
+.void-scope [data-void-message]:first-child {
+	border-top: none;
+}
+
+.void-scope .void-message-role,
+.void-scope [data-void-message-role] {
+	font-size: var(--void-font-size-xs);
+	color: var(--void-fg-muted);
+	font-weight: 500;
+	margin-bottom: var(--void-space-2);
+	letter-spacing: 0;
+	text-transform: none;
+}
+
+.void-scope .void-message-body,
+.void-scope [data-void-message-body] {
+	color: var(--void-fg-default);
+	line-height: 1.6;
+}
+
+.void-scope .void-message-body p { margin: 0 0 var(--void-space-3) 0; }
+.void-scope .void-message-body p:last-child { margin-bottom: 0; }
+
+/* =========================================================
+ * Code blocks — 余計な装飾を削除
+ * ========================================================= */
+
+.void-scope pre,
+.void-scope .void-codeblock {
+	margin: var(--void-space-3) 0;
+	padding: var(--void-space-3) var(--void-space-4);
+	background: var(--vscode-textCodeBlock-background, var(--void-surface-2));
+	border: var(--void-border-subtle);
+	border-radius: var(--void-radius-md);
+	font-family: var(--vscode-editor-font-family, ui-monospace, SFMono-Regular, Menlo, monospace);
+	font-size: var(--void-font-size-sm);
+	line-height: 1.55;
+	overflow-x: auto;
+	box-shadow: none;
+}
+
+.void-scope code {
+	font-family: var(--vscode-editor-font-family, ui-monospace, SFMono-Regular, Menlo, monospace);
+	font-size: 0.95em;
+	padding: 1px 4px;
+	border-radius: var(--void-radius-sm);
+	background: var(--vscode-textCodeBlock-background, var(--void-hover-bg));
+}
+
+.void-scope pre code {
+	padding: 0;
+	background: transparent;
+}
+
+/* =========================================================
+ * Lists / dividers
+ * ========================================================= */
+
+.void-scope hr,
+.void-scope .void-divider {
+	border: none;
+	border-top: var(--void-border-subtle);
+	margin: var(--void-space-4) 0;
+}
+
+.void-scope ul,
+.void-scope ol {
+	padding-left: var(--void-space-5);
+	margin: var(--void-space-2) 0;
+}
+.void-scope li + li { margin-top: var(--void-space-1); }
+
+/* =========================================================
+ * Tabs / pills — 線だけのミニマル表現
+ * ========================================================= */
+
+.void-scope .void-tabs {
+	display: flex;
+	gap: var(--void-space-4);
+	border-bottom: var(--void-border-subtle);
+	padding: 0 var(--void-space-4);
+}
+
+.void-scope .void-tab {
+	padding: var(--void-space-3) 0;
+	font-size: var(--void-font-size-sm);
+	color: var(--void-fg-muted);
+	background: transparent;
+	border: none;
+	border-bottom: 2px solid transparent;
+	border-radius: 0;
+	cursor: pointer;
+	transition: color 120ms ease, border-color 120ms ease;
+}
+
+.void-scope .void-tab:hover { color: var(--void-fg-default); background: transparent; }
+.void-scope .void-tab[aria-selected="true"],
+.void-scope .void-tab.is-active {
+	color: var(--void-fg-default);
+	border-bottom-color: var(--vscode-focusBorder, currentColor);
+}
+
+/* =========================================================
+ * Cards / panels — 影を消し、ボーダーと余白で表現
+ * ========================================================= */
+
+.void-scope .void-card,
+.void-scope .void-panel {
+	padding: var(--void-space-4);
+	border: var(--void-border-subtle);
+	border-radius: var(--void-radius-lg);
+	background: var(--void-surface-1);
+	box-shadow: none;
+}
+
+/* =========================================================
+ * Scrollbar — 細く控えめに
+ * ========================================================= */
+
+.void-scope ::-webkit-scrollbar { width: 8px; height: 8px; }
+.void-scope ::-webkit-scrollbar-thumb {
+	background: color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+	border-radius: 8px;
+}
+.void-scope ::-webkit-scrollbar-thumb:hover {
+	background: color-mix(in srgb, var(--vscode-foreground) 22%, transparent);
+}
+.void-scope ::-webkit-scrollbar-track { background: transparent; }
+
+/* =========================================================
+ * Reduced motion
+ * ========================================================= */
+@media (prefers-reduced-motion: reduce) {
+	.void-scope *,
+	.void-scope *::before,
+	.void-scope *::after {
+		transition: none !important;
+		animation: none !important;
+	}
+}

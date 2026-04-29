@@ -1131,41 +1131,76 @@ const DivisionSettings = () => {
 		divisionProjectService.save({ ...project, agents: updated });
 	};
 
-	// File Search → Coder/Writer → Reviewer ループの最大反復回数（ユーザー設定）
-	const maxReviewIterations = settingsState.globalSettings.maxReviewIterations;
-	const [maxReviewIterationsInput, setMaxReviewIterationsInput] = useState<string>(String(maxReviewIterations ?? 10));
+	// Division API orchestration loop caps（ユーザー設定）
+	const maxBriefGateIterations = settingsState.globalSettings.maxBriefGateIterations;
+	const maxReviewerIterations = settingsState.globalSettings.maxReviewerIterations;
+	const [maxBriefGateIterationsInput, setMaxBriefGateIterationsInput] = useState<string>(String(maxBriefGateIterations ?? 10));
+	const [maxReviewerIterationsInput, setMaxReviewerIterationsInput] = useState<string>(String(maxReviewerIterations ?? 10));
 	useEffect(() => {
-		setMaxReviewIterationsInput(String(settingsState.globalSettings.maxReviewIterations ?? 10));
-	}, [settingsState.globalSettings.maxReviewIterations]);
-	const commitMaxReviewIterations = (raw: string) => {
+		setMaxBriefGateIterationsInput(String(settingsState.globalSettings.maxBriefGateIterations ?? 10));
+	}, [settingsState.globalSettings.maxBriefGateIterations]);
+	useEffect(() => {
+		setMaxReviewerIterationsInput(String(settingsState.globalSettings.maxReviewerIterations ?? 10));
+	}, [settingsState.globalSettings.maxReviewerIterations]);
+	const normalizeLoopCapInput = (raw: string) => {
 		const n = parseInt(raw, 10);
-		const clamped = Number.isFinite(n) && n > 0 ? Math.min(n, 100) : 10;
-		voidSettingsService.setGlobalSetting('maxReviewIterations', clamped);
-		setMaxReviewIterationsInput(String(clamped));
+		return Number.isFinite(n) && n > 0 ? Math.min(n, 100) : 10;
+	};
+	const commitMaxBriefGateIterations = (raw: string) => {
+		const clamped = normalizeLoopCapInput(raw);
+		voidSettingsService.setGlobalSetting('maxBriefGateIterations', clamped);
+		setMaxBriefGateIterationsInput(String(clamped));
+	};
+	const commitMaxReviewerIterations = (raw: string) => {
+		const clamped = normalizeLoopCapInput(raw);
+		voidSettingsService.setGlobalSetting('maxReviewerIterations', clamped);
+		setMaxReviewerIterationsInput(String(clamped));
 	};
 
 	return (
 		<div className="flex flex-col gap-4">
-			{/* Review loop iteration cap */}
-			<div className="flex items-center justify-between gap-4 border border-void-border-2 bg-void-bg-2 rounded-sm px-3 py-2">
-				<div className="flex flex-col">
-					<span className="text-xs text-void-fg-2 font-medium">レビュー最大反復回数</span>
-					<span className="text-[11px] text-void-fg-4">
-						File Search → Coder/Writer → Reviewer のループ上限。Reviewer が合格を出さない場合はこの回数に達した時点で終了します（1〜100）。
-					</span>
+			{/* Orchestration loop iteration caps */}
+			<div className="flex flex-col gap-2 border border-void-border-2 bg-void-bg-2 rounded-sm px-3 py-2">
+				<div className="flex items-center justify-between gap-4">
+					<div className="flex flex-col">
+						<span className="text-xs text-void-fg-2 font-medium">Brief Gate 最大試行回数</span>
+						<span className="text-[11px] text-void-fg-4">
+							Brief Gate が不合格のときの再調査ループ上限。File Search → Leader 進捗確認 → Coder/Writer に戻る回数を制御します（1〜100）。
+						</span>
+					</div>
+					<input
+						type="number"
+						min={1}
+						max={100}
+						step={1}
+						value={maxBriefGateIterationsInput}
+						onChange={(e) => setMaxBriefGateIterationsInput(e.target.value)}
+						onBlur={(e) => commitMaxBriefGateIterations(e.target.value)}
+						onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+						className="w-20 bg-void-bg-1 border border-void-border-3 rounded-sm px-2 py-1 text-xs text-void-fg-1 focus:outline-none focus:border-[#0e70c0]"
+						aria-label="Max brief gate iterations"
+					/>
 				</div>
-				<input
-					type="number"
-					min={1}
-					max={100}
-					step={1}
-					value={maxReviewIterationsInput}
-					onChange={(e) => setMaxReviewIterationsInput(e.target.value)}
-					onBlur={(e) => commitMaxReviewIterations(e.target.value)}
-					onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-					className="w-20 bg-void-bg-1 border border-void-border-3 rounded-sm px-2 py-1 text-xs text-void-fg-1 focus:outline-none focus:border-[#0e70c0]"
-					aria-label="Max review iterations"
-				/>
+				<div className="flex items-center justify-between gap-4">
+					<div className="flex flex-col">
+						<span className="text-xs text-void-fg-2 font-medium">Reviewer 最大試行回数</span>
+						<span className="text-[11px] text-void-fg-4">
+							Reviewer が不合格のときの再調査ループ上限。Todos 再生成ありで File Search → Coder/Writer に戻る回数を制御します（1〜100）。
+						</span>
+					</div>
+					<input
+						type="number"
+						min={1}
+						max={100}
+						step={1}
+						value={maxReviewerIterationsInput}
+						onChange={(e) => setMaxReviewerIterationsInput(e.target.value)}
+						onBlur={(e) => commitMaxReviewerIterations(e.target.value)}
+						onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+						className="w-20 bg-void-bg-1 border border-void-border-3 rounded-sm px-2 py-1 text-xs text-void-fg-1 focus:outline-none focus:border-[#0e70c0]"
+						aria-label="Max reviewer iterations"
+					/>
+				</div>
 			</div>
 
 			{/* agents.json section header with Update All + Supabase Sync buttons */}

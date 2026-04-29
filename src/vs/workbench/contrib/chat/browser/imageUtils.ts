@@ -17,7 +17,7 @@ export async function resizeImage(data: Uint8Array | string): Promise<Uint8Array
 		data = convertStringToUInt8Array(data);
 	}
 
-	const blob = new Blob([data]);
+	const blob = new Blob([data as unknown as BlobPart]);
 	const img = new Image();
 	const url = URL.createObjectURL(blob);
 	img.src = url;

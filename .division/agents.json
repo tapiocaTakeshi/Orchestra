@@ -9,57 +9,57 @@
       "agents": [
         {
           "role": "leader",
-          "provider": "OpenAI",
+          "provider": "openAI",
           "model": "gpt-5.4-mini"
         },
         {
-          "role": "reviewer",
-          "provider": "Anthropic",
+          "role": "review",
+          "provider": "anthropic",
           "model": "claude-sonnet-4-6"
         },
         {
           "role": "planner",
-          "provider": "Google",
+          "provider": "gemini",
           "model": "gemini-3.1-flash-lite-preview"
         },
         {
-          "role": "designer",
-          "provider": "Google",
+          "role": "design",
+          "provider": "gemini",
           "model": "gemini-3.1-pro-preview"
         },
         {
-          "role": "imager",
-          "provider": "Google",
+          "role": "image",
+          "provider": "gemini",
           "model": "gemini-3.1-flash-image-preview"
         },
         {
           "role": "ideaman",
-          "provider": "OpenAI",
+          "provider": "openAI",
           "model": "gpt-5.4-nano"
         },
         {
-          "role": "writer",
-          "provider": "OpenAI",
+          "role": "writing",
+          "provider": "openAI",
           "model": "gpt-5.4"
         },
         {
           "role": "coder",
-          "provider": "Anthropic",
+          "provider": "anthropic",
           "model": "claude-opus-4-7"
         },
         {
-          "role": "file-searcher",
-          "provider": "Anthropic",
+          "role": "filesearch",
+          "provider": "anthropic",
           "model": "claude-sonnet-4-6"
         },
         {
-          "role": "searcher",
-          "provider": "Perplexity",
+          "role": "search",
+          "provider": "perplexity",
           "model": "sonar-pro"
         },
         {
-          "role": "researcher",
-          "provider": "Perplexity",
+          "role": "research",
+          "provider": "perplexity",
           "model": "sonar-deep-research"
         }
       ]

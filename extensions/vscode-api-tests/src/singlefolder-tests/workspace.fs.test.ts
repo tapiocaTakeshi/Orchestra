@@ -60,7 +60,7 @@ suite('vscode API - workspace-fs', () => {
 	test('fs.write/stat/read/delete', async function () {
 
 		const uri = root.with({ path: posix.join(root.path, 'new.file') });
-		await vscode.workspace.fs.writeFile(uri, Buffer.from('HELLO'));
+		await vscode.workspace.fs.writeFile(uri, Buffer.from('HELLO') as unknown as Uint8Array);
 
 		const stat = await vscode.workspace.fs.stat(uri);
 		assert.strictEqual(stat.type, vscode.FileType.File);
@@ -84,7 +84,7 @@ suite('vscode API - workspace-fs', () => {
 		const file = root.with({ path: posix.join(root.path, 'folder/file') });
 
 		await vscode.workspace.fs.createDirectory(folder);
-		await vscode.workspace.fs.writeFile(file, Buffer.from('FOO'));
+		await vscode.workspace.fs.writeFile(file, Buffer.from('FOO') as unknown as Uint8Array);
 
 		await vscode.workspace.fs.stat(folder);
 		await vscode.workspace.fs.stat(file);
@@ -169,7 +169,7 @@ suite('vscode API - workspace-fs', () => {
 		const file = root.with({ path: posix.join(root.path, 'folder/file') });
 
 		await vscode.workspace.fs.createDirectory(folder);
-		await vscode.workspace.fs.writeFile(file, Buffer.from('FOO'));
+		await vscode.workspace.fs.writeFile(file, Buffer.from('FOO') as unknown as Uint8Array);
 
 		const someFolder = root.with({ path: posix.join(root.path, '6b1f9d664a92/a564c52da70a') });
 
@@ -230,7 +230,7 @@ suite('vscode API - workspace-fs', () => {
 		await vscode.workspace.fs.createDirectory(folder); // calling on existing folder is also ok!
 
 		const file = root.with({ path: posix.join(folder.path, 'file.txt') });
-		await vscode.workspace.fs.writeFile(file, Buffer.from('Hello World'));
+		await vscode.workspace.fs.writeFile(file, Buffer.from('Hello World') as unknown as Uint8Array);
 		const folder2 = root.with({ path: posix.join(file.path, 'invalid') });
 		let e;
 		try {
@@ -253,7 +253,7 @@ suite('vscode API - workspace-fs', () => {
 		const folder = root.with({ path: posix.join(root.path, 'other-deeply', 'nested', 'folder') });
 		const file = root.with({ path: posix.join(folder.path, 'file.txt') });
 
-		await vscode.workspace.fs.writeFile(file, Buffer.from('Hello World'));
+		await vscode.workspace.fs.writeFile(file, Buffer.from('Hello World') as unknown as Uint8Array);
 
 		const stat = await vscode.workspace.fs.stat(file);
 		assert.strictEqual(stat.type, vscode.FileType.File);

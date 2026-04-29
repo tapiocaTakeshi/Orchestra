@@ -13,8 +13,90 @@ import { IFileService } from '../../../../platform/files/common/files.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
-import { AgentRole, defaultRoleAssignments, displayInfoOfProviderName, ProviderName, RoleAssignment } from '../common/voidSettingsTypes.js';
+import { AgentRole, defaultRoleAssignments, displayInfoOfProviderName, ProviderName, providerNames, RoleAssignment } from '../common/voidSettingsTypes.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
+
+
+// --- Canonical ID normalizers ---
+// agents.json と Supabase から流入する値は表示名や別名で汚れていることがあるため、
+// 内部 ProviderName / AgentRole に正規化する。
+
+const ALL_AGENT_ROLES: AgentRole[] = [
+	'leader', 'coder', 'planner', 'search', 'research',
+	'design', 'writing', 'ideaman', 'filesearch', 'image', 'review',
+];
+
+const PROVIDER_ALIASES: Record<string, ProviderName> = {
+	'google': 'gemini',
+	'google ai': 'gemini',
+	'googleai': 'gemini',
+	'open ai': 'openAI',
+	'openai': 'openAI',
+	'claude': 'anthropic',
+	'grok': 'xAI',
+	'xai': 'xAI',
+	'azure': 'microsoftAzure',
+	'bedrock': 'awsBedrock',
+	'vertex': 'googleVertex',
+	'lm studio': 'lmStudio',
+	'lmstudio': 'lmStudio',
+	'litellm': 'liteLLM',
+	'vllm': 'vLLM',
+	'openrouter': 'openRouter',
+	'openai-compatible': 'openAICompatible',
+	'openaicompatible': 'openAICompatible',
+	'division api': 'divisionAPI',
+	'divisionapi': 'divisionAPI',
+};
+
+const ROLE_ALIASES: Record<string, AgentRole> = {
+	'reviewer': 'review',
+	'designer': 'design',
+	'imager': 'image',
+	'writer': 'writing',
+	'searcher': 'search',
+	'researcher': 'research',
+	'file-searcher': 'filesearch',
+	'filesearcher': 'filesearch',
+	'file_searcher': 'filesearch',
+	'file search': 'filesearch',
+};
+
+function normalizeProviderName(value: string | undefined | null): ProviderName | null {
+	if (!value) return null;
+	const raw = String(value).trim();
+	if (!raw) return null;
+
+	if ((providerNames as string[]).includes(raw)) return raw as ProviderName;
+
+	const lower = raw.toLowerCase();
+	const ciMatch = providerNames.find(p => p.toLowerCase() === lower);
+	if (ciMatch) return ciMatch;
+
+	for (const p of providerNames) {
+		try {
+			if (displayInfoOfProviderName(p).title.toLowerCase() === lower) return p;
+		} catch { /* ignore */ }
+	}
+
+	if (PROVIDER_ALIASES[lower]) return PROVIDER_ALIASES[lower];
+
+	return null;
+}
+
+function normalizeAgentRole(value: string | undefined | null): AgentRole | null {
+	if (!value) return null;
+	const raw = String(value).trim();
+	if (!raw) return null;
+
+	const lower = raw.toLowerCase();
+	const direct = ALL_AGENT_ROLES.find(r => r.toLowerCase() === lower);
+	if (direct) return direct;
+
+	if (ROLE_ALIASES[lower]) return ROLE_ALIASES[lower];
+
+	return null;
+}
 
 
 // --- Supabase configuration ---
@@ -205,13 +287,35 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 		}
 	}
 
-	private _parseAgents(agents: any): RoleAssignment[] {
-		if (!Array.isArray(agents)) return [...defaultRoleAssignments];
-		return agents.map((a: any) => ({
-			role: a.role as AgentRole,
-			provider: a.provider as ProviderName,
-			model: String(a.model),
-		}));
+	/**
+	 * agents 配列を正規化された RoleAssignment[] に変換する。
+	 * 表示名や別名（例: "OpenAI", "Google", "reviewer", "designer"）を内部 ID に揃える。
+	 * 正規化に失敗した値は元のまま残し、UI/ストアでは扱えるが Supabase 同期で再正規化される。
+	 */
+	private _parseAgents(agents: any): { agents: RoleAssignment[]; changed: boolean } {
+		if (!Array.isArray(agents)) {
+			return { agents: [...defaultRoleAssignments], changed: true };
+		}
+		let changed = false;
+		const result: RoleAssignment[] = agents.map((a: any) => {
+			const rawRole = a?.role;
+			const rawProvider = a?.provider;
+
+			const normRole = normalizeAgentRole(rawRole);
+			const normProvider = normalizeProviderName(rawProvider);
+
+			const role: AgentRole = (normRole ?? rawRole) as AgentRole;
+			const provider: ProviderName = (normProvider ?? rawProvider) as ProviderName;
+
+			if (rawRole !== role || rawProvider !== provider) changed = true;
+
+			return {
+				role,
+				provider,
+				model: String(a?.model ?? ''),
+			};
+		});
+		return { agents: result, changed };
 	}
 
 	private async _readConfig(uri: URI): Promise<void> {
@@ -219,12 +323,18 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 			const content = await this.fileService.readFile(uri);
 			const parsed = JSON.parse(content.value.toString());
 
+			let needsRewrite = false;
+
 			if (Array.isArray(parsed.projects)) {
-				const projects: DivisionProjectConfig[] = parsed.projects.map((p: any) => ({
-					projectId: typeof p.projectId === 'string' ? p.projectId : '',
-					name: p.name || 'Division Project',
-					agents: this._parseAgents(p.agents),
-				}));
+				const projects: DivisionProjectConfig[] = parsed.projects.map((p: any) => {
+					const parsedAgents = this._parseAgents(p.agents);
+					if (parsedAgents.changed) needsRewrite = true;
+					return {
+						projectId: typeof p.projectId === 'string' ? p.projectId : '',
+						name: p.name || 'Division Project',
+						agents: parsedAgents.agents,
+					};
+				});
 				if (projects.length === 0) {
 					const def = defaultDivisionProjectConfig();
 					projects.push(def);
@@ -236,13 +346,19 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 				} else {
 					this._activeProjectIds = [projects[0].projectId];
 				}
+
+				// 表示名/別名を canonical ID に書き戻す（ディスクのクリーンアップ）
+				if (needsRewrite) {
+					await this._persistToDisk();
+				}
 			}
 			// Legacy format: { name, projectId, agents }
 			else if (parsed.name || parsed.agents) {
+				const parsedAgents = this._parseAgents(parsed.agents);
 				const legacyProject: DivisionProjectConfig = {
 					projectId: typeof parsed.projectId === 'string' ? parsed.projectId : '',
 					name: parsed.name || 'Division Project',
-					agents: this._parseAgents(parsed.agents),
+					agents: parsedAgents.agents,
 				};
 				this._projects = [legacyProject];
 				this._activeProjectIds = [legacyProject.projectId];
@@ -535,7 +651,8 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 				'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
 			};
 
-			// Build Role ID→slug and Provider ID→name maps
+			// Role / Provider テーブルから ID → canonical slug/name へのマップを構築する。
+			// displayName は表示用なので使わない。常に slug / name（内部識別子）を優先する。
 			const roleIdToSlug = new Map<string, string>();
 			const providerIdToName = new Map<string, string>();
 
@@ -548,7 +665,7 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 				if (rolesRes.ok) {
 					const roles: Array<{ id: string; slug?: string; name?: string }> = await rolesRes.json();
 					for (const r of roles) {
-						roleIdToSlug.set(r.id, r.slug || r.name || r.id);
+						roleIdToSlug.set(r.id, r.slug || r.id);
 					}
 					console.log(`[DivisionProjectService] Fetched ${roles.length} roles from Supabase`);
 				} else {
@@ -558,7 +675,7 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 				if (providersRes.ok) {
 					const providers: Array<{ id: string; name?: string; displayName?: string }> = await providersRes.json();
 					for (const p of providers) {
-						providerIdToName.set(p.id, p.displayName || p.name || p.id);
+						providerIdToName.set(p.id, p.name || p.id);
 					}
 					console.log(`[DivisionProjectService] Fetched ${providers.length} providers from Supabase`);
 				} else {
@@ -608,27 +725,29 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 						model = cfg.model || '';
 					} catch { /* ignore */ }
 
-					// Resolve role: embedded relation → map lookup → raw ID
-					let role = a.roleId;
-					if (a.Role && (a.Role.slug || a.Role.name)) {
-						role = a.Role.slug || a.Role.name || a.Role.id;
+					// Resolve role: 埋め込みリレーションの slug → ルックアップマップ → raw roleId の順で探索する。
+					// displayName 用の `name` は使わない（内部識別子と乖離するため）。
+					let roleRaw = a.roleId;
+					if (a.Role && a.Role.slug) {
+						roleRaw = a.Role.slug;
 					} else if (roleIdToSlug.has(a.roleId)) {
-						role = roleIdToSlug.get(a.roleId)!;
+						roleRaw = roleIdToSlug.get(a.roleId)!;
 					}
 
-					// Resolve provider: embedded relation (displayName > name) → map lookup → raw ID
-					let provider = a.providerId;
-					if (a.Provider && (a.Provider.displayName || a.Provider.name)) {
-						provider = a.Provider.displayName || a.Provider.name || a.Provider.id;
+					// Resolve provider: 埋め込みリレーションの name（内部識別子） → ルックアップマップ → raw providerId。
+					// displayName は人間向けの表示文字列なので絶対に採用しない。
+					let providerRaw = a.providerId;
+					if (a.Provider && a.Provider.name) {
+						providerRaw = a.Provider.name;
 					} else if (providerIdToName.has(a.providerId)) {
-						provider = providerIdToName.get(a.providerId)!;
+						providerRaw = providerIdToName.get(a.providerId)!;
 					}
 
-					return {
-						role: role as AgentRole,
-						provider: provider as ProviderName,
-						model,
-					};
+					// 別名・表示名で汚れていた場合に備えて最後に正規化する。
+					const role = (normalizeAgentRole(roleRaw) ?? roleRaw) as AgentRole;
+					const provider = (normalizeProviderName(providerRaw) ?? providerRaw) as ProviderName;
+
+					return { role, provider, model };
 				});
 
 				const updatedProject: DivisionProjectConfig = {
@@ -670,7 +789,7 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 			const updatedProject: DivisionProjectConfig = {
 				...project,
 				name: typeof data.name === 'string' ? data.name : project.name,
-				agents: Array.isArray(data.agents) ? this._parseAgents(data.agents) : project.agents,
+				agents: Array.isArray(data.agents) ? this._parseAgents(data.agents).agents : project.agents,
 			};
 
 			await this.save(updatedProject);

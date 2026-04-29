@@ -275,7 +275,7 @@ export class ChatAttachmentsContentPart extends Disposable {
 
 	// Helper function to create and replace image
 	private async createImageElements(buffer: ArrayBuffer | Uint8Array, widget: HTMLElement, hoverElement: HTMLElement) {
-		const blob = new Blob([buffer], { type: 'image/png' });
+		const blob = new Blob([buffer as unknown as BlobPart], { type: 'image/png' });
 		const url = URL.createObjectURL(blob);
 		const img = dom.$('img.chat-attached-context-image', { src: url, alt: '' });
 		const pillImg = dom.$('img.chat-attached-context-pill-image', { src: url, alt: '' });

@@ -29,7 +29,7 @@ import { AgentRole, ChatMode, displayInfoOfProviderName, contextTags, contextTag
 import { ICommandService } from '../../../../../../../platform/commands/common/commands.js';
 import { WarningBox } from '../void-settings-tsx/WarningBox.js';
 import { getModelCapabilities, getIsReasoningEnabledState } from '../../../../common/modelCapabilities.js';
-import { AlertTriangle, File, Ban, Check, ChevronDown, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text, Image as ImageIcon, Paperclip, Palette, Blocks } from 'lucide-react';
+import { AlertTriangle, File, Ban, Check, ChevronDown, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text, Image as ImageIcon, Paperclip, Palette, Blocks, SendHorizontal } from 'lucide-react';
 import { ChatMessage, CheckpointEntry, StagingSelectionItem, ToolMessage } from '../../../../common/chatThreadServiceTypes.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, ToolName, LintErrorItem, ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsServiceTypes.js';
 import { CopyButton, EditToolAcceptRejectButtonsHTML, IconShell1, JumpToFileButton, JumpToTerminalButton, StatusIndicator, StatusIndicatorForApplyButton, useApplyStreamState, useEditToolStreamState } from '../markdown/ApplyBlockHoverButtons.js';
@@ -2052,6 +2052,155 @@ const DivisionOrchestrationComponent = ({ response, chatMessageLocation }: { res
 	);
 };
 
+const looksLikeAssistantQuestion = (content: string): boolean => {
+	const normalized = content.trim();
+	if (!normalized) return false;
+	const lastLine = normalized.split('\n').map(line => line.trim()).filter(Boolean).at(-1) ?? normalized;
+	return /[?？]\s*$/.test(lastLine)
+		|| /(どちら|どれ|どの|できますか|しますか|でしょうか|ですか|くださいか|選んで|教えて|確認してください)[。.!！\s]*$/.test(lastLine);
+}
+
+type AssistantTodoItem = {
+	text: string;
+	done: boolean;
+}
+
+const extractAssistantTodos = (content: string): AssistantTodoItem[] => {
+	const lines = content.split('\n');
+	const todos: AssistantTodoItem[] = [];
+	let inTodoSection = false;
+
+	for (const rawLine of lines) {
+		const line = rawLine.trim();
+		if (!line) continue;
+
+		const headingText = line.replace(/^#{1,6}\s*/, '').replace(/[:：]\s*$/, '').trim();
+		if (/^(to[\s-]?do|todos|todo list|やること|タスク|実行項目|作業項目|次にやること)$/i.test(headingText)) {
+			inTodoSection = true;
+			continue;
+		}
+
+		if (inTodoSection && /^#{1,6}\s+/.test(line) && !/todo|to do|やること|タスク|実行項目|作業項目/i.test(line)) {
+			inTodoSection = false;
+		}
+
+		const checkboxMatch = line.match(/^[-*]\s+\[([ xX])\]\s+(.+)$/);
+		const numberedMatch = line.match(/^\d+[.)]\s+(.+)$/);
+		const bulletMatch = line.match(/^[-*]\s+(.+)$/);
+
+		if (checkboxMatch) {
+			todos.push({ done: checkboxMatch[1].toLowerCase() === 'x', text: checkboxMatch[2].trim() });
+		}
+		else if (inTodoSection && numberedMatch) {
+			todos.push({ done: false, text: numberedMatch[1].trim() });
+		}
+		else if (inTodoSection && bulletMatch) {
+			todos.push({ done: false, text: bulletMatch[1].trim() });
+		}
+
+		if (todos.length >= 12) break;
+	}
+
+	return todos.filter(todo => todo.text && !/^判定[:：]/.test(todo.text));
+}
+
+const AssistantTodoCard = ({ todos }: { todos: AssistantTodoItem[] }) => {
+	if (todos.length === 0) return null;
+	const doneCount = todos.filter(todo => todo.done).length;
+
+	return <div className="my-2 rounded-xl border border-void-border-2 bg-void-bg-2/80 px-3 py-2 shadow-sm">
+		<div className="mb-2 flex items-center justify-between gap-2">
+			<div className="flex items-center gap-2 text-[12px] font-medium text-void-fg-2">
+				<span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-void-bg-3 text-void-fg-2">
+					<Check size={13} />
+				</span>
+				<span>To Do</span>
+			</div>
+			<span className="text-[11px] text-void-fg-4">{doneCount}/{todos.length}</span>
+		</div>
+		<div className="flex flex-col gap-1.5">
+			{todos.map((todo, i) => (
+				<div key={`${todo.text}-${i}`} className="flex items-start gap-2 rounded-lg bg-void-bg-1/60 px-2 py-1.5">
+					<span className={`mt-0.5 inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border ${
+						todo.done ? 'border-void-fg-3 bg-void-bg-3 text-void-fg-2' : 'border-void-border-2 text-transparent'
+					}`}>
+						<Check size={11} />
+					</span>
+					<span className={`text-[12px] leading-relaxed ${todo.done ? 'text-void-fg-4 line-through' : 'text-void-fg-2'}`}>
+						{todo.text}
+					</span>
+				</div>
+			))}
+		</div>
+	</div>
+}
+
+const AssistantQuestionReply = ({ threadId }: { threadId: string }) => {
+	const accessor = useAccessor()
+	const chatThreadsService = accessor.get('IChatThreadService')
+	const [answer, setAnswer] = useState('')
+	const [isSending, setIsSending] = useState(false)
+
+	const quickReplies = ['このまま進めて', 'はい', 'いいえ', '詳しく説明して']
+
+	const submitAnswer = useCallback(async (answerText?: string) => {
+		const text = (answerText ?? answer).trim()
+		if (!text || isSending) return
+		setIsSending(true)
+		try {
+			await chatThreadsService.addUserMessageAndStreamResponse({ userMessage: text, threadId })
+			setAnswer('')
+		} catch (e) {
+			console.error('Error while answering assistant question:', e)
+		} finally {
+			setIsSending(false)
+		}
+	}, [answer, chatThreadsService, isSending, threadId])
+
+	const onKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
+		if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+			e.preventDefault()
+			submitAnswer()
+		}
+	}, [submitAnswer])
+
+	return <div className="mt-2 mb-1 rounded-xl border border-void-border-2 bg-void-bg-2/80 px-3 py-2 shadow-sm">
+		<div className="mb-2 flex items-center gap-2 text-[12px] text-void-fg-3">
+			<span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-void-bg-3 text-void-fg-2">?</span>
+			<span>質問に回答</span>
+		</div>
+		<textarea
+			value={answer}
+			onChange={e => setAnswer(e.target.value)}
+			onKeyDown={onKeyDown}
+			placeholder="回答を入力..."
+			className="min-h-[72px] w-full resize-y rounded-lg border border-void-border-2 bg-void-bg-1 px-3 py-2 text-[13px] text-void-fg-1 outline-none placeholder:text-void-fg-4 focus:border-void-ring-color"
+		/>
+		<div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+			<div className="flex flex-wrap gap-1.5">
+				{quickReplies.map(reply => (
+					<button
+						key={reply}
+						onClick={() => submitAnswer(reply)}
+						disabled={isSending}
+						className="rounded-full border border-void-border-2 px-2.5 py-1 text-[12px] text-void-fg-3 hover:bg-void-bg-3 hover:text-void-fg-1 disabled:opacity-50"
+					>
+						{reply}
+					</button>
+				))}
+			</div>
+			<button
+				onClick={() => submitAnswer()}
+				disabled={!answer.trim() || isSending}
+				className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--vscode-button-background)] px-3 py-1.5 text-[12px] font-medium text-[var(--vscode-button-foreground)] hover:bg-[var(--vscode-button-hoverBackground)] disabled:cursor-not-allowed disabled:opacity-50"
+			>
+				<SendHorizontal size={13} />
+				送信
+			</button>
+		</div>
+	</div>
+}
+
 
 
 const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted, messageIdx }: { chatMessage: ChatMessage & { role: 'assistant' }, isCheckpointGhost: boolean, messageIdx: number, isCommitted: boolean }) => {
@@ -2064,6 +2213,7 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 	const hasReasoning = !!reasoningStr
 	const isDoneReasoning = !!chatMessage.displayContent
 	const thread = chatThreadsService.getCurrentThread()
+	const streamState = useChatThreadsStreamState(thread.id)
 
 	// Get model info from current settings
 	const modelSelection = settingsState.modelSelectionOfFeature['Chat']
@@ -2105,10 +2255,18 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 			return null;
 		}
 	}, [chatMessage.displayContent]);
+	const todoItems = useMemo(() => extractAssistantTodos(chatMessage.displayContent || ''), [chatMessage.displayContent]);
 
 
 	const isEmpty = !chatMessage.displayContent && !chatMessage.reasoning
 	if (isEmpty) return null
+
+	const hasLaterVisibleMessage = thread.messages.slice(messageIdx + 1).some(m => m.role !== 'checkpoint')
+	const shouldShowQuestionReply = isCommitted
+		&& !isCheckpointGhost
+		&& !streamState?.isRunning
+		&& !hasLaterVisibleMessage
+		&& looksLikeAssistantQuestion(chatMessage.displayContent || '')
 
 	return <div className="py-1">
 		{/* reasoning token */}
@@ -2137,6 +2295,7 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 				<DivisionOrchestrationComponent response={divisionResponse} chatMessageLocation={chatMessageLocation} />
 			) : (
 				<div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
+					<AssistantTodoCard todos={todoItems} />
 					<ProseWrapper>
 						<ChatMarkdownRender
 							string={chatMessage.displayContent || ''}
@@ -2148,6 +2307,7 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 				</div>
 			)
 		)}
+		{shouldShowQuestionReply && <AssistantQuestionReply threadId={thread.id} />}
 	</div>
 
 }

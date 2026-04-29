@@ -529,23 +529,32 @@ export type GlobalSettings = {
 	divisionProjectId: string;
 	divisionApiKey: string;
 	isLoggedIn: boolean;
-	// File Search → Coder/Writer → Reviewer ループの最大反復回数（Division API orchestration 用）。
+	// Brief Gate Not OK → File Search → Leader 進捗確認 → Coder/Writer ループの最大試行回数。
 	// 1 以上の整数。0 / 負数は 1 に丸められる。
-	maxReviewIterations: number;
+	maxBriefGateIterations: number;
+	// Reviewer Not OK → File Search → Leader(Todos) → Coder/Writer ループの最大試行回数。
+	// 1 以上の整数。0 / 負数は 1 に丸められる。
+	maxReviewerIterations: number;
+	// Legacy setting kept for persisted settings migration/fallback.
+	maxReviewIterations?: number;
 }
 
 // Default role assignments for Division API
 // Ordered to match the Orchestra flow:
-// User → Leader → (ideaman, search, research) → (design, image, planner) → filesearch → (coder or writing) → review → User
+// User → Leader → (ideaman, search, research, filesearch) → (design, image, planner) → (coder or writing) → review → User
+//
+// filesearch はワークスペース全体の事前読み込みを担うため、search / research と同じ
+// ファースト・ウェーブ（情報収集ウェーブ）に同居させる。Coder 直前にも fallback 実行が
+// 残してあるが、通常はここで取得済みの FILE-SEARCH.md を使い回す。
 export const defaultRoleAssignments: RoleAssignment[] = [
 	{ role: 'leader', provider: 'openAI', model: 'gpt-5.2' },
 	{ role: 'ideaman', provider: 'openAI', model: 'gpt-5.2' },
 	{ role: 'search', provider: 'openAI', model: 'gpt-5.2-instant' },
 	{ role: 'research', provider: 'perplexity', model: 'sonar-pro' },
+	{ role: 'filesearch', provider: 'openAI', model: 'gpt-5.2-instant' },
 	{ role: 'design', provider: 'gemini', model: 'gemini-3-flash' },
 	{ role: 'image', provider: 'gemini', model: 'gemini-3-flash' },
 	{ role: 'planner', provider: 'gemini', model: 'gemini-3-pro' },
-	{ role: 'filesearch', provider: 'openAI', model: 'gpt-5.2-instant' },
 	{ role: 'coder', provider: 'anthropic', model: 'claude-opus-4-6' },
 	{ role: 'writing', provider: 'openAI', model: 'gpt-5.2' },
 	{ role: 'review', provider: 'anthropic', model: 'claude-opus-4-6' },
@@ -569,6 +578,8 @@ export const defaultGlobalSettings: GlobalSettings = {
 	divisionProjectId: '',
 	divisionApiKey: '',
 	isLoggedIn: false,
+	maxBriefGateIterations: 10,
+	maxReviewerIterations: 10,
 	maxReviewIterations: 10,
 }
 

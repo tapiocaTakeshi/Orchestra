@@ -195,8 +195,8 @@ suite('vscode API - workspace', () => {
 		const uriONE = vscode.Uri.parse('this-fs:/ONE'); // same resource, different uri
 		const uriTWO = vscode.Uri.parse('this-fs:/TWO');
 
-		fs.writeFile(uriOne, Buffer.from('one'), { create: true, overwrite: true });
-		fs.writeFile(uriTwo, Buffer.from('two'), { create: true, overwrite: true });
+		fs.writeFile(uriOne, Buffer.from('one') as unknown as Uint8Array, { create: true, overwrite: true });
+		fs.writeFile(uriTwo, Buffer.from('two') as unknown as Uint8Array, { create: true, overwrite: true });
 
 		// lower case (actual case) comes first
 		const docOne = await vscode.workspace.openTextDocument(uriOne);
@@ -1259,7 +1259,7 @@ suite('vscode API - workspace', () => {
 		const data = Buffer.from('Hello Binary Files');
 
 		const ws = new vscode.WorkspaceEdit();
-		ws.createFile(fileUri, { contents: data, ignoreIfExists: false, overwrite: false });
+		ws.createFile(fileUri, { contents: data as unknown as Uint8Array, ignoreIfExists: false, overwrite: false });
 
 		const success = await vscode.workspace.applyEdit(ws);
 		assert.ok(success);
@@ -1396,8 +1396,8 @@ suite('vscode API - workspace', () => {
 		const uri = root.with({ path: posix.join(root.path, 'file.txt') });
 
 		// without setting
-		assert.strictEqual(await vscode.workspace.decode(Buffer.from('Hello World'), uri), 'Hello World');
-		assert.strictEqual(await vscode.workspace.decode(Buffer.from('Hellö Wörld'), uri), 'Hellö Wörld');
+		assert.strictEqual(await vscode.workspace.decode(Buffer.from('Hello World') as unknown as Uint8Array, uri), 'Hello World');
+		assert.strictEqual(await vscode.workspace.decode(Buffer.from('Hellö Wörld') as unknown as Uint8Array, uri), 'Hellö Wörld');
 		assert.strictEqual(await vscode.workspace.decode(new Uint8Array([0xEF, 0xBB, 0xBF, 72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100]), uri), 'Hello World'); // UTF-8 with BOM
 		assert.strictEqual(await vscode.workspace.decode(new Uint8Array([0xFE, 0xFF, 0, 72, 0, 101, 0, 108, 0, 108, 0, 111, 0, 32, 0, 87, 0, 111, 0, 114, 0, 108, 0, 100]), uri), 'Hello World'); // UTF-16 BE with BOM
 		assert.strictEqual(await vscode.workspace.decode(new Uint8Array([0xFF, 0xFE, 72, 0, 101, 0, 108, 0, 108, 0, 111, 0, 32, 0, 87, 0, 111, 0, 114, 0, 108, 0, 100, 0]), uri), 'Hello World'); // UTF-16 LE with BOM
@@ -1422,7 +1422,7 @@ suite('vscode API - workspace', () => {
 
 		// with encoding provided
 		assert.strictEqual(await vscode.workspace.decode(new Uint8Array([72, 101, 108, 108, 0xF6, 32, 87, 0xF6, 114, 108, 100]), uri, { encoding: 'windows1252' }), 'Hellö Wörld');
-		assert.strictEqual(await vscode.workspace.decode(Buffer.from('Hello World'), uri, { encoding: 'foobar123' }), 'Hello World');
+		assert.strictEqual(await vscode.workspace.decode(Buffer.from('Hello World') as unknown as Uint8Array, uri, { encoding: 'foobar123' }), 'Hello World');
 
 		// binary
 		let err;

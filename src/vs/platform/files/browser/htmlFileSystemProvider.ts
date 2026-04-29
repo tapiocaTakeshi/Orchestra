@@ -221,7 +221,7 @@ export class HTMLFileSystemProvider extends Disposable implements IFileSystemPro
 
 			// Write to target overwriting any existing contents
 			const writable = await handle.createWritable();
-			await writable.write(content);
+			await writable.write(content as unknown as FileSystemWriteChunkType);
 			await writable.close();
 		} catch (error) {
 			throw this.toFileSystemProviderError(error);

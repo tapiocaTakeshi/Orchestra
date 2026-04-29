@@ -61,6 +61,8 @@ type SendChatParams_Internal = InternalCommonMessageParams & {
 	divisionRoleAssignments?: RoleAssignment[];
 	divisionProjectId?: string;
 	divisionApiKey?: string;
+	divisionMaxBriefGateIterations?: number;
+	divisionMaxReviewerIterations?: number;
 	divisionMaxReviewIterations?: number;
 	workspaceFolderPath?: string;
 }
@@ -1438,13 +1440,17 @@ const TEXT_EXTENSIONS = new Set([
 	'.c', '.cpp', '.h', '.hpp', '.cs', '.php', '.sh', '.bash', '.zsh',
 	'.yml', '.yaml', '.toml', '.xml', '.txt', '.env', '.sql', '.graphql',
 ]);
-const MAX_SEARCH_FILES = 30;
+// file-search はワークスペース全体の事前読み込みを担う。後続エージェント
+// （search / research / design / planner / coder ...）に「とにかく全部見せる」
+// ことが価値なので、ファイル数とトータル文字数の予算を大きく確保する。
+// 走査範囲は `.divisionignore` と IGNORED_DIRS / TEXT_EXTENSIONS で絞り、
+// ノイズ的なバイナリ・ビルド成果物は除外する。
+const MAX_SEARCH_FILES = 400;
 const MAX_FILE_SIZE_BYTES = 100 * 1024; // 100KB
-const MAX_TOTAL_OUTPUT_CHARS = 60000;
+const MAX_TOTAL_OUTPUT_CHARS = 180000;
 
-// レビューサイクル（Coder → Reviewer → 不合格ならもう一度）の最大反復回数のデフォルト値。
-// 実際の値はユーザー設定 (`globalSettings.maxReviewIterations`) から
-// sendChat 呼び出し時に `divisionMaxReviewIterations` として渡される。
+// Division API orchestration の各ループ最大試行回数のデフォルト値。
+// 実際の値はユーザー設定から sendChat 呼び出し時に渡される。
 // ユーザーは AbortController 経由でいつでも中断できる。
 const DEFAULT_MAX_REVIEW_ITERATIONS = 10;
 
@@ -1705,8 +1711,9 @@ const BASELINE_FILE_CANDIDATES: string[] = [
 ];
 
 // ディレクトリツリー（上位 maxEntries 件）を整形して返す。
-// キーワード一致が 0 件でも、AI にワークスペース全体の構成を見せるため。
-const buildDirectoryTree = (files: string[], workspaceFolderPath: string, maxEntries = 300): string => {
+// 「すべてのフォルダやファイルを後続エージェントに見せる」のが file-search の責務なので、
+// 既定値はかなり大きめにし、本当に巨大なワークスペースのときだけ省略する。
+const buildDirectoryTree = (files: string[], workspaceFolderPath: string, maxEntries = 2000): string => {
 	const sorted = files
 		.map(f => path.relative(workspaceFolderPath, f).replace(/\\/g, '/'))
 		.sort();
@@ -1726,22 +1733,8 @@ const searchWorkspaceFiles = (
 	walkDirectory(workspaceFolderPath, workspaceFolderPath, allFiles, 5000, ignoreMatcher);
 
 	const keywords = extractKeywordsFromQuery(query);
-	const scored: { file: string; score: number }[] = [];
 
-	for (const file of allFiles) {
-		const relative = path.relative(workspaceFolderPath, file).toLowerCase();
-		let score = 0;
-		for (const kw of keywords) {
-			if (relative.includes(kw)) {
-				score += relative.endsWith('/' + kw) || relative === kw ? 10 : 3;
-			}
-			const base = path.basename(relative);
-			if (base.includes(kw)) score += 2;
-		}
-		if (score > 0) scored.push({ file, score });
-	}
-
-	// Baseline: always prepend important manifests / entry points that actually exist.
+	// 1) Baseline: 主要マニフェスト / エントリーポイントを最優先で含める
 	const baselineFiles: string[] = [];
 	const seen = new Set<string>();
 	for (const candidate of BASELINE_FILE_CANDIDATES) {
@@ -1757,18 +1750,38 @@ const searchWorkspaceFiles = (
 		} catch (_e) { /* not present */ }
 	}
 
-	// Keyword/content-matched files
-	const pickedFiles: string[] = [];
-	if (scored.length > 0) {
-		scored.sort((a, b) => b.score - a.score);
-		for (const s of scored.slice(0, MAX_SEARCH_FILES)) {
-			if (!seen.has(s.file)) { pickedFiles.push(s.file); seen.add(s.file); }
+	// 2) Keyword score: パスとファイル名にキーワードが含まれるものを高優先度に
+	const scored: { file: string; score: number }[] = [];
+	for (const file of allFiles) {
+		if (seen.has(file)) continue;
+		const relative = path.relative(workspaceFolderPath, file).toLowerCase();
+		let score = 0;
+		for (const kw of keywords) {
+			if (relative.includes(kw)) {
+				score += relative.endsWith('/' + kw) || relative === kw ? 10 : 3;
+			}
+			const base = path.basename(relative);
+			if (base.includes(kw)) score += 2;
 		}
-	} else if (keywords.length > 0) {
-		// Fallback: scan file contents for keywords (limited number of files)
+		// 浅いパス（ルート直下に近いほど）に小さなボーナスを付与し、重要なエントリ
+		// （src/index.ts, app/page.tsx など）が後段の「全件取り込み」でも先頭側に来やすくする。
+		const depth = relative.split('/').length;
+		score += Math.max(0, 5 - depth);
+		scored.push({ file, score });
+	}
+	scored.sort((a, b) => {
+		if (b.score !== a.score) return b.score - a.score;
+		// 同点なら相対パスのアルファベット順で安定化（再現性確保）
+		return path.relative(workspaceFolderPath, a.file).localeCompare(path.relative(workspaceFolderPath, b.file));
+	});
+
+	// 3) Keyword content-fallback: パスにキーワードが無くても本文にヒットしたファイルを救済
+	const keywordHitFiles: string[] = [];
+	if (keywords.length > 0) {
 		const contentScored: { file: string; score: number }[] = [];
 		const candidatesForContent = allFiles.slice(0, 500);
 		for (const file of candidatesForContent) {
+			if (seen.has(file)) continue;
 			try {
 				const stat = fs.statSync(file);
 				if (stat.size > MAX_FILE_SIZE_BYTES) continue;
@@ -1782,20 +1795,33 @@ const searchWorkspaceFiles = (
 			} catch (_e) { /* skip */ }
 		}
 		contentScored.sort((a, b) => b.score - a.score);
-		for (const s of contentScored.slice(0, MAX_SEARCH_FILES)) {
-			if (!seen.has(s.file)) { pickedFiles.push(s.file); seen.add(s.file); }
-		}
+		for (const s of contentScored) keywordHitFiles.push(s.file);
 	}
 
-	// Assemble final order: baseline first, then keyword matches.
-	const orderedFiles = [...baselineFiles, ...pickedFiles];
+	// 4) Final ordering: baseline → score 上位 → 残り全件（パス順）
+	//    ユーザー要求「すべてのフォルダやファイルを読み込んで」に応えるため、
+	//    キーワード未一致のファイルも予算に余裕がある限り取り込む。
+	const orderedFiles: string[] = [];
+	const enqueue = (f: string) => {
+		if (seen.has(f)) return;
+		orderedFiles.push(f);
+		seen.add(f);
+	};
+	for (const f of baselineFiles) enqueue(f);
+	for (const s of scored) enqueue(s.file);
+	for (const f of keywordHitFiles) enqueue(f);
 
 	const matches: { relativePath: string; content: string }[] = [];
 	let totalChars = 0;
+	let truncatedDueToBudget = 0;
 	for (const file of orderedFiles) {
+		if (matches.length >= MAX_SEARCH_FILES) break;
 		try {
 			const stat = fs.statSync(file);
-			if (stat.size > MAX_FILE_SIZE_BYTES) continue;
+			if (stat.size > MAX_FILE_SIZE_BYTES) {
+				truncatedDueToBudget++;
+				continue;
+			}
 			const content = fs.readFileSync(file, 'utf-8');
 			const relativePath = path.relative(workspaceFolderPath, file);
 			if (totalChars + content.length > MAX_TOTAL_OUTPUT_CHARS) {
@@ -1804,6 +1830,7 @@ const searchWorkspaceFiles = (
 					matches.push({ relativePath, content: content.slice(0, remaining) + '\n... (truncated)' });
 					totalChars = MAX_TOTAL_OUTPUT_CHARS;
 				}
+				truncatedDueToBudget++;
 				break;
 			}
 			matches.push({ relativePath, content });
@@ -1813,16 +1840,20 @@ const searchWorkspaceFiles = (
 
 	const tree = buildDirectoryTree(allFiles, workspaceFolderPath);
 
-	const kwLabel = keywords.length > 0 ? keywords.join(', ') : '(なし)';
+	const kwLabel = keywords.length > 0 ? keywords.join(', ') : '(全件モード)';
+	const includedRatio = allFiles.length > 0
+		? Math.round((matches.length / allFiles.length) * 100)
+		: 0;
 	const summary = matches.length === 0
-		? `ワークスペースを走査しましたが、キーワード「${kwLabel}」に一致するファイルが見つかりませんでした。`
+		? `ワークスペースを走査しましたがテキスト系ファイルが見つかりませんでした。`
 			+ `以下のディレクトリツリーを参考に、編集対象ファイルを判断してください。`
-		: `${matches.length} 件のファイルを読み込みました（キーワード: ${kwLabel}、合計 ${totalChars.toLocaleString()} 文字）。`
-			+ ` ベースラインとして主要マニフェスト/エントリを常に含めています。`;
+		: `${matches.length} / ${allFiles.length} 件 (${includedRatio}%) のファイルを本文込みで読み込みました`
+			+ `（キーワード: ${kwLabel}、合計 ${totalChars.toLocaleString()} 文字）。`
+			+ ` 主要マニフェスト・エントリポイントを最優先で取り込み、残り予算で全フォルダを順次走査しています。`;
 
 	console.log(`[FileSearch] workspace=${workspaceFolderPath} scanned=${allFiles.length} `
 		+ `keywords=[${keywords.join(',')}] baseline=${baselineFiles.length} `
-		+ `keywordMatched=${pickedFiles.length} included=${matches.length} chars=${totalChars}`);
+		+ `included=${matches.length} chars=${totalChars} skipped=${truncatedDueToBudget}`);
 
 	return { matches, summary, tree };
 };
@@ -2353,6 +2384,8 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		separateSystemMessage,
 		divisionProjectId: divisionProjectIdParam,
 		divisionApiKey,
+		divisionMaxBriefGateIterations,
+		divisionMaxReviewerIterations,
 		divisionMaxReviewIterations,
 		workspaceFolderPath,
 		modelName: selectedModel,
@@ -2361,13 +2394,18 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		takePendingInjection,
 	} = params
 
-	// ユーザー設定のレビュー最大反復回数を解釈（安全側に clamp）
-	const maxReviewIterations: number = (() => {
-		const raw = divisionMaxReviewIterations;
+	const normalizeIterationCap = (raw: number | undefined): number => {
 		if (typeof raw !== 'number' || !Number.isFinite(raw)) return DEFAULT_MAX_REVIEW_ITERATIONS;
 		if (raw < 1) return 1;
 		return Math.floor(raw);
-	})();
+	};
+	const legacyMaxReviewIterations = normalizeIterationCap(divisionMaxReviewIterations);
+	const maxBriefGateIterations = divisionMaxBriefGateIterations === undefined
+		? legacyMaxReviewIterations
+		: normalizeIterationCap(divisionMaxBriefGateIterations);
+	const maxReviewerIterations = divisionMaxReviewerIterations === undefined
+		? legacyMaxReviewIterations
+		: normalizeIterationCap(divisionMaxReviewerIterations);
 
 	try {
 		const endpointBase = settingsOfProvider.divisionAPI.endpoint || 'https://api.division.he-ro.jp';
@@ -2589,8 +2627,11 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		const normalizeFlowRole = (r: string): string => (r || '').toLowerCase().replace(/[_\s-]+/g, '');
 		const isFirstWaveRole = (r: string): boolean => {
 			const role = normalizeFlowRole(r);
+			// file-search はワークスペース全体の事前読み込みを担うため、
+			// search / research と同じ「情報収集ウェーブ」に属させる。
 			return role === 'ideaman' || role === 'idea' || role === 'search' || role === 'searcher'
-				|| role === 'research' || role === 'researcher' || role === 'deepresearch' || role === 'deepresearcher';
+				|| role === 'research' || role === 'researcher' || role === 'deepresearch' || role === 'deepresearcher'
+				|| role === 'filesearch' || role === 'filesearcher';
 		};
 		const isSecondWaveRole = (r: string): boolean => {
 			const role = normalizeFlowRole(r);
@@ -2601,12 +2642,18 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			if (isSecondWaveRole(task.role)) return 1;
 			return 2;
 		};
+		// 同じウェーブ内でも file-search はワークスペース読み込みを先に済ませる方が
+		// 後続 (Search / Research / Ideaman) にコンテキストを供給できるため、先頭に寄せる。
+		const intraStageRank = (task: DivisionTask): number => isFileSearchRole(task.role || '') ? 0 : 1;
 		const orderedTaskStages = (tasks: DivisionTask[]): DivisionTask[] =>
 			tasks
 				.map((task, index) => ({ task, index }))
 				.sort((a, b) => {
 					const rankDiff = flowStageRank(a.task) - flowStageRank(b.task);
-					return rankDiff !== 0 ? rankDiff : a.index - b.index;
+					if (rankDiff !== 0) return rankDiff;
+					const intraDiff = intraStageRank(a.task) - intraStageRank(b.task);
+					if (intraDiff !== 0) return intraDiff;
+					return a.index - b.index;
 				})
 				.map(({ task }) => task);
 
@@ -2661,15 +2708,33 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 
 			const { sessionId: cycleSessionId, tasks: rawTasks, finalRole: cycleFinalRole } = taskResult;
 
-			// Filter out server-side Coder/Reviewer/File Search tasks. Coder/Reviewer run
-			// locally, and File Search must run after Leader produces Todos from all
-			// Markdown outputs, so it can search with the final task list.
+			// Filter out server-side Coder/Reviewer tasks (these run locally).
+			// File Search はワークスペース全体の事前読み込み担当として、search / research と
+			// 同じファースト・ウェーブで動かす（runFinalFlow 直前ではなく、情報収集と同時に実行）。
 			const EXCLUDED_SERVER_ROLES = new Set(['coder', 'coding', 'review', 'reviewer']);
-			const serverTasks = rawTasks.filter(t => !EXCLUDED_SERVER_ROLES.has((t.role || '').toLowerCase()) && !isFileSearchRole(t.role || ''));
+			const serverTasks = rawTasks.filter(t => !EXCLUDED_SERVER_ROLES.has((t.role || '').toLowerCase()));
+
+			// Leader が file-search タスクを生成しなかった場合でも、ファースト・ウェーブで
+			// 必ずワークスペース全件読み込みを行うため、合成タスクを自動挿入する。
+			// 先頭に挿入することで、後続の Search / Research / Ideaman が
+			// 「実際のコードベース内容」を assistant 履歴経由で参照できる。
+			const hasFileSearch = serverTasks.some(t => isFileSearchRole(t.role || ''));
+			if (!hasFileSearch && workspaceFolderPath) {
+				serverTasks.unshift({
+					taskId: 'auto-filesearch',
+					role: 'filesearch',
+					title: 'ワークスペース全件読み込み',
+					description: 'すべてのフォルダ・ファイルを走査し、後続エージェントにコンテキストとして共有する',
+				});
+			}
+
 			const tasks = orderedTaskStages(serverTasks);
-			const droppedCount = rawTasks.length - tasks.length;
+			const droppedCount = rawTasks.filter(t => EXCLUDED_SERVER_ROLES.has((t.role || '').toLowerCase())).length;
 			if (droppedCount > 0) {
-				console.log(`[DivisionAPI] Repositioned/skipped ${droppedCount} server-side Coder/Reviewer/File Search task(s) — Coder/Reviewer run locally; File Search runs after Leader Todos.`);
+				console.log(`[DivisionAPI] Skipped ${droppedCount} server-side Coder/Reviewer task(s) — they run locally.`);
+			}
+			if (!hasFileSearch && workspaceFolderPath) {
+				console.log(`[DivisionAPI] Auto-injected filesearch task into the first wave for workspace prefetch.`);
 			}
 
 			// Display task decomposition
@@ -2714,14 +2779,18 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				const role = (task.role || '').toLowerCase();
 
 				if (isFileSearchRole(role)) {
+					// ファースト・ウェーブで動かすため、先行 Markdown は通常空。
+					// ランキング用のキーワード抽出はユーザーの元入力を主軸にし、
+					// Leader が付けたタスク詳細・先行出力（あれば）も補助で連結する。
 					const priorMarkdown = buildPriorContextHistory()
 						.map(entry => entry.content)
 						.join('\n\n');
 					const query = [
-						task.input || task.title || cycleInput,
+						cycleInput,
+						task.input || task.title || '',
 						priorMarkdown ? `\n\n## 先行 Markdown コンテキスト\n${priorMarkdown}` : '',
-					].join('\n');
-					appendText(`### ${i + 1}. file-search — ${task.title || ''}\n\nワークスペースのファイルを読み込み中...\n\n`);
+					].filter(Boolean).join('\n');
+					appendText(`### ${i + 1}. file-search — ${task.title || ''}\n\nすべてのフォルダ・ファイルを走査して読み込み中...\n\n`);
 					try {
 						const rawOutput = workspaceFolderPath
 							? buildFileSearchOutput(workspaceFolderPath, query)
@@ -2904,10 +2973,33 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			let sessionIdArg = initialSessionId;
 			let flowOutputs = initialFlowOutputs;
 			let iteration = 0;
+			let briefGateAttempts = 0;
+			let reviewerAttempts = 0;
 			let lastReviewFeedback = '';
+			let lastBriefGateFeedback = '';
+			let retrySource: 'brief_gate' | 'reviewer' | null = null;
 
-			const runFileSearchBeforeCoder = (reason: string): void => {
+			const runFileSearchBeforeCoder = async (reason: string, feedback: string = '', regenerateTodos: boolean = false): Promise<void> => {
 				if (!workspaceFolderPath) return;
+
+				// Reviewer Not OK で Todo を再生成するとき、image / planner / designer / ideaman /
+				// search / research などの中間 MD はユーザーが手動編集している可能性があるため、
+				// 必ずディスク (.division/*.md) から読み込み直してから File Search のクエリと
+				// Leader Todo 再生成プロンプトに反映する。
+				if (regenerateTodos) {
+					const reloadable = flowOutputs.filter(o => !isFileSearchRole(o.role) && !!o.mdFileName);
+					const others = flowOutputs.filter(o => isFileSearchRole(o.role) || !o.mdFileName);
+					const reloaded = loadFlowMdFiles(workspaceFolderPath, reloadable);
+					const reloadedTargets = reloaded
+						.map(o => o.mdFileName)
+						.filter((v, i, a) => v && a.indexOf(v) === i)
+						.join(', ');
+					if (reloadedTargets) {
+						appendText(`\n📥 中間 Markdown を再読込 (${reloadedTargets})\n`);
+					}
+					flowOutputs = [...reloaded, ...others];
+				}
+
 				const priorMarkdown = flowOutputs
 					.filter(o => !isFileSearchRole(o.role))
 					.map(o => `## ${o.role} の出力 (${o.mdFileName})\n\n${o.mdContent}`)
@@ -2916,7 +3008,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					`## ユーザーの要求`,
 					currentInput,
 					priorMarkdown ? `\n\n## 先行 Markdown コンテキスト\n${priorMarkdown}` : '',
-					lastReviewFeedback.trim() ? `\n\n## 前回レビュー指摘\n${lastReviewFeedback}` : '',
+					feedback.trim() ? `\n\n## 再調査要求\n${feedback}` : '',
 				].join('\n');
 
 				appendText(`\n---\n\n**File Search** (${reason}) 開始...\n\n`);
@@ -2947,17 +3039,138 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				} catch (e: any) {
 					appendText(`⚠️ File Search エラー: ${e?.message || String(e)}\n\n`);
 				}
+
+				if (!regenerateTodos) return;
+
+				appendText(`\n---\n\n**Leader** (Todos 再生成) 開始...\n\n`);
+				const todoContext = flowOutputs
+					.map(o => `## ${o.role} の出力 (${o.mdFileName})\n\n${truncateForContext(o.mdContent, MAX_CHARS_PER_CONTEXT)}`)
+					.join('\n\n');
+				const todoPrompt = [
+					`## ユーザーの要求`,
+					currentInput,
+					``,
+					`## Reviewer Not OK による再調査結果`,
+					feedback || '(レビュー指摘なし)',
+					``,
+					`## 現在の Markdown / File Search コンテキスト`,
+					todoContext,
+					``,
+					`## 指示`,
+					`Reviewer の不合格理由を踏まえて、File Search と Coder/Writer に渡す Todo を再生成してください。`,
+					`出力は Markdown の Todo リストにし、調査対象・編集対象・実装順・検証観点を具体化してください。`,
+				].join('\n');
+
+				const todoResult = await callDivisionTaskExecute(
+					endpointBase, projectId, 'leader', todoPrompt, controller.signal,
+					(chunk) => appendText(chunk),
+					divisionApiKey, sessionIdArg,
+					withStackContext(chatHistory),
+					workspaceFolderPath,
+				);
+
+				const todoOutput = todoResult.error
+					? `(leader todo regeneration failed: ${todoResult.error})`
+					: (todoResult.output || '');
+				if (todoResult.error) appendText(`\n⚠️ Leader Todo 再生成エラー: ${todoResult.error}\n\n`);
+
+				const mdPath = saveFlowResultAsMd(workspaceFolderPath, 'leader', 'Reviewer feedback todos', todoOutput, sessionIdArg || 'leader');
+				const leaderOutput: FlowOutputEntry = {
+					role: 'leader',
+					mdFileName: FLOW_ROLE_TO_FILENAME['leader'],
+					mdFilePath: mdPath || path.join(workspaceFolderPath, '.division', FLOW_ROLE_TO_FILENAME['leader']),
+					mdContent: todoOutput,
+				};
+				const existingIdx = flowOutputs.findIndex(o => (o.role || '').toLowerCase() === 'leader');
+				if (existingIdx >= 0) {
+					flowOutputs = [
+						...flowOutputs.slice(0, existingIdx),
+						leaderOutput,
+						...flowOutputs.slice(existingIdx + 1),
+					];
+				} else {
+					flowOutputs = [...flowOutputs, leaderOutput];
+				}
 			};
 
-			// Loop: File Search → Coder/Writer → Reviewer → （不合格ならレビュー指摘を持って File Search に戻る）...
-			// Leader へは戻らず、図の Not OK ループは File Search から再開する。
+			const runLeaderProgressCheck = async (reason: string, feedback: string): Promise<void> => {
+				if (!workspaceFolderPath) return;
+
+				appendText(`\n---\n\n**Leader** (進捗確認: ${reason}) 開始...\n\n`);
+				const progressContext = flowOutputs
+					.map(o => `## ${o.role} の出力 (${o.mdFileName})\n\n${truncateForContext(o.mdContent, MAX_CHARS_PER_CONTEXT)}`)
+					.join('\n\n');
+				const progressPrompt = [
+					`## ユーザーの要求`,
+					currentInput,
+					``,
+					`## Brief Gate からの再調査要求`,
+					feedback || '(再調査要求なし)',
+					``,
+					`## File Search 後の現在コンテキスト`,
+					progressContext,
+					``,
+					`## 指示`,
+					`これは Brief Gate ループ中の進捗確認です。Todo は再生成しないでください。`,
+					`再調査結果が Brief Gate の懸念に対して十分か、Coder/Writer が次に反映すべき不足点が何かを短く整理してください。`,
+					`出力は Markdown で、以下を含めてください:`,
+					`- 進捗サマリー`,
+					`- まだ不足している情報`,
+					`- Coder/Writer への反映指示`,
+				].join('\n');
+
+				const progressResult = await callDivisionTaskExecute(
+					endpointBase, projectId, 'leader', progressPrompt, controller.signal,
+					(chunk) => appendText(chunk),
+					divisionApiKey, sessionIdArg,
+					withStackContext(chatHistory),
+					workspaceFolderPath,
+				);
+
+				const progressOutput = progressResult.error
+					? `(leader progress check failed: ${progressResult.error})`
+					: (progressResult.output || '');
+				if (progressResult.error) appendText(`\n⚠️ Leader 進捗確認エラー: ${progressResult.error}\n\n`);
+
+				const mdPath = saveFlowResultAsMd(workspaceFolderPath, 'leader', 'Brief Gate progress check', progressOutput, sessionIdArg || 'leader', true);
+				const progressEntry: FlowOutputEntry = {
+					role: 'leader-progress',
+					mdFileName: FLOW_ROLE_TO_FILENAME['leader'],
+					mdFilePath: mdPath || path.join(workspaceFolderPath, '.division', FLOW_ROLE_TO_FILENAME['leader']),
+					mdContent: progressOutput,
+				};
+				flowOutputs = [
+					...flowOutputs.filter(o => o.role !== 'leader-progress'),
+					progressEntry,
+				];
+			};
+
+			// Loop:
+			// Coder/Writer → Brief Gate(Leader) → Reviewer.
+			// Brief Gate Not OK: Reviewer をスキップし、File Search 再調査（Todos 再生成なし）→ Leader 進捗確認へ戻る。
+			// Reviewer Not OK: File Search 再調査（Todos 再生成あり）へ戻る。
 			while (true) {
 				// Coder（synthesis）実行前の割り込み取り込み
 				drainInjections();
 				if (iteration > 0) {
-					runFileSearchBeforeCoder(`レビュー指摘反映 ${iteration + 1} 回目`);
-				} else if (!flowOutputs.some(o => isFileSearchRole(o.role))) {
-					runFileSearchBeforeCoder('Coder/Writer 前の既存ワークスペース確認');
+					const feedback = retrySource === 'reviewer' ? lastReviewFeedback : lastBriefGateFeedback;
+					const regenerateTodos = retrySource === 'reviewer';
+					await runFileSearchBeforeCoder(
+						retrySource === 'reviewer'
+							? `Reviewer Not OK 反映 ${iteration + 1} 回目（Todos 再生成あり）`
+							: `Brief Gate Not OK 反映 ${iteration + 1} 回目（Todos 再生成なし）`,
+						feedback,
+						regenerateTodos,
+					);
+					if (retrySource === 'brief_gate') {
+						await runLeaderProgressCheck(`Brief Gate ループ ${iteration + 1} 回目`, feedback);
+					}
+				} else {
+					// 新フロー: ファースト・ウェーブの File Search は「ワークスペース全体の事前読み込み」、
+					// ここで走る 2 回目の File Search は「Leader Todos に絞った狙い撃ち再走査」を担当する。
+					// Leader が確定させた Todo / 計画が手元にある状態で Coder/Writer 前にもう一度
+					// 走らせることで、Coder/Writer が実装直前に最新かつ目的特化のファイル文脈を得られる。
+					await runFileSearchBeforeCoder('Leader Todos に基づく Coder/Writer 直前の再走査');
 				}
 				// Build synthesis context from current flowOutputs
 				const synthesisContextHistory: { role: 'user' | 'assistant'; content: string }[] = [];
@@ -2985,6 +3198,12 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					synthesisContextHistory.push({
 						role: 'assistant',
 						content: `## 前回レビューでの指摘（必ず反映してください）\n\n${truncateForContext(lastReviewFeedback, MAX_CHARS_PER_CONTEXT)}`,
+					});
+				}
+				if (iteration > 0 && lastBriefGateFeedback.trim()) {
+					synthesisContextHistory.push({
+						role: 'assistant',
+						content: `## 前回 Brief Gate での再調査要求（必ず反映してください）\n\n${truncateForContext(lastBriefGateFeedback, MAX_CHARS_PER_CONTEXT)}`,
 					});
 				}
 
@@ -3084,17 +3303,93 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					}
 				}
 
+				// Brief Gate: Coder/Writer の成果物がレビュー可能な brief を満たしているかを Leader が判定する。
+				// Not OK の場合は Reviewer をスキップし、再調査要求を出して File Search に戻る。
+				drainInjections();
+
+				briefGateAttempts++;
+				const briefGateAttemptLabel = briefGateAttempts === 1 ? '' : ` (${briefGateAttempts} 回目)`;
+				appendText(`\n---\n\n**Brief Gate** (leader)${briefGateAttemptLabel} 開始...\n\n`);
+				const gateContextHistory: { role: 'user' | 'assistant'; content: string }[] = [];
+				if (synthesisOutput && synthesisOutput.trim()) {
+					gateContextHistory.push({
+						role: 'assistant',
+						content: `## ${finalRoleArg} が生成した成果物\n\n${truncateForContext(synthesisOutput, MAX_CHARS_PER_CONTEXT)}`,
+					});
+				}
+				if (flowOutputs.length > 0) {
+					gateContextHistory.push({
+						role: 'assistant',
+						content: flowOutputs
+							.map(o => `## ${o.role} の出力 (${o.mdFileName})\n\n${truncateForContext(o.mdContent, MAX_CHARS_PER_CONTEXT)}`)
+							.join('\n\n'),
+					});
+				}
+
+				const briefGatePrompt = [
+					`以下の Coder/Writer 成果物が、ユーザー要求と Leader Todo / File Search の要点を満たしており、Reviewer に渡す準備ができているかを判定してください。`,
+					``,
+					`## ユーザーの要求`,
+					currentInput,
+					``,
+					`## 指示`,
+					`直前の assistant メッセージに ${finalRoleArg} の成果物と Markdown コンテキストが添付されています。`,
+					`Reviewer に回す前の brief gate として、要件漏れ・調査不足・実装不足・明らかな方向違いがないかを確認してください。`,
+					``,
+					`### 出力形式（厳守）`,
+					`1 行目に必ず以下のどちらかのマーカーを出力してください:`,
+					`- **OK** の場合: ` + '`判定: 合格`',
+					`- **Not OK** の場合: ` + '`判定: 不合格`',
+					``,
+					`不合格の場合は、Reviewer はスキップされます。File Search に渡す「再調査要求」を具体的に書いてください。Todo は再生成しません。`,
+				].join('\n');
+
+				const briefGateResult = await callDivisionTaskExecute(
+					endpointBase, projectId, 'leader', briefGatePrompt, controller.signal,
+					(chunk) => appendText(chunk),
+					divisionApiKey, sessionIdArg,
+					withStackContext(gateContextHistory),
+					workspaceFolderPath,
+				);
+
+				if (briefGateResult.error) {
+					appendText(`\n❌ **Brief Gate Error:** ${briefGateResult.error}\n`);
+					break;
+				}
+
+				const briefGateOutput = briefGateResult.output || '';
+				lastBriefGateFeedback = briefGateOutput;
+				if (briefGateOutput && workspaceFolderPath && FLOW_ROLE_TO_FILENAME['leader']) {
+					saveFlowResultAsMd(workspaceFolderPath, 'leader', 'Brief Gate', briefGateOutput, sessionIdArg, true);
+				}
+
+				const briefGatePassed = judgeReviewPass(briefGateOutput);
+				if (!briefGatePassed) {
+					if (briefGateAttempts >= maxBriefGateIterations) {
+						appendText(`\n\n⚠️ **Brief Gate 最大試行回数 (${maxBriefGateIterations}) に到達** — Brief Gate 合格に至らなかったためここで終了します。最新の再調査要求は LEADER.md を参照してください。\n`);
+						break;
+					}
+
+					iteration++;
+					retrySource = 'brief_gate';
+					drainInjections();
+					appendText(`\n\n🔄 **Brief Gate 不合格** — Reviewer をスキップし、File Search 再調査（Todos 再生成なし）に戻ります（${iteration + 1} 回目）...\n\n`);
+					continue;
+				}
+
 				// Reviewer 実行前の割り込み取り込み
 				drainInjections();
 
 				// Review step
-				appendText(`\n---\n\n**レビューステップ** (reviewer)${iterLabel} 開始...\n\n`);
+				reviewerAttempts++;
+				const reviewerAttemptLabel = reviewerAttempts === 1 ? '' : ` (${reviewerAttempts} 回目)`;
+				appendText(`\n---\n\n**レビューステップ** (reviewer)${reviewerAttemptLabel} 開始...\n\n`);
 
-				const reviewContextHistory: { role: 'user' | 'assistant'; content: string }[] = [];
-				if (synthesisOutput && synthesisOutput.trim()) {
+				const reviewContextHistory: { role: 'user' | 'assistant'; content: string }[] = [...gateContextHistory];
+				if (briefGateOutput.trim()) {
 					reviewContextHistory.push({
 						role: 'assistant',
-						content: `## ${finalRoleArg} が生成した成果物\n\n${truncateForContext(synthesisOutput, MAX_CHARS_PER_CONTEXT)}`,
+						content: `## Brief Gate 判定\n\n${truncateForContext(briefGateOutput, MAX_CHARS_PER_CONTEXT)}`,
 					});
 				}
 
@@ -3136,22 +3431,23 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 
 				const passed = judgeReviewPass(reviewOutput);
 				if (passed) {
-					appendText(`\n\n✅ **レビュー合格** (${iteration + 1} 回目で合格) — 完了しました。\n`);
+					appendText(`\n\n✅ **レビュー合格** (${reviewerAttempts} 回目で合格) — 完了しました。\n`);
 					break;
 				}
 
-				if (iteration >= maxReviewIterations - 1) {
-					appendText(`\n\n⚠️ **最大反復回数 (${maxReviewIterations}) に到達** — レビュー合格に至らなかったためここで終了します。最新のレビュー指摘は REVIEW.md を参照してください。\n`);
+				if (reviewerAttempts >= maxReviewerIterations) {
+					appendText(`\n\n⚠️ **Reviewer 最大試行回数 (${maxReviewerIterations}) に到達** — レビュー合格に至らなかったためここで終了します。最新のレビュー指摘は REVIEW.md を参照してください。\n`);
 					break;
 				}
 
-				// Failed → File Search に戻り、最新レビュー指摘を踏まえてから Coder/Writer を再実行
+				// Failed → Reviewer 指摘では Todo も再生成してから File Search / Coder に戻る
 				iteration++;
+				retrySource = 'reviewer';
 				// 次 Coder iteration 前の割り込み取り込み
 				drainInjections();
-				appendText(`\n\n🔄 **レビュー不合格** — File Search に戻り、指摘を踏まえて Coder/Writer を再実行します（${iteration + 1} 回目）...\n\n`);
+				appendText(`\n\n🔄 **レビュー不合格** — File Search 再調査（Todos 再生成あり）に戻り、Coder/Writer を再実行します（${iteration + 1} 回目）...\n\n`);
 				// finalRoleArg / sessionIdArg / flowOutputs はそのまま流用。
-				// lastReviewFeedback は次ループ冒頭で synthesisContextHistory に積まれる。
+				// lastReviewFeedback は次ループ冒頭で synthesisContextHistory に積まれ、Leader Todo も再生成される。
 			}
 
 			if (workspaceFolderPath) clearOrchestrationState(workspaceFolderPath);

@@ -1,388 +1,435 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Commit Message Design Proposal</title>
-    <style>
-        :root {
-            /* Colors */
-            --bg-page: #f1f5f9;
-            --bg-surface: #ffffff;
-            --bg-card: #f8fafc;
-            --border: #e2e8f0;
-            --text-main: #0f172a;
-            --text-muted: #64748b;
-            --primary: #3b82f6;
-            --primary-bg: #eff6ff;
-            --success: #10b981;
-            --danger: #ef4444;
-            
-            /* Terminal Colors */
-            --term-bg: #0f172a;
-            --term-header: #1e293b;
-            --term-text: #e2e8f0;
-            --term-green: #22c55e;
-            --term-blue: #60a5fa;
-            --term-muted: #94a3b8;
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Void UI - Minimal Design</title>
+  <style>
+    :root {
+      /* Color Palette: Minimal & Clean */
+      --bg-primary: #ffffff;
+      --bg-secondary: #f9fafb;
+      --bg-tertiary: #f3f4f6;
+      --text-main: #111827;
+      --text-muted: #6b7280;
+      --border-color: #e5e7eb;
+      --accent-color: #000000;
+      --accent-hover: #374151;
+      --user-msg-bg: #f3f4f6;
+      --focus-ring: rgba(0, 0, 0, 0.08);
+      
+      /* Typography */
+      --font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-size-base: 14px;
+      --font-size-sm: 12px;
+      --font-size-lg: 16px;
+      
+      /* Spacing */
+      --spacing-xs: 4px;
+      --spacing-sm: 8px;
+      --spacing-md: 16px;
+      --spacing-lg: 24px;
+      --spacing-xl: 32px;
+      
+      /* Border Radius */
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+    }
 
-            /* Typography */
-            --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
+    body {
+      font-family: var(--font-family);
+      font-size: var(--font-size-base);
+      color: var(--text-main);
+      background-color: var(--bg-secondary);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
 
-        body {
-            font-family: var(--font-sans);
-            background-color: var(--bg-page);
-            color: var(--text-main);
-            line-height: 1.6;
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 2rem;
-        }
+    /* Main Container representing the extension panel */
+    .panel-container {
+      width: 420px;
+      height: 85vh;
+      max-height: 800px;
+      background-color: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+      overflow: hidden;
+    }
 
-        .app-container {
-            width: 100%;
-            max-width: 840px;
-            background: var(--bg-surface);
-            border-radius: 16px;
-            box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.05), 0 8px 10px -6px rgb(0 0 0 / 0.01);
-            overflow: hidden;
-            border: 1px solid var(--border);
-            animation: fadeIn 0.5s ease-out;
-        }
+    /* Header */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--spacing-md) var(--spacing-lg);
+      border-bottom: 1px solid var(--border-color);
+      background-color: var(--bg-primary);
+    }
 
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
+    .header-title {
+      font-size: var(--font-size-lg);
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
 
-        .header {
-            padding: 1.75rem 2rem;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            background: var(--bg-surface);
-        }
+    .icon-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 6px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
 
-        .header-title h1 {
-            font-size: 1.25rem;
-            font-weight: 700;
-            letter-spacing: -0.025em;
-            color: var(--text-main);
-            margin-bottom: 0.25rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
+    .icon-btn:hover {
+      background-color: var(--bg-tertiary);
+      color: var(--text-main);
+    }
 
-        .header-title p {
-            font-size: 0.875rem;
-            color: var(--text-muted);
-        }
+    .icon-btn svg {
+      width: 18px;
+      height: 18px;
+    }
 
-        .branch-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.375rem;
-            font-family: var(--font-mono);
-            font-size: 0.75rem;
-            font-weight: 500;
-            color: var(--text-main);
-            background: var(--bg-page);
-            padding: 0.375rem 0.75rem;
-            border-radius: 9999px;
-            border: 1px solid var(--border);
-        }
+    /* Chat Area */
+    .chat-scroll-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: var(--spacing-lg);
+      display: flex;
+      flex-direction: column;
+      gap: var(--spacing-lg);
+    }
 
-        .content {
-            padding: 2rem;
-            display: flex;
-            flex-direction: column;
-            gap: 2.5rem;
-        }
+    .chat-scroll-area::-webkit-scrollbar {
+      width: 6px;
+    }
+    .chat-scroll-area::-webkit-scrollbar-thumb {
+      background-color: var(--border-color);
+      border-radius: 10px;
+    }
 
-        .section {
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-        }
+    /* Message Layout */
+    .message {
+      display: flex;
+      flex-direction: column;
+      max-width: 85%;
+      animation: fadeIn 0.3s ease forwards;
+    }
 
-        .section-header {
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: var(--text-muted);
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
+    .message.user {
+      align-self: flex-end;
+    }
 
-        .section-header::after {
-            content: "";
-            flex: 1;
-            height: 1px;
-            background: var(--border);
-        }
+    .message.ai {
+      align-self: flex-start;
+      width: 100%;
+      max-width: 100%;
+    }
 
-        /* Diff Stat Styling */
-        .diff-stat {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.75rem;
-            font-family: var(--font-mono);
-            font-size: 0.8125rem;
-            color: var(--text-main);
-            background: var(--bg-card);
-            padding: 0.75rem 1rem;
-            border-radius: 8px;
-            border: 1px solid var(--border);
-            width: max-content;
-        }
+    .message-header {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-sm);
+      margin-bottom: var(--spacing-sm);
+      font-size: var(--font-size-sm);
+      color: var(--text-muted);
+      font-weight: 500;
+    }
 
-        .diff-stat .file-name {
-            font-weight: 500;
-        }
+    .avatar {
+      width: 22px;
+      height: 22px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 600;
+    }
 
-        .diff-stat .stats {
-            display: flex;
-            gap: 0.5rem;
-            font-size: 0.75rem;
-        }
+    .avatar-ai {
+      background-color: var(--accent-color);
+      color: white;
+    }
 
-        .stat-add { color: var(--success); font-weight: 600; }
-        .stat-rm { color: var(--danger); font-weight: 600; }
+    .message-content {
+      line-height: 1.6;
+    }
 
-        /* Structure Grid */
-        .grid-cards {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 1rem;
-        }
+    .user .message-content {
+      background-color: var(--user-msg-bg);
+      padding: 12px 16px;
+      border-radius: var(--radius-md);
+      border-bottom-right-radius: 4px;
+      color: var(--text-main);
+    }
 
-        .card {
-            background: var(--bg-surface);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 1.25rem;
-            transition: all 0.2s ease;
-            position: relative;
-            overflow: hidden;
-        }
+    .ai .message-content {
+      /* Minimal styling for AI: no background box, generous line-height */
+      padding: 0;
+      color: var(--text-main);
+    }
 
-        .card:hover {
-            border-color: var(--primary);
-            box-shadow: 0 4px 12px rgb(59 130 246 / 0.08);
-            transform: translateY(-2px);
-        }
+    .ai .message-content p {
+      margin-bottom: var(--spacing-sm);
+    }
 
-        .card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 4px;
-            height: 100%;
-            background: var(--border);
-            transition: background 0.2s ease;
-        }
+    /* Code Block Minimal Design */
+    .code-block {
+      margin-top: var(--spacing-md);
+      background-color: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      font-family: "JetBrains Mono", "SF Mono", "Fira Code", monospace;
+      font-size: 13px;
+    }
 
-        .card:hover::before {
-            background: var(--primary);
-        }
+    .code-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px var(--spacing-md);
+      background-color: var(--bg-tertiary);
+      border-bottom: 1px solid var(--border-color);
+      font-size: 12px;
+      color: var(--text-muted);
+    }
 
-        .card-label {
-            font-size: 0.6875rem;
-            font-weight: 700;
-            color: var(--primary);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 0.75rem;
-            display: inline-block;
-            background: var(--primary-bg);
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-        }
+    .code-content {
+      padding: var(--spacing-md);
+      overflow-x: auto;
+      color: var(--text-main);
+      background-color: #fafafa;
+    }
 
-        .card-value {
-            font-family: var(--font-mono);
-            font-size: 0.875rem;
-            font-weight: 600;
-            color: var(--text-main);
-            margin-bottom: 0.5rem;
-            line-height: 1.4;
-        }
+    .code-content span.keyword { color: #000; font-weight: 600; }
+    .code-content span.string { color: #4b5563; }
+    
+    /* Input Area */
+    .input-area {
+      padding: var(--spacing-md) var(--spacing-lg);
+      border-top: 1px solid var(--border-color);
+      background-color: var(--bg-primary);
+    }
 
-        .card-desc {
-            font-size: 0.8125rem;
-            color: var(--text-muted);
-            line-height: 1.5;
-        }
+    .context-chips {
+      display: flex;
+      gap: var(--spacing-sm);
+      margin-bottom: var(--spacing-sm);
+    }
 
-        /* Terminal Preview */
-        .terminal {
-            background: var(--term-bg);
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 4px 20px rgb(0 0 0 / 0.15);
-        }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 500;
+      padding: 4px 10px;
+      background-color: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      color: var(--text-muted);
+      transition: background-color 0.2s;
+      cursor: pointer;
+    }
 
-        .terminal-header {
-            background: var(--term-header);
-            padding: 0.75rem 1rem;
-            display: flex;
-            gap: 0.5rem;
-            align-items: center;
-        }
+    .chip:hover {
+      background-color: var(--bg-secondary);
+      color: var(--text-main);
+    }
 
-        .dot { width: 12px; height: 12px; border-radius: 50%; }
-        .dot.red { background: #ff5f56; }
-        .dot.yellow { background: #ffbd2e; }
-        .dot.green { background: #27c93f; }
+    .input-wrapper {
+      position: relative;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      background-color: var(--bg-primary);
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
 
-        .terminal-body {
-            padding: 1.5rem;
-            font-family: var(--font-mono);
-            font-size: 0.875rem;
-            color: var(--term-text);
-            line-height: 1.6;
-            overflow-x: auto;
-        }
+    .input-wrapper:focus-within {
+      border-color: #d1d5db;
+      box-shadow: 0 0 0 3px var(--focus-ring);
+    }
 
-        .prompt {
-            display: flex;
-            margin-bottom: 1rem;
-        }
+    .chat-input {
+      width: 100%;
+      border: none;
+      background: transparent;
+      padding: 14px 16px;
+      padding-right: 50px;
+      font-family: inherit;
+      font-size: var(--font-size-base);
+      color: var(--text-main);
+      resize: none;
+      height: 60px;
+      outline: none;
+      line-height: 1.5;
+    }
 
-        .prompt::before {
-            content: "$";
-            color: var(--term-green);
-            margin-right: 0.75rem;
-            font-weight: 700;
-        }
+    .chat-input::placeholder {
+      color: #9ca3af;
+    }
 
-        .cmd-text { color: var(--term-text); }
-        .cmd-flag { color: var(--term-muted); }
-        .cmd-string { color: var(--term-blue); }
+    .send-btn {
+      position: absolute;
+      right: 8px;
+      bottom: 10px;
+      background-color: var(--accent-color);
+      color: white;
+      border: none;
+      width: 32px;
+      height: 32px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background-color 0.2s, transform 0.1s;
+    }
 
-        .term-output {
-            color: var(--term-muted);
-            white-space: pre-wrap;
-        }
+    .send-btn:hover {
+      background-color: var(--accent-hover);
+    }
+    
+    .send-btn:active {
+      transform: scale(0.95);
+    }
 
-        .highlight {
-            color: #fbbf24;
-            font-weight: 600;
-        }
-    </style>
+    .send-btn svg {
+      width: 14px;
+      height: 14px;
+      fill: currentColor;
+    }
+
+    /* Animations */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
 </head>
 <body>
 
-    <div class="app-container">
-        <!-- Header -->
-        <header class="header">
-            <div class="header-title">
-                <h1>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);">
-                        <circle cx="18" cy="18" r="3"></circle>
-                        <circle cx="6" cy="6" r="3"></circle>
-                        <path d="M13 6h3a2 2 0 0 1 2 2v7"></path>
-                        <line x1="6" y1="9" x2="6" y2="21"></line>
-                    </svg>
-                    Commit Message Design
-                </h1>
-                <p>Structured format for clear and consistent version history</p>
-            </div>
-            <div class="branch-badge">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="6" y1="3" x2="6" y2="15"></line>
-                    <circle cx="18" cy="6" r="3"></circle>
-                    <circle cx="6" cy="18" r="3"></circle>
-                    <path d="M18 9a9 9 0 0 1-9 9"></path>
+  <div class="panel-container">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-title">Void</div>
+      <div style="display: flex; gap: 4px;">
+        <button class="icon-btn" title="Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
+        <button class="icon-btn" title="New Chat">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Chat Area -->
+    <div class="chat-scroll-area">
+      
+      <!-- User Message -->
+      <div class="message user">
+        <div class="message-content">
+          Refine the UI for the void editor extension. Make it extremely minimal, focus on typography and negative space.
+        </div>
+      </div>
+
+      <!-- AI Message -->
+      <div class="message ai" style="animation-delay: 0.1s;">
+        <div class="message-header">
+          <div class="avatar avatar-ai">V</div>
+          <span>Void</span>
+        </div>
+        <div class="message-content">
+          <p>I've simplified the interface. Borders are subtle, padding is generous, and the typography hierarchy clearly guides the eye without heavy background elements.</p>
+          
+          <div class="code-block">
+            <div class="code-header">
+              <span>layout.css</span>
+              <button class="icon-btn" title="Copy code" style="padding: 2px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                 </svg>
-                main2
+              </button>
             </div>
-        </header>
+            <div class="code-content">
+<pre style="margin:0;">
+<span class="keyword">.container</span> {
+  <span class="string">display</span>: flex;
+  <span class="string">flex-direction</span>: column;
+  <span class="string">padding</span>: 2rem;
+  <span class="string">background</span>: var(--bg-primary);
+  <span class="string">border</span>: 1px solid var(--border-light);
+}
 
-        <main class="content">
-            <!-- Context Section -->
-            <section class="section">
-                <div class="section-header">Change Context</div>
-                <div class="diff-stat">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                        <polyline points="14 2 14 8 20 8"></polyline>
-                        <line x1="12" y1="18" x2="12" y2="12"></line>
-                        <line x1="9" y1="15" x2="15" y2="15"></line>
-                    </svg>
-                    <span class="file-name">.gitignore</span>
-                    <div class="stats">
-                        <span class="stat-add">+2 insertions</span>
-                        <span class="stat-rm">-1 deletion</span>
-                    </div>
-                </div>
-            </section>
+<span class="keyword">.typography-focus</span> {
+  <span class="string">font-family</span>: "Inter", sans-serif;
+  <span class="string">letter-spacing</span>: -0.02em;
+  <span class="string">line-height</span>: 1.6;
+}
+</pre>
+            </div>
+          </div>
+        </div>
+      </div>
 
-            <!-- Structure Breakdown Section -->
-            <section class="section">
-                <div class="section-header">Proposed Structure</div>
-                <div class="grid-cards">
-                    <div class="card">
-                        <span class="card-label">Type</span>
-                        <div class="card-value">chore</div>
-                        <div class="card-desc">Used for maintenance tasks, auxiliary tools, or configurations (e.g., ignoring files) that don't modify source code.</div>
-                    </div>
-                    <div class="card">
-                        <span class="card-label">Subject</span>
-                        <div class="card-value">ignore .dmg files</div>
-                        <div class="card-desc">A concise summary in the imperative mood, kept under 50 characters, explaining what the commit does.</div>
-                    </div>
-                    <div class="card">
-                        <span class="card-label">Body</span>
-                        <div class="card-value">Add *.dmg to .gitignore...</div>
-                        <div class="card-desc">Detailed explanation of <i>why</i> the change was made (to prevent tracking macOS disk images).</div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Terminal Preview Section -->
-            <section class="section">
-                <div class="section-header">Final Preview</div>
-                <div class="terminal">
-                    <div class="terminal-header">
-                        <div class="dot red"></div>
-                        <div class="dot yellow"></div>
-                        <div class="dot green"></div>
-                    </div>
-                    <div class="terminal-body">
-                        <div class="prompt">
-                            <div>
-                                <span class="cmd-text">git commit</span> 
-                                <span class="cmd-flag">-m</span> 
-                                <span class="cmd-string">"chore: ignore .dmg files"</span> 
-                                <span class="cmd-flag">-m</span> 
-                                <span class="cmd-string">"Add *.dmg to .gitignore to prevent macOS disk image files from being tracked by git."</span>
-                            </div>
-                        </div>
-                        <div class="term-output">
-[main2 8f9a2b1] <span style="color: var(--term-text);">chore: ignore .dmg files</span>
- 1 file changed, <span style="color: var(--term-green);">2 insertions(+)</span>, <span style="color: #ff5f56;">1 deletion(-)</span>
-                        </div>
-                    </div>
-                </div>
-            </section>
-        </main>
     </div>
+
+    <!-- Input Area -->
+    <div class="input-area">
+      <div class="context-chips">
+        <div class="chip">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px; height:12px;">
+            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+            <polyline points="13 2 13 9 20 9"></polyline>
+          </svg>
+          layout.css
+        </div>
+        <div class="chip">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px; height:12px;">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          Search
+        </div>
+      </div>
+      <div class="input-wrapper">
+        <textarea class="chat-input" placeholder="Message Void..."></textarea>
+        <button class="send-btn" title="Send message">
+          <svg viewBox="0 0 24 24">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
 
 </body>
 </html>

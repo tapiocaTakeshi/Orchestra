@@ -164,7 +164,10 @@ export type SendLLMMessageParams = {
 	divisionRoleAssignments?: RoleAssignment[];
 	divisionProjectId?: string;
 	divisionApiKey?: string;
-	// File Search → Coder/Writer → Reviewer ループの最大反復回数（divisionAPI のみ使用）
+	// Brief Gate / Reviewer それぞれの最大試行回数（divisionAPI のみ使用）
+	divisionMaxBriefGateIterations?: number;
+	divisionMaxReviewerIterations?: number;
+	// Legacy fallback for older callers.
 	divisionMaxReviewIterations?: number;
 	workspaceFolderPath?: string;
 	// main 側（channel）が注入する関数。IPC を越えないので BlockedMainLLMMessageParams に含める。

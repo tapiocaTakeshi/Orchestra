@@ -1,5 +1,5 @@
 {
     "workbench.colorCustomizations": {
-       "terminal.integrated.gpuAcceleration": "off"
+        "terminal.integrated.gpuAcceleration": "off"
     }
 }

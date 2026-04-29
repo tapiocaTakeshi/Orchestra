@@ -305,6 +305,14 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 			// add autoAcceptLLMChanges feature
 			if (readS.globalSettings.autoAcceptLLMChanges === undefined) readS.globalSettings.autoAcceptLLMChanges = false;
 
+			const legacyMaxReviewIterations = (readS.globalSettings as any).maxReviewIterations;
+			if (readS.globalSettings.maxBriefGateIterations === undefined) {
+				readS.globalSettings.maxBriefGateIterations = typeof legacyMaxReviewIterations === 'number' ? legacyMaxReviewIterations : defaultGlobalSettings.maxBriefGateIterations;
+			}
+			if (readS.globalSettings.maxReviewerIterations === undefined) {
+				readS.globalSettings.maxReviewerIterations = typeof legacyMaxReviewIterations === 'number' ? legacyMaxReviewIterations : defaultGlobalSettings.maxReviewerIterations;
+			}
+
 			// Cleanup legacy auth state
 			if ((readS.globalSettings as any).auth0Token !== undefined) delete (readS.globalSettings as any).auth0Token;
 			if ((readS.globalSettings as any).auth0User !== undefined) delete (readS.globalSettings as any).auth0User;

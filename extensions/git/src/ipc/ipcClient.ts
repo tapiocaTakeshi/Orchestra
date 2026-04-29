@@ -34,7 +34,7 @@ export class IPCClient {
 
 				const chunks: Buffer[] = [];
 				res.on('data', d => chunks.push(d));
-				res.on('end', () => c(JSON.parse(Buffer.concat(chunks).toString('utf8'))));
+				res.on('end', () => c(JSON.parse(Buffer.concat(chunks as unknown as Uint8Array[]).toString('utf8'))));
 			});
 
 			req.on('error', err => e(err));

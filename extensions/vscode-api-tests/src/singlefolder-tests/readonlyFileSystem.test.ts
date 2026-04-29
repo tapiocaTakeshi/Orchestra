@@ -20,7 +20,7 @@ suite('vscode API - file system', () => {
 		const reg = vscode.workspace.registerFileSystemProvider(fs.scheme, fs, { isReadonly: true });
 		let error: any | undefined;
 		try {
-			await vscode.workspace.fs.writeFile(vscode.Uri.parse('this-fs:/foo.txt'), Buffer.from('Hello World'));
+			await vscode.workspace.fs.writeFile(vscode.Uri.parse('this-fs:/foo.txt'), Buffer.from('Hello World') as unknown as Uint8Array);
 		} catch (e) {
 			error = e;
 		}
@@ -36,7 +36,7 @@ suite('vscode API - file system', () => {
 		const reg = vscode.workspace.registerFileSystemProvider(fs.scheme, fs, { isReadonly: new vscode.MarkdownString('This file is readonly.') });
 		let error: any | undefined;
 		try {
-			await vscode.workspace.fs.writeFile(vscode.Uri.parse('this-fs:/foo.txt'), Buffer.from('Hello World'));
+			await vscode.workspace.fs.writeFile(vscode.Uri.parse('this-fs:/foo.txt'), Buffer.from('Hello World') as unknown as Uint8Array);
 		} catch (e) {
 			error = e;
 		}
@@ -52,7 +52,7 @@ suite('vscode API - file system', () => {
 		const reg = vscode.workspace.registerFileSystemProvider(fs.scheme, fs);
 		let error: any | undefined;
 		try {
-			await vscode.workspace.fs.writeFile(vscode.Uri.parse('this-fs:/foo.txt'), Buffer.from('Hello World'));
+			await vscode.workspace.fs.writeFile(vscode.Uri.parse('this-fs:/foo.txt'), Buffer.from('Hello World') as unknown as Uint8Array);
 		} catch (e) {
 			error = e;
 		}
