@@ -2708,6 +2708,11 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 
 			const { sessionId: cycleSessionId, tasks: rawTasks, finalRole: cycleFinalRole } = taskResult;
 
+			// --- DEBUG: Leader が返した raw タスクを必ずログ出力する（filesearch 注入問題の調査用）
+			console.log(`[DivisionAPI][debug] Leader raw tasks (count=${rawTasks.length}):`,
+				rawTasks.map(t => ({ role: t.role, title: t.title, taskId: t.taskId })));
+			console.log(`[DivisionAPI][debug] workspaceFolderPath = ${workspaceFolderPath || '(empty)'}`);
+
 			// Filter out server-side Coder/Reviewer tasks (these run locally).
 			// File Search はワークスペース全体の事前読み込み担当として、search / research と
 			// 同じファースト・ウェーブで動かす（runFinalFlow 直前ではなく、情報収集と同時に実行）。
@@ -2718,14 +2723,23 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			// 必ずワークスペース全件読み込みを行うため、合成タスクを自動挿入する。
 			// 先頭に挿入することで、後続の Search / Research / Ideaman が
 			// 「実際のコードベース内容」を assistant 履歴経由で参照できる。
+			//
+			// NOTE: workspaceFolderPath が空でも、ワークスペース未指定スキップメッセージを
+			// task.output に入れて中間 markdown 化はする（ただし読み込みはしない）。
+			// 「filesearch が wave1 に出てこない」というユーザー報告を防ぐため、
+			// workspaceFolderPath の有無に関わらず必ず先頭に注入する。
 			const hasFileSearch = serverTasks.some(t => isFileSearchRole(t.role || ''));
-			if (!hasFileSearch && workspaceFolderPath) {
+			if (!hasFileSearch) {
 				serverTasks.unshift({
 					taskId: 'auto-filesearch',
 					role: 'filesearch',
 					title: 'ワークスペース全件読み込み',
 					description: 'すべてのフォルダ・ファイルを走査し、後続エージェントにコンテキストとして共有する',
 				});
+				console.log(`[DivisionAPI] Auto-injected filesearch task at index 0 (Leader did not produce one).`);
+			} else {
+				const fsTask = serverTasks.find(t => isFileSearchRole(t.role || ''));
+				console.log(`[DivisionAPI] Leader already produced a file-search task (role="${fsTask?.role}"), skipping auto-inject.`);
 			}
 
 			const tasks = orderedTaskStages(serverTasks);
@@ -2733,14 +2747,23 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			if (droppedCount > 0) {
 				console.log(`[DivisionAPI] Skipped ${droppedCount} server-side Coder/Reviewer task(s) — they run locally.`);
 			}
-			if (!hasFileSearch && workspaceFolderPath) {
-				console.log(`[DivisionAPI] Auto-injected filesearch task into the first wave for workspace prefetch.`);
-			}
 
-			// Display task decomposition
+			console.log(`[DivisionAPI][debug] Final ordered task list (count=${tasks.length}):`,
+				tasks.map((t, idx) => ({
+					idx,
+					role: t.role,
+					stage: ['wave1', 'wave2', 'wave3+'][Math.min(2, isFirstWaveRole(t.role) ? 0 : (isSecondWaveRole(t.role) ? 1 : 2))],
+					title: t.title,
+				})));
+
+			// Display task decomposition (wave 番号 + filesearch を強調)
 			if (tasks.length > 0) {
 				for (let i = 0; i < tasks.length; i++) {
-					appendText(`${i + 1}. **${tasks[i].role}** — ${tasks[i].title}\n`);
+					const t = tasks[i];
+					const wave = isFirstWaveRole(t.role) ? 'wave1' : (isSecondWaveRole(t.role) ? 'wave2' : 'wave3+');
+					const displayRole = isFileSearchRole(t.role || '') ? 'filesearch' : t.role;
+					const marker = isFileSearchRole(t.role || '') ? '📂 ' : '';
+					appendText(`${i + 1}. [${wave}] ${marker}**${displayRole}** — ${t.title}\n`);
 				}
 				appendText(`\n`);
 			}

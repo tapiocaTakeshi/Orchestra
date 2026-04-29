@@ -2090,6 +2090,15 @@ class EditCodeService extends Disposable implements IEditCodeService {
 		const diffareaids = this.diffAreasOfURI[uri.fsPath]
 		if ((diffareaids?.size ?? 0) === 0) return // do nothing
 
+		// model が未ロードのまま onFinishEdit → saveModel に進むと
+		// textFileService.save が "Failed to save" 通知を出すことがあるので、
+		// 先に model を確実に初期化しておく。
+		try {
+			await this._voidModelService.getModelSafe(uri)
+		} catch (e) {
+			console.warn(`[EditCodeService] getModelSafe failed for ${uri.toString()} before reject/accept:`, e)
+		}
+
 		const { onFinishEdit } = _addToHistory === false ? { onFinishEdit: () => { } } : this._addToHistory(uri)
 
 		for (const diffareaid of diffareaids ?? []) {
@@ -2109,7 +2118,15 @@ class EditCodeService extends Disposable implements IEditCodeService {
 		}
 
 		this._refreshStylesAndDiffsInURI(uri)
-		onFinishEdit()
+		// onFinishEdit() の中で saveModel が呼ばれるが、savedModel 側でエラーは
+		// 内部で握りつぶし fallback で fileService 直接書き込みするので、
+		// ここで失敗を伝播させない（discard 経路で UI に "Failed to save" が
+		// 出ないようにするため）。
+		try {
+			await onFinishEdit()
+		} catch (e) {
+			console.warn(`[EditCodeService] onFinishEdit (save) failed silently for ${uri.toString()}:`, e)
+		}
 	}
 
 
@@ -2129,6 +2146,14 @@ class EditCodeService extends Disposable implements IEditCodeService {
 		if (diffArea.type !== 'DiffZone') return
 
 		const uri = diffArea._URI
+
+		// model 未ロードのまま saveModel に進むと "Failed to save" 通知が出る可能性があるため
+		// 先に model を確実にロードしておく。
+		try {
+			await this._voidModelService.getModelSafe(uri)
+		} catch (e) {
+			console.warn(`[EditCodeService] getModelSafe failed for ${uri.toString()} before acceptDiff:`, e)
+		}
 
 		// add to history
 		const { onFinishEdit } = this._addToHistory(uri)
@@ -2179,7 +2204,11 @@ class EditCodeService extends Disposable implements IEditCodeService {
 
 		this._refreshStylesAndDiffsInURI(uri)
 
-		onFinishEdit()
+		try {
+			await onFinishEdit()
+		} catch (e) {
+			console.warn(`[EditCodeService] acceptDiff onFinishEdit failed silently for ${uri.toString()}:`, e)
+		}
 
 	}
 
@@ -2198,6 +2227,14 @@ class EditCodeService extends Disposable implements IEditCodeService {
 		if (diffArea.type !== 'DiffZone') return
 
 		const uri = diffArea._URI
+
+		// model 未ロードのまま saveModel に進むと "Failed to save" 通知が出る可能性があるため
+		// 先に model を確実にロードしておく。
+		try {
+			await this._voidModelService.getModelSafe(uri)
+		} catch (e) {
+			console.warn(`[EditCodeService] getModelSafe failed for ${uri.toString()} before rejectDiff:`, e)
+		}
 
 		// add to history
 		const { onFinishEdit } = this._addToHistory(uri)
@@ -2268,7 +2305,11 @@ class EditCodeService extends Disposable implements IEditCodeService {
 
 		this._refreshStylesAndDiffsInURI(uri)
 
-		onFinishEdit()
+		try {
+			await onFinishEdit()
+		} catch (e) {
+			console.warn(`[EditCodeService] rejectDiff onFinishEdit failed silently for ${uri.toString()}:`, e)
+		}
 
 	}
 

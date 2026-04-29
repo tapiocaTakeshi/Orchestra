@@ -246,7 +246,11 @@ export interface IChatThreadService {
 
 	getCurrentThread(): ThreadType;
 	openNewThread(): void;
-	switchToThread(threadId: string): void;
+	switchToThread(threadId: string, opts?: { revertFiles?: boolean }): void;
+
+	// 指定スレッド内の最後のチェックポイントの voidFileSnapshot にファイル群を戻す。
+	// 過去チャットを開いた瞬間にワークスペースを当時の状態へ復元する用途で使う。
+	revertFilesToThreadEnd(threadId: string): void;
 
 	// thread selector
 	deleteThread(threadId: string): void;
@@ -1843,8 +1847,79 @@ We only need to do it for files that were edited since `from`, ie files between 
 		return this.getCurrentFocusedMessageIdx() !== undefined
 	}
 
-	switchToThread(threadId: string) {
+	switchToThread(threadId: string, opts?: { revertFiles?: boolean }) {
+		// 切り替え対象スレッドが現在実行中なら revert は危険なのでスキップする。
+		const targetIsRunning = !!this.streamState[threadId]?.isRunning
+		const currentIsRunning = !!this.streamState[this.state.currentThreadId]?.isRunning
+		const canRevert = !!opts?.revertFiles
+			&& threadId !== this.state.currentThreadId
+			&& !targetIsRunning
+			&& !currentIsRunning
+
+		if (canRevert) {
+			try {
+				this.revertFilesToThreadEnd(threadId)
+			} catch (e) {
+				console.error('[ChatThreadService] revertFilesToThreadEnd failed during switchToThread:', e)
+			}
+		}
+
 		this._setState({ currentThreadId: threadId })
+	}
+
+	revertFilesToThreadEnd(threadId: string): void {
+		const thread = this.state.allThreads[threadId]
+		if (!thread) return
+
+		// 末尾から最初に見つかった checkpoint を「スレッドの最終状態」とみなす。
+		// （checkpoint には userModifications 含む voidFileSnapshotOfURI が入っている）
+		let lastCheckpoint: (ChatMessage & { role: 'checkpoint' }) | undefined
+		for (let i = thread.messages.length - 1; i >= 0; i--) {
+			const m = thread.messages[i]
+			if (m.role === 'checkpoint') { lastCheckpoint = m; break }
+		}
+		if (!lastCheckpoint) return
+
+		// 各ファイルについて、userModifications がある場合はそちらを優先（ユーザー手動編集も復元）。
+		const fsPaths = new Set<string>([
+			...Object.keys(lastCheckpoint.voidFileSnapshotOfURI || {}),
+			...Object.keys(lastCheckpoint.userModifications?.voidFileSnapshotOfURI || {}),
+		])
+
+		let restoredCount = 0
+		for (const fsPath of fsPaths) {
+			const userSnapshot = lastCheckpoint.userModifications?.voidFileSnapshotOfURI?.[fsPath]
+			const baseSnapshot = lastCheckpoint.voidFileSnapshotOfURI?.[fsPath]
+			const snapshot = userSnapshot ?? baseSnapshot
+			if (!snapshot) continue
+			try {
+				this._editCodeService.restoreVoidFileSnapshot(URI.file(fsPath), snapshot)
+				restoredCount++
+			} catch (e) {
+				console.error(`[ChatThreadService] restoreVoidFileSnapshot failed for ${fsPath}:`, e)
+			}
+		}
+
+		// 復元したスレッドの末尾チェックポイントに「立っている」状態にしておく。
+		// （以後 jumpToCheckpointBeforeMessageIdx を使った差分計算が正しくなる）
+		const lastCheckpointIdx = findLastIdx(thread.messages, m => m.role === 'checkpoint')
+		if (lastCheckpointIdx >= 0) {
+			const newAllThreads = {
+				...this.state.allThreads,
+				[threadId]: {
+					...thread,
+					state: {
+						...thread.state,
+						currCheckpointIdx: lastCheckpointIdx,
+					},
+				},
+			}
+			this._storeAllThreads(newAllThreads)
+			this.state = { ...this.state, allThreads: newAllThreads }
+			this._onDidChangeCurrentThread.fire()
+		}
+
+		console.log(`[ChatThreadService] revertFilesToThreadEnd: restored ${restoredCount} file(s) for thread ${threadId}`)
 	}
 
 

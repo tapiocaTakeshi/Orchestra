@@ -6,6 +6,7 @@ import { registerSingleton, InstantiationType } from '../../../../platform/insta
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { ITextFileService } from '../../../services/textfile/common/textfiles.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
+import { VSBuffer } from '../../../../base/common/buffer.js';
 
 type VoidModelType = {
 	model: ITextModel | null;
@@ -38,9 +39,41 @@ class VoidModelService extends Disposable implements IVoidModelService {
 	}
 
 	saveModel = async (uri: URI) => {
-		await this._textFileService.save(uri, { // we want [our change] -> [save] so it's all treated as one change.
-			skipSaveParticipants: true // avoid triggering extensions etc (if they reformat the page, it will add another item to the undo stack)
-		})
+		// 1) 通常パス: textFileService.save を使う。
+		//    - テキストモデルが読み込まれていれば、エディタ上の最新内容を atomic に保存できる。
+		//    - skipSaveParticipants: true で formatter 等が走って undo スタックを汚さないようにする。
+		// 2) Fallback: 1) が失敗した場合 (model が未ロード／dispose 済み等)、
+		//    その場で在メモリのモデル文字列を fileService 経由で直接書き出して
+		//    "Failed to save" 通知を抑止する。
+		try {
+			const result = await this._textFileService.save(uri, {
+				skipSaveParticipants: true,
+				// VS Code 標準の保存エラーハンドラ (textFileSaveErrorHandler) が
+				// "Failed to save '<file>': ..." の通知を出さないようにする。
+				// 失敗時は下の fallback で在メモリ内容を直接書き出すため、
+				// ユーザーに不要なエラー通知を見せない。
+				ignoreErrorHandler: true,
+			})
+			if (result) return
+			// 戻り値 undefined = 内部で諦めたケース → fallback へ
+		} catch (e) {
+			console.warn(`[VoidModelService] textFileService.save failed for ${uri.toString()}:`, e)
+		}
+
+		// Fallback: 在メモリの ITextModel から内容を取り出してファイルへ直接書き出す。
+		try {
+			const { model } = this.getModel(uri)
+			if (model && !model.isDisposed()) {
+				const text = model.getValue()
+				await this._fileService.writeFile(uri, VSBuffer.fromString(text))
+				console.log(`[VoidModelService] saveModel fallback: wrote ${text.length} chars to ${uri.fsPath}`)
+				return
+			}
+			// model がない場合はサイレントに諦める（reject/discard 経路では既にメモリ整合は取れているため）。
+			console.warn(`[VoidModelService] saveModel fallback skipped: no in-memory model for ${uri.fsPath}`)
+		} catch (e) {
+			console.error(`[VoidModelService] saveModel fallback write failed for ${uri.toString()}:`, e)
+		}
 	}
 
 	initializeModel = async (uri: URI) => {
