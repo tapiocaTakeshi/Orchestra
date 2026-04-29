@@ -541,11 +541,11 @@ export type GlobalSettings = {
 
 // Default role assignments for Division API
 // Ordered to match the Orchestra flow:
-// User → Leader → filesearch (wave0/pre) → (ideaman, search, research) (wave1)
-//   → (design, image, planner) (wave2) → (coder or writing) → review → User
+// User → Leader → filesearch (wave1/pre) → (ideaman, search, research) (wave2)
+//   → (design, image, planner) (wave3) → (coder or writing) → review → User
 //
-// filesearch はワークスペース全件事前読み込みを担う pre-wave (wave0) として
-// **wave1 の情報収集系より前に単独実行** する。Coder 直前にも Leader Todos
+// filesearch はワークスペース全件事前読み込みを担う wave1 として
+// **wave2 の情報収集系より前に単独実行** する。Coder 直前にも Leader Todos
 // に基づいた再走査の fallback があるが、通常はここで取得済みの FILE-SEARCH.md
 // を後続エージェントが使い回す。
 export const defaultRoleAssignments: RoleAssignment[] = [

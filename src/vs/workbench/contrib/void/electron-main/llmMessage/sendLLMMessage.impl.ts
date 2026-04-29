@@ -2625,20 +2625,23 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		};
 
 		const normalizeFlowRole = (r: string): string => (r || '').toLowerCase().replace(/[_\s-]+/g, '');
-		// Wave 0 (pre-wave): file-search のみ。ワークスペース全件読み込みを
+		// Wave 1 (pre-wave): file-search のみ。ワークスペース全件読み込みを
 		// **必ず最初に単独で実行**してから後続ウェーブにコンテキストを渡す。
 		const isPreWaveRole = (r: string): boolean => isFileSearchRole(r || '');
-		// Wave 1: 情報収集系（filesearch を除く ideaman / search / research）
+		// Wave 2: 情報収集系（filesearch を除く ideaman / search / research）
 		const isFirstWaveRole = (r: string): boolean => {
 			const role = normalizeFlowRole(r);
 			return role === 'ideaman' || role === 'idea' || role === 'search' || role === 'searcher'
 				|| role === 'research' || role === 'researcher' || role === 'deepresearch' || role === 'deepresearcher';
 		};
-		// Wave 2: 設計・画像・計画
+		// Wave 3: 設計・画像・計画
 		const isSecondWaveRole = (r: string): boolean => {
 			const role = normalizeFlowRole(r);
 			return role === 'design' || role === 'designer' || role === 'image' || role === 'planner' || role === 'planning';
 		};
+		// 内部 rank は安定ソート用の番号で、UI 表示の wave 番号とは別物。
+		// rank 0 = wave1 (filesearch), rank 1 = wave2 (info gathering),
+		// rank 2 = wave3 (design/image/plan), rank 3 = wave4+ (others)。
 		const flowStageRank = (task: DivisionTask): number => {
 			if (isPreWaveRole(task.role)) return 0;
 			if (isFirstWaveRole(task.role)) return 1;
@@ -2756,12 +2759,12 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					idx,
 					role: t.role,
 					stage: isPreWaveRole(t.role)
-						? 'wave0(pre)'
+						? 'wave1'
 						: isFirstWaveRole(t.role)
-							? 'wave1'
+							? 'wave2'
 							: isSecondWaveRole(t.role)
-								? 'wave2'
-								: 'wave3+',
+								? 'wave3'
+								: 'wave4+',
 					title: t.title,
 				})));
 
@@ -2770,12 +2773,12 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				for (let i = 0; i < tasks.length; i++) {
 					const t = tasks[i];
 					const wave = isPreWaveRole(t.role)
-						? 'wave0'
+						? 'wave1'
 						: isFirstWaveRole(t.role)
-							? 'wave1'
+							? 'wave2'
 							: isSecondWaveRole(t.role)
-								? 'wave2'
-								: 'wave3+';
+								? 'wave3'
+								: 'wave4+';
 					const displayRole = isFileSearchRole(t.role || '') ? 'filesearch' : t.role;
 					const marker = isFileSearchRole(t.role || '') ? '📂 ' : '';
 					appendText(`${i + 1}. [${wave}] ${marker}**${displayRole}** — ${t.title}\n`);
