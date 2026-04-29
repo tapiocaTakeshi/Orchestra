@@ -2625,26 +2625,29 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		};
 
 		const normalizeFlowRole = (r: string): string => (r || '').toLowerCase().replace(/[_\s-]+/g, '');
+		// Wave 0 (pre-wave): file-search のみ。ワークスペース全件読み込みを
+		// **必ず最初に単独で実行**してから後続ウェーブにコンテキストを渡す。
+		const isPreWaveRole = (r: string): boolean => isFileSearchRole(r || '');
+		// Wave 1: 情報収集系（filesearch を除く ideaman / search / research）
 		const isFirstWaveRole = (r: string): boolean => {
 			const role = normalizeFlowRole(r);
-			// file-search はワークスペース全体の事前読み込みを担うため、
-			// search / research と同じ「情報収集ウェーブ」に属させる。
 			return role === 'ideaman' || role === 'idea' || role === 'search' || role === 'searcher'
-				|| role === 'research' || role === 'researcher' || role === 'deepresearch' || role === 'deepresearcher'
-				|| role === 'filesearch' || role === 'filesearcher';
+				|| role === 'research' || role === 'researcher' || role === 'deepresearch' || role === 'deepresearcher';
 		};
+		// Wave 2: 設計・画像・計画
 		const isSecondWaveRole = (r: string): boolean => {
 			const role = normalizeFlowRole(r);
 			return role === 'design' || role === 'designer' || role === 'image' || role === 'planner' || role === 'planning';
 		};
 		const flowStageRank = (task: DivisionTask): number => {
-			if (isFirstWaveRole(task.role)) return 0;
-			if (isSecondWaveRole(task.role)) return 1;
-			return 2;
+			if (isPreWaveRole(task.role)) return 0;
+			if (isFirstWaveRole(task.role)) return 1;
+			if (isSecondWaveRole(task.role)) return 2;
+			return 3;
 		};
-		// 同じウェーブ内でも file-search はワークスペース読み込みを先に済ませる方が
-		// 後続 (Search / Research / Ideaman) にコンテキストを供給できるため、先頭に寄せる。
-		const intraStageRank = (task: DivisionTask): number => isFileSearchRole(task.role || '') ? 0 : 1;
+		// pre-wave 内に複数 file-search が来てもユーザー入力順を保つので
+		// intra ランクは現状不要だが、interface の互換のため残す。
+		const intraStageRank = (_task: DivisionTask): number => 0;
 		const orderedTaskStages = (tasks: DivisionTask[]): DivisionTask[] =>
 			tasks
 				.map((task, index) => ({ task, index }))
@@ -2752,7 +2755,13 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				tasks.map((t, idx) => ({
 					idx,
 					role: t.role,
-					stage: ['wave1', 'wave2', 'wave3+'][Math.min(2, isFirstWaveRole(t.role) ? 0 : (isSecondWaveRole(t.role) ? 1 : 2))],
+					stage: isPreWaveRole(t.role)
+						? 'wave0(pre)'
+						: isFirstWaveRole(t.role)
+							? 'wave1'
+							: isSecondWaveRole(t.role)
+								? 'wave2'
+								: 'wave3+',
 					title: t.title,
 				})));
 
@@ -2760,7 +2769,13 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			if (tasks.length > 0) {
 				for (let i = 0; i < tasks.length; i++) {
 					const t = tasks[i];
-					const wave = isFirstWaveRole(t.role) ? 'wave1' : (isSecondWaveRole(t.role) ? 'wave2' : 'wave3+');
+					const wave = isPreWaveRole(t.role)
+						? 'wave0'
+						: isFirstWaveRole(t.role)
+							? 'wave1'
+							: isSecondWaveRole(t.role)
+								? 'wave2'
+								: 'wave3+';
 					const displayRole = isFileSearchRole(t.role || '') ? 'filesearch' : t.role;
 					const marker = isFileSearchRole(t.role || '') ? '📂 ' : '';
 					appendText(`${i + 1}. [${wave}] ${marker}**${displayRole}** — ${t.title}\n`);

@@ -541,17 +541,19 @@ export type GlobalSettings = {
 
 // Default role assignments for Division API
 // Ordered to match the Orchestra flow:
-// User → Leader → (ideaman, search, research, filesearch) → (design, image, planner) → (coder or writing) → review → User
+// User → Leader → filesearch (wave0/pre) → (ideaman, search, research) (wave1)
+//   → (design, image, planner) (wave2) → (coder or writing) → review → User
 //
-// filesearch はワークスペース全体の事前読み込みを担うため、search / research と同じ
-// ファースト・ウェーブ（情報収集ウェーブ）に同居させる。Coder 直前にも fallback 実行が
-// 残してあるが、通常はここで取得済みの FILE-SEARCH.md を使い回す。
+// filesearch はワークスペース全件事前読み込みを担う pre-wave (wave0) として
+// **wave1 の情報収集系より前に単独実行** する。Coder 直前にも Leader Todos
+// に基づいた再走査の fallback があるが、通常はここで取得済みの FILE-SEARCH.md
+// を後続エージェントが使い回す。
 export const defaultRoleAssignments: RoleAssignment[] = [
 	{ role: 'leader', provider: 'openAI', model: 'gpt-5.2' },
+	{ role: 'filesearch', provider: 'openAI', model: 'gpt-5.2-instant' },
 	{ role: 'ideaman', provider: 'openAI', model: 'gpt-5.2' },
 	{ role: 'search', provider: 'openAI', model: 'gpt-5.2-instant' },
 	{ role: 'research', provider: 'perplexity', model: 'sonar-pro' },
-	{ role: 'filesearch', provider: 'openAI', model: 'gpt-5.2-instant' },
 	{ role: 'design', provider: 'gemini', model: 'gemini-3-flash' },
 	{ role: 'image', provider: 'gemini', model: 'gemini-3-flash' },
 	{ role: 'planner', provider: 'gemini', model: 'gemini-3-pro' },
