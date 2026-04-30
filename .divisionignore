@@ -25,6 +25,7 @@ out/
 .parcel-cache/
 .vite/
 coverage/
+package.json
 
 # --- VCS / IDE メタデータ ---
 .git/
