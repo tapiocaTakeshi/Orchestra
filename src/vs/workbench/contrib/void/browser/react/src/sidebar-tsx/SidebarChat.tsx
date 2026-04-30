@@ -10,7 +10,8 @@ import './sidebar-chat-modern.css'
 import './sidebar-chat-redesign.css';
 
 
-import { useAccessor, useChatThreadsState, useChatThreadsStreamState, useSettingsState, useActiveURI, useCommandBarState, useFullChatThreadsStreamState, useDivisionProjects, useDivisionProjectConfig } from '../util/services.js';
+import { useAccessor, useChatThreadsState, useChatThreadsStreamState, useSettingsState, useActiveURI, useCommandBarState, useFullChatThreadsStreamState, useDivisionProjects, useDivisionProjectConfig, useIsDark } from '../util/services.js';
+import { FloatingPortal } from '@floating-ui/react';
 import { OrchestraLogoButton } from './OrchestraLogoButton.js';
 import { DivisionProjectConfig } from '../../../divisionProjectService.js';
 import { ScrollType } from '../../../../../../../editor/common/editorCommon.js';
@@ -29,7 +30,7 @@ import { AgentRole, ChatMode, displayInfoOfProviderName, contextTags, contextTag
 import { ICommandService } from '../../../../../../../platform/commands/common/commands.js';
 import { WarningBox } from '../void-settings-tsx/WarningBox.js';
 import { getModelCapabilities, getIsReasoningEnabledState } from '../../../../common/modelCapabilities.js';
-import { AlertTriangle, File, Ban, Check, ChevronDown, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text, Image as ImageIcon, Paperclip, Palette, Blocks, SendHorizontal } from 'lucide-react';
+import { AlertTriangle, File, Ban, Check, ChevronDown, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text, Image as ImageIcon, Paperclip, Palette, Blocks, SendHorizontal, Code, Package, RotateCcw, Loader2 } from 'lucide-react';
 import { ChatMessage, CheckpointEntry, StagingSelectionItem, ToolMessage } from '../../../../common/chatThreadServiceTypes.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, ToolName, LintErrorItem, ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsServiceTypes.js';
 import { CopyButton, EditToolAcceptRejectButtonsHTML, IconShell1, JumpToFileButton, JumpToTerminalButton, StatusIndicator, StatusIndicatorForApplyButton, useApplyStreamState, useEditToolStreamState } from '../markdown/ApplyBlockHoverButtons.js';
@@ -43,6 +44,7 @@ import { ToolApprovalTypeSwitch } from '../void-settings-tsx/Settings.js';
 import { persistentTerminalNameOfId } from '../../../terminalToolService.js';
 import { removeMCPToolNamePrefix } from '../../../../common/mcpServiceTypes.js';
 import { LoginScreen } from '../void-login-tsx/LoginScreen.js';
+import { DivisionPipelinePanel } from './DivisionPipelinePanel.js';
 
 
 
@@ -370,6 +372,12 @@ interface VoidChatAreaProps {
 	// Optional close button
 	onClose?: () => void;
 
+	// Optional revert button — shown in the bottom-right action area
+	// (next to the submit/abort button). Used when editing a past chat
+	// message so the user can revert the conversation + code state from
+	// the same place they would normally hit "送信".
+	onClickRevert?: () => void;
+
 	featureName: FeatureName;
 }
 
@@ -390,6 +398,7 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 	setSelections,
 	featureName,
 	loadingIcon,
+	onClickRevert,
 }) => {
 	const accessor = useAccessor()
 	const chatThreadService = accessor.get('IChatThreadService')
@@ -671,13 +680,20 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 
 					{isStreaming && loadingIcon}
 
-					{isStreaming ? (
-						<ButtonStop onClick={onAbort} />
+					{/* 過去メッセージを編集中（onClickRevert が渡されている）の場合は、
+					    送信/停止ボタンを表示せずリバートボタンだけを置く。
+					    通常の入力欄では従来どおり Submit / Stop を表示する。 */}
+					{onClickRevert ? (
+						<ButtonRevert onClick={onClickRevert} />
 					) : (
-						<ButtonSubmit
-							onClick={onSubmit}
-							disabled={isDisabled}
-						/>
+						isStreaming ? (
+							<ButtonStop onClick={onAbort} />
+						) : (
+							<ButtonSubmit
+								onClick={onSubmit}
+								disabled={isDisabled}
+							/>
+						)
 					)}
 				</div>
 
@@ -728,6 +744,35 @@ export const ButtonStop = ({ className, ...props }: ButtonHTMLAttributes<HTMLBut
 		{...props}
 	>
 		<IconSquare size={DEFAULT_BUTTON_SIZE} className="stroke-[3] p-[7px] relative z-10" />
+	</button>
+}
+
+// Revert button — icon-only, sits in the right-bottom action slot in place
+// of Submit/Stop while editing a past message. Matches the size & shape of
+// ButtonSubmit / ButtonStop so the layout stays consistent.
+export const ButtonRevert = ({ className, onClick, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => {
+	return <button
+		type='button'
+		{...props}
+		className={`
+			rounded-full flex-shrink-0 flex-grow-0 cursor-pointer
+			flex items-center justify-center
+			w-[22px] h-[22px]
+			text-void-fg-2 hover:text-void-fg-1
+			bg-void-bg-2 hover:bg-[color-mix(in_srgb,var(--void-fg-1)_10%,transparent)]
+			border border-void-border-2 hover:border-void-border-1
+			transition-colors duration-150
+			${className ?? ''}
+		`}
+		onClick={(e) => {
+			e.stopPropagation()
+			onClick?.(e)
+		}}
+		data-tooltip-id='void-tooltip'
+		data-tooltip-content='ここに戻す（チャットとコードを巻き戻し）'
+		data-tooltip-place='top'
+	>
+		<RotateCcw size={12} className='stroke-[2]' />
 	</button>
 }
 
@@ -1074,7 +1119,11 @@ export const SelectedFiles = (
 				if (selection.type === 'ContextTag') {
 					const tag = contextTags.find(t => t.id === selection.tagId);
 					const groupInfo = contextTagGroups[selection.tagGroup];
-					const TagIcon = selection.tagGroup === 'design' ? Palette : Blocks;
+					const TagIcon = selection.tagGroup === 'design' ? Palette
+						: selection.tagGroup === 'feature' ? Blocks
+							: selection.tagGroup === 'language' ? Code
+								: selection.tagGroup === 'framework' ? Package
+									: Blocks;
 					return <div key={thisKey} className='flex flex-col space-y-[1px]'>
 						<div
 							className={`
@@ -1532,6 +1581,8 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 	const [isFocused, setIsFocused] = useState(false)
 	const [isHovered, setIsHovered] = useState(false)
 	const [isDisabled, setIsDisabled] = useState(false)
+	const [showRevertConfirm, setShowRevertConfirm] = useState(false)
+	const [isReverting, setIsReverting] = useState(false)
 	const [textAreaRefState, setTextAreaRef] = useState<HTMLTextAreaElement | null>(null)
 	const textAreaFnsRef = useRef<TextAreaFns | null>(null)
 
@@ -1631,6 +1682,10 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 
 	const EditSymbol = mode === 'display' ? Pencil : X
 
+	// 「このメッセージは現在のチェックポイントの直後か？」
+	// = リバート済み（or もともとチェックポイントの境界）であれば、
+	// 編集→そのまま送信が自然な動線になる。
+	const isMsgAfterCheckpoint = currCheckpointIdx !== undefined && currCheckpointIdx === messageIdx - 1
 
 	let chatbubbleContents: React.ReactNode
 	if (mode === 'display') {
@@ -1706,6 +1761,12 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 			return null
 		}
 
+		// リバートが必要なケースだけ onClickRevert を渡す。
+		// - リバート済み or 本来チェックポイント直後の状態 (`isMsgAfterCheckpoint`)
+		//   なら、そのまま編集して送信できるよう Submit ボタンを残す（=undefined）
+		// - そうでない過去メッセージ（`messageIdx > 0`）はリバート前提なのでリバート
+		//   ボタンを表示する。
+		const canSubmitDirectly = messageIdx === 0 || isMsgAfterCheckpoint
 		chatbubbleContents = <VoidChatArea
 			featureName='Chat'
 			onSubmit={onSubmit}
@@ -1716,6 +1777,7 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 			showProspectiveSelections={false}
 			selections={stagingSelections}
 			setSelections={setStagingSelections}
+			onClickRevert={canSubmitDirectly ? undefined : () => setShowRevertConfirm(true)}
 		>
 			<VoidInputBox2
 				enableAtToMention
@@ -1736,8 +1798,6 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 			/>
 		</VoidChatArea>
 	}
-
-	const isMsgAfterCheckpoint = currCheckpointIdx !== undefined && currCheckpointIdx === messageIdx - 1
 
 	return <div
 		ref={stickyRef}
@@ -1801,18 +1861,18 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 			{chatbubbleContents}
 		</div>
 
+		{/* Cursor 風のホバーアクション（右上、編集ボタンのみ）。
+		    リバートは編集モード時に右下のスタート/停止ボタンと同じ場所へ移し、
+		    display モード時は重複表示を避けるためここでは編集だけを出す。 */}
 		<div
-			className="absolute top-1.5 right-1.5 z-1"
+			className={`
+				absolute top-1.5 right-1.5 z-1 flex items-center gap-1
+				transition-all duration-150 ease-out
+				${(isHovered || (isFocused && mode === 'edit')) ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-0.5 pointer-events-none'}
+			`}
 		>
-			<EditSymbol
-				size={14}
-				className={`
-                    cursor-pointer
-                    p-[3px] rounded
-                    text-void-fg-3 hover:text-void-fg-1 hover:bg-[color-mix(in_srgb,var(--void-fg-1)_8%,transparent)]
-                    transition-all duration-150 ease-out
-                    ${isHovered || (isFocused && mode === 'edit') ? 'opacity-100' : 'opacity-0'}
-                `}
+			<button
+				type="button"
 				onClick={() => {
 					if (mode === 'display') {
 						onOpenEdit()
@@ -1820,10 +1880,224 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 						onCloseEdit()
 					}
 				}}
-			/>
+				className={`
+					inline-flex items-center gap-1
+					px-1.5 py-[3px] rounded-md
+					text-[10px] font-medium leading-none
+					text-void-fg-2 hover:text-void-fg-1
+					bg-[color-mix(in_srgb,var(--void-bg-1)_85%,transparent)]
+					hover:bg-[color-mix(in_srgb,var(--void-fg-1)_8%,transparent)]
+					border border-void-border-2 hover:border-void-border-1
+					backdrop-blur-sm
+					shadow-sm
+					transition-colors duration-150 ease-out
+					cursor-pointer
+				`}
+				data-tooltip-id="void-tooltip"
+				data-tooltip-content={mode === 'display' ? 'このメッセージを編集' : '編集を閉じる'}
+				data-tooltip-place="top"
+			>
+				<EditSymbol size={11} className="opacity-80" />
+				<span>{mode === 'display' ? '編集' : '閉じる'}</span>
+			</button>
 		</div>
+
+		{showRevertConfirm && (
+			<RevertConfirmDialog
+				isReverting={isReverting}
+				onCancel={() => setShowRevertConfirm(false)}
+				onConfirm={async () => {
+					if (isReverting) return
+					setIsReverting(true)
+					try {
+						const threadId = chatThreadsService.state.currentThreadId
+						const isThreadRunning = !!chatThreadsService.streamState[threadId]?.isRunning
+						if (isThreadRunning) {
+							// _setAborter で登録された callback が /api/tasks/stop を叩いた後、
+							// ローカル fetch も中断する。
+							try { await chatThreadsService.abortRunning(threadId) } catch { /* best-effort */ }
+						}
+						// jumpToUserModified: true により、AI による変更だけでなく
+						// その後ユーザーが手動で編集した内容も含めて、すべて
+						// このメッセージを送信する直前のスナップショットに戻す。
+						chatThreadsService.jumpToCheckpointBeforeMessageIdx({
+							threadId,
+							messageIdx,
+							jumpToUserModified: true,
+						})
+					} finally {
+						setIsReverting(false)
+						setShowRevertConfirm(false)
+					}
+				}}
+			/>
+		)}
 	</div>
 
+}
+
+const RevertConfirmDialog = ({
+	isReverting,
+	onCancel,
+	onConfirm,
+}: {
+	isReverting: boolean,
+	onCancel: () => void,
+	onConfirm: () => void,
+}) => {
+	const isDark = useIsDark()
+	const mouseDownInsideModal = useRef(false)
+
+	// Portal で body 直下にマウントしているため、scope-tailwind の生成 CSS が
+	// 効かないことがある。背景色や枠線は CSS 変数 (var(--void-bg-1) など) を
+	// インラインで直接指定して、確実にスタイルが反映されるようにする。
+	void isDark; // 参照しておく（使用箇所はインライン style 側）
+	return (
+		<FloatingPortal>
+			<div
+				style={{
+					position: 'fixed',
+					inset: 0,
+					zIndex: 9999999,
+					display: 'flex',
+					alignItems: 'center',
+					justifyContent: 'center',
+					padding: '16px',
+					backgroundColor: 'rgba(0, 0, 0, 0.6)',
+					backdropFilter: 'blur(4px)',
+					WebkitBackdropFilter: 'blur(4px)',
+				}}
+				onClick={(e) => e.stopPropagation()}
+				onMouseDown={() => { mouseDownInsideModal.current = false }}
+				onMouseUp={() => {
+					if (!mouseDownInsideModal.current && !isReverting) {
+						onCancel()
+					}
+					mouseDownInsideModal.current = false
+				}}
+			>
+				<div
+					style={{
+						width: '100%',
+						maxWidth: '380px',
+						display: 'flex',
+						flexDirection: 'column',
+						gap: '12px',
+						padding: '20px',
+						borderRadius: '12px',
+						backgroundColor: 'var(--void-bg-1, #1e1e1e)',
+						color: 'var(--void-fg-1, #e6e6e6)',
+						border: '1px solid var(--void-border-2, #3a3a3a)',
+						boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.6)',
+					}}
+					onClick={(e) => e.stopPropagation()}
+					onMouseDown={(e) => {
+						mouseDownInsideModal.current = true
+						e.stopPropagation()
+					}}
+				>
+					<div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+						<div
+							style={{
+								flexShrink: 0,
+								width: '36px',
+								height: '36px',
+								borderRadius: '50%',
+								display: 'flex',
+								alignItems: 'center',
+								justifyContent: 'center',
+								backgroundColor: 'rgba(245, 158, 11, 0.15)',
+							}}
+						>
+							<RotateCcw size={18} style={{ color: '#f59e0b' }} />
+						</div>
+						<div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
+							<h3 style={{
+								fontSize: '14px',
+								fontWeight: 600,
+								margin: 0,
+								color: 'var(--void-fg-1, #e6e6e6)',
+								lineHeight: 1.2,
+							}}>
+								本当にリバートしますか？
+							</h3>
+							<p style={{
+								fontSize: '12px',
+								margin: 0,
+								color: 'var(--void-fg-3, #a0a0a0)',
+								lineHeight: 1.45,
+							}}>
+								このメッセージ以降のチャット履歴を取り消し、
+								<br />
+								<span style={{ fontWeight: 500, color: 'var(--void-fg-2, #cfcfcf)' }}>
+									編集されたコードファイルもこのメッセージ送信前の状態に戻します。
+								</span>
+								<br />
+								<span style={{ color: 'var(--void-fg-4, #7a7a7a)' }}>
+									この操作は元に戻せません。
+								</span>
+							</p>
+						</div>
+					</div>
+
+					<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px', marginTop: '4px' }}>
+						<button
+							type="button"
+							onClick={onCancel}
+							disabled={isReverting}
+							style={{
+								padding: '6px 12px',
+								borderRadius: '6px',
+								fontSize: '12px',
+								fontWeight: 500,
+								color: 'var(--void-fg-2, #cfcfcf)',
+								backgroundColor: 'var(--void-bg-2, #252525)',
+								border: '1px solid var(--void-border-2, #3a3a3a)',
+								cursor: isReverting ? 'not-allowed' : 'pointer',
+								opacity: isReverting ? 0.5 : 1,
+								transition: 'all 150ms',
+							}}
+						>
+							キャンセル
+						</button>
+						<button
+							type="button"
+							onClick={onConfirm}
+							disabled={isReverting}
+							style={{
+								display: 'inline-flex',
+								alignItems: 'center',
+								gap: '6px',
+								padding: '6px 12px',
+								borderRadius: '6px',
+								fontSize: '12px',
+								fontWeight: 600,
+								color: '#ffffff',
+								backgroundColor: '#dc2626',
+								border: '1px solid rgba(220, 38, 38, 0.4)',
+								boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
+								cursor: isReverting ? 'not-allowed' : 'pointer',
+								opacity: isReverting ? 0.6 : 1,
+								transition: 'all 150ms',
+							}}
+						>
+							{isReverting ? (
+								<>
+									<Loader2 size={12} className="animate-spin" />
+									リバート中…
+								</>
+							) : (
+								<>
+									<RotateCcw size={12} />
+									リバートする
+								</>
+							)}
+						</button>
+					</div>
+				</div>
+			</div>
+		</FloatingPortal>
+	)
 }
 
 const SmallProseWrapper = ({ children }: { children: React.ReactNode }) => {
@@ -2003,20 +2277,43 @@ const detectFlowPhases = (messages: ChatMessage[], isRunning: IsRunningType, rea
 	return activatedPhases;
 };
 
-const FlowIndicator = ({ messages, isRunning, reasoningSoFar }: {
+const FlowIndicator = ({ messages, isRunning, reasoningSoFar, displayContentSoFar }: {
 	messages: ChatMessage[],
 	isRunning: IsRunningType,
 	reasoningSoFar?: string,
+	displayContentSoFar?: string,
 }) => {
 	const settingsState = useSettingsState()
 	const modelSelection = settingsState.modelSelectionOfFeature['Chat']
 	const roleAssignments = settingsState.globalSettings.roleAssignments
 	const isDivision = modelSelection?.providerName === 'divisionAPI'
 
+	// Division API 利用時のテキストソース（ストリーミング中は displayContentSoFar、
+	// 完了後は最後の assistant メッセージのコンテンツ）
+	const lastAssistantText = useMemo(() => {
+		if (displayContentSoFar) return displayContentSoFar
+		for (let i = messages.length - 1; i >= 0; i--) {
+			const m = messages[i]
+			if (m.role === 'assistant') return m.displayContent || ''
+		}
+		return ''
+	}, [messages, displayContentSoFar])
+
 	const phases = useMemo(() =>
 		detectFlowPhases(messages, isRunning, reasoningSoFar, isDivision ? roleAssignments : undefined),
 		[messages, isRunning, reasoningSoFar, isDivision, roleAssignments]
 	);
+
+	// Division API 利用時は専用のロールパイプラインパネルを表示する
+	if (isDivision) {
+		return (
+			<DivisionPipelinePanel
+				text={lastAssistantText}
+				isRunning={!!isRunning}
+				roleAssignments={roleAssignments}
+			/>
+		)
+	}
 
 	if (!isRunning || phases.length === 0) return null;
 
@@ -4152,6 +4449,11 @@ const SidebarHeader = ({ onLoginClick, activeTab, onTabChange }: { onLoginClick:
 					<button
 						onClick={() => {
 							settingsService.setGlobalSetting('isLoggedIn', false)
+							settingsService.setGlobalSetting('divisionUserId', '')
+							settingsService.setGlobalSetting('divisionUserEmail', '')
+							settingsService.setGlobalSetting('divisionAccessToken', '')
+							settingsService.setGlobalSetting('divisionRefreshToken', '')
+							settingsService.setGlobalSetting('divisionApiKey', '')
 						}}
 						className="text-[11px] font-medium px-2 py-0.5 rounded text-void-fg-3 hover:text-void-fg-1 transition-colors"
 					>
@@ -4333,11 +4635,12 @@ export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTa
 			{/* Generating tool */}
 			{generatingTool}
 
-			{/* Flow indicator - shows agent workflow phases */}
+			{/* Flow indicator - shows agent workflow phases (Division 利用時はロールパイプライン UI) */}
 			<FlowIndicator
 				messages={previousMessages}
 				isRunning={isRunning}
 				reasoningSoFar={reasoningSoFar}
+				displayContentSoFar={displayContentSoFar}
 			/>
 
 			{/* loading indicator */}

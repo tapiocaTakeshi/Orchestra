@@ -1745,16 +1745,27 @@ export const Settings = () => {
 											<div className="flex items-center justify-between p-4 bg-void-bg-1 rounded-lg border border-void-border-2">
 												<div className="flex items-center gap-3">
 													<div className="w-8 h-8 rounded-full bg-[#0e70c0] flex items-center justify-center text-white text-sm font-bold">
-														O
+														{(settingsState.globalSettings.divisionUserEmail?.[0] || 'O').toUpperCase()}
 													</div>
 													<div>
-														<div className="font-medium text-void-fg-1">Orchestra User</div>
-														<div className="text-xs text-void-fg-3 opacity-70">ログイン済み</div>
+														<div className="font-medium text-void-fg-1">
+															{settingsState.globalSettings.divisionUserEmail || 'Orchestra User'}
+														</div>
+														<div className="text-xs text-void-fg-3 opacity-70">
+															{settingsState.globalSettings.divisionApiKey
+																? `API キー: ${settingsState.globalSettings.divisionApiKey.slice(0, 7)}…${settingsState.globalSettings.divisionApiKey.slice(-4)}`
+																: 'ログイン済み'}
+														</div>
 													</div>
 												</div>
 												<button
 													onClick={() => {
 														voidSettingsService.setGlobalSetting('isLoggedIn', false)
+														voidSettingsService.setGlobalSetting('divisionUserId', '')
+														voidSettingsService.setGlobalSetting('divisionUserEmail', '')
+														voidSettingsService.setGlobalSetting('divisionAccessToken', '')
+														voidSettingsService.setGlobalSetting('divisionRefreshToken', '')
+														voidSettingsService.setGlobalSetting('divisionApiKey', '')
 													}}
 													className="text-xs text-void-fg-3 hover:text-void-fg-1 transition-colors"
 												>

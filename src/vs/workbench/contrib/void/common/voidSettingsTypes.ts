@@ -460,7 +460,7 @@ export type ChatMode = 'agent' | 'gather' | 'normal'
 
 
 // Context tag types for chat context injection
-export type ContextTagGroup = 'design' | 'feature';
+export type ContextTagGroup = 'design' | 'feature' | 'language' | 'framework';
 
 export type ContextTag = {
 	group: ContextTagGroup;
@@ -472,6 +472,8 @@ export type ContextTag = {
 export const contextTagGroups: Record<ContextTagGroup, { title: string; icon: string }> = {
 	design: { title: 'Design', icon: 'palette' },
 	feature: { title: 'Feature', icon: 'blocks' },
+	language: { title: 'Language', icon: 'code' },
+	framework: { title: 'Framework', icon: 'package' },
 };
 
 export const contextTags: ContextTag[] = [
@@ -497,6 +499,48 @@ export const contextTags: ContextTag[] = [
 	{ group: 'feature', id: 'realtime', title: 'Realtime', description: 'リアルタイム通信・WebSocket' },
 	{ group: 'feature', id: 'crud', title: 'CRUD', description: 'データの作成・読取・更新・削除' },
 	{ group: 'feature', id: 'i18n', title: 'i18n', description: '多言語対応・国際化' },
+	// Language group — 主要なプログラミング言語
+	{ group: 'language', id: 'typescript', title: 'TypeScript', description: '型付き JavaScript' },
+	{ group: 'language', id: 'javascript', title: 'JavaScript', description: 'ECMAScript 標準' },
+	{ group: 'language', id: 'python', title: 'Python', description: 'スクリプト/データサイエンス' },
+	{ group: 'language', id: 'dart', title: 'Dart', description: 'Flutter / Web 向け言語' },
+	{ group: 'language', id: 'go', title: 'Go', description: 'シンプル・高速・並行性' },
+	{ group: 'language', id: 'rust', title: 'Rust', description: 'メモリ安全・高性能' },
+	{ group: 'language', id: 'java', title: 'Java', description: 'JVM 系・エンタープライズ' },
+	{ group: 'language', id: 'kotlin', title: 'Kotlin', description: 'Android / JVM 向けモダン言語' },
+	{ group: 'language', id: 'swift', title: 'Swift', description: 'iOS/macOS ネイティブ' },
+	{ group: 'language', id: 'csharp', title: 'C#', description: '.NET エコシステム' },
+	{ group: 'language', id: 'cpp', title: 'C++', description: 'ハイパフォーマンスシステムズ' },
+	{ group: 'language', id: 'ruby', title: 'Ruby', description: 'Rails / DSL に強い' },
+	{ group: 'language', id: 'php', title: 'PHP', description: 'Web バックエンド' },
+	{ group: 'language', id: 'sql', title: 'SQL', description: 'リレーショナル DB クエリ' },
+	{ group: 'language', id: 'html-css', title: 'HTML / CSS', description: 'Web マークアップとスタイル' },
+	// Framework group — フロント/バック/モバイルの主要フレームワーク
+	{ group: 'framework', id: 'react', title: 'React', description: 'UI ライブラリ' },
+	{ group: 'framework', id: 'nextjs', title: 'Next.js', description: 'React フルスタックフレームワーク' },
+	{ group: 'framework', id: 'vue', title: 'Vue.js', description: 'プログレッシブ JS フレームワーク' },
+	{ group: 'framework', id: 'nuxt', title: 'Nuxt', description: 'Vue ベースのフルスタック' },
+	{ group: 'framework', id: 'svelte', title: 'Svelte / SvelteKit', description: 'コンパイル型 UI' },
+	{ group: 'framework', id: 'angular', title: 'Angular', description: 'TypeScript ベース大規模 SPA' },
+	{ group: 'framework', id: 'astro', title: 'Astro', description: 'コンテンツ駆動の MPA' },
+	{ group: 'framework', id: 'remix', title: 'Remix', description: 'React フルスタック' },
+	{ group: 'framework', id: 'flutter', title: 'Flutter', description: 'クロスプラットフォーム UI (Dart)' },
+	{ group: 'framework', id: 'react-native', title: 'React Native', description: 'クロスプラットフォームモバイル' },
+	{ group: 'framework', id: 'tailwind', title: 'Tailwind CSS', description: 'ユーティリティ CSS' },
+	{ group: 'framework', id: 'nodejs', title: 'Node.js', description: 'JavaScript ランタイム' },
+	{ group: 'framework', id: 'express', title: 'Express', description: 'Node.js Web フレームワーク' },
+	{ group: 'framework', id: 'nestjs', title: 'NestJS', description: 'TypeScript エンタープライズバックエンド' },
+	{ group: 'framework', id: 'fastapi', title: 'FastAPI', description: 'Python 高速 Web フレームワーク' },
+	{ group: 'framework', id: 'django', title: 'Django', description: 'Python フルスタック Web' },
+	{ group: 'framework', id: 'flask', title: 'Flask', description: 'Python マイクロフレームワーク' },
+	{ group: 'framework', id: 'spring', title: 'Spring Boot', description: 'Java エンタープライズ' },
+	{ group: 'framework', id: 'rails', title: 'Ruby on Rails', description: 'Ruby フルスタック Web' },
+	{ group: 'framework', id: 'laravel', title: 'Laravel', description: 'PHP フルスタック Web' },
+	{ group: 'framework', id: 'gin', title: 'Gin', description: 'Go HTTP フレームワーク' },
+	{ group: 'framework', id: 'actix', title: 'Actix Web', description: 'Rust 高速 Web フレームワーク' },
+	{ group: 'framework', id: 'supabase', title: 'Supabase', description: 'OSS Firebase 代替 BaaS' },
+	{ group: 'framework', id: 'firebase', title: 'Firebase', description: 'Google BaaS' },
+	{ group: 'framework', id: 'prisma', title: 'Prisma', description: 'TypeScript ORM' },
 ];
 
 export const contextTagsOfGroup = (group: ContextTagGroup): ContextTag[] =>
@@ -528,6 +572,11 @@ export type GlobalSettings = {
 	roleAssignments: RoleAssignment[];
 	divisionProjectId: string;
 	divisionApiKey: string;
+	// Supabase 認証セッション（Division API のキーを引くために使用）
+	divisionUserId: string;
+	divisionUserEmail: string;
+	divisionAccessToken: string;
+	divisionRefreshToken: string;
 	isLoggedIn: boolean;
 	// Brief Gate Not OK → File Search → Leader 進捗確認 → Coder/Writer ループの最大試行回数。
 	// 1 以上の整数。0 / 負数は 1 に丸められる。
@@ -579,6 +628,10 @@ export const defaultGlobalSettings: GlobalSettings = {
 	roleAssignments: defaultRoleAssignments,
 	divisionProjectId: '',
 	divisionApiKey: '',
+	divisionUserId: '',
+	divisionUserEmail: '',
+	divisionAccessToken: '',
+	divisionRefreshToken: '',
 	isLoggedIn: false,
 	maxBriefGateIterations: 10,
 	maxReviewerIterations: 10,

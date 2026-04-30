@@ -12,6 +12,7 @@ import { OllamaSetupInstructions, OneClickSwitchButton, SettingsForProvider, Mod
 import { ColorScheme } from '../../../../../../../platform/theme/common/theme.js';
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js';
 import { isLinux } from '../../../../../../../base/common/platform.js';
+import { LoginScreen } from '../void-login-tsx/LoginScreen.js';
 
 const OVERRIDE_VALUE = false
 
@@ -653,15 +654,10 @@ const VoidOnboardingContent = () => {
 	const accessor = useAccessor()
 	const voidSettingsService = accessor.get('IVoidSettingsService')
 	const voidMetricsService = accessor.get('IMetricsService')
-	const nativeHostService = accessor.get('INativeHostService')
 
-	const openExternalLogin = async () => {
-		try {
-			await nativeHostService.openExternal('https://division.he-ro.jp/login');
-		} catch (e) {
-			console.error('Failed to open external browser:', e);
-		}
-	};
+	// Division サインインモーダルの表示状態
+	const [showLoginScreen, setShowLoginScreen] = useState(false);
+	const openExternalLogin = () => setShowLoginScreen(true);
 
 	const voidSettingsState = useSettingsState()
 
@@ -876,6 +872,9 @@ const VoidOnboardingContent = () => {
 		<ErrorBoundary>
 			{contentOfIdx[pageIndex]}
 		</ErrorBoundary>
+		{showLoginScreen && (
+			<LoginScreen onClose={() => setShowLoginScreen(false)} />
+		)}
 	</div>
 
 }

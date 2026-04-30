@@ -318,6 +318,12 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 			if ((readS.globalSettings as any).auth0User !== undefined) delete (readS.globalSettings as any).auth0User;
 			if ((readS.globalSettings as any).clerkUser !== undefined) delete (readS.globalSettings as any).clerkUser;
 			if ((readS.globalSettings as any).clerkSessionId !== undefined) delete (readS.globalSettings as any).clerkSessionId;
+
+			// Supabase 認証フィールドのデフォルト補完（v1.4 以降で追加）
+			if (readS.globalSettings.divisionUserId === undefined) readS.globalSettings.divisionUserId = '';
+			if (readS.globalSettings.divisionUserEmail === undefined) readS.globalSettings.divisionUserEmail = '';
+			if (readS.globalSettings.divisionAccessToken === undefined) readS.globalSettings.divisionAccessToken = '';
+			if (readS.globalSettings.divisionRefreshToken === undefined) readS.globalSettings.divisionRefreshToken = '';
 		}
 		catch (e) {
 			readS = defaultState()

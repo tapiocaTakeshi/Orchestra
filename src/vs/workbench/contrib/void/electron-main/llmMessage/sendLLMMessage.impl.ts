@@ -2413,7 +2413,36 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		const prompt = buildPromptFromMessages(messages, separateSystemMessage);
 
 		const controller = new AbortController()
-		_setAborter(() => { controller.abort() })
+
+		// サーバ側の `/api/tasks/stop` を呼ぶための、現在有効な sessionId 集合。
+		// 各サイクルの /api/tasks/create 成功時に追加し、停止/最終化のたびに
+		// 中身は維持する（停止後に再度送らないよう、stopServerSessions が clear する）。
+		const activeServerSessionIds = new Set<string>();
+		const stopServerSessions = async () => {
+			const ids = Array.from(activeServerSessionIds);
+			activeServerSessionIds.clear();
+			if (ids.length === 0) return;
+			const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+			const apiKey = divisionApiKey || process.env.DIVISION_API_KEY || '';
+			if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+			await Promise.all(ids.map(sessionId =>
+				fetch(`${settingsOfProvider.divisionAPI.endpoint || 'https://api.division.he-ro.jp'}/api/tasks/stop`, {
+					method: 'POST',
+					headers,
+					body: JSON.stringify({ projectId: divisionProjectIdParam || '', sessionId }),
+				}).catch(err => {
+					console.warn('[DivisionAPI] /api/tasks/stop failed:', err?.message || err);
+					return null;
+				})
+			));
+		};
+
+		_setAborter(() => {
+			// サーバ側へ停止指示を投げる（fire-and-forget; 完了を待つ必要はない）
+			void stopServerSessions();
+			// ローカルの fetch ストリームも即座に中断
+			controller.abort();
+		});
 
 		let fullText = '';
 		const appendText = (text: string) => {
@@ -2713,6 +2742,11 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			}
 
 			const { sessionId: cycleSessionId, tasks: rawTasks, finalRole: cycleFinalRole } = taskResult;
+			// このサイクルの sessionId を追跡。abort 発火時に
+			// `POST /api/tasks/stop` で確実にサーバ側を停止できるようにする。
+			if (cycleSessionId) {
+				activeServerSessionIds.add(cycleSessionId);
+			}
 
 			// --- DEBUG: Leader が返した raw タスクを必ずログ出力する（filesearch 注入問題の調査用）
 			console.log(`[DivisionAPI][debug] Leader raw tasks (count=${rawTasks.length}):`,
@@ -2996,6 +3030,12 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 						});
 					}
 				}
+			}
+
+			// このサイクルは正常完了したので、stop 候補集合から外しておく。
+			// （以降に新たに作るサイクルは新しい sessionId で再追加される。）
+			if (cycleSessionId) {
+				activeServerSessionIds.delete(cycleSessionId);
 			}
 
 			return { flowOutputs, sessionId: cycleSessionId, finalRole: cycleFinalRole, aborted: false };

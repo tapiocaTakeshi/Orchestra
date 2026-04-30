@@ -1,834 +1,446 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Modern UI Dashboard</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      /* Color Palette */
-      --bg-body: #f8fafc;
-      --bg-surface: #ffffff;
-      --bg-surface-hover: #f1f5f9;
-      
-      --text-primary: #0f172a;
-      --text-secondary: #64748b;
-      --text-tertiary: #94a3b8;
-      
-      --brand-primary: #4f46e5;
-      --brand-primary-light: #e0e7ff;
-      --brand-secondary: #06b6d4;
-      
-      --accent-success: #10b981;
-      --accent-warning: #f59e0b;
-      --accent-danger: #ef4444;
-      
-      --border-color: #e2e8f0;
-      
-      /* Typography */
-      --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-      
-      /* Spacing & Layout */
-      --radius-sm: 0.5rem;
-      --radius-md: 0.75rem;
-      --radius-lg: 1rem;
-      --radius-full: 9999px;
-      
-      /* Shadows */
-      --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-      --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
-      --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.05), 0 4px 6px -4px rgb(0 0 0 / 0.05);
-    }
-
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    body {
-      font-family: var(--font-sans);
-      background-color: var(--bg-body);
-      color: var(--text-primary);
-      display: flex;
-      height: 100vh;
-      overflow: hidden;
-      -webkit-font-smoothing: antialiased;
-    }
-
-    /* --- Sidebar --- */
-    .sidebar {
-      width: 260px;
-      background-color: var(--bg-surface);
-      border-right: 1px solid var(--border-color);
-      display: flex;
-      flex-direction: column;
-      padding: 1.5rem;
-      z-index: 20;
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      font-size: 1.25rem;
-      font-weight: 700;
-      color: var(--text-primary);
-      margin-bottom: 2.5rem;
-      padding: 0 0.5rem;
-    }
-
-    .brand-icon {
-      width: 32px;
-      height: 32px;
-      background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary));
-      border-radius: var(--radius-sm);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-    }
-
-    .nav-menu {
-      list-style: none;
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-    }
-
-    .nav-item a {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      padding: 0.75rem 1rem;
-      border-radius: var(--radius-md);
-      color: var(--text-secondary);
-      text-decoration: none;
-      font-weight: 500;
-      font-size: 0.95rem;
-      transition: all 0.2s ease;
-    }
-
-    .nav-item a:hover {
-      background-color: var(--bg-surface-hover);
-      color: var(--text-primary);
-    }
-
-    .nav-item a.active {
-      background-color: var(--brand-primary-light);
-      color: var(--brand-primary);
-    }
-
-    .nav-item svg {
-      width: 20px;
-      height: 20px;
-      stroke-width: 2;
-    }
-
-    .sidebar-footer {
-      margin-top: auto;
-      padding-top: 1.5rem;
-      border-top: 1px solid var(--border-color);
-    }
-
-    /* --- Main Layout --- */
-    .main-wrapper {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-
-    /* --- Header --- */
-    .header {
-      height: 72px;
-      background-color: var(--bg-surface);
-      border-bottom: 1px solid var(--border-color);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 2rem;
-    }
-
-    .search-container {
-      display: flex;
-      align-items: center;
-      background-color: var(--bg-body);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-full);
-      padding: 0.5rem 1rem;
-      width: 320px;
-      transition: border-color 0.2s;
-    }
-
-    .search-container:focus-within {
-      border-color: var(--brand-primary);
-      box-shadow: 0 0 0 3px var(--brand-primary-light);
-    }
-
-    .search-container input {
-      border: none;
-      background: transparent;
-      outline: none;
-      margin-left: 0.5rem;
-      width: 100%;
-      font-family: inherit;
-      color: var(--text-primary);
-    }
-
-    .search-container input::placeholder {
-      color: var(--text-tertiary);
-    }
-
-    .header-actions {
-      display: flex;
-      align-items: center;
-      gap: 1.5rem;
-    }
-
-    .icon-btn {
-      background: none;
-      border: none;
-      color: var(--text-secondary);
-      cursor: pointer;
-      position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 40px;
-      height: 40px;
-      border-radius: var(--radius-full);
-      transition: background-color 0.2s;
-    }
-
-    .icon-btn:hover {
-      background-color: var(--bg-surface-hover);
-      color: var(--text-primary);
-    }
-
-    .notification-dot {
-      position: absolute;
-      top: 8px;
-      right: 10px;
-      width: 8px;
-      height: 8px;
-      background-color: var(--accent-danger);
-      border-radius: 50%;
-      border: 2px solid var(--bg-surface);
-    }
-
-    .user-profile {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      cursor: pointer;
-      padding: 0.25rem;
-      border-radius: var(--radius-full);
-      transition: background-color 0.2s;
-    }
-
-    .user-profile:hover {
-      background-color: var(--bg-surface-hover);
-    }
-
-    .avatar {
-      width: 36px;
-      height: 36px;
-      border-radius: 50%;
-      object-fit: cover;
-      background: linear-gradient(45deg, #f3e8ff, #e0e7ff);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 600;
-      color: var(--brand-primary);
-      border: 1px solid var(--border-color);
-    }
-
-    /* --- Content Area --- */
-    .content-area {
-      flex: 1;
-      overflow-y: auto;
-      padding: 2rem;
-    }
-
-    .page-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-      margin-bottom: 2rem;
-    }
-
-    .page-title h1 {
-      font-size: 1.5rem;
-      font-weight: 700;
-      margin-bottom: 0.25rem;
-    }
-
-    .page-title p {
-      color: var(--text-secondary);
-      font-size: 0.875rem;
-    }
-
-    .btn-primary {
-      background-color: var(--brand-primary);
-      color: white;
-      border: none;
-      padding: 0.625rem 1.25rem;
-      border-radius: var(--radius-md);
-      font-weight: 600;
-      font-size: 0.875rem;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      transition: background-color 0.2s, transform 0.1s;
-      box-shadow: var(--shadow-sm);
-    }
-
-    .btn-primary:hover {
-      background-color: #4338ca;
-    }
-
-    .btn-primary:active {
-      transform: translateY(1px);
-    }
-
-    /* --- Stats Grid --- */
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 1.5rem;
-      margin-bottom: 2rem;
-    }
-
-    .stat-card {
-      background-color: var(--bg-surface);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-lg);
-      padding: 1.5rem;
-      box-shadow: var(--shadow-sm);
-      transition: transform 0.2s, box-shadow 0.2s;
-    }
-
-    .stat-card:hover {
-      transform: translateY(-2px);
-      box-shadow: var(--shadow-md);
-    }
-
-    .stat-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 1rem;
-    }
-
-    .stat-title {
-      color: var(--text-secondary);
-      font-size: 0.875rem;
-      font-weight: 500;
-    }
-
-    .stat-icon {
-      width: 40px;
-      height: 40px;
-      border-radius: var(--radius-md);
-      background-color: var(--bg-body);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--text-primary);
-    }
-
-    .stat-icon.primary { background-color: var(--brand-primary-light); color: var(--brand-primary); }
-    .stat-icon.success { background-color: #d1fae5; color: var(--accent-success); }
-    .stat-icon.warning { background-color: #fef3c7; color: var(--accent-warning); }
-    .stat-icon.info { background-color: #cffafe; color: var(--brand-secondary); }
-
-    .stat-value {
-      font-size: 1.75rem;
-      font-weight: 700;
-      color: var(--text-primary);
-      margin-bottom: 0.5rem;
-    }
-
-    .stat-trend {
-      display: flex;
-      align-items: center;
-      gap: 0.25rem;
-      font-size: 0.875rem;
-      font-weight: 500;
-    }
-
-    .trend-up { color: var(--accent-success); }
-    .trend-down { color: var(--accent-danger); }
-
-    /* --- Main Sections Grid --- */
-    .sections-grid {
-      display: grid;
-      grid-template-columns: 2fr 1fr;
-      gap: 1.5rem;
-    }
-
-    .card {
-      background-color: var(--bg-surface);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-sm);
-      display: flex;
-      flex-direction: column;
-    }
-
-    .card-header {
-      padding: 1.5rem 1.5rem 1rem;
-      border-bottom: 1px solid var(--border-color);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .card-title {
-      font-size: 1.125rem;
-      font-weight: 600;
-    }
-
-    .card-action {
-      background: none;
-      border: none;
-      color: var(--brand-primary);
-      font-weight: 500;
-      font-size: 0.875rem;
-      cursor: pointer;
-    }
-
-    .card-body {
-      padding: 1.5rem;
-      flex: 1;
-    }
-
-    /* Mock Chart */
-    .chart-container {
-      height: 240px;
-      display: flex;
-      align-items: flex-end;
-      justify-content: space-between;
-      gap: 0.5rem;
-      padding-top: 1rem;
-      position: relative;
-    }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Chat - Minimal Electron</title>
+<style>
+  :root {
+    --bg-window: #ffffff;
+    --bg-sidebar: #fcfcfc;
+    --bg-chat-user: #f4f4f5;
+    --bg-input: #ffffff;
     
-    .chart-grid-line {
-      position: absolute;
-      left: 0;
-      right: 0;
-      border-top: 1px dashed var(--border-color);
-      z-index: 1;
-    }
+    --text-primary: #18181b;
+    --text-secondary: #71717a;
+    --text-tertiary: #a1a1aa;
+    
+    --border-subtle: #f4f4f5;
+    --border-focus: #e4e4e7;
+    
+    --accent: #18181b;
+    --accent-hover: #27272a;
+    
+    --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
 
-    .bar-group {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 0.5rem;
-      z-index: 2;
-    }
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
 
-    .bar {
-      width: 100%;
-      max-width: 32px;
-      background: linear-gradient(to top, var(--brand-primary), #818cf8);
-      border-radius: 4px 4px 0 0;
-      animation: grow 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-      transform-origin: bottom;
-      transform: scaleY(0);
-    }
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--bg-window);
+    color: var(--text-primary);
+    height: 100vh;
+    display: flex;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 
-    .bar.secondary {
-      background: linear-gradient(to top, var(--bg-body), var(--border-color));
-      opacity: 0.7;
-    }
+  /* Electron Native Window Controls Mock */
+  .titlebar-drag-region {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 48px;
+    -webkit-app-region: drag;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    pointer-events: none; /* Let clicks pass through except for the region itself */
+  }
 
-    .bar-label {
-      font-size: 0.75rem;
-      color: var(--text-secondary);
-    }
+  .mac-controls {
+    display: flex;
+    gap: 8px;
+    pointer-events: auto;
+    -webkit-app-region: no-drag;
+  }
 
-    @keyframes grow {
-      to { transform: scaleY(1); }
-    }
+  .mac-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+  }
+  .mac-dot.close { background-color: #ed6a5e; }
+  .mac-dot.minimize { background-color: #f5bf4f; }
+  .mac-dot.maximize { background-color: #61c554; }
 
-    /* List Items */
-    .list-group {
-      display: flex;
-      flex-direction: column;
-    }
+  /* Layout */
+  .sidebar {
+    width: 260px;
+    background-color: var(--bg-sidebar);
+    border-right: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    padding-top: 48px; /* Offset for titlebar */
+    z-index: 10;
+  }
 
-    .list-item {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-      padding: 1rem 0;
-      border-bottom: 1px solid var(--border-color);
-    }
+  .main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    background-color: var(--bg-window);
+  }
 
-    .list-item:last-child {
-      border-bottom: none;
-      padding-bottom: 0;
-    }
+  /* Sidebar Elements */
+  .new-chat-container {
+    padding: 16px;
+    -webkit-app-region: no-drag;
+  }
 
-    .item-icon {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      background-color: var(--bg-body);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--text-secondary);
-      border: 1px solid var(--border-color);
-    }
+  .btn-new-chat {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: transparent;
+    border: 1px solid var(--border-focus);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .btn-new-chat:hover {
+    background-color: #ffffff;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+  }
 
-    .item-content {
-      flex: 1;
-    }
+  .history-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 12px 16px 12px;
+  }
 
-    .item-title {
-      font-weight: 500;
-      font-size: 0.95rem;
-      color: var(--text-primary);
-      margin-bottom: 0.25rem;
-    }
+  .history-group-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 16px 0 8px 12px;
+  }
 
-    .item-subtitle {
-      font-size: 0.8rem;
-      color: var(--text-tertiary);
-    }
+  .history-item {
+    padding: 8px 12px;
+    margin-bottom: 2px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: all 0.2s ease;
+  }
+  .history-item:hover {
+    background-color: var(--border-subtle);
+    color: var(--text-primary);
+  }
+  .history-item.active {
+    background-color: var(--border-focus);
+    color: var(--text-primary);
+    font-weight: 500;
+  }
 
-    .item-value {
-      font-weight: 600;
-      font-size: 0.95rem;
-    }
+  .sidebar-footer {
+    padding: 16px;
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+  .sidebar-footer:hover {
+    color: var(--text-primary);
+  }
 
-    .badge {
-      padding: 0.25rem 0.5rem;
-      border-radius: var(--radius-full);
-      font-size: 0.75rem;
-      font-weight: 500;
-    }
+  /* Chat Area */
+  .chat-scroll-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 64px 0 140px 0; /* Top offset for drag, bottom for input */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
 
-    .badge.success { background-color: #d1fae5; color: var(--accent-success); }
-    .badge.warning { background-color: #fef3c7; color: var(--accent-warning); }
+  .chat-container {
+    width: 100%;
+    max-width: 720px;
+    padding: 0 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+  }
 
-    /* Responsive */
-    @media (max-width: 1024px) {
-      .sections-grid { grid-template-columns: 1fr; }
-    }
-    @media (max-width: 768px) {
-      .sidebar { display: none; }
-      .search-container { width: 200px; }
-    }
-  </style>
+  .message {
+    display: flex;
+    gap: 16px;
+    opacity: 0;
+    animation: fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .avatar.ai {
+    background-color: var(--text-primary);
+    color: #ffffff;
+  }
+  .avatar.user {
+    background-color: var(--bg-chat-user);
+    color: var(--text-primary);
+    border: 1px solid var(--border-focus);
+  }
+
+  .message-content {
+    flex: 1;
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--text-primary);
+    padding-top: 3px;
+  }
+  .message-content p {
+    margin-bottom: 12px;
+  }
+  .message-content p:last-child {
+    margin-bottom: 0;
+  }
+  
+  .message.user .message-content {
+    color: var(--text-secondary);
+  }
+
+  /* Input Area */
+  .input-region {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    padding: 24px;
+    background: linear-gradient(0deg, var(--bg-window) 60%, transparent 100%);
+    display: flex;
+    justify-content: center;
+  }
+
+  .input-wrapper {
+    width: 100%;
+    max-width: 720px;
+    background-color: var(--bg-input);
+    border: 1px solid var(--border-focus);
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.03);
+    display: flex;
+    align-items: flex-end;
+    padding: 10px 14px;
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  }
+  .input-wrapper:focus-within {
+    border-color: #d4d4d8;
+    box-shadow: 0 4px 32px rgba(0, 0, 0, 0.06);
+  }
+
+  .input-field {
+    flex: 1;
+    border: none;
+    background: transparent;
+    resize: none;
+    outline: none;
+    font-family: inherit;
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--text-primary);
+    padding: 4px 8px;
+    max-height: 200px;
+    min-height: 24px;
+  }
+  .input-field::placeholder {
+    color: var(--text-tertiary);
+  }
+
+  .btn-send {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    background-color: var(--accent);
+    color: #ffffff;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    margin-bottom: 2px;
+    transition: all 0.2s ease;
+  }
+  .btn-send:hover {
+    background-color: var(--accent-hover);
+    transform: translateY(-1px);
+  }
+  .btn-send:active {
+    transform: translateY(0) scale(0.96);
+  }
+
+  /* Icons */
+  svg {
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    fill: none;
+    stroke: currentColor;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    width: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-focus);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #d4d4d8;
+  }
+</style>
 </head>
 <body>
 
+  <!-- Electron Drag Region & Window Controls -->
+  <div class="titlebar-drag-region">
+    <div class="mac-controls">
+      <div class="mac-dot close"></div>
+      <div class="mac-dot minimize"></div>
+      <div class="mac-dot maximize"></div>
+    </div>
+  </div>
+
   <!-- Sidebar -->
   <aside class="sidebar">
-    <div class="brand">
-      <div class="brand-icon">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
-          <polyline points="2 17 12 22 22 17"></polyline>
-          <polyline points="2 12 12 17 22 12"></polyline>
-        </svg>
-      </div>
-      Nexus UI
+    <div class="new-chat-container">
+      <button class="btn-new-chat">
+        New thread
+        <svg width="16" height="16" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      </button>
     </div>
-    
-    <ul class="nav-menu">
-      <li class="nav-item">
-        <a href="#" class="active">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="7" height="9"></rect>
-            <rect x="14" y="3" width="7" height="5"></rect>
-            <rect x="14" y="12" width="7" height="9"></rect>
-            <rect x="3" y="16" width="7" height="5"></rect>
-          </svg>
-          Dashboard
-        </a>
-      </li>
-      <li class="nav-item">
-        <a href="#">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-          </svg>
-          Messages
-        </a>
-      </li>
-      <li class="nav-item">
-        <a href="#">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-            <circle cx="12" cy="7" r="4"></circle>
-          </svg>
-          Customers
-        </a>
-      </li>
-      <li class="nav-item">
-        <a href="#">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-          </svg>
-          Analytics
-        </a>
-      </li>
-    </ul>
+
+    <div class="history-list">
+      <div class="history-group-title">Today</div>
+      <div class="history-item active">Minimalism in Desktop Apps</div>
+      <div class="history-item">Electron IPC best practices</div>
+      
+      <div class="history-group-title">Previous 7 Days</div>
+      <div class="history-item">Typography scaling system</div>
+      <div class="history-item">Designing without borders</div>
+      <div class="history-item">State management review</div>
+      <div class="history-item">Color contrast accessibility</div>
+    </div>
 
     <div class="sidebar-footer">
-      <ul class="nav-menu">
-        <li class="nav-item">
-          <a href="#">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="3"></circle>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-            </svg>
-            Settings
-          </a>
-        </li>
-      </ul>
+      <svg width="16" height="16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+      Preferences
     </div>
   </aside>
 
-  <!-- Main Content -->
-  <main class="main-wrapper">
-    <!-- Header -->
-    <header class="header">
-      <div class="search-container">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-tertiary);">
-          <circle cx="11" cy="11" r="8"></circle>
-          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-        </svg>
-        <input type="text" placeholder="Search anything...">
-      </div>
-
-      <div class="header-actions">
-        <button class="icon-btn">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-          </svg>
-          <div class="notification-dot"></div>
-        </button>
-        <div class="user-profile">
-          <div class="avatar">AK</div>
-          <div style="display: flex; flex-direction: column;">
-            <span style="font-size: 0.875rem; font-weight: 600;">Alex Knight</span>
-            <span style="font-size: 0.75rem; color: var(--text-secondary);">Admin</span>
-          </div>
-        </div>
-      </div>
-    </header>
-
-    <!-- Content Area -->
-    <div class="content-area">
-      
-      <div class="page-header">
-        <div class="page-title">
-          <h1>Overview</h1>
-          <p>Welcome back, here's what's happening today.</p>
-        </div>
-        <button class="btn-primary">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-          New Report
-        </button>
-      </div>
-
-      <!-- Stats Grid -->
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-header">
-            <span class="stat-title">Total Revenue</span>
-            <div class="stat-icon primary">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="12" y1="1" x2="12" y2="23"></line>
-                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-              </svg>
-            </div>
-          </div>
-          <div class="stat-value">$124,563.00</div>
-          <div class="stat-trend trend-up">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
-              <polyline points="17 6 23 6 23 12"></polyline>
-            </svg>
-            +14.5% from last month
-          </div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-header">
-            <span class="stat-title">Active Users</span>
-            <div class="stat-icon success">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                <circle cx="9" cy="7" r="4"></circle>
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-              </svg>
-            </div>
-          </div>
-          <div class="stat-value">8,432</div>
-          <div class="stat-trend trend-up">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
-              <polyline points="17 6 23 6 23 12"></polyline>
-            </svg>
-            +5.2% from last month
-          </div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-header">
-            <span class="stat-title">Bounce Rate</span>
-            <div class="stat-icon warning">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
-              </svg>
-            </div>
-          </div>
-          <div class="stat-value">24.5%</div>
-          <div class="stat-trend trend-down">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="23 18 13.5 8.5 8.5 13.5 1 6"></polyline>
-              <polyline points="17 18 23 18 23 12"></polyline>
-            </svg>
-            -1.1% from last month
-          </div>
-        </div>
-      </div>
-
-      <!-- Sections Grid -->
-      <div class="sections-grid">
+  <!-- Main Chat -->
+  <main class="main-content">
+    <div class="chat-scroll-area">
+      <div class="chat-container">
         
-        <!-- Chart Section -->
-        <div class="card">
-          <div class="card-header">
-            <h2 class="card-title">Revenue Overview</h2>
-            <button class="card-action">View Full Report</button>
+        <!-- User -->
+        <div class="message user" style="animation-delay: 0s;">
+          <div class="avatar user">
+            <svg width="14" height="14" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
           </div>
-          <div class="card-body">
-            <div class="chart-container">
-              <div class="chart-grid-line" style="bottom: 25%;"></div>
-              <div class="chart-grid-line" style="bottom: 50%;"></div>
-              <div class="chart-grid-line" style="bottom: 75%;"></div>
-              
-              <div class="bar-group">
-                <div class="bar" style="height: 40%;"></div>
-                <span class="bar-label">Jan</span>
-              </div>
-              <div class="bar-group">
-                <div class="bar" style="height: 55%;"></div>
-                <span class="bar-label">Feb</span>
-              </div>
-              <div class="bar-group">
-                <div class="bar" style="height: 35%;"></div>
-                <span class="bar-label">Mar</span>
-              </div>
-              <div class="bar-group">
-                <div class="bar" style="height: 70%;"></div>
-                <span class="bar-label">Apr</span>
-              </div>
-              <div class="bar-group">
-                <div class="bar" style="height: 60%;"></div>
-                <span class="bar-label">May</span>
-              </div>
-              <div class="bar-group">
-                <div class="bar" style="height: 85%;"></div>
-                <span class="bar-label">Jun</span>
-              </div>
-              <div class="bar-group">
-                <div class="bar" style="height: 100%;"></div>
-                <span class="bar-label">Jul</span>
-              </div>
-            </div>
+          <div class="message-content">
+            <p>I'm building an AI chat app using Electron. I want the design to be extremely minimal. No heavy borders, no cluttered headers. How should I approach the UI?</p>
           </div>
         </div>
 
-        <!-- Recent Activity Section -->
-        <div class="card">
-          <div class="card-header">
-            <h2 class="card-title">Recent Transactions</h2>
-            <button class="card-action">See All</button>
+        <!-- AI -->
+        <div class="message ai" style="animation-delay: 0.15s;">
+          <div class="avatar ai">
+            <svg width="14" height="14" viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
           </div>
-          <div class="card-body">
-            <div class="list-group">
-              <div class="list-item">
-                <div class="item-icon">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="2" y="5" width="20" height="14" rx="2"></rect>
-                    <line x1="2" y1="10" x2="22" y2="10"></line>
-                  </svg>
-                </div>
-                <div class="item-content">
-                  <div class="item-title">Stripe Payment</div>
-                  <div class="item-subtitle">Today, 2:34 PM</div>
-                </div>
-                <div class="item-value">+$240.00</div>
-              </div>
-
-              <div class="list-item">
-                <div class="item-icon">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                  </svg>
-                </div>
-                <div class="item-content">
-                  <div class="item-title">Design Assets</div>
-                  <div class="item-subtitle">Yesterday, 1:12 PM</div>
-                </div>
-                <div class="item-value">-$45.00</div>
-              </div>
-
-              <div class="list-item">
-                <div class="item-icon">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="2" y="5" width="20" height="14" rx="2"></rect>
-                    <line x1="2" y1="10" x2="22" y2="10"></line>
-                  </svg>
-                </div>
-                <div class="item-content">
-                  <div class="item-title">PayPal Transfer</div>
-                  <div class="item-subtitle">May 24, 09:40 AM</div>
-                </div>
-                <div class="item-value">+$1,250.00</div>
-              </div>
-
-              <div class="list-item">
-                <div class="item-icon">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                    <line x1="16" y1="2" x2="16" y2="6"></line>
-                    <line x1="8" y1="2" x2="8" y2="6"></line>
-                    <line x1="3" y1="10" x2="21" y2="10"></line>
-                  </svg>
-                </div>
-                <div class="item-content">
-                  <div class="item-title">AWS Hosting</div>
-                  <div class="item-subtitle">May 21, 10:20 PM</div>
-                </div>
-                <div class="item-value">-$120.00</div>
-              </div>
-            </div>
+          <div class="message-content">
+            <p>To achieve a truly minimal aesthetic in an Electron app, the key is to rely on whitespace and typography rather than explicit structural elements like borders or backgrounds.</p>
+            <p>Here are three core principles for this approach:</p>
+            <p style="padding-left: 16px; border-left: 2px solid var(--border-focus); margin: 16px 0; color: var(--text-secondary);">
+              <strong>1. Frameless Window</strong><br>
+              Hide the OS default title bar and implement a custom `-webkit-app-region: drag` area. Blend it seamlessly into your layout so the app feels like a single continuous surface.
+            </p>
+            <p style="padding-left: 16px; border-left: 2px solid var(--border-focus); margin: 16px 0; color: var(--text-secondary);">
+              <strong>2. Typographic Hierarchy</strong><br>
+              Use font weight, size, and subtle color shifts (like grays instead of stark black) to differentiate UI components. Remove unnecessary dividing lines.
+            </p>
+            <p style="padding-left: 16px; border-left: 2px solid var(--border-focus); margin: 16px 0; color: var(--text-secondary);">
+              <strong>3. Contextual Input</strong><br>
+              The text input should float elegantly at the bottom. Use a very subtle box-shadow instead of a harsh border to indicate the input area, keeping focus purely on the text.
+            </p>
           </div>
         </div>
 
+        <!-- User -->
+        <div class="message user" style="animation-delay: 0.3s;">
+          <div class="avatar user">
+             <svg width="14" height="14" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+          </div>
+          <div class="message-content">
+            <p>Make sense. Could you generate a quick HTML prototype reflecting these ideas?</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Floating Input -->
+    <div class="input-region">
+      <div class="input-wrapper">
+        <textarea class="input-field" rows="1" placeholder="Ask anything..."></textarea>
+        <button class="btn-send" aria-label="Send message">
+          <svg width="14" height="14" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+        </button>
       </div>
     </div>
   </main>
 
+  <script>
+    // Mock auto-resizing for the textarea
+    const textarea = document.querySelector('.input-field');
+    textarea.addEventListener('input', function() {
+      this.style.height = 'auto';
+      this.style.height = (this.scrollHeight) + 'px';
+      if(this.value === '') {
+        this.style.height = 'auto';
+      }
+    });
+  </script>
 </body>
 </html>

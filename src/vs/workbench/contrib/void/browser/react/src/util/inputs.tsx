@@ -18,7 +18,7 @@ import { inputBackground, inputForeground } from '../../../../../../../platform/
 import { useFloating, autoUpdate, offset, flip, shift, size, autoPlacement, FloatingPortal } from '@floating-ui/react';
 import { URI } from '../../../../../../../base/common/uri.js';
 import { getBasename, getFolderName } from '../sidebar-tsx/SidebarChat.js';
-import { ChevronRight, File, Folder, FolderClosed, LucideProps, Palette, Blocks, Tag } from 'lucide-react';
+import { ChevronRight, File, Folder, FolderClosed, LucideProps, Palette, Blocks, Tag, Code, Package } from 'lucide-react';
 import { contextTagsOfGroup } from '../../../../common/voidSettingsTypes.js';
 import { StagingSelectionItem } from '../../../../common/chatThreadServiceTypes.js';
 import { DiffEditorWidget } from '../../../../../../../editor/browser/widget/diffEditor/diffEditorWidget.js';
@@ -340,6 +340,32 @@ const getOptionsAtPath = async (accessor: ReturnType<typeof useAccessor>, path: 
 				leafNodeType: 'ContextTag' as const,
 				tagId: t.id,
 				tagGroup: 'feature' as const,
+			})),
+		},
+		{
+			fullName: 'language',
+			abbreviatedName: 'language',
+			iconInMenu: Code,
+			nextOptions: contextTagsOfGroup('language').map(t => ({
+				fullName: t.title,
+				abbreviatedName: t.title,
+				iconInMenu: Code,
+				leafNodeType: 'ContextTag' as const,
+				tagId: t.id,
+				tagGroup: 'language' as const,
+			})),
+		},
+		{
+			fullName: 'framework',
+			abbreviatedName: 'framework',
+			iconInMenu: Package,
+			nextOptions: contextTagsOfGroup('framework').map(t => ({
+				fullName: t.title,
+				abbreviatedName: t.title,
+				iconInMenu: Package,
+				leafNodeType: 'ContextTag' as const,
+				tagId: t.id,
+				tagGroup: 'framework' as const,
 			})),
 		},
 	]
