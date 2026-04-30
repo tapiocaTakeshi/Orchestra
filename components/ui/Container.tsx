@@ -1,34 +1,12 @@
-import { cn } from "@/lib/utils";
-import type { HTMLAttributes } from "react";
+import * as React from "react";
+import { cn } from "@/lib/cn";
 
-type Props = HTMLAttributes<HTMLDivElement> & {
-  size?: "sm" | "md" | "lg";
-};
-
-const sizeMap = {
-  sm: "max-w-2xl",
-  md: "max-w-4xl",
-  lg: "max-w-readable",
-};
-
-export function Container({
-  size = "lg",
+export const Container = ({
   className,
-  children,
-  ...rest
-}: Props) {
-  return (
-    <div
-      className={cn(
-        "mx-auto w-full px-5 md:px-8",
-        sizeMap[size],
-        className
-      )}
-      {...rest}
-    >
-      {children}
-    </div>
-  );
-}
-
-export default Container;
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) => (
+  <div
+    className={cn("mx-auto w-full max-w-6xl px-5 md:px-8", className)}
+    {...props}
+  />
+);

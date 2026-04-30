@@ -1,34 +1,25 @@
 import * as React from "react";
 
-type Props = {
-  children: React.ReactNode;
-  title?: string;
-  eyebrow?: string;
-  className?: string;
-};
+interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
+  interactive?: boolean;
+}
 
-export function Card({ children, title, eyebrow, className }: Props) {
+export function Card({
+  className = "",
+  interactive = false,
+  ...props
+}: CardProps) {
   return (
-    <article
-      className={className}
-      style={{
-        border: "1px solid var(--color-border)",
-        borderRadius: "var(--radius-lg)",
-        background: "var(--color-bg)",
-        padding: "clamp(20px, 3vw, 32px)",
-        display: "flex",
-        flexDirection: "column",
-        gap: 12,
-        transition: "border-color var(--dur-base) var(--ease)",
-      }}
-    >
-      {eyebrow && <span className="eyebrow">{eyebrow}</span>}
-      {title && (
-        <h3 style={{ fontSize: "var(--fs-lg)", fontWeight: 600 }}>{title}</h3>
-      )}
-      <div style={{ color: "var(--color-text-muted)", lineHeight: 1.6 }}>
-        {children}
-      </div>
-    </article>
+    <div
+      className={[
+        "rounded-2xl border border-border bg-card/70 backdrop-blur-sm",
+        "shadow-soft p-6 sm:p-7",
+        interactive
+          ? "transition-all duration-300 hover:-translate-y-1 hover:shadow-glow hover:border-foreground/20"
+          : "",
+        className,
+      ].join(" ")}
+      {...props}
+    />
   );
 }

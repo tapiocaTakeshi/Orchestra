@@ -1,7 +1,7 @@
 {
   "name": "theme-minimal",
   "displayName": "Minimal Theme",
-  "description": "A minimal, whitespace-driven color theme for a calm editing experience.",
+  "description": "シンプルで余白を活かしたミニマルなカラーテーマ (Light / Dark)。",
   "version": "1.0.0",
   "publisher": "vscode",
   "license": "MIT",
@@ -14,11 +14,13 @@
   "contributes": {
     "themes": [
       {
+        "id": "Minimal Light",
         "label": "Minimal Light",
         "uiTheme": "vs",
         "path": "./themes/minimal-light-color-theme.json"
       },
       {
+        "id": "Minimal Dark",
         "label": "Minimal Dark",
         "uiTheme": "vs-dark",
         "path": "./themes/minimal-dark-color-theme.json"

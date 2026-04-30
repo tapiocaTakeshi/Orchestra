@@ -1,73 +1,69 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
+  darkMode: "class",
   content: [
-    "./app/**/*.{ts,tsx,mdx}",
-    "./pages/**/*.{ts,tsx,mdx}",
-    "./components/**/*.{ts,tsx,mdx}",
-    "./src/**/*.{ts,tsx,mdx}",
+    "./app/**/*.{ts,tsx,js,jsx,mdx}",
+    "./pages/**/*.{ts,tsx,js,jsx,mdx}",
+    "./components/**/*.{ts,tsx,js,jsx,mdx}",
+    "./src/**/*.{ts,tsx,js,jsx,mdx}",
   ],
-  darkMode: "media",
   theme: {
     container: {
       center: true,
-      padding: {
-        DEFAULT: "1.25rem",
-        md: "2rem",
-      },
-      screens: {
-        sm: "640px",
-        md: "768px",
-        lg: "1024px",
-        xl: "1152px",
-      },
+      padding: "1.5rem",
+      screens: { "2xl": "1200px" },
     },
     extend: {
       colors: {
-        paper: "hsl(var(--paper) / <alpha-value>)",
-        mist: "hsl(var(--mist) / <alpha-value>)",
-        hairline: "hsl(var(--hairline) / <alpha-value>)",
-        ink: {
-          DEFAULT: "hsl(var(--ink) / <alpha-value>)",
-          2: "hsl(var(--ink-2) / <alpha-value>)",
-          3: "hsl(var(--ink-3) / <alpha-value>)",
+        border: "hsl(var(--border))",
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring))",
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
+        muted: {
+          DEFAULT: "hsl(var(--muted))",
+          foreground: "hsl(var(--muted-foreground))",
         },
-        accent: "hsl(var(--accent) / <alpha-value>)",
-      },
-      fontFamily: {
-        sans: [
-          "Inter",
-          "ui-sans-serif",
-          "system-ui",
-          "-apple-system",
-          "Segoe UI",
-          "Hiragino Sans",
-          "Noto Sans JP",
-          "sans-serif",
-        ],
-      },
-      letterSpacing: {
-        tightest: "-0.03em",
-        tighter: "-0.022em",
-      },
-      maxWidth: {
-        prose: "65ch",
-        readable: "72rem",
-      },
-      spacing: {
-        section: "clamp(4rem, 3rem + 4vw, 7.5rem)",
+        card: {
+          DEFAULT: "hsl(var(--card))",
+          foreground: "hsl(var(--card-foreground))",
+        },
+        primary: {
+          DEFAULT: "hsl(var(--primary))",
+          foreground: "hsl(var(--primary-foreground))",
+        },
+        accent: {
+          DEFAULT: "hsl(var(--accent))",
+          foreground: "hsl(var(--accent-foreground))",
+        },
       },
       borderRadius: {
-        DEFAULT: "6px",
+        lg: "var(--radius)",
+        md: "calc(var(--radius) - 4px)",
+        sm: "calc(var(--radius) - 8px)",
+      },
+      fontFamily: {
+        sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ["var(--font-display)", "var(--font-sans)", "sans-serif"],
+        mono: ["var(--font-mono)", "ui-monospace", "monospace"],
+      },
+      boxShadow: {
+        soft: "0 1px 2px 0 rgb(0 0 0 / 0.04), 0 8px 24px -8px rgb(0 0 0 / 0.10)",
+        glow: "0 10px 40px -10px hsl(var(--primary) / 0.45)",
+      },
+      backgroundImage: {
+        "brand-gradient":
+          "linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--accent)) 100%)",
       },
       keyframes: {
-        rise: {
-          "0%": { opacity: "0", transform: "translateY(4px)" },
-          "100%": { opacity: "1", transform: "translateY(0)" },
+        shimmer: {
+          "0%": { backgroundPosition: "-200% 0" },
+          "100%": { backgroundPosition: "200% 0" },
         },
       },
       animation: {
-        rise: "rise .5s cubic-bezier(.2,.7,.2,1) both",
+        shimmer: "shimmer 2.5s linear infinite",
       },
     },
   },

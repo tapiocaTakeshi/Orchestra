@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self';"
+    />
+    <title>App</title>
+    <link rel="stylesheet" href="./styles/minimal.css" />
+  </head>
+  <body>
+    <div class="app" id="app">
+      <header class="app-header">
+        <div class="brand">
+          <span class="logo" aria-hidden="true"></span>
+          <span>Minimal</span>
+        </div>
+        <nav>
+          <button class="btn btn-ghost" id="theme-toggle" type="button">
+            Theme
+          </button>
+          <button class="btn" type="button">Settings</button>
+          <button class="btn btn-primary" type="button">New</button>
+        </nav>
+      </header>
+
+      <main class="app-main">
+        <div class="container">
+          <section class="hero">
+            <h1>静かに、必要なものだけを。</h1>
+            <p>
+              余白とタイポグラフィでコンテンツを引き立てる、ミニマルな
+              Electron アプリのスタートテンプレートです。
+            </p>
+          </section>
+
+          <section class="grid" aria-label="features">
+            <article class="card">
+              <h2>シンプル</h2>
+              <p>装飾を削ぎ落とし、操作対象だけを際立たせます。</p>
+            </article>
+            <article class="card">
+              <h2>軽快</h2>
+              <p>控えめなモーションと十分な余白で読みやすく。</p>
+            </article>
+            <article class="card">
+              <h2>一貫性</h2>
+              <p>8pt スペーシングと最小限のカラーで統一。</p>
+            </article>
+          </section>
+
+          <section class="card" aria-label="quickstart">
+            <h2>クイックスタート</h2>
+            <p class="muted">
+              <span class="kbd">⌘</span> <span class="kbd">K</span>
+              でコマンドパレットを開きます。
+            </p>
+          </section>
+        </div>
+      </main>
+
+      <footer class="app-footer">
+        <span>© Minimal</span>
+        <span class="muted">v0.1.0</span>
+      </footer>
+    </div>
+
+    <script src="./renderer.js" defer></script>
+  </body>
+</html>

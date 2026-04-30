@@ -1,17 +1,35 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
 const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-inter",
+  variable: "--font-sans",
+  display: "swap",
+});
+
+const display = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-display",
+  display: "swap",
+});
+
+const mono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
   display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Minimal — Less, but better.",
+  title: "Modern UI — Crafted with care",
   description:
-    "A quiet, focused product designed around restraint, whitespace, and clarity.",
+    "A modern, accessible, and beautifully crafted experience. Built for clarity, speed, and delight.",
+  metadataBase: new URL("https://example.com"),
+  openGraph: {
+    title: "Modern UI",
+    description: "Modern, accessible, and delightful.",
+    type: "website",
+  },
 };
 
 export default function RootLayout({
@@ -20,8 +38,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={inter.variable}>
-      <body className="min-h-screen antialiased">{children}</body>
+    <html lang="ja" className={`${inter.variable} ${display.variable} ${mono.variable}`}>
+      <body className="font-sans antialiased min-h-dvh">
+        {children}
+      </body>
     </html>
   );
 }

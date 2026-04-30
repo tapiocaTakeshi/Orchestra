@@ -1,458 +1,769 @@
 ### 1. 実装プラン
 
-ユーザー要求は「designを改善して」（Minimal / Electron）。VS Code (Electron) ベースのワークスペースに既存の Electron デスクトップアプリがあるため、**ミニマルデザインのウェルカム/スタートアップ画面**を Electron アプリ内に追加する形で改善します。
+直前のコンテキストに具体的なスナップショットが復元できていないため、**最も一般的な静的サイト構成（`index.html` + `style.css`）** を前提に、Modern テーマの UI/UX 改善を最小差分で適用します。プロジェクトが Next.js/React の場合でも、`style.css` をそのまま `globals.css` 等にコピーすれば再利用可能な設計にしています。
 
-具体的には:
-- Electron のレンダラ用に、シンプルで余白を活かしたミニマルなウェルカム画面（HTML + CSS）を新規作成
-- 既存の `defaultExtensionsInitializer.ts` には触らず（ロジック層なのでデザインと無関係）、UI レイヤのみを追加
-- 既存 `language-configuration.json` の動作には影響を与えない
-- システムフォント・余白・モノクロ基調・最小限のアクセントカラーで「Minimal」テーマを表現
-
-影響範囲:
-- 新規: `src/vs/workbench/contrib/welcomeMinimal/browser/media/welcomeMinimal.css`
-- 新規: `src/vs/workbench/contrib/welcomeMinimal/browser/media/welcomeMinimal.html`
-- 新規: `src/vs/workbench/contrib/welcomeMinimal/browser/welcomeMinimal.contribution.ts`（最小限のコントリビューション）
-
-既存の3ファイルは UI/デザインに関するファイルではない（言語設定 JSON、ドキュメントコンテキスト解決ロジック、拡張初期化ロジック）ため、デザイン改善とは関連性が低く、編集対象外とします。
+Modern デザインのポイント:
+- **デザイントークン化**: CSS カスタムプロパティで色・余白・角丸・影・タイポグラフィを一元管理
+- **ダーク/ライト両対応**: `prefers-color-scheme` で自動切替、`[data-theme]` で手動切替も可能
+- **モダンなタイポグラフィ**: Variable font (Inter) + `clamp()` による流体タイポ
+- **ガラスモーフィズム / ソフトシャドウ / グラデーションアクセント** をヒーローと CTA に適用
+- **マイクロインタラクション**: hover lift, focus ring, smooth transitions, reduced-motion 配慮
+- **レスポンシブ**: CSS Grid + `min()/clamp()` でブレイクポイント依存を最小化
+- **アクセシビリティ**: コントラスト比 AA 以上、`:focus-visible`、`prefers-reduced-motion` 対応
 
 ### 2. ファイル一覧
 
 | ファイル | 操作 | 概要 |
 |---|---|---|
-| `src/vs/workbench/contrib/welcomeMinimal/browser/media/welcomeMinimal.css` | 新規 | ミニマルデザインのスタイル |
-| `src/vs/workbench/contrib/welcomeMinimal/browser/media/welcomeMinimal.html` | 新規 | ウェルカム画面のマークアップ |
-| `src/vs/workbench/contrib/welcomeMinimal/browser/welcomeMinimal.contribution.ts` | 新規 | レンダラから読み込むエントリ |
+| `style.css` | 新規/上書き | Modern デザイントークン + コンポーネントスタイル |
+| `index.html` | 新規/上書き | セマンティックなマークアップ + Modern UI レイアウト |
+| `script.js` | 新規/上書き | テーマ切替・スムーズスクロール・IntersectionObserver による出現アニメ |
+
+> 既存ファイルが別パス（`src/index.html` 等）の場合は、下記コードブロックの `:path` 部分を実プロジェクトのパスに置換してご利用ください。
 
 ### 3. コード本体
 
-```css:src/vs/workbench/contrib/welcomeMinimal/browser/media/welcomeMinimal.css
-/*---------------------------------------------------------------------------------------------
- *  Minimal Welcome — シンプルで余白を活かしたデザイン
- *--------------------------------------------------------------------------------------------*/
-
+```css:style.css
+/* =========================================================
+   Modern UI/UX — Design Tokens
+   ========================================================= */
 :root {
-	--minimal-bg: var(--vscode-editor-background, #ffffff);
-	--minimal-fg: var(--vscode-foreground, #1a1a1a);
-	--minimal-muted: var(--vscode-descriptionForeground, #6b6b6b);
-	--minimal-accent: var(--vscode-textLink-foreground, #0a66c2);
-	--minimal-border: var(--vscode-panel-border, rgba(0, 0, 0, 0.08));
-	--minimal-hover: var(--vscode-list-hoverBackground, rgba(0, 0, 0, 0.04));
-	--minimal-radius: 6px;
-	--minimal-space-xs: 6px;
-	--minimal-space-sm: 12px;
-	--minimal-space-md: 24px;
-	--minimal-space-lg: 48px;
-	--minimal-space-xl: 96px;
-	--minimal-font:
-		-apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue",
-		"Hiragino Sans", "Yu Gothic UI", Meiryo, system-ui, sans-serif;
+  /* Brand */
+  --brand-50:  #eef4ff;
+  --brand-100: #dbe7ff;
+  --brand-200: #b8ceff;
+  --brand-300: #8aafff;
+  --brand-400: #5b8dff;
+  --brand-500: #3b6dff;
+  --brand-600: #2754e6;
+  --brand-700: #1f43b8;
+  --brand-800: #1b3791;
+  --brand-900: #182f73;
+
+  /* Neutral (Slate) */
+  --bg:        #ffffff;
+  --bg-soft:   #f7f8fb;
+  --bg-elev:   #ffffff;
+  --surface:   #ffffff;
+  --border:    #e6e8ee;
+  --border-strong: #d3d7e0;
+  --text:      #0b1020;
+  --text-muted:#5a6178;
+  --text-subtle:#8b91a6;
+
+  /* Accent */
+  --accent:    #7c5cff;
+  --success:   #14b87a;
+  --warning:   #f5a524;
+  --danger:    #ef4444;
+
+  /* Radius */
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --radius-pill: 999px;
+
+  /* Spacing scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --space-9: 96px;
+
+  /* Shadow (soft, layered) */
+  --shadow-xs: 0 1px 2px rgba(11,16,32,.06);
+  --shadow-sm: 0 2px 8px rgba(11,16,32,.06), 0 1px 2px rgba(11,16,32,.04);
+  --shadow-md: 0 8px 24px rgba(11,16,32,.08), 0 2px 6px rgba(11,16,32,.05);
+  --shadow-lg: 0 20px 48px rgba(11,16,32,.12), 0 8px 16px rgba(11,16,32,.06);
+  --shadow-glow: 0 10px 40px -10px rgba(59,109,255,.55);
+
+  /* Typography */
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+               'Helvetica Neue', 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+  --font-display: 'Inter', var(--font-sans);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --fs-1: clamp(2.25rem, 4vw + 1rem, 4rem);     /* h1 / hero */
+  --fs-2: clamp(1.75rem, 2.4vw + 1rem, 2.75rem);
+  --fs-3: clamp(1.375rem, 1.4vw + 1rem, 1.75rem);
+  --fs-4: 1.125rem;
+  --fs-base: 1rem;
+  --fs-sm: .9375rem;
+  --fs-xs: .8125rem;
+
+  /* Layout */
+  --container: 1200px;
+  --gutter: clamp(16px, 4vw, 32px);
+
+  /* Motion */
+  --ease-out: cubic-bezier(.2, .7, .2, 1);
+  --ease-spring: cubic-bezier(.22, 1.2, .36, 1);
+  --dur-fast: 150ms;
+  --dur: 240ms;
+  --dur-slow: 420ms;
 }
 
-.welcome-minimal {
-	box-sizing: border-box;
-	min-height: 100vh;
-	margin: 0;
-	padding: var(--minimal-space-xl) var(--minimal-space-lg);
-	background: var(--minimal-bg);
-	color: var(--minimal-fg);
-	font-family: var(--minimal-font);
-	font-size: 14px;
-	line-height: 1.7;
-	-webkit-font-smoothing: antialiased;
-	display: flex;
-	justify-content: center;
+/* Dark theme */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg:        #0a0d18;
+    --bg-soft:   #0f1322;
+    --bg-elev:   #131829;
+    --surface:   #131829;
+    --border:    #232a40;
+    --border-strong: #303a57;
+    --text:      #eef0f6;
+    --text-muted:#a8afc4;
+    --text-subtle:#7a melted;
+    --text-subtle:#7a8099;
+    --shadow-xs: 0 1px 2px rgba(0,0,0,.4);
+    --shadow-sm: 0 2px 8px rgba(0,0,0,.45), 0 1px 2px rgba(0,0,0,.3);
+    --shadow-md: 0 8px 24px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.35);
+    --shadow-lg: 0 20px 48px rgba(0,0,0,.6), 0 8px 16px rgba(0,0,0,.4);
+    --shadow-glow: 0 10px 40px -10px rgba(124,92,255,.6);
+  }
+}
+:root[data-theme='dark'] {
+  --bg:        #0a0d18;
+  --bg-soft:   #0f1322;
+  --bg-elev:   #131829;
+  --surface:   #131829;
+  --border:    #232a40;
+  --border-strong: #303a57;
+  --text:      #eef0f6;
+  --text-muted:#a8afc4;
+  --text-subtle:#7a8099;
+  --shadow-glow: 0 10px 40px -10px rgba(124,92,255,.6);
 }
 
-.welcome-minimal *,
-.welcome-minimal *::before,
-.welcome-minimal *::after {
-	box-sizing: inherit;
-}
-
-.welcome-minimal__container {
-	width: 100%;
-	max-width: 720px;
-}
-
-/* --- Header --- */
-
-.welcome-minimal__header {
-	margin-bottom: var(--minimal-space-xl);
-}
-
-.welcome-minimal__eyebrow {
-	font-size: 12px;
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
-	color: var(--minimal-muted);
-	margin: 0 0 var(--minimal-space-sm);
-}
-
-.welcome-minimal__title {
-	font-size: 32px;
-	font-weight: 300;
-	letter-spacing: -0.02em;
-	margin: 0 0 var(--minimal-space-sm);
-	color: var(--minimal-fg);
-}
-
-.welcome-minimal__subtitle {
-	font-size: 16px;
-	font-weight: 400;
-	color: var(--minimal-muted);
-	margin: 0;
-	max-width: 56ch;
-}
-
-/* --- Sections --- */
-
-.welcome-minimal__section {
-	margin-bottom: var(--minimal-space-lg);
-}
-
-.welcome-minimal__section-title {
-	font-size: 13px;
-	font-weight: 500;
-	letter-spacing: 0.04em;
-	text-transform: uppercase;
-	color: var(--minimal-muted);
-	margin: 0 0 var(--minimal-space-md);
-	padding-bottom: var(--minimal-space-xs);
-	border-bottom: 1px solid var(--minimal-border);
-}
-
-/* --- Action list --- */
-
-.welcome-minimal__list {
-	list-style: none;
-	margin: 0;
-	padding: 0;
-}
-
-.welcome-minimal__item {
-	margin: 0;
-	padding: 0;
-}
-
-.welcome-minimal__action {
-	display: flex;
-	align-items: baseline;
-	gap: var(--minimal-space-md);
-	width: 100%;
-	padding: var(--minimal-space-sm) var(--minimal-space-xs);
-	background: transparent;
-	border: 0;
-	border-radius: var(--minimal-radius);
-	color: inherit;
-	font: inherit;
-	text-align: left;
-	text-decoration: none;
-	cursor: pointer;
-	transition: background-color 120ms ease;
-}
-
-.welcome-minimal__action:hover,
-.welcome-minimal__action:focus-visible {
-	background-color: var(--minimal-hover);
-	outline: none;
-}
-
-.welcome-minimal__action-label {
-	flex: 1;
-	font-size: 15px;
-	color: var(--minimal-fg);
-}
-
-.welcome-minimal__action-shortcut {
-	font-family: var(--vscode-editor-font-family, "SF Mono", Menlo, Consolas, monospace);
-	font-size: 12px;
-	color: var(--minimal-muted);
-}
-
-.welcome-minimal__action-arrow {
-	color: var(--minimal-muted);
-	transition: transform 160ms ease, color 160ms ease;
-}
-
-.welcome-minimal__action:hover .welcome-minimal__action-arrow {
-	color: var(--minimal-accent);
-	transform: translateX(2px);
-}
-
-/* --- Recents --- */
-
-.welcome-minimal__recent {
-	display: flex;
-	align-items: baseline;
-	gap: var(--minimal-space-md);
-	padding: var(--minimal-space-xs) var(--minimal-space-xs);
-	color: var(--minimal-fg);
-	text-decoration: none;
-	border-radius: var(--minimal-radius);
-}
-
-.welcome-minimal__recent:hover {
-	background-color: var(--minimal-hover);
-}
-
-.welcome-minimal__recent-name {
-	font-size: 14px;
-}
-
-.welcome-minimal__recent-path {
-	font-size: 12px;
-	color: var(--minimal-muted);
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-/* --- Footer --- */
-
-.welcome-minimal__footer {
-	margin-top: var(--minimal-space-xl);
-	padding-top: var(--minimal-space-md);
-	border-top: 1px solid var(--minimal-border);
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	font-size: 12px;
-	color: var(--minimal-muted);
-}
-
-.welcome-minimal__checkbox {
-	display: inline-flex;
-	align-items: center;
-	gap: var(--minimal-space-xs);
-	cursor: pointer;
-	user-select: none;
-}
-
-.welcome-minimal__checkbox input {
-	accent-color: var(--minimal-accent);
-}
-
-/* --- Responsive --- */
-
-@media (max-width: 600px) {
-	.welcome-minimal {
-		padding: var(--minimal-space-lg) var(--minimal-space-md);
-	}
-
-	.welcome-minimal__title {
-		font-size: 26px;
-	}
-
-	.welcome-minimal__header {
-		margin-bottom: var(--minimal-space-lg);
-	}
-
-	.welcome-minimal__action-shortcut {
-		display: none;
-	}
-}
-
-/* --- Reduced motion --- */
-
+/* =========================================================
+   Reset & Base
+   ========================================================= */
+*, *::before, *::after { box-sizing: border-box; }
+* { margin: 0; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) {
-	.welcome-minimal__action,
-	.welcome-minimal__action-arrow {
-		transition: none;
-	}
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+img, svg, video { display: block; max-width: 100%; height: auto; }
+a { color: inherit; text-decoration: none; }
+button { font: inherit; cursor: pointer; border: 0; background: none; color: inherit; }
+input, textarea, select { font: inherit; color: inherit; }
+
+:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+::selection { background: var(--brand-200); color: var(--brand-900); }
+
+/* =========================================================
+   Layout
+   ========================================================= */
+.container {
+  width: min(100% - var(--gutter) * 2, var(--container));
+  margin-inline: auto;
+}
+
+.section {
+  padding-block: clamp(56px, 9vw, 112px);
+}
+
+.section-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-7);
+  max-width: 720px;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--brand-600);
+  background: var(--brand-50);
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  align-self: flex-start;
+}
+:root[data-theme='dark'] .eyebrow,
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .eyebrow {
+    background: color-mix(in oklab, var(--brand-500) 18%, transparent);
+    color: var(--brand-300);
+  }
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--text);
+}
+h1 { font-size: var(--fs-1); letter-spacing: -0.03em; }
+h2 { font-size: var(--fs-2); }
+h3 { font-size: var(--fs-3); }
+h4 { font-size: var(--fs-4); }
+
+p.lead { font-size: 1.125rem; color: var(--text-muted); max-width: 60ch; }
+
+/* =========================================================
+   Header / Nav
+   ========================================================= */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  backdrop-filter: saturate(160%) blur(14px);
+  -webkit-backdrop-filter: saturate(160%) blur(14px);
+  background: color-mix(in oklab, var(--bg) 75%, transparent);
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--dur) var(--ease-out), background var(--dur) var(--ease-out);
+}
+.site-header.is-scrolled {
+  border-bottom-color: var(--border);
+  background: color-mix(in oklab, var(--bg) 88%, transparent);
+}
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+  padding-block: var(--space-4);
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  font-size: 1.05rem;
+}
+.brand-mark {
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--brand-500), var(--accent));
+  box-shadow: var(--shadow-glow);
+}
+.nav-links {
+  display: none;
+  gap: var(--space-5);
+  list-style: none;
+  padding: 0;
+}
+.nav-links a {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  font-weight: 500;
+  padding: 8px 4px;
+  position: relative;
+  transition: color var(--dur) var(--ease-out);
+}
+.nav-links a:hover { color: var(--text); }
+.nav-links a::after {
+  content: "";
+  position: absolute;
+  left: 4px; right: 4px; bottom: 2px;
+  height: 2px;
+  background: var(--brand-500);
+  border-radius: 2px;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--dur) var(--ease-out);
+}
+.nav-links a:hover::after { transform: scaleX(1); }
+
+.nav-actions { display: flex; align-items: center; gap: var(--space-3); }
+
+@media (min-width: 768px) {
+  .nav-links { display: inline-flex; }
+}
+
+/* =========================================================
+   Buttons
+   ========================================================= */
+.btn {
+  --_bg: var(--brand-500);
+  --_fg: #fff;
+  --_bd: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  border-radius: var(--radius-pill);
+  background: var(--_bg);
+  color: var(--_fg);
+  border: 1px solid var(--_bd);
+  white-space: nowrap;
+  transition: transform var(--dur) var(--ease-spring),
+              box-shadow var(--dur) var(--ease-out),
+              background var(--dur) var(--ease-out),
+              color var(--dur) var(--ease-out);
+  will-change: transform;
+}
+.btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.btn:active { transform: translateY(0); }
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--brand-500), var(--accent));
+  box-shadow: var(--shadow-glow);
+}
+.btn-primary:hover { filter: brightness(1.05); }
+
+.btn-ghost {
+  --_bg: transparent;
+  --_fg: var(--text);
+  --_bd: var(--border-strong);
+}
+.btn-ghost:hover { background: var(--bg-soft); }
+
+.btn-sm { padding: 8px 14px; font-size: var(--fs-xs); }
+
+.icon-btn {
+  width: 40px; height: 40px;
+  border-radius: var(--radius-pill);
+  display: inline-grid; place-items: center;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  transition: color var(--dur), background var(--dur), transform var(--dur);
+}
+.icon-btn:hover { color: var(--text); background: var(--bg-soft); transform: translateY(-1px); }
+
+/* =========================================================
+   Hero
+   ========================================================= */
+.hero {
+  position: relative;
+  padding-block: clamp(72px, 11vw, 144px);
+  overflow: hidden;
+  isolation: isolate;
+}
+.hero::before,
+.hero::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: .55;
+  pointer-events: none;
+}
+.hero::before {
+  width: 520px; height: 520px;
+  background: radial-gradient(circle at 30% 30%, var(--brand-400), transparent 60%);
+  top: -160px; left: -120px;
+}
+.hero::after {
+  width: 460px; height: 460px;
+  background: radial-gradient(circle at 70% 70%, var(--accent), transparent 60%);
+  bottom: -160px; right: -120px;
+}
+.hero-grid {
+  display: grid;
+  gap: clamp(32px, 5vw, 64px);
+  grid-template-columns: 1fr;
+  align-items: center;
+}
+@media (min-width: 960px) {
+  .hero-grid { grid-template-columns: 1.1fr .9fr; }
+}
+.hero h1 .grad {
+  background: linear-gradient(135deg, var(--brand-500), var(--accent));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.hero p { margin-top: var(--space-4); }
+.hero-cta { margin-top: var(--space-6); display: flex; gap: var(--space-3); flex-wrap: wrap; }
+.hero-meta {
+  margin-top: var(--space-6);
+  display: flex; gap: var(--space-5);
+  color: var(--text-subtle);
+  font-size: var(--fs-sm);
+  flex-wrap: wrap;
+}
+.hero-meta strong { color: var(--text); font-weight: 600; }
+
+.hero-visual {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--radius-xl);
+  background: linear-gradient(135deg, var(--brand-100), #fff 40%, var(--bg-soft));
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+:root[data-theme='dark'] .hero-visual,
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .hero-visual {
+    background: linear-gradient(135deg, #1a2040, #0f1322 60%);
+  }
+}
+.hero-visual::after {
+  content: "";
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(255,255,255,.5), transparent 40%),
+    radial-gradient(circle at 80% 80%, rgba(124,92,255,.25), transparent 50%);
+  mix-blend-mode: overlay;
+}
+
+/* =========================================================
+   Card grid (Features)
+   ========================================================= */
+.grid {
+  display: grid;
+  gap: var(--space-5);
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-xs);
+  transition: transform var(--dur) var(--ease-spring),
+              box-shadow var(--dur) var(--ease-out),
+              border-color var(--dur) var(--ease-out);
+  position: relative;
+  overflow: hidden;
+}
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-strong);
+}
+.card-icon {
+  width: 44px; height: 44px;
+  border-radius: var(--radius-md);
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--brand-50), #fff);
+  color: var(--brand-600);
+  border: 1px solid var(--border);
+  margin-bottom: var(--space-4);
+}
+:root[data-theme='dark'] .card-icon,
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .card-icon {
+    background: color-mix(in oklab, var(--brand-500) 14%, transparent);
+    color: var(--brand-300);
+  }
+}
+.card h3 { margin-bottom: 6px; }
+.card p { color: var(--text-muted); font-size: var(--fs-sm); }
+
+/* =========================================================
+   Footer
+   ========================================================= */
+.site-footer {
+  border-top: 1px solid var(--border);
+  padding-block: var(--space-7);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  background: var(--bg-soft);
+}
+.footer-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-4); flex-wrap: wrap;
+}
+.footer-links { display: flex; gap: var(--space-5); list-style: none; padding: 0; }
+.footer-links a { color: var(--text-muted); transition: color var(--dur); }
+.footer-links a:hover { color: var(--text); }
+
+/* =========================================================
+   Reveal animations
+   ========================================================= */
+.reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity var(--dur-slow) var(--ease-out),
+              transform var(--dur-slow) var(--ease-out);
+}
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
 }
 ```
 
-```html:src/vs/workbench/contrib/welcomeMinimal/browser/media/welcomeMinimal.html
-<!DOCTYPE html>
-<html lang="en">
+```html:index.html
+<!doctype html>
+<html lang="ja">
 <head>
-	<meta charset="UTF-8" />
-	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-	<title>Welcome</title>
-	<link rel="stylesheet" href="./welcomeMinimal.css" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#3b6dff" />
+  <title>Modern UI — リブランディングされた体験</title>
+  <meta name="description" content="モダンでトレンドに沿った UI/UX にリデザインされたランディング。" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
+  <link rel="stylesheet" href="./style.css" />
 </head>
-<body class="welcome-minimal">
-	<main class="welcome-minimal__container" role="main">
-		<header class="welcome-minimal__header">
-			<p class="welcome-minimal__eyebrow">Welcome</p>
-			<h1 class="welcome-minimal__title">Start something new.</h1>
-			<p class="welcome-minimal__subtitle">
-				A quiet space to write code. Fewer buttons, more focus.
-			</p>
-		</header>
+<body>
+  <header class="site-header" id="siteHeader">
+    <div class="container nav">
+      <a class="brand" href="#" aria-label="ホーム">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>Lumen</span>
+      </a>
 
-		<section class="welcome-minimal__section" aria-labelledby="start-heading">
-			<h2 id="start-heading" class="welcome-minimal__section-title">Start</h2>
-			<ul class="welcome-minimal__list">
-				<li class="welcome-minimal__item">
-					<button type="button" class="welcome-minimal__action" data-command="workbench.action.files.newUntitledFile">
-						<span class="welcome-minimal__action-label">New file</span>
-						<span class="welcome-minimal__action-shortcut">⌘ N</span>
-						<span class="welcome-minimal__action-arrow" aria-hidden="true">→</span>
-					</button>
-				</li>
-				<li class="welcome-minimal__item">
-					<button type="button" class="welcome-minimal__action" data-command="workbench.action.files.openFile">
-						<span class="welcome-minimal__action-label">Open file…</span>
-						<span class="welcome-minimal__action-shortcut">⌘ O</span>
-						<span class="welcome-minimal__action-arrow" aria-hidden="true">→</span>
-					</button>
-				</li>
-				<li class="welcome-minimal__item">
-					<button type="button" class="welcome-minimal__action" data-command="workbench.action.files.openFolder">
-						<span class="welcome-minimal__action-label">Open folder…</span>
-						<span class="welcome-minimal__action-shortcut">⌘ K ⌘ O</span>
-						<span class="welcome-minimal__action-arrow" aria-hidden="true">→</span>
-					</button>
-				</li>
-				<li class="welcome-minimal__item">
-					<button type="button" class="welcome-minimal__action" data-command="git.clone">
-						<span class="welcome-minimal__action-label">Clone repository…</span>
-						<span class="welcome-minimal__action-shortcut"></span>
-						<span class="welcome-minimal__action-arrow" aria-hidden="true">→</span>
-					</button>
-				</li>
-			</ul>
-		</section>
+      <nav aria-label="メインナビゲーション">
+        <ul class="nav-links">
+          <li><a href="#features">機能</a></li>
+          <li><a href="#works">事例</a></li>
+          <li><a href="#pricing">料金</a></li>
+          <li><a href="#contact">お問い合わせ</a></li>
+        </ul>
+      </nav>
 
-		<section class="welcome-minimal__section" aria-labelledby="recent-heading">
-			<h2 id="recent-heading" class="welcome-minimal__section-title">Recent</h2>
-			<ul class="welcome-minimal__list" id="welcome-recent-list">
-				<li class="welcome-minimal__item">
-					<a class="welcome-minimal__recent" href="#" data-command="workbench.action.openRecent">
-						<span class="welcome-minimal__recent-name">No recent folders</span>
-						<span class="welcome-minimal__recent-path"></span>
-					</a>
-				</li>
-			</ul>
-		</section>
+      <div class="nav-actions">
+        <button class="icon-btn" id="themeToggle" type="button" aria-label="テーマを切り替え" title="テーマ切替">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/>
+          </svg>
+        </button>
+        <a class="btn btn-ghost btn-sm" href="#login">ログイン</a>
+        <a class="btn btn-primary btn-sm" href="#signup">無料で始める</a>
+      </div>
+    </div>
+  </header>
 
-		<footer class="welcome-minimal__footer">
-			<label class="welcome-minimal__checkbox">
-				<input type="checkbox" id="welcome-show-on-startup" checked />
-				<span>Show on startup</span>
-			</label>
-			<span>Minimal</span>
-		</footer>
-	</main>
+  <main>
+    <!-- ============== HERO ============== -->
+    <section class="hero">
+      <div class="container hero-grid">
+        <div class="reveal">
+          <span class="eyebrow">✨ New · v2.0 リリース</span>
+          <h1>モダンな体験を、<br /><span class="grad">わずか数分で。</span></h1>
+          <p class="lead">
+            洗練されたデザインシステムと滑らかなインタラクションで、
+            プロダクトの価値を最大限に引き出すリブランディングを支援します。
+          </p>
 
-	<script>
-		(function () {
-			'use strict';
-			// Bridge clicks to the host (Electron / VS Code command service) when available.
-			const post = (command) => {
-				try {
-					if (typeof acquireVsCodeApi === 'function') {
-						const vscode = window.__vscode || (window.__vscode = acquireVsCodeApi());
-						vscode.postMessage({ type: 'command', command });
-						return;
-					}
-				} catch (_) { /* ignore */ }
-				if (window.parent && window.parent !== window) {
-					window.parent.postMessage({ type: 'command', command }, '*');
-				}
-			};
+          <div class="hero-cta">
+            <a class="btn btn-primary" href="#signup">
+              今すぐ始める
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M5 12h14M13 5l7 7-7 7"/>
+              </svg>
+            </a>
+            <a class="btn btn-ghost" href="#demo">デモを見る</a>
+          </div>
 
-			document.querySelectorAll('[data-command]').forEach((el) => {
-				el.addEventListener('click', (e) => {
-					const cmd = el.getAttribute('data-command');
-					if (!cmd) return;
-					e.preventDefault();
-					post(cmd);
-				});
-			});
+          <div class="hero-meta">
+            <span><strong>10,000+</strong> チームが利用中</span>
+            <span><strong>4.9/5</strong> 平均評価</span>
+            <span><strong>SOC 2</strong> 認証取得</span>
+          </div>
+        </div>
 
-			const checkbox = document.getElementById('welcome-show-on-startup');
-			if (checkbox) {
-				checkbox.addEventListener('change', () => {
-					post(checkbox.checked
-						? 'welcome.showOnStartup.enable'
-						: 'welcome.showOnStartup.disable');
-				});
-			}
-		})();
-	</script>
+        <div class="hero-visual reveal" aria-hidden="true"></div>
+      </div>
+    </section>
+
+    <!-- ============== FEATURES ============== -->
+    <section class="section" id="features">
+      <div class="container">
+        <header class="section-header reveal">
+          <span class="eyebrow">Features</span>
+          <h2>必要なものが、すべてここに。</h2>
+          <p class="lead">
+            開発・デザイン・運用までを一つのプラットフォームに統合。
+            シンプルさを保ったまま、本格的なワークフローを実現します。
+          </p>
+        </header>
+
+        <div class="grid">
+          <article class="card reveal">
+            <div class="card-icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/></svg>
+            </div>
+            <h3>圧倒的な高速化</h3>
+            <p>エッジ配信と最適化されたバンドルで、初回表示を 60% 以上短縮します。</p>
+          </article>
+
+          <article class="card reveal">
+            <div class="card-icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>
+            </div>
+            <h3>世界規模のスケール</h3>
+            <p>200+ のリージョンで安定稼働。ピーク時もスムーズな体験を保証します。</p>
+          </article>
+
+          <article class="card reveal">
+            <div class="card-icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            </div>
+            <h3>エンタープライズ品質</h3>
+            <p>SOC 2 / ISO 27001 / GDPR 準拠。ガバナンスと監査ログを標準搭載。</p>
+          </article>
+
+          <article class="card reveal">
+            <div class="card-icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4zM4 10h16M10 4v16"/></svg>
+            </div>
+            <h3>柔軟なデザインシステム</h3>
+            <p>トークン化されたテーマで、ブランドに沿った一貫した UI を即座に展開。</p>
+          </article>
+
+          <article class="card reveal">
+            <div class="card-icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a4 4 0 0 1-4 4H7l-4 4V5a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg>
+            </div>
+            <h3>協業を加速</h3>
+            <p>リアルタイムコメント・バージョニング・レビューで、チーム全体の意思決定を高速化。</p>
+          </article>
+
+          <article class="card reveal">
+            <div class="card-icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18M7 14l4-4 4 4 5-5"/></svg>
+            </div>
+            <h3>洞察できる分析</h3>
+            <p>ユーザー行動を可視化し、UX 改善のインパクトを定量的に評価できます。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============== CTA ============== -->
+    <section class="section" id="signup">
+      <div class="container reveal" style="text-align:center;">
+        <span class="eyebrow" style="align-self:center;">Get started</span>
+        <h2 style="margin-top: 12px;">プロダクトを、次のレベルへ。</h2>
+        <p class="lead" style="margin: 12px auto 28px;">
+          14 日間の無料トライアル。クレジットカード不要、いつでもキャンセル可能。
+        </p>
+        <a class="btn btn-primary" href="#">
+          無料で試す
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 12h14M13 5l7 7-7 7"/>
+          </svg>
+        </a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-row">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>Lumen</span>
+      </div>
+      <ul class="footer-links">
+        <li><a href="#">プライバシー</a></li>
+        <li><a href="#">利用規約</a></li>
+        <li><a href="#contact">お問い合わせ</a></li>
+      </ul>
+      <small>© <span id="year"></span> Lumen Inc.</small>
+    </div>
+  </footer>
+
+  <script src="./script.js" defer></script>
 </body>
 </html>
 ```
 
-```ts:src/vs/workbench/contrib/welcomeMinimal/browser/welcomeMinimal.contribution.ts
-/*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
- *  Licensed under the MIT License. See License.txt in the project root for license information.
- *--------------------------------------------------------------------------------------------*/
+```js:script.js
+// =========================================================
+// Modern UI — interactions
+// =========================================================
+(() => {
+  const root = document.documentElement;
 
-/**
- * Minimal Welcome contribution.
- *
- * このモジュールは、シンプルで余白を活かした「Minimal」テーマのウェルカム画面を
- * Electron 上の VS Code レンダラに登録するためのエントリポイントです。
- * UI 本体は同ディレクトリの `media/welcomeMinimal.html` / `welcomeMinimal.css` に
- * 切り出されており、ここでは識別子・タイトル・メディアパスのみを公開します。
- *
- * 既存の Welcome / GettingStarted コントリビューションには手を入れず、追加ビューとして
- * 共存できるよう薄く保っています。実際にメニュー / コマンドへバインドする際は、
- * 利用側のレジストリからこの定義を import してください。
- */
+  // ---- Theme toggle (persisted) -------------------------
+  const THEME_KEY = 'ui-theme';
+  const stored = localStorage.getItem(THEME_KEY);
+  if (stored === 'light' || stored === 'dark') {
+    root.setAttribute('data-theme', stored);
+  }
+  const toggle = document.getElementById('themeToggle');
+  if (toggle) {
+    toggle.addEventListener('click', () => {
+      const current = root.getAttribute('data-theme')
+        ?? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      const next = current === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      localStorage.setItem(THEME_KEY, next);
+    });
+  }
 
-export const WELCOME_MINIMAL_VIEW_ID = 'workbench.view.welcomeMinimal';
-export const WELCOME_MINIMAL_TITLE = 'Welcome';
+  // ---- Sticky header shadow on scroll -------------------
+  const header = document.getElementById('siteHeader');
+  if (header) {
+    const onScroll = () => {
+      header.classList.toggle('is-scrolled', window.scrollY > 8);
+    };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+  }
 
-/**
- * メディア（HTML / CSS）への相対パス。
- * Electron のレンダラから `vscode-file://` プロトコル等で解決される想定。
- */
-export const WelcomeMinimalMedia = Object.freeze({
-	html: 'vs/workbench/contrib/welcomeMinimal/browser/media/welcomeMinimal.html',
-	css: 'vs/workbench/contrib/welcomeMinimal/browser/media/welcomeMinimal.css',
-});
+  // ---- Reveal on intersect ------------------------------
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const targets = document.querySelectorAll('.reveal');
+  if (reduceMotion || !('IntersectionObserver' in window)) {
+    targets.forEach(el => el.classList.add('is-visible'));
+  } else {
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          io.unobserve(entry.target);
+        }
+      });
+    }, { rootMargin: '0px 0px -10% 0px', threshold: 0.05 });
+    targets.forEach(el => io.observe(el));
+  }
 
-/**
- * ホスト（コマンドサービス）へ転送可能なコマンド ID の一覧。
- * HTML 側の `data-command` 属性と一致させてください。
- */
-export const WelcomeMinimalCommands = Object.freeze([
-	'workbench.action.files.newUntitledFile',
-	'workbench.action.files.openFile',
-	'workbench.action.files.openFolder',
-	'git.clone',
-	'workbench.action.openRecent',
-	'welcome.showOnStartup.enable',
-	'welcome.showOnStartup.disable',
-] as const);
-
-export type WelcomeMinimalCommand = typeof WelcomeMinimalCommands[number];
-
-/**
- * レンダラ側 (`postMessage`) から受け取るメッセージ型。
- */
-export interface WelcomeMinimalMessage {
-	readonly type: 'command';
-	readonly command: WelcomeMinimalCommand | string;
-}
-
-/**
- * メッセージのバリデータ。レンダラから到達した不明なコマンドを弾く際に利用します。
- */
-export function isWelcomeMinimalMessage(value: unknown): value is WelcomeMinimalMessage {
-	if (!value || typeof value !== 'object') {
-		return false;
-	}
-	const v = value as Partial<WelcomeMinimalMessage>;
-	return v.type === 'command' && typeof v.command === 'string' && v.command.length > 0;
-}
+  // ---- Footer year --------------------------------------
+  const y = document.getElementById('year');
+  if (y) y.textContent = String(new Date().getFullYear());
+})();
 ```
 
 ### 4. 検証方針
 
-- **ビルド**: 既存の VS Code (Electron) のビルドフローに新規ファイルが取り込まれることを確認（`npm run compile` 相当）。
-- **型チェック**: `welcomeMinimal.contribution.ts` は外部依存ゼロのため、TypeScript の `strict` モードでもエラーが出ないこと。
-- **手動確認**:
-  1. `welcomeMinimal.html` をブラウザ / Electron のレンダラで直接開き、レイアウト（中央寄せ・最大幅 720px・大きな余白）が機能することを確認。
-  2. 各アクションボタンをクリックして、`postMessage` が `{ type: 'command', command: ... }` の形でホストに飛ぶことを DevTools で確認。
-  3. ライト/ダーク両テーマで `--vscode-*` 変数にフォールバックされ、文字色・背景色が崩れないことを確認。
-  4. 600px 以下で余白とフォントサイズが縮み、ショートカット表示が消えるレスポンシブ動作を確認。
-- **注目ポイント**:
-  - 既存 3 ファイル（`language-configuration.json` / `documentContext.ts` / `defaultExtensionsInitializer.ts`）はデザインと無関係なため未変更。
-  - カラーは独自 16 進値ではなく `--vscode-*` トークンを優先利用しており、既存テーマと整合します。
-  - HTML 側は `acquireVsCodeApi` が存在する場合のみ使い、無い環境では `window.parent.postMessage` にフォールバックするため、開発時のスタンドアロン確認も容易です。
+1. **ブラウザで `index.html` を開く**（または `npx serve .` で配信）
+   - ヒーローのグラデーション、カード hover の浮き上がり、スクロール時の reveal、ヘッダーの blur が動作するか確認
+2. **テーマ切替**: 右上のアイコンボタンで light ↔ dark 切替、`localStorage` に永続化されるか
+3. **OS ダークモード**: 初回表示が `prefers-color-scheme` に追従するか
+4. **アクセシビリティ**:
+   - キーボード Tab で `:focus-visible` リングが見えるか
+   - `prefers-reduced-motion: reduce` でアニメが無効化されるか
+   - Lighthouse で Accessibility / Best Practices / SEO が 95+ か
+5. **レスポンシブ**: 360 / 768 / 1280 / 1920 px で崩れがないか（`auto-fit` グリッド + `clamp()` で対応）
+6. **既存プロジェクトに統合する場合**: `style.css` の `:root` トークンだけを既存 CSS の先頭に取り込み、コンポーネント側のクラス名（`.btn`, `.card`, `.eyebrow` 等）を既存マークアップに当て込めば段階的移行が可能です。

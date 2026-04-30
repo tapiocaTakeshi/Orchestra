@@ -1,31 +1,32 @@
-import { ButtonHTMLAttributes, ReactNode } from "react";
+import * as React from "react";
+import styles from "./Button.module.css";
 
-type Variant = "primary" | "ghost";
+type Variant = "primary" | "ghost" | "outline";
+type Size = "sm" | "md" | "lg";
 
-type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
+type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: Variant;
-  children: ReactNode;
+  size?: Size;
 };
 
-const base =
-  "inline-flex items-center justify-center h-11 px-6 text-sm font-medium tracking-tight transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-40 disabled:pointer-events-none";
+export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  function Button(
+    { variant = "primary", size = "md", className = "", children, ...rest },
+    ref
+  ) {
+    const cls = [
+      styles.btn,
+      styles[`v_${variant}`],
+      styles[`s_${size}`],
+      className,
+    ]
+      .filter(Boolean)
+      .join(" ");
 
-const variants: Record<Variant, string> = {
-  primary:
-    "bg-foreground text-background hover:bg-foreground/85",
-  ghost:
-    "bg-transparent text-foreground border hairline hover:bg-foreground/5",
-};
-
-export function Button({
-  variant = "primary",
-  className = "",
-  children,
-  ...rest
-}: Props) {
-  return (
-    <button className={`${base} ${variants[variant]} ${className}`} {...rest}>
-      {children}
-    </button>
-  );
-}
+    return (
+      <button ref={ref} className={cls} {...rest}>
+        <span className={styles.label}>{children}</span>
+      </button>
+    );
+  }
+);

@@ -1,59 +1,60 @@
 /*---------------------------------------------------------------------------------------------
- * Minimal Design overlay for the Workbench.
+ *  Minimal Design — Electron Workbench Overrides
  *
- * Goal:
- *   - Reduce visual noise (borders, shadows, dense chrome)
- *   - Increase breathing room (padding, line-height)
- *   - Use a calm, neutral palette that respects the active VS Code theme
+ *  目的:
+ *    - ノイズ（過剰な境界線・濃いシャドウ・装飾）を取り除く
+ *    - 余白とタイポグラフィでヒエラルキーを表現する
+ *    - VS Code のテーマトークン（--vscode-*）に追従し、ライト/ダーク両対応
  *
- * This file is intentionally written with low specificity so user themes
- * can still override individual tokens via workbench.colorCustomizations.
+ *  注意:
+ *    - 色は極力 --vscode-* 変数を使い、ハードコードは避ける
+ *    - 既存の機能性（フォーカスリング・コントラスト）は維持する
  *--------------------------------------------------------------------------------------------*/
 
-/* ----- Design tokens (CSS custom properties) ----- */
+@import "./minimal-tokens.css";
+
+/* ---------------------------------------------------------------------------
+ * Base
+ * ------------------------------------------------------------------------- */
+
 .monaco-workbench {
-	--md-radius-sm: 4px;
-	--md-radius-md: 8px;
-	--md-radius-lg: 12px;
-
-	--md-space-1: 4px;
-	--md-space-2: 8px;
-	--md-space-3: 12px;
-	--md-space-4: 16px;
-	--md-space-5: 24px;
-
-	--md-border-subtle: color-mix(in srgb, currentColor 8%, transparent);
-	--md-border-strong: color-mix(in srgb, currentColor 16%, transparent);
-
-	--md-font-stack: -apple-system, BlinkMacSystemFont, "Segoe UI Variable",
-		"Segoe UI", "Inter", "Helvetica Neue", Arial, sans-serif;
-	--md-line-height: 1.55;
-	--md-transition: 120ms ease;
-}
-
-/* ----- Global typography ----- */
-.monaco-workbench {
-	font-family: var(--md-font-stack);
-	font-feature-settings: "ss01", "cv11";
+	font-family: var(--md-font-sans);
+	font-size: var(--md-font-size-md);
+	line-height: var(--md-line-height-base);
 	letter-spacing: 0.01em;
-	line-height: var(--md-line-height);
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	text-rendering: optimizeLegibility;
 }
 
-/* ----- Title bar: flatten and quiet down ----- */
+.monaco-workbench .mac,
+.monaco-workbench .windows,
+.monaco-workbench .linux {
+	font-feature-settings: "ss01", "cv11";
+}
+
+/* ---------------------------------------------------------------------------
+ * Title bar — フラット & 静か
+ * ------------------------------------------------------------------------- */
+
 .monaco-workbench .part.titlebar {
-	border-bottom: 1px solid var(--md-border-subtle) !important;
-	box-shadow: none !important;
-	height: 36px;
+	border-bottom: 1px solid var(--vscode-titleBar-border, transparent);
+	box-shadow: none;
+	font-weight: 500;
+	letter-spacing: 0.02em;
 }
 
 .monaco-workbench .part.titlebar .window-title {
-	font-weight: 500;
-	opacity: 0.85;
+	opacity: 0.75;
+	font-size: var(--md-font-size-sm);
 }
 
-/* ----- Activity bar: airy spacing, no harsh divider ----- */
+/* ---------------------------------------------------------------------------
+ * Activity bar — アイコン中心、ボーダーは廃止
+ * ------------------------------------------------------------------------- */
+
 .monaco-workbench .part.activitybar {
-	border-right: 1px solid var(--md-border-subtle) !important;
+	border-right: none;
 }
 
 .monaco-workbench .part.activitybar .monaco-action-bar .action-item {
@@ -61,144 +62,265 @@
 }
 
 .monaco-workbench .part.activitybar .monaco-action-bar .action-label {
-	border-radius: var(--md-radius-sm);
-	transition: background-color var(--md-transition);
+	border-radius: var(--md-radius-md);
+	transition: background-color var(--md-duration-fast) var(--md-ease-out);
 }
 
 .monaco-workbench .part.activitybar .monaco-action-bar .action-item.checked .action-label::before {
-	border-left-width: 2px;
+	/* 太いインジケータを細いラインに置き換え */
+	border-left-width: 2px !important;
+	left: 0;
 }
 
-/* ----- Side bar: softer headers ----- */
+/* ---------------------------------------------------------------------------
+ * Side bar — ヘッダーを軽く、余白を広く
+ * ------------------------------------------------------------------------- */
+
 .monaco-workbench .part.sidebar {
-	border-right: 1px solid var(--md-border-subtle) !important;
+	border-right: 1px solid var(--vscode-sideBar-border, transparent);
 }
 
-.monaco-workbench .part.sidebar .composite.title,
+.monaco-workbench .part.sidebar .title-label > h2,
+.monaco-workbench .part.sidebar .composite.title h2 {
+	font-size: var(--md-font-size-xs);
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	opacity: 0.7;
+}
+
 .monaco-workbench .part.sidebar .pane-header {
-	font-weight: 500;
-	letter-spacing: 0.04em;
-	text-transform: none;
-	padding: var(--md-space-2) var(--md-space-3);
-	border-bottom-color: var(--md-border-subtle) !important;
-}
-
-.monaco-workbench .part.sidebar .pane-header h3.title {
-	font-size: 11px;
-	opacity: 0.75;
-}
-
-/* ----- Editor tabs: minimal pill style ----- */
-.monaco-workbench .part.editor > .content .editor-group-container > .title .tabs-container > .tab {
-	border: none !important;
-	border-radius: var(--md-radius-sm) var(--md-radius-sm) 0 0;
-	margin: 2px 1px 0 1px;
+	height: 28px;
 	padding: 0 var(--md-space-3);
-	transition: background-color var(--md-transition);
+	border-top: none;
+	font-size: var(--md-font-size-xs);
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
 }
 
-.monaco-workbench .part.editor > .content .editor-group-container > .title .tabs-container > .tab.active {
-	box-shadow: inset 0 -2px 0 0 currentColor;
+.monaco-workbench .part.sidebar .pane-body {
+	padding-top: var(--md-space-1);
 }
+
+/* ツリー行の余白を広めに */
+.monaco-workbench .monaco-list .monaco-list-row {
+	border-radius: var(--md-radius-sm);
+}
+
+.monaco-workbench .monaco-list .monaco-list-row.focused,
+.monaco-workbench .monaco-list .monaco-list-row.selected {
+	box-shadow: inset 0 0 0 1px var(--vscode-focusBorder, transparent);
+}
+
+/* ---------------------------------------------------------------------------
+ * Editor tabs — 下線インジケータでミニマルに
+ * ------------------------------------------------------------------------- */
 
 .monaco-workbench .part.editor > .content .editor-group-container > .title {
-	border-bottom: 1px solid var(--md-border-subtle) !important;
+	border-bottom: 1px solid var(--vscode-editorGroupHeader-border, transparent);
+	box-shadow: none;
 }
 
-/* ----- Status bar: thinner and quieter ----- */
+.monaco-workbench .part.editor .tab {
+	border: none !important;
+	padding: 0 var(--md-space-4);
+	font-size: var(--md-font-size-md);
+	transition:
+		background-color var(--md-duration-fast) var(--md-ease-out),
+		color var(--md-duration-fast) var(--md-ease-out);
+}
+
+.monaco-workbench .part.editor .tab.active {
+	position: relative;
+	font-weight: 500;
+}
+
+.monaco-workbench .part.editor .tab.active::after {
+	content: "";
+	position: absolute;
+	left: var(--md-space-3);
+	right: var(--md-space-3);
+	bottom: 0;
+	height: 2px;
+	background: var(--vscode-tab-activeBorderTop, var(--vscode-focusBorder, currentColor));
+	border-radius: var(--md-radius-pill);
+	opacity: 0.9;
+}
+
+.monaco-workbench .part.editor .tab .tab-close {
+	opacity: 0;
+	transition: opacity var(--md-duration-fast) var(--md-ease-out);
+}
+
+.monaco-workbench .part.editor .tab:hover .tab-close,
+.monaco-workbench .part.editor .tab.active .tab-close,
+.monaco-workbench .part.editor .tab.dirty .tab-close {
+	opacity: 1;
+}
+
+/* ---------------------------------------------------------------------------
+ * Status bar — 細く、控えめに
+ * ------------------------------------------------------------------------- */
+
 .monaco-workbench .part.statusbar {
 	height: 22px;
-	font-size: 11px;
-	border-top: 1px solid var(--md-border-subtle) !important;
+	font-size: var(--md-font-size-xs);
+	letter-spacing: 0.02em;
+	border-top: 1px solid var(--vscode-statusBar-border, transparent);
 }
 
 .monaco-workbench .part.statusbar .statusbar-item {
 	padding: 0 var(--md-space-2);
 }
 
-/* ----- Buttons / inputs: consistent rounding ----- */
+/* ---------------------------------------------------------------------------
+ * Panel (Terminal / Output / Problems)
+ * ------------------------------------------------------------------------- */
+
+.monaco-workbench .part.panel > .title {
+	border-bottom: 1px solid var(--vscode-panel-border, transparent);
+}
+
+.monaco-workbench .part.panel .panel-switcher-container .action-label {
+	font-size: var(--md-font-size-xs);
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	padding: 0 var(--md-space-3);
+}
+
+/* ---------------------------------------------------------------------------
+ * Buttons / Inputs — 角丸 & ホバー
+ * ------------------------------------------------------------------------- */
+
 .monaco-workbench .monaco-button,
-.monaco-workbench .monaco-text-button {
+.monaco-workbench button.monaco-text-button {
 	border-radius: var(--md-radius-md);
-	padding: 6px 14px;
+	padding: var(--md-space-2) var(--md-space-4);
 	font-weight: 500;
 	letter-spacing: 0.01em;
-	transition: background-color var(--md-transition), transform var(--md-transition);
+	transition:
+		background-color var(--md-duration-fast) var(--md-ease-out),
+		transform var(--md-duration-fast) var(--md-ease-out),
+		box-shadow var(--md-duration-fast) var(--md-ease-out);
 }
 
-.monaco-workbench .monaco-button:active {
-	transform: translateY(1px);
+.monaco-workbench .monaco-button:hover,
+.monaco-workbench button.monaco-text-button:hover {
+	box-shadow: var(--md-shadow-1);
 }
 
-.monaco-workbench .monaco-inputbox {
-	border-radius: var(--md-radius-sm);
+.monaco-workbench .monaco-button:active,
+.monaco-workbench button.monaco-text-button:active {
+	transform: translateY(0.5px);
 }
 
-.monaco-workbench .monaco-inputbox > .ibwrapper > .input {
-	padding: 4px 8px;
+.monaco-workbench .monaco-inputbox,
+.monaco-workbench .monaco-findInput .monaco-inputbox {
+	border-radius: var(--md-radius-md);
 }
 
-/* ----- Quick input (Command Palette): center-stage minimal ----- */
+.monaco-workbench .monaco-inputbox > .ibwrapper > .input,
+.monaco-workbench .monaco-inputbox > .ibwrapper > textarea.input {
+	padding: var(--md-space-2) var(--md-space-3);
+	font-size: var(--md-font-size-md);
+}
+
+/* ---------------------------------------------------------------------------
+ * Quick Pick / Command Palette — 中央寄せ・上品な影
+ * ------------------------------------------------------------------------- */
+
 .monaco-workbench .quick-input-widget {
-	border-radius: var(--md-radius-lg) !important;
-	box-shadow:
-		0 1px 2px rgba(0, 0, 0, 0.06),
-		0 8px 24px rgba(0, 0, 0, 0.18) !important;
-	padding: var(--md-space-2);
-	border: 1px solid var(--md-border-subtle) !important;
+	border-radius: var(--md-radius-lg);
+	box-shadow: var(--md-shadow-3);
+	overflow: hidden;
+	border: 1px solid var(--vscode-widget-border, transparent);
 }
 
 .monaco-workbench .quick-input-widget .quick-input-header {
-	padding-bottom: var(--md-space-2);
+	padding: var(--md-space-3) var(--md-space-4) var(--md-space-2);
 }
 
 .monaco-workbench .quick-input-widget .quick-input-list .monaco-list-row {
-	border-radius: var(--md-radius-sm);
-	padding: 2px var(--md-space-2);
+	padding: 0 var(--md-space-3);
+	height: 30px;
 }
 
-/* ----- Notifications: card-like, restrained ----- */
+/* ---------------------------------------------------------------------------
+ * Notifications — トースト風
+ * ------------------------------------------------------------------------- */
+
 .monaco-workbench .notifications-toasts .notification-toast {
-	border-radius: var(--md-radius-md);
-	border: 1px solid var(--md-border-subtle) !important;
-	box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+	border-radius: var(--md-radius-lg);
+	box-shadow: var(--md-shadow-2);
+	overflow: hidden;
 }
 
-/* ----- Lists: gentle hover ----- */
-.monaco-workbench .monaco-list .monaco-list-row {
-	border-radius: var(--md-radius-sm);
+.monaco-workbench .notifications-toasts .notification-toast .notification-list-item {
+	padding: var(--md-space-3) var(--md-space-4);
 }
 
-.monaco-workbench .monaco-list:focus .monaco-list-row.focused,
-.monaco-workbench .monaco-list .monaco-list-row.selected {
-	outline: none;
-}
+/* ---------------------------------------------------------------------------
+ * Scrollbar — 細く目立たなく
+ * ------------------------------------------------------------------------- */
 
-/* ----- Scrollbars: thinner ----- */
 .monaco-workbench .monaco-scrollable-element > .scrollbar > .slider {
-	border-radius: 999px;
-	opacity: 0.6;
+	border-radius: var(--md-radius-pill);
+	opacity: 0.0;
+	transition: opacity var(--md-duration-base) var(--md-ease-out);
 }
 
-/* ----- Welcome / Walkthrough page: more breathing room ----- */
-.monaco-workbench .welcomePageContainer,
-.monaco-workbench .gettingStartedContainer {
-	padding: var(--md-space-5);
-	max-width: 980px;
+.monaco-workbench .monaco-scrollable-element:hover > .scrollbar > .slider,
+.monaco-workbench .monaco-scrollable-element > .scrollbar.active > .slider {
+	opacity: 0.8;
+}
+
+/* ---------------------------------------------------------------------------
+ * Breadcrumbs — 軽く
+ * ------------------------------------------------------------------------- */
+
+.monaco-workbench .breadcrumbs-control {
+	font-size: var(--md-font-size-sm);
+	opacity: 0.85;
+}
+
+.monaco-workbench .breadcrumbs-control .monaco-breadcrumb-item {
+	padding: 0 var(--md-space-2);
+}
+
+/* ---------------------------------------------------------------------------
+ * Welcome / Walkthrough — 余白を活かす
+ * ------------------------------------------------------------------------- */
+
+.monaco-workbench .editor-instance .gettingStartedContainer {
+	padding: var(--md-space-7) var(--md-space-6);
+	max-width: 1080px;
 	margin: 0 auto;
-	line-height: var(--md-line-height);
+	font-size: var(--md-font-size-lg);
+	line-height: var(--md-line-height-base);
 }
 
-.monaco-workbench .gettingStartedContainer h1,
-.monaco-workbench .welcomePageContainer h1 {
+.monaco-workbench .editor-instance .gettingStartedContainer h1 {
 	font-weight: 600;
 	letter-spacing: -0.01em;
+	margin-bottom: var(--md-space-2);
 }
 
-/* ----- Reduce motion respect ----- */
+.monaco-workbench .editor-instance .gettingStartedContainer h2 {
+	font-weight: 500;
+	opacity: 0.8;
+}
+
+/* ---------------------------------------------------------------------------
+ * Reduced motion 対応
+ * ------------------------------------------------------------------------- */
+
 @media (prefers-reduced-motion: reduce) {
-	.monaco-workbench * {
-		transition-duration: 0ms !important;
-		animation-duration: 0ms !important;
+	.monaco-workbench *,
+	.monaco-workbench *::before,
+	.monaco-workbench *::after {
+		animation-duration: 0.001ms !important;
+		transition-duration: 0.001ms !important;
 	}
 }

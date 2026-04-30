@@ -6,7 +6,7 @@
     "name": "He-ro Corporation"
   },
   "license": "MIT",
-  "main": "/Volumes/T7/Program/Orchestra/out/main.js",
+  "main": "./out/main.js",
   "type": "module",
   "private": true,
   "scripts": {

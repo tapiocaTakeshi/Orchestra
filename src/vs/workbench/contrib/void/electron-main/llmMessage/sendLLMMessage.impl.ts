@@ -3327,6 +3327,15 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 
 				const synthesisOutput = synthesisResult.output;
 
+				// Coder/Writer の成果物が空 or 極端に短い場合は Brief Gate 側の判断に必要な情報になるため、
+				// オーケストレーションログに警告を出す。Brief Gate は別途プロンプト本文に出力をインライン展開するが、
+				// ここで状況をユーザーに可視化しておく。
+				if (!synthesisOutput || synthesisOutput.trim().length === 0) {
+					appendText(`\n⚠️ **${finalRoleArg} の出力が空です。** Brief Gate に渡す Coder 成果物がないため、Brief Gate は不合格として扱われ、File Search 再調査に戻ります。\n`);
+				} else if (synthesisOutput.trim().length < 80) {
+					appendText(`\n⚠️ **${finalRoleArg} の出力が極端に短い** (${synthesisOutput.trim().length} 文字)。Brief Gate は不合格と判断する可能性が高いです。\n`);
+				}
+
 				if (synthesisOutput && workspaceFolderPath) {
 					const { savedFiles, fileOperations, commands } = saveCodeBlocksFromOutput(synthesisOutput, sessionIdArg || 'synthesis', workspaceFolderPath);
 					if (savedFiles.length > 0) {
@@ -3352,18 +3361,24 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				const briefGateAttemptLabel = briefGateAttempts === 1 ? '' : ` (${briefGateAttempts} 回目)`;
 				appendText(`\n---\n\n**Brief Gate** (leader)${briefGateAttemptLabel} 開始...\n\n`);
 				const gateContextHistory: { role: 'user' | 'assistant'; content: string }[] = [];
-				if (synthesisOutput && synthesisOutput.trim()) {
+				const truncatedSynthesisForGate = synthesisOutput && synthesisOutput.trim()
+					? truncateForContext(synthesisOutput, MAX_CHARS_PER_CONTEXT)
+					: '';
+				const flowOutputsBlockForGate = flowOutputs.length > 0
+					? flowOutputs
+						.map(o => `### ${o.role} の出力 (${o.mdFileName})\n\n${truncateForContext(o.mdContent, MAX_CHARS_PER_CONTEXT)}`)
+						.join('\n\n')
+					: '';
+				if (truncatedSynthesisForGate) {
 					gateContextHistory.push({
 						role: 'assistant',
-						content: `## ${finalRoleArg} が生成した成果物\n\n${truncateForContext(synthesisOutput, MAX_CHARS_PER_CONTEXT)}`,
+						content: `## ${finalRoleArg} が生成した成果物\n\n${truncatedSynthesisForGate}`,
 					});
 				}
-				if (flowOutputs.length > 0) {
+				if (flowOutputsBlockForGate) {
 					gateContextHistory.push({
 						role: 'assistant',
-						content: flowOutputs
-							.map(o => `## ${o.role} の出力 (${o.mdFileName})\n\n${truncateForContext(o.mdContent, MAX_CHARS_PER_CONTEXT)}`)
-							.join('\n\n'),
+						content: flowOutputsBlockForGate.replace(/^### /gm, '## '),
 					});
 				}
 
@@ -3373,9 +3388,17 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					`## ユーザーの要求`,
 					currentInput,
 					``,
+					`## ${finalRoleArg} の成果物（直近の Coder/Writer 出力）`,
+					truncatedSynthesisForGate
+						? truncatedSynthesisForGate
+						: `> ⚠️ ${finalRoleArg} は今回の反復で空の出力を返しました。これは不合格と判断し、再調査要求として「${finalRoleArg} が実装/編集できていない理由」を分析してください。`,
+					``,
+					flowOutputsBlockForGate
+						? `## 中間エージェントの出力（参考）\n\n${flowOutputsBlockForGate}`
+						: '',
+					``,
 					`## 指示`,
-					`直前の assistant メッセージに ${finalRoleArg} の成果物と Markdown コンテキストが添付されています。`,
-					`Reviewer に回す前の brief gate として、要件漏れ・調査不足・実装不足・明らかな方向違いがないかを確認してください。`,
+					`Reviewer に回す前の brief gate として、上記 ${finalRoleArg} 成果物について、要件漏れ・調査不足・実装不足・明らかな方向違いがないかを確認してください。`,
 					``,
 					`### 出力形式（厳守）`,
 					`1 行目に必ず以下のどちらかのマーカーを出力してください:`,
@@ -3383,7 +3406,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					`- **Not OK** の場合: ` + '`判定: 不合格`',
 					``,
 					`不合格の場合は、Reviewer はスキップされます。File Search に渡す「再調査要求」を具体的に書いてください。Todo は再生成しません。`,
-				].join('\n');
+				].filter(Boolean).join('\n');
 
 				const briefGateResult = await callDivisionTaskExecute(
 					endpointBase, projectId, 'leader', briefGatePrompt, controller.signal,
@@ -3440,8 +3463,17 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					`## ユーザーの要求`,
 					currentInput,
 					``,
+					`## ${finalRoleArg} の成果物（レビュー対象）`,
+					truncatedSynthesisForGate
+						? truncatedSynthesisForGate
+						: `> ⚠️ ${finalRoleArg} は今回の反復で空の出力を返しました。Coder が実装できていない原因を指摘し、不合格としてください。`,
+					``,
+					briefGateOutput.trim()
+						? `## Brief Gate 判定（参考）\n\n${truncateForContext(briefGateOutput, MAX_CHARS_PER_CONTEXT)}`
+						: '',
+					``,
 					`## 指示`,
-					`直前の assistant メッセージに ${finalRoleArg} の成果物が添付されています。評価結果を Markdown で返してください。`,
+					`上記 ${finalRoleArg} の成果物について、評価結果を Markdown で返してください。`,
 					``,
 					`### 出力形式（厳守）`,
 					`1 行目に必ず以下のどちらかのマーカーを出力してください:`,
@@ -3449,7 +3481,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					`- **不合格** の場合: ` + '`判定: 不合格`',
 					``,
 					`その下に、理由・具体的な改善点（不合格時は修正指示）を箇条書きで書いてください。改善点が無く完全に問題ない場合のみ合格にしてください。`,
-				].join('\n');
+				].filter(Boolean).join('\n');
 
 				const reviewResult = await callDivisionTaskExecute(
 					endpointBase, projectId, 'review', reviewPrompt, controller.signal,

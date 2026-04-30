@@ -1,19 +1,26 @@
 # Minimal Theme
 
-A whitespace-driven, low-contrast color theme designed for calm, focused editing.
+シンプルで余白を活かしたミニマルなカラーテーマです。Electron 製のエディタ UI 全体を、無彩色を中心に整え、視線を内容に集中させることを目的としています。
 
-## Variants
+## バリアント
 
-- **Minimal Light** — soft neutrals on pure white, single blue accent.
-- **Minimal Dark** — deep slate background with restrained syntax color.
+- **Minimal Light** — 明度の高いオフホワイト背景 (`#FAFAFA`) + 落ち着いたチャコール文字 (`#1F1F1F`)
+- **Minimal Dark** — ソフトブラック背景 (`#161616`) + 柔らかいオフホワイト文字 (`#E6E6E6`)
 
-## Design principles
+## デザイン原則
 
-1. **Whitespace first** — borders and section headers fade into the background; structure is communicated through spacing, not lines.
-2. **One accent** — a single blue accent (`#0a66c2` / `#58a6ff`) marks active state, focus, and selection. No competing hues in chrome.
-3. **Quiet syntax** — reduced saturation in token colors to keep prose-like readability.
-4. **Consistent surfaces** — sidebar, editor, panel, and title bar share the same background to remove visual chunking.
+1. **余白の確保** — タブ・サイドバー・ステータスバーの境界線は最小限の `1px` でグレー寄りに統一。
+2. **無彩色基調** — UI クロムは黒・白・グレーのみ。アクセントは構文ハイライトに限定。
+3. **静かな構文色** — シンタックスは緑 / 茶 / 青 / 紫を低彩度に抑え、コードを読み疲れない。
+4. **強調はタイポグラフィで** — キーワードや見出しは色ではなく `bold` で表現。
+5. **インジケータは 1 本線** — アクティブタブ / パネルは上端 1px のラインのみで示す。
 
-## How to enable
+## 利用方法
 
-`File` → `Preferences` → `Theme` → `Color Theme` → choose **Minimal Light** or **Minimal Dark**.
+1. コマンドパレットを開く（`Cmd/Ctrl + Shift + P`）
+2. `Preferences: Color Theme` を選択
+3. `Minimal Light` または `Minimal Dark` を選択
+
+## ライセンス
+
+MIT
