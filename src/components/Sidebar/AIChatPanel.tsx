@@ -1,529 +1,261 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   TextInput,
-  Pressable,
-  FlatList,
-  StyleSheet,
-  Platform,
+  TouchableOpacity,
+  ScrollView,
   KeyboardAvoidingView,
-  ListRenderItem,
+  Platform,
+  ActivityIndicator,
+  Animated,
 } from 'react-native';
-import {
-  AIChatColors,
-  AIChatRadius,
-  AIChatSpacing,
-  AIChatTypography,
-} from './aiChatTheme';
+import { styles, COLORS } from './aiChatStyles';
 
-/**
- * AIChatPanel — Minimal sidebar AI chat
- *
- * 既存サイドバーの AI チャット領域に差し込んで使うパネル。
- * 親側の幅 / 高さに追従するため flex: 1 で動作する想定。
- */
+export type ChatRole = 'user' | 'assistant';
 
-export type AIChatRole = 'user' | 'assistant';
-
-export interface AIChatMessage {
+export interface ChatMessage {
   id: string;
-  role: AIChatRole;
+  role: ChatRole;
   content: string;
-  createdAt?: number;
+  createdAt: number;
 }
 
 export interface AIChatPanelProps {
+  visible?: boolean;
   title?: string;
-  subtitle?: string;
   online?: boolean;
-  messages?: AIChatMessage[];
-  placeholder?: string;
-  onSend?: (text: string) => void | Promise<void>;
-  onClear?: () => void;
+  messages?: ChatMessage[];
+  loading?: boolean;
+  onSend?: (text: string) => void;
   onClose?: () => void;
-  isThinking?: boolean;
+  onClear?: () => void;
 }
 
-const DEFAULT_MESSAGES: AIChatMessage[] = [
-  {
-    id: 'sys-1',
-    role: 'assistant',
-    content: 'こんにちは。何でも気軽に聞いてください。',
-  },
+const SUGGESTIONS = [
+  '今日のタスクを要約して',
+  'このページの使い方を教えて',
+  '英語に翻訳して',
+  'アイデア出しを手伝って',
 ];
 
-const formatTime = (ts?: number) => {
-  if (!ts) return '';
+const formatTime = (ts: number) => {
   const d = new Date(ts);
   const hh = `${d.getHours()}`.padStart(2, '0');
   const mm = `${d.getMinutes()}`.padStart(2, '0');
   return `${hh}:${mm}`;
 };
 
-const HeaderDivider = () => <View style={styles.divider} />;
+const TypingDots: React.FC = () => {
+  const a1 = useRef(new Animated.Value(0.3)).current;
+  const a2 = useRef(new Animated.Value(0.3)).current;
+  const a3 = useRef(new Animated.Value(0.3)).current;
 
-const Avatar: React.FC<{ role: AIChatRole }> = ({ role }) => {
-  const isUser = role === 'user';
+  React.useEffect(() => {
+    const loop = (v: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(v, { toValue: 1, duration: 400, delay, useNativeDriver: true }),
+          Animated.timing(v, { toValue: 0.3, duration: 400, useNativeDriver: true }),
+        ]),
+      ).start();
+    loop(a1, 0);
+    loop(a2, 150);
+    loop(a3, 300);
+  }, [a1, a2, a3]);
+
   return (
-    <View
-      style={[
-        styles.avatar,
-        {
-          backgroundColor: isUser
-            ? AIChatColors.accent
-            : AIChatColors.surface,
-          borderColor: isUser ? AIChatColors.accent : AIChatColors.border,
-        },
-      ]}
-    >
-      <Text
-        style={[
-          styles.avatarText,
-          { color: isUser ? '#FFFFFF' : AIChatColors.textPrimary },
-        ]}
-      >
-        {isUser ? 'You' : 'AI'}
-      </Text>
+    <View style={styles.typingRow}>
+      <Animated.View style={[styles.typingDot, { opacity: a1 }]} />
+      <Animated.View style={[styles.typingDot, { opacity: a2 }]} />
+      <Animated.View style={[styles.typingDot, { opacity: a3 }]} />
     </View>
   );
 };
 
-const MessageRow: React.FC<{ message: AIChatMessage }> = ({ message }) => {
-  const isUser = message.role === 'user';
+const MessageBubble: React.FC<{ msg: ChatMessage }> = ({ msg }) => {
+  const isUser = msg.role === 'user';
   return (
-    <View style={styles.messageRow}>
-      <Avatar role={message.role} />
-      <View style={styles.messageBody}>
-        <View style={styles.messageMetaRow}>
-          <Text style={styles.messageAuthor}>
-            {isUser ? 'You' : 'Assistant'}
-          </Text>
-          {message.createdAt ? (
-            <Text style={styles.messageTime}>
-              {formatTime(message.createdAt)}
-            </Text>
-          ) : null}
+    <View style={[styles.bubbleRow, isUser ? styles.bubbleRowRight : styles.bubbleRowLeft]}>
+      {!isUser && (
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>AI</Text>
         </View>
-        <Text style={styles.messageText}>{message.content}</Text>
+      )}
+      <View style={{ maxWidth: '78%' }}>
+        <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAssistant]}>
+          <Text style={[styles.bubbleText, isUser ? styles.bubbleTextUser : styles.bubbleTextAssistant]}>
+            {msg.content}
+          </Text>
+        </View>
+        <Text style={[styles.timeText, isUser ? styles.timeRight : styles.timeLeft]}>
+          {formatTime(msg.createdAt)}
+        </Text>
       </View>
     </View>
   );
 };
-
-const TypingIndicator: React.FC = () => (
-  <View style={styles.messageRow}>
-    <Avatar role="assistant" />
-    <View style={styles.messageBody}>
-      <View style={styles.messageMetaRow}>
-        <Text style={styles.messageAuthor}>Assistant</Text>
-      </View>
-      <View style={styles.typingDots}>
-        <View style={[styles.dot, styles.dot1]} />
-        <View style={[styles.dot, styles.dot2]} />
-        <View style={[styles.dot, styles.dot3]} />
-      </View>
-    </View>
-  </View>
-);
-
-const IconButton: React.FC<{
-  label: string;
-  onPress?: () => void;
-  glyph: string;
-  disabled?: boolean;
-  primary?: boolean;
-}> = ({ label, onPress, glyph, disabled, primary }) => (
-  <Pressable
-    accessibilityRole="button"
-    accessibilityLabel={label}
-    onPress={onPress}
-    disabled={disabled}
-    style={({ pressed }) => [
-      primary ? styles.sendButton : styles.iconButton,
-      pressed && !disabled && { opacity: 0.7 },
-      disabled && { opacity: 0.35 },
-    ]}
-    hitSlop={6}
-  >
-    <Text
-      style={[
-        primary ? styles.sendButtonText : styles.iconButtonText,
-      ]}
-    >
-      {glyph}
-    </Text>
-  </Pressable>
-);
 
 export const AIChatPanel: React.FC<AIChatPanelProps> = ({
+  visible = true,
   title = 'AI Assistant',
-  subtitle = 'ALWAYS HERE TO HELP',
   online = true,
-  messages,
-  placeholder = 'メッセージを入力…',
+  messages = [],
+  loading = false,
   onSend,
-  onClear,
   onClose,
-  isThinking = false,
+  onClear,
 }) => {
   const [input, setInput] = useState('');
-  const [focused, setFocused] = useState(false);
-  const listRef = useRef<FlatList<AIChatMessage>>(null);
+  const scrollRef = useRef<ScrollView>(null);
 
-  const data = useMemo<AIChatMessage[]>(
-    () => (messages && messages.length ? messages : DEFAULT_MESSAGES),
-    [messages],
-  );
+  const grouped = useMemo(() => {
+    // 今日 / それ以前 を簡易グルーピング
+    const today: ChatMessage[] = [];
+    const earlier: ChatMessage[] = [];
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    messages.forEach((m) => {
+      if (m.createdAt >= startOfToday.getTime()) today.push(m);
+      else earlier.push(m);
+    });
+    return { today, earlier };
+  }, [messages]);
 
-  const canSend = input.trim().length > 0;
-
-  const handleSend = useCallback(() => {
+  const handleSend = () => {
     const text = input.trim();
     if (!text) return;
     onSend?.(text);
     setInput('');
-    requestAnimationFrame(() => {
-      listRef.current?.scrollToEnd({ animated: true });
-    });
-  }, [input, onSend]);
+    requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
+  };
 
-  const renderItem: ListRenderItem<AIChatMessage> = useCallback(
-    ({ item }) => <MessageRow message={item} />,
-    [],
-  );
+  if (!visible) return null;
+
+  const isEmpty = messages.length === 0;
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      style={styles.container}
     >
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <View style={styles.headerIconWrap}>
-            <Text style={styles.headerIcon}>✦</Text>
-          </View>
+          <View style={styles.brandDot} />
           <View>
-            <Text style={styles.title}>{title}</Text>
-            <View style={styles.subtitleRow}>
-              <View
-                style={[
-                  styles.statusDot,
-                  {
-                    backgroundColor: online
-                      ? AIChatColors.online
-                      : AIChatColors.textTertiary,
-                  },
-                ]}
-              />
-              <Text style={styles.subtitle}>{subtitle}</Text>
+            <Text style={styles.headerTitle}>{title}</Text>
+            <View style={styles.statusRow}>
+              <View style={[styles.statusDot, { backgroundColor: online ? COLORS.success : COLORS.muted }]} />
+              <Text style={styles.statusText}>{online ? 'オンライン' : 'オフライン'}</Text>
             </View>
           </View>
         </View>
-
         <View style={styles.headerActions}>
-          {onClear ? (
-            <IconButton label="Clear" glyph="↺" onPress={onClear} />
-          ) : null}
-          {onClose ? (
-            <IconButton label="Close" glyph="×" onPress={onClose} />
-          ) : null}
+          {onClear && (
+            <TouchableOpacity style={styles.iconBtn} onPress={onClear} accessibilityLabel="履歴をクリア">
+              <Text style={styles.iconBtnText}>⟲</Text>
+            </TouchableOpacity>
+          )}
+          {onClose && (
+            <TouchableOpacity style={styles.iconBtn} onPress={onClose} accessibilityLabel="閉じる">
+              <Text style={styles.iconBtnText}>×</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
-      <HeaderDivider />
+      <View style={styles.divider} />
 
-      {/* Messages */}
-      <FlatList
-        ref={listRef}
-        data={data}
-        keyExtractor={(m) => m.id}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={styles.itemSpacer} />}
-        ListFooterComponent={isThinking ? <TypingIndicator /> : null}
+      {/* Body */}
+      <ScrollView
+        ref={scrollRef}
+        style={styles.body}
+        contentContainerStyle={styles.bodyContent}
         showsVerticalScrollIndicator={false}
-      />
+      >
+        {isEmpty ? (
+          <View style={styles.emptyWrap}>
+            <View style={styles.emptyAvatar}>
+              <Text style={styles.emptyAvatarText}>AI</Text>
+            </View>
+            <Text style={styles.emptyTitle}>何でも聞いてください</Text>
+            <Text style={styles.emptySubtitle}>
+              質問・要約・翻訳・アイデア出しまで、{'\n'}あなたの作業をサポートします。
+            </Text>
 
-      {/* Suggestion chips */}
-      <View style={styles.suggestionsRow}>
-        {['要約して', 'コードを説明', 'アイデアを出して'].map((s) => (
-          <Pressable
-            key={s}
-            onPress={() => setInput(s)}
-            style={({ pressed }) => [
-              styles.chip,
-              pressed && { backgroundColor: AIChatColors.surface },
-            ]}
-          >
-            <Text style={styles.chipText}>{s}</Text>
-          </Pressable>
-        ))}
-      </View>
+            <Text style={styles.sectionLabel}>提案</Text>
+            <View style={styles.chipWrap}>
+              {SUGGESTIONS.map((s) => (
+                <TouchableOpacity key={s} style={styles.chip} onPress={() => onSend?.(s)}>
+                  <Text style={styles.chipText}>{s}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        ) : (
+          <>
+            {grouped.earlier.length > 0 && (
+              <>
+                <Text style={styles.sectionLabel}>これまでの会話</Text>
+                {grouped.earlier.map((m) => (
+                  <MessageBubble key={m.id} msg={m} />
+                ))}
+              </>
+            )}
+            {grouped.today.length > 0 && (
+              <>
+                <Text style={styles.sectionLabel}>今日</Text>
+                {grouped.today.map((m) => (
+                  <MessageBubble key={m.id} msg={m} />
+                ))}
+              </>
+            )}
+            {loading && (
+              <View style={[styles.bubbleRow, styles.bubbleRowLeft]}>
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>AI</Text>
+                </View>
+                <View style={[styles.bubble, styles.bubbleAssistant]}>
+                  <TypingDots />
+                </View>
+              </View>
+            )}
+          </>
+        )}
+      </ScrollView>
 
       {/* Composer */}
-      <View
-        style={[
-          styles.composer,
-          focused && { borderColor: AIChatColors.accent },
-        ]}
-      >
-        <TextInput
-          style={styles.input}
-          value={input}
-          onChangeText={setInput}
-          placeholder={placeholder}
-          placeholderTextColor={AIChatColors.textTertiary}
-          multiline
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          onSubmitEditing={handleSend}
-          blurOnSubmit={false}
-          returnKeyType="send"
-          underlineColorAndroid="transparent"
-        />
-        <View style={styles.composerActions}>
-          <IconButton label="Attach" glyph="＋" onPress={() => {}} />
-          <IconButton
-            label="Send"
-            glyph="↑"
-            onPress={handleSend}
-            disabled={!canSend}
-            primary
+      <View style={styles.composerWrap}>
+        <View style={styles.composer}>
+          <TextInput
+            value={input}
+            onChangeText={setInput}
+            placeholder="メッセージを入力..."
+            placeholderTextColor={COLORS.muted}
+            style={styles.input}
+            multiline
+            maxLength={2000}
+            onSubmitEditing={handleSend}
+            blurOnSubmit={false}
           />
+          <TouchableOpacity
+            style={[styles.sendBtn, (!input.trim() || loading) && styles.sendBtnDisabled]}
+            onPress={handleSend}
+            disabled={!input.trim() || loading}
+            accessibilityLabel="送信"
+          >
+            {loading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.sendBtnText}>↑</Text>
+            )}
+          </TouchableOpacity>
         </View>
+        <Text style={styles.footerHint}>Enter で送信 ・ Shift+Enter で改行</Text>
       </View>
-
-      <Text style={styles.footerHint}>
-        Enter で送信 · Shift + Enter で改行
-      </Text>
     </KeyboardAvoidingView>
   );
 };
 
 export default AIChatPanel;
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: AIChatColors.background,
-  },
-
-  // Header
-  header: {
-    paddingHorizontal: AIChatSpacing.lg,
-    paddingTop: AIChatSpacing.lg,
-    paddingBottom: AIChatSpacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: AIChatSpacing.md,
-  },
-  headerIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: AIChatRadius.md,
-    backgroundColor: AIChatColors.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: AIChatColors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerIcon: {
-    fontSize: 14,
-    color: AIChatColors.textPrimary,
-  },
-  title: {
-    ...AIChatTypography.title,
-    color: AIChatColors.textPrimary,
-  },
-  subtitleRow: {
-    marginTop: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  subtitle: {
-    ...AIChatTypography.subtitle,
-    color: AIChatColors.textSecondary,
-    textTransform: 'uppercase',
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: AIChatSpacing.xs,
-  },
-
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: AIChatColors.border,
-    marginHorizontal: AIChatSpacing.lg,
-  },
-
-  // List
-  listContent: {
-    paddingHorizontal: AIChatSpacing.lg,
-    paddingVertical: AIChatSpacing.lg,
-    flexGrow: 1,
-  },
-  itemSpacer: {
-    height: AIChatSpacing.lg,
-  },
-
-  // Message
-  messageRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: AIChatSpacing.md,
-  },
-  avatar: {
-    width: 28,
-    height: 28,
-    borderRadius: AIChatRadius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  avatarText: {
-    fontSize: 10,
-    fontWeight: '600',
-    letterSpacing: 0.4,
-  },
-  messageBody: {
-    flex: 1,
-    paddingTop: 2,
-  },
-  messageMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  messageAuthor: {
-    ...AIChatTypography.meta,
-    color: AIChatColors.textSecondary,
-    textTransform: 'uppercase',
-  },
-  messageTime: {
-    ...AIChatTypography.meta,
-    color: AIChatColors.textTertiary,
-  },
-  messageText: {
-    ...AIChatTypography.message,
-    color: AIChatColors.textPrimary,
-  },
-
-  // Typing
-  typingDots: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 6,
-  },
-  dot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: AIChatColors.textTertiary,
-  },
-  dot1: { opacity: 0.4 },
-  dot2: { opacity: 0.7 },
-  dot3: { opacity: 1 },
-
-  // Suggestions
-  suggestionsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: AIChatSpacing.sm,
-    paddingHorizontal: AIChatSpacing.lg,
-    paddingBottom: AIChatSpacing.sm,
-  },
-  chip: {
-    paddingHorizontal: AIChatSpacing.md,
-    paddingVertical: 6,
-    borderRadius: AIChatRadius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: AIChatColors.border,
-    backgroundColor: AIChatColors.background,
-  },
-  chipText: {
-    fontSize: 12,
-    color: AIChatColors.textSecondary,
-    fontWeight: '500',
-  },
-
-  // Composer
-  composer: {
-    marginHorizontal: AIChatSpacing.lg,
-    marginBottom: AIChatSpacing.sm,
-    borderWidth: 1,
-    borderColor: AIChatColors.border,
-    borderRadius: AIChatRadius.lg,
-    backgroundColor: AIChatColors.background,
-    paddingHorizontal: AIChatSpacing.md,
-    paddingTop: AIChatSpacing.sm,
-    paddingBottom: AIChatSpacing.xs,
-  },
-  input: {
-    ...AIChatTypography.input,
-    color: AIChatColors.textPrimary,
-    minHeight: 36,
-    maxHeight: 140,
-    paddingTop: 4,
-    paddingBottom: 4,
-    textAlignVertical: 'top',
-  },
-  composerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: AIChatSpacing.xs,
-  },
-
-  iconButton: {
-    width: 30,
-    height: 30,
-    borderRadius: AIChatRadius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
-  },
-  iconButtonText: {
-    fontSize: 16,
-    color: AIChatColors.textSecondary,
-    lineHeight: 18,
-  },
-
-  sendButton: {
-    width: 30,
-    height: 30,
-    borderRadius: AIChatRadius.pill,
-    backgroundColor: AIChatColors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sendButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-    lineHeight: 16,
-  },
-
-  footerHint: {
-    paddingHorizontal: AIChatSpacing.lg,
-    paddingBottom: AIChatSpacing.md,
-    fontSize: 10,
-    color: AIChatColors.textTertiary,
-    letterSpacing: 0.2,
-  },
-});
