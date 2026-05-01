@@ -95,19 +95,17 @@ const MemoizedModelDropdown = ({ featureName, className }: { featureName: Featur
 		// Inject Division Project option at the top if project config exists and not already in list
 		let divisionOption: ModelOption | null = null
 		if (divisionProjectConfig && featureName === 'Chat') {
-			const existingIdx = newOptions.findIndex(o => isDivisionProjectOption(o.selection))
-			if (existingIdx >= 0) {
-				divisionOption = newOptions.splice(existingIdx, 1)[0]
-			} else {
-				divisionOption = {
-					name: `Division Project`,
-					selection: DIVISION_PROJECT_SELECTION,
-				}
+			// 既存の division-orchestrator 行は全て取り除き、先頭に 1 行だけ挿入する。
+			// 同一 selection が複数残っていると React key が衝突する。
+			const extracted = newOptions.filter(o => isDivisionProjectOption(o.selection))
+			newOptions = newOptions.filter(o => !isDivisionProjectOption(o.selection))
+			divisionOption = extracted[0] ?? {
+				name: `Division Project`,
+				selection: DIVISION_PROJECT_SELECTION,
 			}
 		} else {
 			// Ensure no stray Division option leaks into non-Chat feature dropdowns
-			const strayIdx = newOptions.findIndex(o => isDivisionProjectOption(o.selection))
-			if (strayIdx >= 0) newOptions.splice(strayIdx, 1)
+			newOptions = newOptions.filter(o => !isDivisionProjectOption(o.selection))
 		}
 
 		// プロバイダごとに隣接させて並べ替え（グループヘッダ表示のため）

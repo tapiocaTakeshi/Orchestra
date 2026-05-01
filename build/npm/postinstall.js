@@ -113,10 +113,31 @@ function removeParcelWatcherPrebuild(dir) {
 	}
 }
 
+// 一部のパッケージは `//# sourceMappingURL=foo.js.map` だけ残して .map を同梱せず公開しているため、
+// DevTools が毎回 ENOENT を吐く。runtime には無関係のため該当コメントだけ末尾から除去する。
+// 対象が増えたらここに追記する。
+const BROKEN_SOURCEMAP_FILES = [
+	'node_modules/vscode-textmate/release/main.js',
+];
+function stripBrokenSourceMappingURLs(dir) {
+	for (const rel of BROKEN_SOURCEMAP_FILES) {
+		const file = path.join(root, dir, rel);
+		if (!fs.existsSync(file)) continue;
+		const mapFile = `${file}.map`;
+		if (fs.existsSync(mapFile)) continue; // .map がそろっていれば触らない
+		const original = fs.readFileSync(file, 'utf8');
+		const stripped = original.replace(/\n?\/\/[#@]\s*sourceMappingURL=[^\n]*\s*$/m, '');
+		if (stripped === original) continue;
+		fs.writeFileSync(file, stripped);
+		log(dir, `Stripped missing sourceMappingURL from ${rel}`);
+	}
+}
+
 for (let dir of dirs) {
 
 	if (dir === '') {
 		removeParcelWatcherPrebuild(dir);
+		stripBrokenSourceMappingURLs(dir);
 		continue; // already executed in root
 	}
 
@@ -186,6 +207,7 @@ for (let dir of dirs) {
 	}
 
 	npmInstall(dir, opts);
+	stripBrokenSourceMappingURLs(dir);
 }
 
 cp.execSync('git config pull.rebase merges');

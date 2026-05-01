@@ -63,7 +63,7 @@ const VoidIcon = () => {
 	}, [])
 
 	// Use orchestra_nonbackground.png for UI
-	const logoPath = new URL('../assets/orchestra_logo.png', import.meta.url).href
+	const logoPath = new URL('../assets/orchestra_icon_nonbackground.png', import.meta.url).href
 	return <img ref={imgRef} src={logoPath} alt="Orchestra Logo" />
 }
 

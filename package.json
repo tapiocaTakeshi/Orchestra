@@ -10,9 +10,10 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "release-macos": "npm  run bac && npm run gulp vscode-darwin-arm64",
-    "release-windows": "npm  run bac && npm run gulp vscode-win32-x64",
-    "release-linux": "npm  run bac && npm run gulp vscode-linux-x64",
+    "release-macos": "npm run bac && npm run gulp vscode-darwin-arm64 && npm run sign-macos",
+    "sign-macos": "xattr -cr ../VSCode-darwin-arm64/Orchestra.app && codesign --force --deep --sign - ../VSCode-darwin-arm64/Orchestra.app && codesign --verify --verbose ../VSCode-darwin-arm64/Orchestra.app",
+    "release-windows": "npm run bac && npm run gulp vscode-win32-x64",
+    "release-linux": "npm run bac && npm run gulp vscode-linux-x64",
     "bac": "npm run buildreact && npm run compile",
     "buildreact": "cd ./src/vs/workbench/contrib/void/browser/react/ && node build.js && cd ../../../../../../../",
     "watchreact": "cd ./src/vs/workbench/contrib/void/browser/react/ && node build.js --watch && cd ../../../../../../../",
@@ -147,6 +148,7 @@
     "yazl": "^2.4.3"
   },
   "devDependencies": {
+    "scope-tailwind": "^1.4.2",
     "@electron-forge/cli": "^7.11.1",
     "@electron-forge/maker-deb": "^7.11.1",
     "@electron-forge/maker-rpm": "^7.11.1",

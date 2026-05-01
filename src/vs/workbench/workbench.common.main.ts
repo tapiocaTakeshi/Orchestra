@@ -172,6 +172,9 @@ registerSingleton(IOpenerService, OpenerService, InstantiationType.Delayed);
 
 //#region --- workbench contributions
 
+// Chat — Glassmorphism visual layer (style only, no behavior change)
+import './contrib/chat/browser/chatGlassmorphism.contribution.js';
+
 // Telemetry
 import './contrib/telemetry/browser/telemetry.contribution.js';
 

@@ -1,446 +1,671 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI Chat - Minimal Electron</title>
+<title>AI Chat Sidebar - Glassmorphism</title>
 <style>
-  :root {
-    --bg-window: #ffffff;
-    --bg-sidebar: #fcfcfc;
-    --bg-chat-user: #f4f4f5;
-    --bg-input: #ffffff;
-    
-    --text-primary: #18181b;
-    --text-secondary: #71717a;
-    --text-tertiary: #a1a1aa;
-    
-    --border-subtle: #f4f4f5;
-    --border-focus: #e4e4e7;
-    
-    --accent: #18181b;
-    --accent-hover: #27272a;
-    
-    --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  }
+    :root {
+        --glass-bg: rgba(25, 25, 35, 0.45);
+        --glass-border: rgba(255, 255, 255, 0.12);
+        --glass-highlight: rgba(255, 255, 255, 0.05);
+        --text-primary: #ffffff;
+        --text-secondary: rgba(255, 255, 255, 0.7);
+        --accent-color: #8a2be2;
+        --accent-glow: rgba(138, 43, 226, 0.6);
+        --user-bubble: rgba(138, 43, 226, 0.3);
+        --ai-bubble: rgba(255, 255, 255, 0.08);
+    }
 
-  * {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-  }
+    * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+    }
 
-  body {
-    font-family: var(--font-sans);
-    background-color: var(--bg-window);
-    color: var(--text-primary);
-    height: 100vh;
-    display: flex;
-    overflow: hidden;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        background-color: #0f0f13;
+        color: var(--text-primary);
+        height: 100vh;
+        overflow: hidden;
+        display: flex;
+        position: relative;
+    }
 
-  /* Electron Native Window Controls Mock */
-  .titlebar-drag-region {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 48px;
-    -webkit-app-region: drag;
-    z-index: 100;
-    display: flex;
-    align-items: center;
-    padding: 0 16px;
-    pointer-events: none; /* Let clicks pass through except for the region itself */
-  }
+    /* Background Animation to emphasize Glassmorphism */
+    .bg-orbs {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        z-index: 0;
+    }
 
-  .mac-controls {
-    display: flex;
-    gap: 8px;
-    pointer-events: auto;
-    -webkit-app-region: no-drag;
-  }
+    .orb {
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(80px);
+        opacity: 0.6;
+        animation: float 20s infinite alternate ease-in-out;
+    }
 
-  .mac-dot {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-  }
-  .mac-dot.close { background-color: #ed6a5e; }
-  .mac-dot.minimize { background-color: #f5bf4f; }
-  .mac-dot.maximize { background-color: #61c554; }
+    .orb-1 {
+        width: 400px;
+        height: 400px;
+        background: radial-gradient(circle, #ff007a, transparent);
+        top: -100px;
+        right: 100px;
+        animation-delay: 0s;
+    }
 
-  /* Layout */
-  .sidebar {
-    width: 260px;
-    background-color: var(--bg-sidebar);
-    border-right: 1px solid var(--border-subtle);
-    display: flex;
-    flex-direction: column;
-    padding-top: 48px; /* Offset for titlebar */
-    z-index: 10;
-  }
+    .orb-2 {
+        width: 500px;
+        height: 500px;
+        background: radial-gradient(circle, #4a00e0, transparent);
+        bottom: -150px;
+        right: -100px;
+        animation-delay: -5s;
+    }
 
-  .main-content {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    position: relative;
-    background-color: var(--bg-window);
-  }
+    .orb-3 {
+        width: 300px;
+        height: 300px;
+        background: radial-gradient(circle, #00d2ff, transparent);
+        top: 30%;
+        left: 20%;
+        animation-delay: -10s;
+    }
 
-  /* Sidebar Elements */
-  .new-chat-container {
-    padding: 16px;
-    -webkit-app-region: no-drag;
-  }
+    @keyframes float {
+        0% { transform: translate(0, 0) scale(1); }
+        50% { transform: translate(-50px, 50px) scale(1.1); }
+        100% { transform: translate(50px, -50px) scale(0.9); }
+    }
 
-  .btn-new-chat {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 14px;
-    background: transparent;
-    border: 1px solid var(--border-focus);
-    border-radius: 8px;
-    color: var(--text-primary);
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-  }
-  .btn-new-chat:hover {
-    background-color: #ffffff;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
-  }
+    /* Main Content Mock */
+    .main-content {
+        flex: 1;
+        position: relative;
+        z-index: 1;
+        padding: 40px;
+        display: flex;
+        flex-direction: column;
+    }
 
-  .history-list {
-    flex: 1;
-    overflow-y: auto;
-    padding: 0 12px 16px 12px;
-  }
+    .app-header {
+        height: 40px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 30px;
+        /* Electron drag region simulation */
+        -webkit-app-region: drag;
+    }
 
-  .history-group-title {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text-tertiary);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin: 16px 0 8px 12px;
-  }
+    .window-controls {
+        display: flex;
+        gap: 8px;
+    }
 
-  .history-item {
-    padding: 8px 12px;
-    margin-bottom: 2px;
-    border-radius: 6px;
-    font-size: 13px;
-    color: var(--text-secondary);
-    cursor: pointer;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    transition: all 0.2s ease;
-  }
-  .history-item:hover {
-    background-color: var(--border-subtle);
-    color: var(--text-primary);
-  }
-  .history-item.active {
-    background-color: var(--border-focus);
-    color: var(--text-primary);
-    font-weight: 500;
-  }
+    .window-btn {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+    }
+    .window-btn.close { background-color: #ff5f56; }
+    .window-btn.min { background-color: #ffbd2e; }
+    .window-btn.max { background-color: #27c93f; }
 
-  .sidebar-footer {
-    padding: 16px;
-    border-top: 1px solid var(--border-subtle);
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    font-size: 13px;
-    color: var(--text-secondary);
-    cursor: pointer;
-  }
-  .sidebar-footer:hover {
-    color: var(--text-primary);
-  }
+    .mock-content {
+        flex: 1;
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid var(--glass-border);
+        border-radius: 16px;
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        padding: 40px;
+    }
 
-  /* Chat Area */
-  .chat-scroll-area {
-    flex: 1;
-    overflow-y: auto;
-    padding: 64px 0 140px 0; /* Top offset for drag, bottom for input */
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-  }
+    .mock-title {
+        width: 40%;
+        height: 32px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        margin-bottom: 24px;
+    }
 
-  .chat-container {
-    width: 100%;
-    max-width: 720px;
-    padding: 0 24px;
-    display: flex;
-    flex-direction: column;
-    gap: 32px;
-  }
+    .mock-text {
+        width: 100%;
+        height: 16px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 4px;
+        margin-bottom: 12px;
+    }
+    .mock-text.short { width: 60%; }
 
-  .message {
-    display: flex;
-    gap: 16px;
-    opacity: 0;
-    animation: fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  }
+    /* Glassmorphism Sidebar */
+    .sidebar {
+        width: 380px;
+        height: 100vh;
+        background: var(--glass-bg);
+        border-left: 1px solid var(--glass-border);
+        backdrop-filter: blur(24px);
+        -webkit-backdrop-filter: blur(24px);
+        box-shadow: -10px 0 30px rgba(0, 0, 0, 0.3);
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        z-index: 2;
+        transition: transform 0.3s ease;
+    }
 
-  @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
+    /* Sidebar Header */
+    .sidebar-header {
+        padding: 24px 20px 16px;
+        border-bottom: 1px solid var(--glass-border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: linear-gradient(180deg, rgba(255,255,255,0.05) 0%, transparent 100%);
+    }
 
-  .avatar {
-    width: 28px;
-    height: 28px;
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-  .avatar.ai {
-    background-color: var(--text-primary);
-    color: #ffffff;
-  }
-  .avatar.user {
-    background-color: var(--bg-chat-user);
-    color: var(--text-primary);
-    border: 1px solid var(--border-focus);
-  }
+    .sidebar-title {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-weight: 600;
+        font-size: 16px;
+        letter-spacing: 0.5px;
+    }
 
-  .message-content {
-    flex: 1;
-    font-size: 15px;
-    line-height: 1.6;
-    color: var(--text-primary);
-    padding-top: 3px;
-  }
-  .message-content p {
-    margin-bottom: 12px;
-  }
-  .message-content p:last-child {
-    margin-bottom: 0;
-  }
-  
-  .message.user .message-content {
-    color: var(--text-secondary);
-  }
+    .ai-icon {
+        width: 28px;
+        height: 28px;
+        background: linear-gradient(135deg, #a8c0ff 0%, #3f2b96 100%);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 0 15px rgba(168, 192, 255, 0.3);
+        position: relative;
+    }
 
-  /* Input Area */
-  .input-region {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    padding: 24px;
-    background: linear-gradient(0deg, var(--bg-window) 60%, transparent 100%);
-    display: flex;
-    justify-content: center;
-  }
+    .ai-icon::after {
+        content: '';
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        border-radius: inherit;
+        border: 1px solid rgba(255, 255, 255, 0.4);
+    }
 
-  .input-wrapper {
-    width: 100%;
-    max-width: 720px;
-    background-color: var(--bg-input);
-    border: 1px solid var(--border-focus);
-    border-radius: 16px;
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.03);
-    display: flex;
-    align-items: flex-end;
-    padding: 10px 14px;
-    transition: box-shadow 0.2s ease, border-color 0.2s ease;
-  }
-  .input-wrapper:focus-within {
-    border-color: #d4d4d8;
-    box-shadow: 0 4px 32px rgba(0, 0, 0, 0.06);
-  }
+    .ai-icon svg {
+        width: 16px;
+        height: 16px;
+        fill: #fff;
+    }
 
-  .input-field {
-    flex: 1;
-    border: none;
-    background: transparent;
-    resize: none;
-    outline: none;
-    font-family: inherit;
-    font-size: 15px;
-    line-height: 1.5;
-    color: var(--text-primary);
-    padding: 4px 8px;
-    max-height: 200px;
-    min-height: 24px;
-  }
-  .input-field::placeholder {
-    color: var(--text-tertiary);
-  }
+    .header-actions {
+        display: flex;
+        gap: 12px;
+    }
 
-  .btn-send {
-    width: 32px;
-    height: 32px;
-    border-radius: 10px;
-    background-color: var(--accent);
-    color: #ffffff;
-    border: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    flex-shrink: 0;
-    margin-bottom: 2px;
-    transition: all 0.2s ease;
-  }
-  .btn-send:hover {
-    background-color: var(--accent-hover);
-    transform: translateY(-1px);
-  }
-  .btn-send:active {
-    transform: translateY(0) scale(0.96);
-  }
+    .icon-btn {
+        background: transparent;
+        border: none;
+        color: var(--text-secondary);
+        cursor: pointer;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+    }
 
-  /* Icons */
-  svg {
-    stroke-width: 2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    fill: none;
-    stroke: currentColor;
-  }
+    .icon-btn:hover {
+        background: var(--glass-highlight);
+        color: var(--text-primary);
+    }
 
-  /* Scrollbar */
-  ::-webkit-scrollbar {
-    width: 4px;
-  }
-  ::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  ::-webkit-scrollbar-thumb {
-    background: var(--border-focus);
-    border-radius: 4px;
-  }
-  ::-webkit-scrollbar-thumb:hover {
-    background: #d4d4d8;
-  }
+    /* Chat Area */
+    .chat-area {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+        scroll-behavior: smooth;
+    }
+
+    /* Custom Scrollbar */
+    .chat-area::-webkit-scrollbar {
+        width: 6px;
+    }
+    .chat-area::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    .chat-area::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+    }
+    .chat-area::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.2);
+    }
+
+    /* Chat Bubbles */
+    .message {
+        display: flex;
+        flex-direction: column;
+        max-width: 90%;
+        animation: fadeIn 0.4s ease forwards;
+    }
+
+    .message.user {
+        align-self: flex-end;
+    }
+
+    .message.ai {
+        align-self: flex-start;
+    }
+
+    .bubble {
+        padding: 14px 18px;
+        border-radius: 18px;
+        font-size: 14px;
+        line-height: 1.6;
+        position: relative;
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+    }
+
+    .user .bubble {
+        background: var(--user-bubble);
+        border: 1px solid rgba(138, 43, 226, 0.4);
+        border-bottom-right-radius: 4px;
+        color: #fff;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+
+    .ai .bubble {
+        background: var(--ai-bubble);
+        border: 1px solid var(--glass-border);
+        border-bottom-left-radius: 4px;
+        color: var(--text-primary);
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+
+    /* Highlighted code/blocks inside AI bubble */
+    .ai-code {
+        background: rgba(0, 0, 0, 0.3);
+        border-radius: 6px;
+        padding: 2px 6px;
+        font-family: monospace;
+        font-size: 13px;
+        color: #a8c0ff;
+    }
+
+    .message-meta {
+        font-size: 11px;
+        color: var(--text-secondary);
+        margin-top: 6px;
+        display: flex;
+        gap: 8px;
+    }
+
+    .user .message-meta {
+        align-self: flex-end;
+    }
+
+    /* Typing Indicator */
+    .typing-indicator {
+        display: flex;
+        gap: 4px;
+        padding: 16px 20px;
+        width: fit-content;
+        align-items: center;
+    }
+
+    .dot {
+        width: 6px;
+        height: 6px;
+        background: var(--text-secondary);
+        border-radius: 50%;
+        animation: bounce 1.4s infinite ease-in-out both;
+    }
+
+    .dot:nth-child(1) { animation-delay: -0.32s; }
+    .dot:nth-child(2) { animation-delay: -0.16s; }
+
+    @keyframes bounce {
+        0%, 80%, 100% { transform: scale(0); opacity: 0.5; }
+        40% { transform: scale(1); opacity: 1; }
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Suggested Actions (Flow clarity) */
+    .suggestions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 12px;
+    }
+
+    .suggest-chip {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--glass-border);
+        padding: 8px 14px;
+        border-radius: 20px;
+        font-size: 12px;
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .suggest-chip:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: var(--text-primary);
+        border-color: rgba(255, 255, 255, 0.3);
+        transform: translateY(-1px);
+    }
+
+    .suggest-chip svg {
+        width: 12px;
+        height: 12px;
+        fill: currentColor;
+    }
+
+    /* Input Area */
+    .input-area {
+        padding: 16px 20px 24px;
+        background: linear-gradient(0deg, rgba(25,25,35,0.8) 0%, rgba(25,25,35,0) 100%);
+        border-top: 1px solid rgba(255, 255, 255, 0.05);
+        position: relative;
+    }
+
+    .input-wrapper {
+        position: relative;
+        background: rgba(0, 0, 0, 0.2);
+        border: 1px solid var(--glass-border);
+        border-radius: 16px;
+        display: flex;
+        align-items: flex-end;
+        padding: 8px 12px;
+        transition: all 0.3s ease;
+        box-shadow: inset 0 2px 10px rgba(0,0,0,0.2);
+    }
+
+    .input-wrapper:focus-within {
+        border-color: rgba(138, 43, 226, 0.5);
+        box-shadow: 0 0 15px rgba(138, 43, 226, 0.2), inset 0 2px 10px rgba(0,0,0,0.2);
+        background: rgba(0, 0, 0, 0.3);
+    }
+
+    .input-field {
+        flex: 1;
+        background: transparent;
+        border: none;
+        color: var(--text-primary);
+        font-size: 14px;
+        font-family: inherit;
+        resize: none;
+        min-height: 24px;
+        max-height: 120px;
+        padding: 4px 8px;
+        outline: none;
+        line-height: 1.5;
+    }
+
+    .input-field::placeholder {
+        color: rgba(255, 255, 255, 0.3);
+    }
+
+    .input-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding-bottom: 2px;
+    }
+
+    .action-btn {
+        background: transparent;
+        border: none;
+        color: var(--text-secondary);
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .action-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: var(--text-primary);
+    }
+
+    .send-btn {
+        background: var(--accent-color);
+        color: #fff;
+        border-radius: 10px;
+        width: 32px;
+        height: 32px;
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s;
+        box-shadow: 0 4px 10px rgba(138, 43, 226, 0.3);
+        margin-left: 4px;
+    }
+
+    .send-btn:hover {
+        background: #9d4edd;
+        transform: scale(1.05);
+        box-shadow: 0 6px 15px rgba(138, 43, 226, 0.5);
+    }
+
+    .send-btn svg {
+        width: 14px;
+        height: 14px;
+        fill: currentColor;
+        transform: translateX(1px); /* optical alignment */
+    }
+
+    /* Context indicator (showing what AI is looking at) */
+    .context-badge {
+        position: absolute;
+        top: -30px;
+        left: 20px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(10px);
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 11px;
+        color: var(--text-secondary);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        opacity: 0;
+        transform: translateY(10px);
+        animation: slideUp 0.3s ease forwards;
+    }
+
+    .context-badge::before {
+        content: '';
+        display: block;
+        width: 6px;
+        height: 6px;
+        background: #27c93f;
+        border-radius: 50%;
+        box-shadow: 0 0 5px #27c93f;
+    }
+
+    @keyframes slideUp {
+        to { opacity: 1; transform: translateY(0); }
+    }
+
 </style>
 </head>
 <body>
 
-  <!-- Electron Drag Region & Window Controls -->
-  <div class="titlebar-drag-region">
-    <div class="mac-controls">
-      <div class="mac-dot close"></div>
-      <div class="mac-dot minimize"></div>
-      <div class="mac-dot maximize"></div>
-    </div>
-  </div>
-
-  <!-- Sidebar -->
-  <aside class="sidebar">
-    <div class="new-chat-container">
-      <button class="btn-new-chat">
-        New thread
-        <svg width="16" height="16" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-      </button>
+    <!-- Background Orbs for Glassmorphism Effect -->
+    <div class="bg-orbs">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
     </div>
 
-    <div class="history-list">
-      <div class="history-group-title">Today</div>
-      <div class="history-item active">Minimalism in Desktop Apps</div>
-      <div class="history-item">Electron IPC best practices</div>
-      
-      <div class="history-group-title">Previous 7 Days</div>
-      <div class="history-item">Typography scaling system</div>
-      <div class="history-item">Designing without borders</div>
-      <div class="history-item">State management review</div>
-      <div class="history-item">Color contrast accessibility</div>
+    <!-- Main Application Area (Mock) -->
+    <div class="main-content">
+        <div class="app-header">
+            <div class="window-controls">
+                <div class="window-btn close"></div>
+                <div class="window-btn min"></div>
+                <div class="window-btn max"></div>
+            </div>
+        </div>
+        <div class="mock-content">
+            <div class="mock-title"></div>
+            <div class="mock-text"></div>
+            <div class="mock-text"></div>
+            <div class="mock-text short"></div>
+            <br>
+            <div class="mock-text"></div>
+            <div class="mock-text"></div>
+        </div>
     </div>
 
-    <div class="sidebar-footer">
-      <svg width="16" height="16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-      Preferences
-    </div>
-  </aside>
-
-  <!-- Main Chat -->
-  <main class="main-content">
-    <div class="chat-scroll-area">
-      <div class="chat-container">
+    <!-- AI Sidebar (Glassmorphism UI) -->
+    <div class="sidebar">
         
-        <!-- User -->
-        <div class="message user" style="animation-delay: 0s;">
-          <div class="avatar user">
-            <svg width="14" height="14" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-          </div>
-          <div class="message-content">
-            <p>I'm building an AI chat app using Electron. I want the design to be extremely minimal. No heavy borders, no cluttered headers. How should I approach the UI?</p>
-          </div>
+        <!-- Header -->
+        <div class="sidebar-header">
+            <div class="sidebar-title">
+                <div class="ai-icon">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                Division AI
+            </div>
+            <div class="header-actions">
+                <button class="icon-btn" title="Settings">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                </button>
+                <button class="icon-btn" title="Close Sidebar">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
         </div>
 
-        <!-- AI -->
-        <div class="message ai" style="animation-delay: 0.15s;">
-          <div class="avatar ai">
-            <svg width="14" height="14" viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-          </div>
-          <div class="message-content">
-            <p>To achieve a truly minimal aesthetic in an Electron app, the key is to rely on whitespace and typography rather than explicit structural elements like borders or backgrounds.</p>
-            <p>Here are three core principles for this approach:</p>
-            <p style="padding-left: 16px; border-left: 2px solid var(--border-focus); margin: 16px 0; color: var(--text-secondary);">
-              <strong>1. Frameless Window</strong><br>
-              Hide the OS default title bar and implement a custom `-webkit-app-region: drag` area. Blend it seamlessly into your layout so the app feels like a single continuous surface.
-            </p>
-            <p style="padding-left: 16px; border-left: 2px solid var(--border-focus); margin: 16px 0; color: var(--text-secondary);">
-              <strong>2. Typographic Hierarchy</strong><br>
-              Use font weight, size, and subtle color shifts (like grays instead of stark black) to differentiate UI components. Remove unnecessary dividing lines.
-            </p>
-            <p style="padding-left: 16px; border-left: 2px solid var(--border-focus); margin: 16px 0; color: var(--text-secondary);">
-              <strong>3. Contextual Input</strong><br>
-              The text input should float elegantly at the bottom. Use a very subtle box-shadow instead of a harsh border to indicate the input area, keeping focus purely on the text.
-            </p>
-          </div>
+        <!-- Chat Area -->
+        <div class="chat-area">
+            
+            <div class="message ai">
+                <div class="bubble">
+                    こんにちは。現在のプロジェクトについて何かお手伝いできることはありますか？
+                </div>
+            </div>
+
+            <div class="message user" style="animation-delay: 0.1s;">
+                <div class="bubble">
+                    現在開いているファイルの、GlassmorphismのUIデザインについて改善案を出して。
+                </div>
+                <div class="message-meta">Just now</div>
+            </div>
+
+            <div class="message ai" style="animation-delay: 0.2s;">
+                <div class="bubble">
+                    はい、Glassmorphismをより洗練させるための提案をいくつか作成しました。<br><br>
+                    1. <b>背景のぼかしを強調</b><br>
+                    <span class="ai-code">backdrop-filter: blur(24px)</span> を使用して奥行きを出します。<br><br>
+                    2. <b>境界線のハイライト</b><br>
+                    左端と上端に薄い白いボーダーを入れることで、ガラスの質感が向上します。
+                </div>
+                <div class="message-meta">Division AI</div>
+                
+                <!-- Flow clarity: Next actions suggestions -->
+                <div class="suggestions">
+                    <div class="suggest-chip">
+                        <svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6H7.5a1 1 0 1 0 0 2h8.8l-1.6 1.6a1 1 0 0 0 1.4 1.4l3.3-3.3a1 1 0 0 0 0-1.4l-3.3-3.3a1 1 0 0 0-1.4 0z"/></svg>
+                        コードを適用する
+                    </div>
+                    <div class="suggest-chip">
+                        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" stroke-width="2"/><line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" stroke-width="2"/></svg>
+                        他のスタイルを見る
+                    </div>
+                </div>
+            </div>
+
+            <div class="message ai" style="animation-delay: 0.4s;">
+                <div class="bubble typing-indicator">
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                </div>
+            </div>
+
         </div>
 
-        <!-- User -->
-        <div class="message user" style="animation-delay: 0.3s;">
-          <div class="avatar user">
-             <svg width="14" height="14" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-          </div>
-          <div class="message-content">
-            <p>Make sense. Could you generate a quick HTML prototype reflecting these ideas?</p>
-          </div>
+        <!-- Input Area -->
+        <div class="input-area">
+            <div class="context-badge">
+                index.html を参照中
+            </div>
+            <div class="input-wrapper">
+                <div class="input-actions">
+                    <button class="action-btn" title="Attach file">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+                        </svg>
+                    </button>
+                </div>
+                
+                <textarea class="input-field" placeholder="AIにメッセージを送信..." rows="1"></textarea>
+                
+                <button class="send-btn" title="Send message">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+            </div>
         </div>
 
-      </div>
     </div>
 
-    <!-- Floating Input -->
-    <div class="input-region">
-      <div class="input-wrapper">
-        <textarea class="input-field" rows="1" placeholder="Ask anything..."></textarea>
-        <button class="btn-send" aria-label="Send message">
-          <svg width="14" height="14" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-        </button>
-      </div>
-    </div>
-  </main>
-
-  <script>
-    // Mock auto-resizing for the textarea
-    const textarea = document.querySelector('.input-field');
-    textarea.addEventListener('input', function() {
-      this.style.height = 'auto';
-      this.style.height = (this.scrollHeight) + 'px';
-      if(this.value === '') {
-        this.style.height = 'auto';
-      }
-    });
-  </script>
+    <script>
+        // Simple script to auto-resize textarea in the mock
+        const textarea = document.querySelector('.input-field');
+        textarea.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = (this.scrollHeight) + 'px';
+            if(this.value === '') {
+                this.style.height = '24px';
+            }
+        });
+    </script>
 </body>
 </html>

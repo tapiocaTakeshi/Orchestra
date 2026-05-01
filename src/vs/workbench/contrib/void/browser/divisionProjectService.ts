@@ -99,6 +99,25 @@ function normalizeAgentRole(value: string | undefined | null): AgentRole | null 
 }
 
 
+// --- Supabase canonical IDs ---
+// Supabase 側の Provider.id は CHECK 制約 (anthropic / openai / google / perplexity / xai / deepseek)
+// のいずれかでなければ INSERT/UPSERT 不可。内部 ProviderName からの対応表を一元管理する。
+const PROVIDER_NAME_TO_SUPABASE_ID: Partial<Record<ProviderName, string>> = {
+	anthropic: 'anthropic',
+	openAI: 'openai',
+	deepseek: 'deepseek',
+	gemini: 'google',
+	xAI: 'xai',
+	perplexity: 'perplexity',
+};
+
+function toSupabaseProviderId(providerName: string | undefined | null): string | null {
+	const canonical = normalizeProviderName(providerName ?? null);
+	if (!canonical) return null;
+	return PROVIDER_NAME_TO_SUPABASE_ID[canonical] ?? null;
+}
+
+
 // --- Supabase configuration ---
 
 const SUPABASE_URL = 'https://wmhrbhcnxglvqwvnbxlt.supabase.co';
@@ -498,41 +517,67 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 				...(ownerId ? { ownerId } : {}),
 			})));
 
-			// Collect unique roles and providers across all projects
+			// Collect unique roles and providers across all projects.
+			// Provider は Supabase 側の CHECK 制約に合わせて canonical id（小文字）で扱う。
+			// RoleAssignment は (projectId, roleId, providerId) を主キーにしているため、
+			// 同一エージェントが重複登録されているケースは前段でデデュープして
+			// "ON CONFLICT DO UPDATE command cannot affect row a second time" を防ぐ。
 			const roleSet = new Map<string, { slug: string; name: string }>();
-			const providerSet = new Map<string, { name: string; displayName: string }>();
-			const roleAssignmentRows: Record<string, unknown>[] = [];
+			const providerSet = new Map<string, { name: string; displayName: string; apiType: string }>();
+			const roleAssignmentRowMap = new Map<string, Record<string, unknown>>();
+			const skippedProviders = new Set<string>();
 
 			for (const project of projects) {
-				for (let i = 0; i < project.agents.length; i++) {
-					const agent = project.agents[i];
-					const roleId = agent.role;
-					const providerId = agent.provider;
+				let priority = 0;
+				for (const agent of project.agents) {
+					const roleSlug = normalizeAgentRole(agent.role);
+					if (!roleSlug) continue; // 不明なロールは同期しない
+					const providerSupabaseId = toSupabaseProviderId(agent.provider);
+					if (!providerSupabaseId) {
+						skippedProviders.add(String(agent.provider));
+						continue; // CHECK 制約に通らないプロバイダは Supabase 同期対象外
+					}
 
-					if (!roleSet.has(roleId)) {
-						roleSet.set(roleId, {
-							slug: roleId,
-							name: roleId.charAt(0).toUpperCase() + roleId.slice(1),
+					if (!roleSet.has(roleSlug)) {
+						roleSet.set(roleSlug, {
+							slug: roleSlug,
+							name: roleSlug.charAt(0).toUpperCase() + roleSlug.slice(1),
 						});
 					}
 
-					if (!providerSet.has(providerId)) {
-						let displayName: string = providerId;
-						try { displayName = displayInfoOfProviderName(providerId).title; } catch { /* keep raw name */ }
-						providerSet.set(providerId, { name: providerId, displayName });
+					if (!providerSet.has(providerSupabaseId)) {
+						const canonicalProviderName = normalizeProviderName(agent.provider) as ProviderName | null;
+						let displayName = providerSupabaseId;
+						if (canonicalProviderName) {
+							try { displayName = displayInfoOfProviderName(canonicalProviderName).title; } catch { /* keep id */ }
+						}
+						providerSet.set(providerSupabaseId, {
+							name: displayName,
+							displayName,
+							apiType: providerSupabaseId,
+						});
 					}
 
-					roleAssignmentRows.push({
-						id: `${project.projectId}-${roleId}-${providerId}`,
-						projectId: project.projectId,
-						roleId,
-						providerId,
-						priority: i,
-						config: JSON.stringify({ model: agent.model }),
-						updatedAt: now,
-					});
+					const id = `${project.projectId}-${roleSlug}-${providerSupabaseId}`;
+					if (!roleAssignmentRowMap.has(id)) {
+						roleAssignmentRowMap.set(id, {
+							id,
+							projectId: project.projectId,
+							roleId: roleSlug,
+							providerId: providerSupabaseId,
+							priority: priority++,
+							config: JSON.stringify({ model: agent.model }),
+							updatedAt: now,
+						});
+					}
 				}
 			}
+
+			if (skippedProviders.size > 0) {
+				console.warn('[DivisionProjectService] Supabase sync skipped unsupported providers:', [...skippedProviders]);
+			}
+
+			const roleAssignmentRows = [...roleAssignmentRowMap.values()];
 
 			// 2) Upsert Roles
 			await this._supabaseUpsert('Role', [...roleSet.entries()].map(([id, r]) => ({
@@ -548,7 +593,7 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 				name: p.name,
 				displayName: p.displayName,
 				apiBaseUrl: '',
-				apiType: 'openai',
+				apiType: p.apiType,
 				modelId: '',
 				updatedAt: now,
 			})));

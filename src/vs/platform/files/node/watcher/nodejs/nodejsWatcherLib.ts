@@ -4,6 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { watch, promises } from 'fs';
+import { promisify } from 'util';
+import { execFile } from 'child_process';
 import { RunOnceWorker, ThrottledWorker } from '../../../../../base/common/async.js';
 import { CancellationToken, CancellationTokenSource } from '../../../../../base/common/cancellation.js';
 import { isEqual, isEqualOrParent } from '../../../../../base/common/extpath.js';
@@ -19,6 +21,57 @@ import { FileChangeFilter, FileChangeType, IFileChange } from '../../../common/f
 import { ILogMessage, coalesceEvents, INonRecursiveWatchRequest, parseWatcherPatterns, IRecursiveWatcherWithSubscribe, isFiltered, isWatchRequestWithCorrelation } from '../../../common/watcher.js';
 import { Lazy } from '../../../../../base/common/lazy.js';
 import { ParsedPattern } from '../../../../../base/common/glob.js';
+
+// macOS: `/Volumes/...` 配下が本当にネットワーク共有 (SMB/AFP/NFS/CIFS/WebDAV/FTP) かどうかを
+// `/sbin/mount` の出力から判定する。USB / Thunderbolt の外付け SSD などローカルディスクは
+// watch しても安全なので、ここで除外して fs.watch() を許可する。
+//
+// `mount` の出力例:
+//   /dev/disk4s1 on /Volumes/T7 (hfs, local, nodev, nosuid, journaled, noowners)
+//   //user@server/share on /Volumes/share (smbfs, nodev, nosuid, mounted by user)
+// 判定ロジック:
+//   1. 該当マウントポイントの行を探す
+//   2. オプションリストに `local` があれば確実にローカル
+//   3. もしくは fs タイプがネットワーク FS のホワイトリストに含まれなければローカル扱い
+const execFileAsync = promisify(execFile);
+const NETWORK_FS_TYPES = new Set([
+	'smbfs', 'cifs', 'afpfs', 'nfs', 'autofs', 'webdav', 'webdavfs', 'ftp', 'fuse',
+]);
+const networkVolumeCache = new Map<string, Promise<boolean>>();
+function getVolumesMountRoot(absPath: string): string | undefined {
+	const match = /^(\/Volumes\/[^/]+)(?:\/|$)/.exec(absPath);
+	return match?.[1];
+}
+async function isMacNetworkVolume(absPath: string): Promise<boolean> {
+	const mountRoot = getVolumesMountRoot(absPath);
+	if (!mountRoot) return true; // 不明な場合は従来通り安全側に倒す
+	let cached = networkVolumeCache.get(mountRoot);
+	if (!cached) {
+		cached = (async () => {
+			try {
+				const { stdout } = await execFileAsync('/sbin/mount', [], { timeout: 2000 });
+				for (const line of stdout.split('\n')) {
+					// ` on <mountRoot> (` の形でマッチさせる。スペース等を含むマウント名にも対応する。
+					const idx = line.indexOf(` on ${mountRoot} (`);
+					if (idx === -1) continue;
+					const optsStart = line.indexOf('(', idx);
+					const optsEnd = line.lastIndexOf(')');
+					if (optsStart === -1 || optsEnd === -1) break;
+					const opts = line.slice(optsStart + 1, optsEnd).split(',').map(s => s.trim().toLowerCase());
+					if (opts.includes('local')) return false; // 明示的にローカル
+					const fsType = opts[0] ?? '';
+					return NETWORK_FS_TYPES.has(fsType);
+				}
+				// 該当行が見つからない場合は安全側でネットワーク扱い
+				return true;
+			} catch {
+				return true;
+			}
+		})();
+		networkVolumeCache.set(mountRoot, cached);
+	}
+	return cached;
+}
 
 export class NodeJSFileWatcherLibrary extends Disposable {
 
@@ -195,10 +248,16 @@ export class NodeJSFileWatcherLibrary extends Disposable {
 		// (https://github.com/microsoft/vscode/issues/106879)
 		// TODO@electron this needs a revisit when the crash is
 		// fixed or mitigated upstream.
+		// 改修: `/Volumes/` 配下でも実際のファイルシステム種別を確認し、
+		// ローカル接続のディスク (apfs / hfs / exfat / msdos など) は watch を許可する。
+		// 旧来通り SMB / AFP / NFS など真のネットワーク共有のみ拒否する。
 		if (isMacintosh && isEqualOrParent(realPath, '/Volumes/', true)) {
-			this.error(`Refusing to watch ${realPath} for changes using fs.watch() for possibly being a network share where watching is unreliable and unstable.`);
-
-			return;
+			const isNetwork = await isMacNetworkVolume(realPath);
+			if (isNetwork) {
+				this.error(`Refusing to watch ${realPath} for changes using fs.watch() for possibly being a network share where watching is unreliable and unstable.`);
+				return;
+			}
+			this.trace(`Allowing watch on /Volumes path because it resolves to a local filesystem: ${realPath}`);
 		}
 
 		const cts = new CancellationTokenSource(this.cts.token);

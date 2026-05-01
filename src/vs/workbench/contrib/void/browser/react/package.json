@@ -1,0 +1,14 @@
+<<<SEARCH
+  "devDependencies": {
+    "scope-tailwind": "^1.1.1",
+    "scope-tailwind": "^1.1.1",
+    "scope-tailwind": "^1.4.1",
+    "scope-tailwind": "^1.1.1",
+    "scope-tailwind": "^1.1.3",
+    "scope-tailwind": "^1.0.10",
+    "scope-tailwind": "^1.4.1",
+    "scope-tailwind": "^1.1.1",
+>>>REPLACE
+  "devDependencies": {
+    "scope-tailwind": "^1.1.7",
+>>>REPLACE

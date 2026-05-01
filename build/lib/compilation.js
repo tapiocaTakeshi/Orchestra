@@ -318,6 +318,21 @@ function generateApiProposalNames() {
             'export type ApiProposalName = keyof typeof _allApiProposals;',
             '',
         ].join(eol);
+        // Skip emit if the existing file already matches the freshly generated content.
+        // This prevents gulp.dest() from re-writing the file (which truncates first and
+        // creates a brief 0-byte window) and stops watch-client from racing into a
+        // transient "is not a module" error during parallel `compile` runs.
+        let existing = null;
+        try {
+            existing = fs_1.default.readFileSync('src/vs/platform/extensions/common/extensionsApiProposals.ts', 'utf-8');
+        }
+        catch {
+            existing = null;
+        }
+        if (existing === contents) {
+            this.emit('end');
+            return;
+        }
         this.emit('data', new vinyl_1.default({
             path: 'vs/platform/extensions/common/extensionsApiProposals.ts',
             contents: Buffer.from(contents)

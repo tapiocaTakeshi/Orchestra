@@ -1881,6 +1881,120 @@ const buildFileSearchOutput = (workspaceFolderPath: string, query: string): stri
 	return lines.join('\n');
 };
 
+// 反復ファイルサーチ用：直前のマッチからクエリを拡張して再検索する。
+// 派生キーワードはマッチしたファイル名・パス・ディレクトリ部品から抽出。
+const deriveNextSearchQuery = (
+	prevQuery: string,
+	matches: { relativePath: string; content: string }[],
+	usedKeywords: Set<string>,
+): string => {
+	const candidates = new Set<string>();
+	const STOPWORDS = new Set([
+		'src', 'lib', 'app', 'pages', 'page', 'components', 'component', 'utils',
+		'util', 'public', 'index', 'main', 'test', 'tests', 'common', 'core',
+		'types', 'type', 'config', 'configs', 'helpers', 'helper', 'styles',
+		'style', 'json', 'tsx', 'ts', 'js', 'jsx', 'css', 'scss', 'html',
+		'md', 'mdx', 'yaml', 'yml', 'toml', 'lock', 'dist', 'build', 'out',
+		'node_modules', 'vendor', 'tmp', 'temp', 'mock', 'mocks', 'fixture',
+		'fixtures', 'spec', 'specs', 'd', 'min',
+	]);
+	for (const m of matches.slice(0, 12)) {
+		const parts = m.relativePath.split(/[/\\.\-_]/);
+		for (const raw of parts) {
+			const p = raw.toLowerCase();
+			if (p.length < 4) continue;
+			if (STOPWORDS.has(p)) continue;
+			if (/^\d+$/.test(p)) continue;
+			if (usedKeywords.has(p)) continue;
+			candidates.add(p);
+		}
+	}
+	const additions = Array.from(candidates).slice(0, 8);
+	for (const a of additions) usedKeywords.add(a);
+	if (additions.length === 0) return prevQuery;
+	return [prevQuery, ...additions].join(' ');
+};
+
+// Wave 1（pre-wave）の File Search を「マージしながらループ」実行する。
+// 各反復で前回の結果からクエリを派生させ、新規発見ファイルを蓄積する。
+// 新規発見が無くなったら早期終了、最大 maxIterations 回で停止。
+const buildFileSearchOutputLooped = (
+	workspaceFolderPath: string,
+	initialQuery: string,
+	options?: {
+		maxIterations?: number;
+		onIterationProgress?: (text: string) => void;
+	},
+): string => {
+	const maxIterations = Math.max(1, options?.maxIterations ?? 3);
+	const onProgress = options?.onIterationProgress;
+
+	const aggregatedMatches = new Map<string, string>();
+	const summaryByIter: string[] = [];
+	const usedKeywords = new Set<string>(extractKeywordsFromQuery(initialQuery));
+	let tree = '';
+	let currentQuery = initialQuery;
+	let iterationsRun = 0;
+
+	for (let iter = 1; iter <= maxIterations; iter++) {
+		iterationsRun = iter;
+		const previewQuery = currentQuery.length > 80
+			? currentQuery.slice(0, 80) + '…'
+			: currentQuery;
+		onProgress?.(`🔁 反復 ${iter}/${maxIterations}: クエリ「${previewQuery}」で走査中…\n`);
+
+		const { matches, summary, tree: iterTree } = searchWorkspaceFiles(workspaceFolderPath, currentQuery);
+		if (iter === 1) tree = iterTree;
+
+		let newCount = 0;
+		for (const m of matches) {
+			if (!aggregatedMatches.has(m.relativePath)) {
+				aggregatedMatches.set(m.relativePath, m.content);
+				newCount++;
+			}
+		}
+		summaryByIter.push(`反復 ${iter}: ${summary}（うち新規 ${newCount} 件、累積 ${aggregatedMatches.size} 件）`);
+		onProgress?.(`   → 新規 ${newCount} 件 / 累積 ${aggregatedMatches.size} 件\n`);
+
+		// 新規発見が 0（初回以外）なら、これ以上掘っても伸びないので終了
+		if (iter > 1 && newCount === 0) {
+			onProgress?.(`   新規ファイルが見つからなかったため反復終了。\n`);
+			break;
+		}
+
+		// クエリ拡張： 直前マッチからキーワードを派生
+		const nextQuery = deriveNextSearchQuery(currentQuery, matches, usedKeywords);
+		if (nextQuery === currentQuery) {
+			onProgress?.(`   クエリ拡張に有効な新キーワードが無かったため反復終了。\n`);
+			break;
+		}
+		currentQuery = nextQuery;
+	}
+
+	const lines: string[] = [
+		`## ワークスペース: \`${workspaceFolderPath}\``,
+		'',
+		`### 反復ファイルサーチ サマリ（${iterationsRun} 回 / 最大 ${maxIterations}）`,
+		'',
+		...summaryByIter.map(s => `- ${s}`),
+		`- 最終累積: **${aggregatedMatches.size} 件** のファイルを統合読み込み`,
+		'',
+		`### ディレクトリツリー（関連ファイルの追加読取が必要ならパスを明示してください）`,
+		'',
+		tree,
+		'',
+	];
+	for (const [relativePath, content] of aggregatedMatches) {
+		const ext = path.extname(relativePath).slice(1) || 'text';
+		lines.push(`### \`${relativePath}\``);
+		lines.push('```' + ext);
+		lines.push(content);
+		lines.push('```');
+		lines.push('');
+	}
+	return lines.join('\n');
+};
+
 // ---- ワークスペースの使用言語 / フレームワーク検出 ----
 //
 // 各種マニフェストファイル（package.json, pubspec.yaml, Cargo.toml, 等）と
@@ -2854,9 +2968,15 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				const role = (task.role || '').toLowerCase();
 
 				if (isFileSearchRole(role)) {
-					// ファースト・ウェーブで動かすため、先行 Markdown は通常空。
+					// ファースト・ウェーブ (Wave 1) で動かすため、先行 Markdown は通常空。
 					// ランキング用のキーワード抽出はユーザーの元入力を主軸にし、
 					// Leader が付けたタスク詳細・先行出力（あれば）も補助で連結する。
+					//
+					// Wave 1 はマージしながらループ実行する：
+					//   1) 初回はユーザー入力ベースで広く走査
+					//   2) 直前マッチからキーワードを派生させて再走査
+					//   3) 結果を重複排除しつつ Map<relPath, content> でマージ
+					//   4) 新規発見が無くなれば早期終了、最大 3 反復
 					const priorMarkdown = buildPriorContextHistory()
 						.map(entry => entry.content)
 						.join('\n\n');
@@ -2865,17 +2985,20 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 						task.input || task.title || '',
 						priorMarkdown ? `\n\n## 先行 Markdown コンテキスト\n${priorMarkdown}` : '',
 					].filter(Boolean).join('\n');
-					appendText(`### ${i + 1}. file-search — ${task.title || ''}\n\nすべてのフォルダ・ファイルを走査して読み込み中...\n\n`);
+					appendText(`### ${i + 1}. file-search — ${task.title || ''}\n\n📂 ワークスペース全体を **マージしながらループ** 走査中…\n\n`);
 					try {
 						const rawOutput = workspaceFolderPath
-							? buildFileSearchOutput(workspaceFolderPath, query)
+							? buildFileSearchOutputLooped(workspaceFolderPath, query, {
+								maxIterations: 3,
+								onIterationProgress: (text) => appendText(text),
+							})
 							: '(ワークスペース未指定のため file-search をスキップ)';
 						const capped = truncateForContext(rawOutput, MAX_CHARS_PER_CONTEXT);
 						task.output = capped;
 						const sizeMsg = rawOutput.length > capped.length
 							? `（${rawOutput.length.toLocaleString()} → ${capped.length.toLocaleString()} 文字に要約）`
 							: `（${capped.length.toLocaleString()} 文字）`;
-						appendText(`📂 file-search 完了 ${sizeMsg}\n\n`);
+						appendText(`📂 file-search ループ完了 ${sizeMsg}\n\n`);
 					} catch (e: any) {
 						appendText(`⚠️ file-search エラー: ${e?.message || String(e)}\n\n`);
 						task.output = `(file-search failed: ${e?.message || String(e)})`;

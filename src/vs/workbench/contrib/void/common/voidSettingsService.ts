@@ -92,15 +92,26 @@ const _modelsWithSwappedInNewModels = (options: { existingModels: VoidStatefulMo
 		existingModelsMap[existingModel.modelName] = existingModel
 	}
 
-	const newDefaultModels = models.map((modelName, i) => ({ modelName, type, isHidden: !!existingModelsMap[modelName]?.isHidden, }))
+	const newDefaultModels = models.map((modelName) => ({ modelName, type, isHidden: !!existingModelsMap[modelName]?.isHidden, }))
 
-	return [
+	const merged = [
 		...newDefaultModels, // swap out all the models of this type for the new models of this type
 		...existingModels.filter(m => {
 			const keep = m.type !== type
 			return keep
 		})
 	]
+
+	// Deduplicate by modelName to prevent duplicate React keys / duplicate _modelOptions entries.
+	// 例: 既存に同名の autodetected と新規 default が混在するケースを排除する。
+	const seen = new Set<string>()
+	const deduped: VoidStatefulModelInfo[] = []
+	for (const m of merged) {
+		if (seen.has(m.modelName)) continue
+		seen.add(m.modelName)
+		deduped.push(m)
+	}
+	return deduped
 }
 
 
@@ -172,11 +183,16 @@ const _validatedModelState = (state: Omit<VoidSettingsState, '_modelOptions'>): 
 
 	// update model options
 	let newModelOptions: ModelOption[] = []
+	const seenModelKeys = new Set<string>()
 	for (const providerName of providerNames) {
 		const providerTitle = providerName // displayInfoOfProviderName(providerName).title.toLowerCase() // looks better lowercase, best practice to not use raw providerName
 		if (!newSettingsOfProvider[providerName]._didFillInProviderSettings) continue // if disabled, don't display model options
 		for (const { modelName, isHidden } of newSettingsOfProvider[providerName].models) {
 			if (isHidden) continue
+			// 同一 (providerName, modelName) は重複排除（React key 衝突対策）
+			const key = `${providerName}::${modelName}`
+			if (seenModelKeys.has(key)) continue
+			seenModelKeys.add(key)
 			newModelOptions.push({ name: `${modelName} (${providerTitle})`, selection: { providerName, modelName } })
 		}
 	}

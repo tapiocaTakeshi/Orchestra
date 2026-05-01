@@ -83,7 +83,7 @@ export const LoginScreen = ({ onClose }: { onClose: () => void }) => {
 
 					<div className="text-center flex flex-col items-center gap-2">
 						<img
-							src={new URL('../assets/orchestra_logo.png', import.meta.url).href}
+							src={new URL('../assets/orchestra_icon_nonbackground.png', import.meta.url).href}
 							alt="Orchestra Logo"
 							style={{ maxWidth: '80px', opacity: 0.85 }}
 						/>
