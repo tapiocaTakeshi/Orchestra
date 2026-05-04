@@ -1,0 +1,28 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .arrow-circle {
+        fill: none;
+        stroke: #E31C23;
+        stroke-width: 30;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .arrow-head {
+        fill: #E31C23;
+      }
+    </style>
+  </defs>
+
+  <!-- Circular arrow path -->
+  <path
+    class="arrow-circle"
+    d="M 100 30 A 70 70 0 1 1 95 30"
+  />
+
+  <!-- Arrow head -->
+  <polygon
+    class="arrow-head"
+    points="95,30 85,45 100,40 110,50"
+  />
+</svg>
