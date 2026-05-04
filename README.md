@@ -2,7 +2,7 @@
 
 <div align="center">
 	<img
-		src="void_icons/orchestra_icon.png"
+		src="void_icons/orchestra_icon_nonbackground.png"
 	 	alt="Orchestra"
 		width="300"
 	 	height="300"
