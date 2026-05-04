@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react'; // Added useRef import just in case it was missed, though likely already present
-import { ProviderName, SettingName, displayInfoOfSettingName, providerNames, VoidStatefulModelInfo, customSettingNamesOfProvider, RefreshableProviderName, refreshableProviderNames, displayInfoOfProviderName, nonlocalProviderNames, localProviderNames, GlobalSettingName, featureNames, displayInfoOfFeatureName, isProviderNameDisabled, FeatureName, hasDownloadButtonsOnModelsProviderNames, subTextMdOfProviderName } from '../../../../common/voidSettingsTypes.js'
+import { ProviderName, SettingName, displayInfoOfSettingName, providerNames, VoidStatefulModelInfo, customSettingNamesOfProvider, RefreshableProviderName, refreshableProviderNames, displayInfoOfProviderName, nonlocalProviderNames, localProviderNames, GlobalSettingName, featureNames, displayInfoOfFeatureName, isProviderNameDisabled, FeatureName, hasDownloadButtonsOnModelsProviderNames, subTextMdOfProviderName, commitMessageLanguages, displayInfoOfCommitMessageLanguage } from '../../../../common/voidSettingsTypes.js'
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
 import { VoidButtonBgDarken, VoidCustomDropdownBox, VoidInputBox2, VoidSimpleInputBox, VoidSwitch } from '../util/inputs.js'
 import { useAccessor, useDivisionProjects, useIsDark, useIsOptedOut, useRefreshModelListener, useRefreshModelState, useSettingsState } from '../util/services.js'
@@ -1710,7 +1710,7 @@ export const Settings = () => {
 
 											<div className='w-full'>
 												<h4 className={`text-base`}>{displayInfoOfFeatureName('SCM')}</h4>
-												<div className='text-sm text-void-fg-3 mt-1'>Settings that control the behavior of the commit message generator.</div>
+												<div className='text-sm text-void-fg-3 mt-1'>Source Control パネルのコミットメッセージ入力欄にある ✨ ボタンで AI が自動生成します。</div>
 
 												<div className='my-2'>
 													{/* Sync to Chat Switch */}
@@ -1726,6 +1726,20 @@ export const Settings = () => {
 													{/* Model Dropdown */}
 													<div className={`my-2 ${settingsState.globalSettings.syncSCMToChat ? 'hidden' : ''}`}>
 														<ModelDropdown featureName={'SCM'} className='text-xs text-void-fg-3 bg-void-bg-1 border border-void-border-1 rounded p-0.5 px-1' />
+													</div>
+
+													{/* Commit Message Language */}
+													<div className='my-2 flex items-center gap-x-2'>
+														<span className='text-void-fg-3 text-xs'>出力言語:</span>
+														<VoidCustomDropdownBox
+															className='text-xs text-void-fg-3 bg-void-bg-1 border border-void-border-1 rounded p-0.5 px-1'
+															options={commitMessageLanguages}
+															selectedOption={settingsState.globalSettings.commitMessageLanguage ?? 'auto'}
+															onChangeOption={(newVal) => voidSettingsService.setGlobalSetting('commitMessageLanguage', newVal)}
+															getOptionDisplayName={(opt) => displayInfoOfCommitMessageLanguage(opt)}
+															getOptionDropdownName={(opt) => displayInfoOfCommitMessageLanguage(opt)}
+															getOptionsEqual={(a, b) => a === b}
+														/>
 													</div>
 												</div>
 

@@ -15,7 +15,7 @@ import { IVoidSettingsService } from '../common/voidSettingsService.js'
 import { IConvertToLLMMessageService } from './convertToLLMMessageService.js'
 import { ILLMMessageService } from '../common/sendLLMMessageService.js'
 import { ModelSelection, OverridesOfModel, ModelSelectionOptions } from '../common/voidSettingsTypes.js'
-import { gitCommitMessage_systemMessage, gitCommitMessage_userMessage } from '../common/prompt/prompts.js'
+import { gitCommitMessage_userMessage, makeGitCommitMessageSystemMessage } from '../common/prompt/prompts.js'
 import { LLMChatMessage } from '../common/sendLLMMessageTypes.js'
 import { generateUuid } from '../../../../base/common/uuid.js'
 import { ThrottledDelayer } from '../../../../base/common/async.js'
@@ -94,10 +94,13 @@ class GenerateCommitMessageService extends Disposable implements IGenerateCommit
 
 				const prompt = gitCommitMessage_userMessage(stat, sampledDiffs, branch, log)
 
+				const language = this.voidSettingsService.state.globalSettings.commitMessageLanguage ?? 'auto'
+				const systemMessage = makeGitCommitMessageSystemMessage(language)
+
 				const simpleMessages = [{ role: 'user', content: prompt } as const]
 				const { messages, separateSystemMessage } = this.convertToLLMMessageService.prepareLLMSimpleMessages({
 					simpleMessages,
-					systemMessage: gitCommitMessage_systemMessage,
+					systemMessage,
 					modelSelection: modelOptions.modelSelection,
 					featureName: 'SCM',
 				})

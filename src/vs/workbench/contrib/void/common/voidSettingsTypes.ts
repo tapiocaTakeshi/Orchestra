@@ -555,6 +555,18 @@ export type RoleAssignment = {
 	model: string;
 };
 
+// AI コミットメッセージ生成の出力言語設定。
+// - 'auto'      : LLM の判断に任せる (リポジトリの既存コミットに引っ張られる)
+// - 'japanese'  : 日本語で出力させる
+// - 'english'   : 英語で出力させる
+export type CommitMessageLanguage = 'auto' | 'japanese' | 'english';
+export const commitMessageLanguages: CommitMessageLanguage[] = ['auto', 'japanese', 'english'];
+export const displayInfoOfCommitMessageLanguage = (lang: CommitMessageLanguage): string => {
+	if (lang === 'japanese') return '日本語';
+	if (lang === 'english') return 'English';
+	return '自動 (LLM に任せる)';
+}
+
 export type GlobalSettings = {
 	autoRefreshModels: boolean;
 	aiInstructions: string;
@@ -563,6 +575,8 @@ export type GlobalSettings = {
 	syncSCMToChat: boolean;
 	enableFastApply: boolean;
 	chatMode: ChatMode;
+	// AI 生成コミットメッセージの出力言語
+	commitMessageLanguage: CommitMessageLanguage;
 	autoApprove: { [approvalType in ToolApprovalType]?: boolean };
 	showInlineSuggestions: boolean;
 	includeToolLintErrors: boolean;
@@ -619,6 +633,7 @@ export const defaultGlobalSettings: GlobalSettings = {
 	syncSCMToChat: true,
 	enableFastApply: true,
 	chatMode: 'agent',
+	commitMessageLanguage: 'auto',
 	autoApprove: {},
 	showInlineSuggestions: true,
 	includeToolLintErrors: true,

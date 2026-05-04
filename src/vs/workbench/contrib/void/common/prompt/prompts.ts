@@ -1009,6 +1009,8 @@ Store Result: After computing fib(n), the result is stored in memo for future re
 
 // ======================================================== scm ========================================================================
 
+// 既存実装との互換のために残す (旧コードがそのまま import している場合のフォールバック)。
+// 通常は makeGitCommitMessageSystemMessage(language) を使うこと。
 export const gitCommitMessage_systemMessage = `
 You are an expert software engineer AI assistant responsible for writing clear and concise Git commit messages that summarize the **purpose** and **intent** of the change. Try to keep your commit messages to one sentence. If necessary, you can use two sentences.
 
@@ -1022,6 +1024,67 @@ Example format:
 
 Do not include anything else outside of these tags.
 Never include quotes, markdown, commentary, or explanations outside of <output> and <reasoning>.`.trim()
+
+
+/**
+ * 言語設定に応じてコミットメッセージ生成用の system message を返す。
+ *
+ * - 'auto'     : 言語指定なし (LLM が自動判断)
+ * - 'japanese' : 日本語強制 + 例も日本語
+ * - 'english'  : 英語強制
+ */
+export const makeGitCommitMessageSystemMessage = (language: 'auto' | 'japanese' | 'english' = 'auto'): string => {
+	const baseHeader = `You are an expert software engineer AI assistant responsible for writing clear and concise Git commit messages that summarize the **purpose** and **intent** of the change. Try to keep your commit messages to one sentence. If necessary, you can use two sentences.`
+
+	const responseFormat = `You always respond with:
+- The commit message wrapped in <output> tags
+- A brief explanation of the reasoning behind the message, wrapped in <reasoning> tags`
+
+	const closing = `Do not include anything else outside of these tags.
+Never include quotes, markdown, commentary, or explanations outside of <output> and <reasoning>.`
+
+	if (language === 'japanese') {
+		return `
+${baseHeader}
+
+IMPORTANT: Always write the commit message and reasoning in **Japanese (日本語)**, regardless of the diff content or the language of the surrounding code.
+
+${responseFormat}
+
+Example format:
+<output>ログインのリダイレクト不具合を修正し、エラーメッセージを改善</output>
+<reasoning>このコミットはログインハンドラのリダイレクト問題を修正し、ログイン失敗時のフロントエンドのエラーメッセージを改善します。</reasoning>
+
+${closing}`.trim()
+	}
+
+	if (language === 'english') {
+		return `
+${baseHeader}
+
+IMPORTANT: Always write the commit message and reasoning in **English**, regardless of the diff content.
+
+${responseFormat}
+
+Example format:
+<output>Fix login bug and improve error handling</output>
+<reasoning>This commit updates the login handler to fix a redirect issue and improves frontend error messages for failed logins.</reasoning>
+
+${closing}`.trim()
+	}
+
+	// 'auto' (既定) — 言語指定なし
+	return `
+${baseHeader}
+
+${responseFormat}
+
+Example format:
+<output>Fix login bug and improve error handling</output>
+<reasoning>This commit updates the login handler to fix a redirect issue and improves frontend error messages for failed logins.</reasoning>
+
+${closing}`.trim()
+}
 
 
 /**
