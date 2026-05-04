@@ -2,7 +2,7 @@
 
 <div align="center">
 	<img
-		src="./src/vs/workbench/browser/parts/editor/media/orchestra_logo.svg"
+		src="void_icons/orchestra_icon.png"
 	 	alt="Orchestra"
 		width="300"
 	 	height="300"
