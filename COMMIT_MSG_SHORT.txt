@@ -1,1 +1,0 @@
-feat(sidebar-chat): add send validation, preview modal, collapsible tool blocks, and grouped model dropdown

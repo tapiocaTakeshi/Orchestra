@@ -1,5 +1,0 @@
-.vscode/**
-.gitignore
-**/tsconfig.json
-**/.eslintrc.json
-**/*.map
