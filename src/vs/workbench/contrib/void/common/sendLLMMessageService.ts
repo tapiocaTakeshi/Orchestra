@@ -1,0 +1,318 @@
+/*--------------------------------------------------------------------------------------
+ *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
+ *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
+ *--------------------------------------------------------------------------------------*/
+
+import { EventLLMMessageOnTextParams, EventLLMMessageOnErrorParams, EventLLMMessageOnFinalMessageParams, EventLLMMessageOnFileOperationParams, EventLLMMessageOnCommandRunParams, FileOperationItem, CommandOperationItem, ServiceSendLLMMessageParams, MainSendLLMMessageParams, MainLLMMessageAbortParams, MainLLMMessageInterjectParams, ServiceModelListParams, EventModelListOnSuccessParams, EventModelListOnErrorParams, MainModelListParams, OllamaModelResponse, OpenaiCompatibleModelResponse, DivisionAPIModelResponse, } from './sendLLMMessageTypes.js';
+
+import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
+import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
+import { IChannel } from '../../../../base/parts/ipc/common/ipc.js';
+import { IMainProcessService } from '../../../../platform/ipc/common/mainProcessService.js';
+import { generateUuid } from '../../../../base/common/uuid.js';
+import { Event } from '../../../../base/common/event.js';
+import { Disposable } from '../../../../base/common/lifecycle.js';
+import { IVoidSettingsService } from './voidSettingsService.js';
+import { IMCPService } from './mcpService.js';
+import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
+
+
+// calls channel to implement features
+export const ILLMMessageService = createDecorator<ILLMMessageService>('llmMessageService');
+
+export interface ILLMMessageService {
+	readonly _serviceBrand: undefined;
+	sendLLMMessage: (params: ServiceSendLLMMessageParams) => string | null;
+	abort: (requestId: string) => void;
+	// 実行中リクエストに「途中で」追加のユーザー指示を注入する。abort せずに
+	// 現在走っている Division orchestration に新情報を届ける用途。
+	interject: (requestId: string, text: string) => void;
+	ollamaList: (params: ServiceModelListParams<OllamaModelResponse>) => void;
+	openAICompatibleList: (params: ServiceModelListParams<OpenaiCompatibleModelResponse>) => void;
+	divisionAPIList: (params: ServiceModelListParams<DivisionAPIModelResponse>) => void;
+	registerFileOperationHandler: (handler: (operations: FileOperationItem[]) => Promise<void>) => void;
+	registerCommandOperationHandler: (handler: (commands: CommandOperationItem[]) => Promise<void>) => void;
+	approveOrchestration: (editedOutputs?: Array<{ mdFileName: string; mdContent: string }>) => Promise<void>;
+}
+
+
+// open this file side by side with llmMessageChannel
+export class LLMMessageService extends Disposable implements ILLMMessageService {
+
+	readonly _serviceBrand: undefined;
+	private readonly channel: IChannel // LLMMessageChannel
+
+	// sendLLMMessage
+	private readonly llmMessageHooks = {
+		onText: {} as { [eventId: string]: ((params: EventLLMMessageOnTextParams) => void) },
+		onFinalMessage: {} as { [eventId: string]: ((params: EventLLMMessageOnFinalMessageParams) => void) },
+		onError: {} as { [eventId: string]: ((params: EventLLMMessageOnErrorParams) => void) },
+		onAbort: {} as { [eventId: string]: (() => void) }, // NOT sent over the channel, result is instant when we call .abort()
+	}
+
+	// File operation handler (registered by chatThreadService or similar)
+	private _fileOperationHandler: ((operations: FileOperationItem[]) => Promise<void>) | null = null;
+	// Command operation handler
+	private _commandOperationHandler: ((commands: CommandOperationItem[]) => Promise<void>) | null = null;
+
+	// list hooks
+	private readonly listHooks = {
+		ollama: {
+			success: {} as { [eventId: string]: ((params: EventModelListOnSuccessParams<OllamaModelResponse>) => void) },
+			error: {} as { [eventId: string]: ((params: EventModelListOnErrorParams<OllamaModelResponse>) => void) },
+		},
+		openAICompat: {
+			success: {} as { [eventId: string]: ((params: EventModelListOnSuccessParams<OpenaiCompatibleModelResponse>) => void) },
+			error: {} as { [eventId: string]: ((params: EventModelListOnErrorParams<OpenaiCompatibleModelResponse>) => void) },
+		},
+		divisionAPI: {
+			success: {} as { [eventId: string]: ((params: EventModelListOnSuccessParams<DivisionAPIModelResponse>) => void) },
+			error: {} as { [eventId: string]: ((params: EventModelListOnErrorParams<DivisionAPIModelResponse>) => void) },
+		},
+	} satisfies {
+		[providerName in 'ollama' | 'openAICompat' | 'divisionAPI']: {
+			success: { [eventId: string]: ((params: EventModelListOnSuccessParams<any>) => void) },
+			error: { [eventId: string]: ((params: EventModelListOnErrorParams<any>) => void) },
+		}
+	}
+
+	constructor(
+		@IMainProcessService private readonly mainProcessService: IMainProcessService, // used as a renderer (only usable on client side)
+		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService,
+		// @INotificationService private readonly notificationService: INotificationService,
+		@IMCPService private readonly mcpService: IMCPService,
+		@IWorkspaceContextService private readonly workspaceContextService: IWorkspaceContextService,
+	) {
+		super()
+
+		// const service = ProxyChannel.toService<LLMMessageChannel>(mainProcessService.getChannel('void-channel-sendLLMMessage')); // lets you call it like a service
+		// see llmMessageChannel.ts
+		this.channel = this.mainProcessService.getChannel('void-channel-llmMessage')
+
+		// .listen sets up an IPC channel and takes a few ms, so we set up listeners immediately and add hooks to them instead
+		// llm
+		this._register((this.channel.listen('onText_sendLLMMessage') satisfies Event<EventLLMMessageOnTextParams>)(e => {
+			this.llmMessageHooks.onText[e.requestId]?.(e)
+		}))
+		this._register((this.channel.listen('onFinalMessage_sendLLMMessage') satisfies Event<EventLLMMessageOnFinalMessageParams>)(e => {
+			this.llmMessageHooks.onFinalMessage[e.requestId]?.(e);
+			this._clearChannelHooks(e.requestId)
+		}))
+		this._register((this.channel.listen('onError_sendLLMMessage') satisfies Event<EventLLMMessageOnErrorParams>)(e => {
+			this.llmMessageHooks.onError[e.requestId]?.(e);
+			this._clearChannelHooks(e.requestId);
+			console.error('Error in LLMMessageService:', JSON.stringify(e))
+		}))
+		// file operations from Division API
+		this._register((this.channel.listen('onFileOperation_sendLLMMessage') satisfies Event<EventLLMMessageOnFileOperationParams>)(e => {
+			if (this._fileOperationHandler) {
+				this._fileOperationHandler(e.operations).catch(err => {
+					console.error('[LLMMessageService] File operation handler error:', err);
+				});
+			}
+		}))
+		// command operations from Division API
+		this._register((this.channel.listen('onCommandRun_sendLLMMessage') satisfies Event<EventLLMMessageOnCommandRunParams>)(e => {
+			if (this._commandOperationHandler) {
+				this._commandOperationHandler(e.commands).catch(err => {
+					console.error('[LLMMessageService] Command operation handler error:', err);
+				});
+			}
+		}))
+		// .list()
+		this._register((this.channel.listen('onSuccess_list_ollama') satisfies Event<EventModelListOnSuccessParams<OllamaModelResponse>>)(e => {
+			this.listHooks.ollama.success[e.requestId]?.(e)
+		}))
+		this._register((this.channel.listen('onError_list_ollama') satisfies Event<EventModelListOnErrorParams<OllamaModelResponse>>)(e => {
+			this.listHooks.ollama.error[e.requestId]?.(e)
+		}))
+		this._register((this.channel.listen('onSuccess_list_openAICompatible') satisfies Event<EventModelListOnSuccessParams<OpenaiCompatibleModelResponse>>)(e => {
+			this.listHooks.openAICompat.success[e.requestId]?.(e)
+		}))
+		this._register((this.channel.listen('onError_list_openAICompatible') satisfies Event<EventModelListOnErrorParams<OpenaiCompatibleModelResponse>>)(e => {
+			this.listHooks.openAICompat.error[e.requestId]?.(e)
+		}))
+		this._register((this.channel.listen('onSuccess_list_divisionAPI') satisfies Event<EventModelListOnSuccessParams<DivisionAPIModelResponse>>)(e => {
+			this.listHooks.divisionAPI.success[e.requestId]?.(e)
+		}))
+		this._register((this.channel.listen('onError_list_divisionAPI') satisfies Event<EventModelListOnErrorParams<DivisionAPIModelResponse>>)(e => {
+			this.listHooks.divisionAPI.error[e.requestId]?.(e)
+		}))
+
+	}
+
+	sendLLMMessage(params: ServiceSendLLMMessageParams) {
+		const { onText, onFinalMessage, onError, onAbort, modelSelection, ...proxyParams } = params;
+
+		const { settingsOfProvider, globalSettings } = this.voidSettingsService.state
+
+		
+
+		// throw an error if no model/provider selected (this should usually never be reached, the UI should check this first, but might happen in cases like Apply where we haven't built much UI/checks yet, good practice to have check logic on backend)
+		if (modelSelection === null) {
+			const message = `Please add a provider in Void's Settings.`
+			onError({ message, fullError: null })
+			return null
+		}
+
+		if (params.messagesType === 'chatMessages' && (params.messages?.length ?? 0) === 0) {
+			const message = `No messages detected.`
+			onError({ message, fullError: null })
+			return null
+		}
+
+		const mcpTools = this.mcpService.getMCPTools()
+
+		// add state for request id
+		const requestId = generateUuid();
+		this.llmMessageHooks.onText[requestId] = onText
+		this.llmMessageHooks.onFinalMessage[requestId] = onFinalMessage
+		this.llmMessageHooks.onError[requestId] = onError
+		this.llmMessageHooks.onAbort[requestId] = onAbort // used internally only
+
+		// If using Division API, include role assignments and project ID from globalSettings
+		const divisionRoleAssignments = modelSelection.providerName === 'divisionAPI'
+			? globalSettings.roleAssignments
+			: undefined;
+		const divisionProjectId = modelSelection.providerName === 'divisionAPI'
+			? globalSettings.divisionProjectId
+			: undefined;
+		const divisionApiKey = modelSelection.providerName === 'divisionAPI'
+			? globalSettings.divisionApiKey
+			: undefined;
+		const normalizeIterationCap = (value: number | undefined, fallback: number): number =>
+			Number.isFinite(value) && typeof value === 'number' && value > 0
+				? Math.floor(value)
+				: fallback;
+		const legacyMaxReviewIterations = normalizeIterationCap(globalSettings.maxReviewIterations, 10);
+		const divisionMaxBriefGateIterations = modelSelection.providerName === 'divisionAPI'
+			? normalizeIterationCap(globalSettings.maxBriefGateIterations, legacyMaxReviewIterations)
+			: undefined;
+		const divisionMaxReviewerIterations = modelSelection.providerName === 'divisionAPI'
+			? normalizeIterationCap(globalSettings.maxReviewerIterations, legacyMaxReviewIterations)
+			: undefined;
+		if (modelSelection.providerName === 'divisionAPI') {
+			console.log(`[LLMMessageService] Division API key present: ${!!divisionApiKey}, length: ${divisionApiKey?.length ?? 0}`);
+		}
+
+		// Get workspace folder path for file operations
+		const workspaceFolders = this.workspaceContextService.getWorkspace().folders;
+		const workspaceFolderPath = workspaceFolders.length > 0 ? workspaceFolders[0].uri.fsPath : undefined;
+
+		// params will be stripped of all its functions over the IPC channel
+		this.channel.call('sendLLMMessage', {
+			...proxyParams,
+			requestId,
+			settingsOfProvider,
+			modelSelection,
+			mcpTools,
+			divisionRoleAssignments,
+			divisionProjectId,
+			divisionApiKey,
+			divisionMaxBriefGateIterations,
+			divisionMaxReviewerIterations,
+			workspaceFolderPath,
+		} satisfies MainSendLLMMessageParams);
+
+		return requestId
+	}
+
+	abort(requestId: string) {
+		this.llmMessageHooks.onAbort[requestId]?.() // calling the abort hook here is instant (doesn't go over a channel)
+		this.channel.call('abort', { requestId } satisfies MainLLMMessageAbortParams);
+		this._clearChannelHooks(requestId)
+	}
+
+	interject(requestId: string, text: string) {
+		if (!text || !text.trim()) return;
+		this.channel.call('interjectMessage', { requestId, text } satisfies MainLLMMessageInterjectParams);
+	}
+
+
+	ollamaList = (params: ServiceModelListParams<OllamaModelResponse>) => {
+		const { onSuccess, onError, ...proxyParams } = params
+
+		const { settingsOfProvider } = this.voidSettingsService.state
+
+		// add state for request id
+		const requestId_ = generateUuid();
+		this.listHooks.ollama.success[requestId_] = onSuccess
+		this.listHooks.ollama.error[requestId_] = onError
+
+		this.channel.call('ollamaList', {
+			...proxyParams,
+			settingsOfProvider,
+			providerName: 'ollama',
+			requestId: requestId_,
+		} satisfies MainModelListParams<OllamaModelResponse>)
+	}
+
+
+	openAICompatibleList = (params: ServiceModelListParams<OpenaiCompatibleModelResponse>) => {
+		const { onSuccess, onError, ...proxyParams } = params
+
+		const { settingsOfProvider } = this.voidSettingsService.state
+
+		// add state for request id
+		const requestId_ = generateUuid();
+		this.listHooks.openAICompat.success[requestId_] = onSuccess
+		this.listHooks.openAICompat.error[requestId_] = onError
+
+		this.channel.call('openAICompatibleList', {
+			...proxyParams,
+			settingsOfProvider,
+			requestId: requestId_,
+		} satisfies MainModelListParams<OpenaiCompatibleModelResponse>)
+	}
+
+	divisionAPIList = (params: ServiceModelListParams<DivisionAPIModelResponse>) => {
+		const { onSuccess, onError, ...proxyParams } = params
+
+		const { settingsOfProvider, globalSettings } = this.voidSettingsService.state
+
+		const requestId_ = generateUuid();
+		this.listHooks.divisionAPI.success[requestId_] = onSuccess
+		this.listHooks.divisionAPI.error[requestId_] = onError
+
+		// Division API は `/api/models` も Bearer 認証を要求する場合があるため、
+		// チャット送信と同じ apiKey を main プロセスに流す。
+		this.channel.call('divisionAPIList', {
+			...proxyParams,
+			settingsOfProvider,
+			divisionApiKey: globalSettings.divisionApiKey,
+			requestId: requestId_,
+		} satisfies MainModelListParams<DivisionAPIModelResponse>)
+	}
+
+	private _clearChannelHooks(requestId: string) {
+		delete this.llmMessageHooks.onText[requestId]
+		delete this.llmMessageHooks.onFinalMessage[requestId]
+		delete this.llmMessageHooks.onError[requestId]
+
+		delete this.listHooks.ollama.success[requestId]
+		delete this.listHooks.ollama.error[requestId]
+
+		delete this.listHooks.openAICompat.success[requestId]
+		delete this.listHooks.openAICompat.error[requestId]
+
+		delete this.listHooks.divisionAPI.success[requestId]
+		delete this.listHooks.divisionAPI.error[requestId]
+	}
+
+	registerFileOperationHandler(handler: (operations: FileOperationItem[]) => Promise<void>) {
+		this._fileOperationHandler = handler;
+	}
+
+	registerCommandOperationHandler(handler: (commands: CommandOperationItem[]) => Promise<void>) {
+		this._commandOperationHandler = handler;
+	}
+
+	async approveOrchestration(editedOutputs?: Array<{ mdFileName: string; mdContent: string }>) {
+		const workspaceFolders = this.workspaceContextService.getWorkspace().folders;
+		const workspaceFolderPath = workspaceFolders.length > 0 ? workspaceFolders[0].uri.fsPath : undefined;
+		await this.channel.call('approveOrchestration', { editedOutputs, workspaceFolderPath });
+	}
+}
+
+registerSingleton(ILLMMessageService, LLMMessageService, InstantiationType.Eager);
+

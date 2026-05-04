@@ -1,0 +1,336 @@
+/*---------------------------------------------------------------------------------------------
+ *  Void — Minimal Theme Overlay
+ *  シンプルで余白を活かしたデザインに統一するための追加スタイル。
+ *  既存スタイルを破壊しないよう .void-scope 配下のみに適用し、
+ *  色は必ず VSCode のテーマ変数を参照する（独自 hex は使用しない）。
+ *--------------------------------------------------------------------------------------------*/
+
+/* ---------- Design Tokens ---------- */
+.void-scope {
+	--void-space-1: 4px;
+	--void-space-2: 8px;
+	--void-space-3: 12px;
+	--void-space-4: 16px;
+	--void-space-5: 24px;
+	--void-space-6: 32px;
+
+	--void-radius-sm: 4px;
+	--void-radius-md: 6px;
+
+	--void-border: 1px solid var(--vscode-widget-border, var(--vscode-editorWidget-border, transparent));
+	--void-border-subtle: 1px solid color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+
+	--void-text-muted: color-mix(in srgb, var(--vscode-foreground) 65%, transparent);
+	--void-text-faint: color-mix(in srgb, var(--vscode-foreground) 45%, transparent);
+
+	--void-bg-hover: color-mix(in srgb, var(--vscode-foreground) 6%, transparent);
+	--void-bg-active: color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+
+	font-family: var(--vscode-font-family);
+	font-size: var(--vscode-font-size);
+	color: var(--vscode-foreground);
+	line-height: 1.55;
+}
+
+/* ---------- Reset & Base ---------- */
+.void-scope *,
+.void-scope *::before,
+.void-scope *::after {
+	box-sizing: border-box;
+}
+
+.void-scope h1,
+.void-scope h2,
+.void-scope h3,
+.void-scope h4 {
+	margin: 0 0 var(--void-space-3);
+	font-weight: 600;
+	letter-spacing: -0.005em;
+}
+
+.void-scope h1 { font-size: 1.15rem; }
+.void-scope h2 { font-size: 1.0rem; }
+.void-scope h3 { font-size: 0.92rem; }
+.void-scope h4 { font-size: 0.85rem; color: var(--void-text-muted); }
+
+.void-scope p {
+	margin: 0 0 var(--void-space-3);
+}
+
+.void-scope hr {
+	border: 0;
+	border-top: var(--void-border-subtle);
+	margin: var(--void-space-5) 0;
+}
+
+/* ---------- Layout: Sidebar / Panel containers ---------- */
+.void-scope .void-pane,
+.void-scope .void-sidebar,
+.void-scope .void-panel {
+	padding: var(--void-space-5) var(--void-space-4);
+	background: transparent;
+}
+
+.void-scope .void-section {
+	padding: var(--void-space-4) 0;
+	border-bottom: var(--void-border-subtle);
+}
+
+.void-scope .void-section:last-child {
+	border-bottom: 0;
+}
+
+.void-scope .void-section-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: var(--void-space-3);
+	font-weight: 500;
+	color: var(--void-text-muted);
+	text-transform: none;
+	letter-spacing: 0;
+}
+
+/* ---------- Buttons ---------- */
+.void-scope button,
+.void-scope .void-btn {
+	appearance: none;
+	display: inline-flex;
+	align-items: center;
+	gap: var(--void-space-2);
+	padding: 6px 12px;
+	border: var(--void-border);
+	border-radius: var(--void-radius-sm);
+	background: transparent;
+	color: var(--vscode-foreground);
+	font: inherit;
+	cursor: pointer;
+	transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.void-scope button:hover,
+.void-scope .void-btn:hover {
+	background: var(--void-bg-hover);
+}
+
+.void-scope button:active,
+.void-scope .void-btn:active {
+	background: var(--void-bg-active);
+}
+
+.void-scope button:focus-visible,
+.void-scope .void-btn:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: 1px;
+}
+
+.void-scope .void-btn-primary {
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	border-color: transparent;
+}
+
+.void-scope .void-btn-primary:hover {
+	background: var(--vscode-button-hoverBackground);
+}
+
+.void-scope .void-btn-ghost {
+	border-color: transparent;
+	padding: 4px 8px;
+	color: var(--void-text-muted);
+}
+
+.void-scope .void-btn-ghost:hover {
+	color: var(--vscode-foreground);
+	background: var(--void-bg-hover);
+}
+
+/* ---------- Inputs ---------- */
+.void-scope input[type="text"],
+.void-scope input[type="search"],
+.void-scope input[type="password"],
+.void-scope textarea,
+.void-scope select,
+.void-scope .void-input {
+	width: 100%;
+	padding: 8px 10px;
+	border: var(--void-border);
+	border-radius: var(--void-radius-sm);
+	background: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+	font: inherit;
+	transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.void-scope input:focus,
+.void-scope textarea:focus,
+.void-scope select:focus,
+.void-scope .void-input:focus {
+	outline: none;
+	border-color: var(--vscode-focusBorder);
+}
+
+.void-scope textarea {
+	resize: vertical;
+	min-height: 64px;
+	line-height: 1.5;
+}
+
+.void-scope ::placeholder {
+	color: var(--void-text-faint);
+}
+
+/* ---------- Chat / Message bubbles ---------- */
+.void-scope .void-chat {
+	display: flex;
+	flex-direction: column;
+	gap: var(--void-space-5);
+	padding-bottom: var(--void-space-6);
+}
+
+.void-scope .void-message {
+	display: flex;
+	flex-direction: column;
+	gap: var(--void-space-2);
+	padding: 0;
+	border: 0;
+	background: transparent;
+}
+
+.void-scope .void-message-role {
+	font-size: 0.78rem;
+	font-weight: 500;
+	color: var(--void-text-muted);
+	letter-spacing: 0.01em;
+}
+
+.void-scope .void-message-body {
+	font-size: 0.92rem;
+	line-height: 1.6;
+	color: var(--vscode-foreground);
+}
+
+.void-scope .void-message + .void-message {
+	border-top: var(--void-border-subtle);
+	padding-top: var(--void-space-5);
+}
+
+/* ---------- Code block in chat ---------- */
+.void-scope pre,
+.void-scope .void-code {
+	margin: var(--void-space-3) 0;
+	padding: var(--void-space-3) var(--void-space-4);
+	background: var(--vscode-textCodeBlock-background, var(--vscode-editor-background));
+	border: var(--void-border-subtle);
+	border-radius: var(--void-radius-md);
+	overflow-x: auto;
+	font-family: var(--vscode-editor-font-family);
+	font-size: 0.85rem;
+	line-height: 1.5;
+}
+
+.void-scope :not(pre) > code {
+	padding: 1px 5px;
+	border-radius: 3px;
+	background: var(--vscode-textCodeBlock-background, var(--void-bg-hover));
+	font-family: var(--vscode-editor-font-family);
+	font-size: 0.88em;
+}
+
+/* ---------- Lists / Thread selector ---------- */
+.void-scope .void-list {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.void-scope .void-list-item {
+	display: flex;
+	align-items: center;
+	gap: var(--void-space-2);
+	padding: var(--void-space-2) var(--void-space-3);
+	border-radius: var(--void-radius-sm);
+	color: var(--vscode-foreground);
+	cursor: pointer;
+	transition: background-color 100ms ease;
+}
+
+.void-scope .void-list-item:hover {
+	background: var(--void-bg-hover);
+}
+
+.void-scope .void-list-item.is-active,
+.void-scope .void-list-item[aria-selected="true"] {
+	background: var(--void-bg-active);
+}
+
+.void-scope .void-list-item-meta {
+	margin-left: auto;
+	color: var(--void-text-faint);
+	font-size: 0.78rem;
+}
+
+/* ---------- Settings rows ---------- */
+.void-scope .void-setting-row {
+	display: flex;
+	flex-direction: column;
+	gap: var(--void-space-2);
+	padding: var(--void-space-4) 0;
+	border-bottom: var(--void-border-subtle);
+}
+
+.void-scope .void-setting-row:last-child {
+	border-bottom: 0;
+}
+
+.void-scope .void-setting-label {
+	font-weight: 500;
+}
+
+.void-scope .void-setting-description {
+	color: var(--void-text-muted);
+	font-size: 0.85rem;
+	line-height: 1.5;
+}
+
+/* ---------- Floating widgets (Quick Edit / Inline) ---------- */
+.void-scope .void-floating,
+.void-scope .void-popover {
+	padding: var(--void-space-3) var(--void-space-4);
+	border: var(--void-border);
+	border-radius: var(--void-radius-md);
+	background: var(--vscode-editorWidget-background);
+	color: var(--vscode-editorWidget-foreground);
+	box-shadow: none;
+}
+
+/* ---------- Scrollbars (subtle) ---------- */
+.void-scope ::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+.void-scope ::-webkit-scrollbar-thumb {
+	background: color-mix(in srgb, var(--vscode-foreground) 18%, transparent);
+	border-radius: 8px;
+}
+
+.void-scope ::-webkit-scrollbar-thumb:hover {
+	background: color-mix(in srgb, var(--vscode-foreground) 28%, transparent);
+}
+
+.void-scope ::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+/* ---------- Utility ---------- */
+.void-scope .void-muted { color: var(--void-text-muted); }
+.void-scope .void-faint { color: var(--void-text-faint); }
+.void-scope .void-stack-2 > * + * { margin-top: var(--void-space-2); }
+.void-scope .void-stack-3 > * + * { margin-top: var(--void-space-3); }
+.void-scope .void-stack-4 > * + * { margin-top: var(--void-space-4); }
+.void-scope .void-row { display: flex; align-items: center; gap: var(--void-space-2); }
+.void-scope .void-row-between { display: flex; align-items: center; justify-content: space-between; gap: var(--void-space-3); }

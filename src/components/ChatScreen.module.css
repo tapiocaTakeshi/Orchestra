@@ -1,0 +1,298 @@
+/* === Glassmorphism AI Chat === */
+
+.page {
+  position: relative;
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  overflow: hidden;
+  background:
+    radial-gradient(1200px 800px at 10% 10%, #ff7ad9 0%, transparent 60%),
+    radial-gradient(1000px 700px at 90% 20%, #7af0ff 0%, transparent 55%),
+    radial-gradient(900px 700px at 50% 100%, #8a7bff 0%, transparent 60%),
+    linear-gradient(135deg, #1a1240 0%, #0b0a23 100%);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans",
+    "Noto Sans JP", sans-serif;
+  color: #f4f6ff;
+}
+
+/* 背景の浮遊オーブ */
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.55;
+  pointer-events: none;
+  animation: float 18s ease-in-out infinite;
+}
+.orbA {
+  width: 380px;
+  height: 380px;
+  background: #ff5ec4;
+  top: -80px;
+  left: -60px;
+}
+.orbB {
+  width: 460px;
+  height: 460px;
+  background: #4cc9ff;
+  bottom: -120px;
+  right: -100px;
+  animation-delay: -6s;
+}
+.orbC {
+  width: 300px;
+  height: 300px;
+  background: #b388ff;
+  top: 40%;
+  left: 55%;
+  animation-delay: -12s;
+}
+@keyframes float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(30px, -40px) scale(1.08); }
+}
+
+/* メインのガラスシェル */
+.shell {
+  position: relative;
+  z-index: 1;
+  width: min(880px, 100%);
+  height: min(86vh, 820px);
+  display: flex;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 24px;
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  overflow: hidden;
+}
+
+/* ヘッダー */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  background: linear-gradient(135deg, #ff79c6, #8be9fd);
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(255, 121, 198, 0.45);
+}
+.title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+.subtitle {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: rgba(244, 246, 255, 0.65);
+}
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(10px);
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 10px #4ade80;
+}
+
+/* メッセージリスト */
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+}
+.messages::-webkit-scrollbar { width: 6px; }
+.messages::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+}
+
+.row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  max-width: 100%;
+  animation: pop 260ms ease-out;
+}
+.rowUser { justify-content: flex-end; }
+.rowAssistant { justify-content: flex-start; }
+
+@keyframes pop {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(10px);
+}
+.avatarAi {
+  background: linear-gradient(135deg, rgba(139, 233, 253, 0.6), rgba(189, 147, 249, 0.6));
+  color: #0b0a23;
+}
+.avatarUser {
+  background: linear-gradient(135deg, rgba(255, 121, 198, 0.6), rgba(255, 184, 108, 0.6));
+  color: #0b0a23;
+}
+
+/* バブル（ガラス） */
+.bubble {
+  max-width: 72%;
+  padding: 12px 16px;
+  font-size: 14.5px;
+  line-height: 1.55;
+  border-radius: 18px;
+  word-break: break-word;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+.bubbleAi {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f4f6ff;
+  border-bottom-left-radius: 6px;
+}
+.bubbleUser {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 121, 198, 0.35),
+    rgba(139, 233, 253, 0.35)
+  );
+  color: #fff;
+  border-bottom-right-radius: 6px;
+}
+
+/* タイピングインジケータ */
+.typing {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  height: 18px;
+}
+.typing i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.8);
+  animation: blink 1.2s infinite ease-in-out;
+}
+.typing i:nth-child(2) { animation-delay: 0.15s; }
+.typing i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes blink {
+  0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }
+  40%           { opacity: 1; transform: translateY(-2px); }
+}
+
+/* 入力欄 */
+.composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 14px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+}
+.input {
+  flex: 1;
+  resize: none;
+  max-height: 140px;
+  min-height: 44px;
+  padding: 12px 16px;
+  font: inherit;
+  font-size: 14.5px;
+  color: #f4f6ff;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  outline: none;
+  backdrop-filter: blur(12px);
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+}
+.input::placeholder { color: rgba(244, 246, 255, 0.55); }
+.input:focus {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 0 3px rgba(139, 233, 253, 0.15);
+}
+
+.sendBtn {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: linear-gradient(135deg, #ff79c6, #8be9fd);
+  color: #0b0a23;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.2s ease, opacity 0.2s;
+  box-shadow: 0 8px 22px rgba(139, 233, 253, 0.35);
+}
+.sendBtn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 26px rgba(255, 121, 198, 0.45);
+}
+.sendBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* レスポンシブ */
+@media (max-width: 600px) {
+  .page { padding: 12px; }
+  .shell { height: 92vh; border-radius: 18px; }
+  .bubble { max-width: 82%; }
+  .title { font-size: 16px; }
+}

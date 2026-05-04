@@ -1,0 +1,374 @@
+/*---------------------------------------------------------------------------------------------
+ *  Void — Minimal Theme
+ *  シンプルで余白を活かしたデザイン。VS Code のテーマ変数のみを使用します。
+ *--------------------------------------------------------------------------------------------*/
+
+/* ===== デザイントークン（VS Code 変数のみ） ===== */
+.void-minimal {
+	/* 余白スケール（4px グリッド） */
+	--void-space-1: 4px;
+	--void-space-2: 8px;
+	--void-space-3: 12px;
+	--void-space-4: 16px;
+	--void-space-5: 24px;
+	--void-space-6: 32px;
+
+	/* 角丸（控えめ） */
+	--void-radius-sm: 3px;
+	--void-radius-md: 4px;
+	--void-radius-lg: 6px;
+
+	/* 罫線（極細・低コントラスト） */
+	--void-border: 1px solid var(--vscode-widget-border, var(--vscode-editorWidget-border, transparent));
+	--void-border-subtle: 1px solid color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+
+	/* テキスト階層（サイズではなく opacity で表現） */
+	--void-text-strong: var(--vscode-foreground);
+	--void-text-default: color-mix(in srgb, var(--vscode-foreground) 90%, transparent);
+	--void-text-muted: color-mix(in srgb, var(--vscode-foreground) 60%, transparent);
+	--void-text-faint: color-mix(in srgb, var(--vscode-foreground) 40%, transparent);
+
+	/* モーション */
+	--void-ease: cubic-bezier(0.2, 0, 0, 1);
+	--void-dur: 150ms;
+
+	/* タイポグラフィ */
+	font-family: var(--vscode-font-family);
+	font-size: var(--vscode-font-size);
+	color: var(--void-text-default);
+	letter-spacing: 0.005em;
+	line-height: 1.55;
+}
+
+/* ===== レイアウト ===== */
+.void-minimal,
+.void-minimal * {
+	box-sizing: border-box;
+}
+
+.void-minimal .void-sidebar,
+.void-minimal .sidebar-root {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	padding: var(--void-space-4);
+	gap: var(--void-space-4);
+	background: transparent;
+}
+
+.void-minimal .void-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: var(--void-space-2) 0 var(--void-space-3);
+	border-bottom: var(--void-border-subtle);
+}
+
+.void-minimal .void-header h1,
+.void-minimal .void-header .title {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--void-text-strong);
+	margin: 0;
+	letter-spacing: 0.01em;
+}
+
+/* ===== チャット表示領域 ===== */
+.void-minimal .void-chat-list,
+.void-minimal .chat-messages {
+	flex: 1 1 auto;
+	overflow-y: auto;
+	padding: var(--void-space-2) 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--void-space-5);
+	scrollbar-gutter: stable;
+}
+
+.void-minimal .void-message,
+.void-minimal .chat-message {
+	display: flex;
+	flex-direction: column;
+	gap: var(--void-space-2);
+	padding: 0;
+	background: transparent;
+	border: none;
+}
+
+.void-minimal .void-message__role,
+.void-minimal .chat-message__role {
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--void-text-muted);
+}
+
+.void-minimal .void-message__content,
+.void-minimal .chat-message__content {
+	color: var(--void-text-default);
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.void-minimal .void-message + .void-message {
+	border-top: var(--void-border-subtle);
+	padding-top: var(--void-space-5);
+}
+
+/* ===== コードブロック ===== */
+.void-minimal pre,
+.void-minimal .void-codeblock {
+	margin: var(--void-space-2) 0;
+	padding: var(--void-space-3) var(--void-space-4);
+	background: color-mix(in srgb, var(--vscode-editor-background) 92%, var(--vscode-foreground) 4%);
+	border: var(--void-border-subtle);
+	border-radius: var(--void-radius-md);
+	font-family: var(--vscode-editor-font-family, monospace);
+	font-size: calc(var(--vscode-font-size) - 1px);
+	overflow-x: auto;
+}
+
+.void-minimal code {
+	font-family: var(--vscode-editor-font-family, monospace);
+}
+
+.void-minimal :not(pre) > code {
+	padding: 1px 6px;
+	border-radius: var(--void-radius-sm);
+	background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+	font-size: 0.92em;
+}
+
+/* ===== 入力エリア ===== */
+.void-minimal .void-input,
+.void-minimal .chat-input,
+.void-minimal .input-container {
+	display: flex;
+	flex-direction: column;
+	gap: var(--void-space-2);
+	padding: var(--void-space-3);
+	border: var(--void-border-subtle);
+	border-radius: var(--void-radius-lg);
+	background: var(--vscode-input-background);
+	transition: border-color var(--void-dur) var(--void-ease);
+}
+
+.void-minimal .void-input:focus-within,
+.void-minimal .chat-input:focus-within,
+.void-minimal .input-container:focus-within {
+	border-color: color-mix(in srgb, var(--vscode-focusBorder) 80%, transparent);
+}
+
+.void-minimal textarea,
+.void-minimal input[type='text'],
+.void-minimal .void-input textarea {
+	width: 100%;
+	min-height: 36px;
+	max-height: 240px;
+	padding: 0;
+	border: none;
+	outline: none;
+	background: transparent;
+	color: var(--vscode-input-foreground);
+	font-family: inherit;
+	font-size: inherit;
+	resize: none;
+}
+
+.void-minimal textarea::placeholder,
+.void-minimal input::placeholder {
+	color: var(--void-text-faint);
+}
+
+/* ===== ボタン ===== */
+.void-minimal button,
+.void-minimal .void-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--void-space-2);
+	height: 28px;
+	padding: 0 var(--void-space-3);
+	border: 1px solid transparent;
+	border-radius: var(--void-radius-md);
+	background: transparent;
+	color: var(--void-text-default);
+	font: inherit;
+	font-weight: 500;
+	cursor: pointer;
+	transition:
+		background-color var(--void-dur) var(--void-ease),
+		color var(--void-dur) var(--void-ease),
+		opacity var(--void-dur) var(--void-ease);
+}
+
+.void-minimal button:hover,
+.void-minimal .void-button:hover {
+	background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+	color: var(--void-text-strong);
+}
+
+.void-minimal button:active,
+.void-minimal .void-button:active {
+	transform: translateY(0.5px);
+}
+
+.void-minimal button:disabled,
+.void-minimal .void-button:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+
+.void-minimal .void-button--primary {
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+}
+
+.void-minimal .void-button--primary:hover {
+	background: var(--vscode-button-hoverBackground);
+	color: var(--vscode-button-foreground);
+}
+
+.void-minimal .void-button--ghost {
+	color: var(--void-text-muted);
+}
+
+.void-minimal .void-button--icon {
+	width: 28px;
+	padding: 0;
+}
+
+/* ===== セレクト / セグメント ===== */
+.void-minimal select,
+.void-minimal .void-select {
+	height: 28px;
+	padding: 0 var(--void-space-3);
+	border: var(--void-border-subtle);
+	border-radius: var(--void-radius-md);
+	background: transparent;
+	color: var(--void-text-default);
+	font: inherit;
+	cursor: pointer;
+	transition: border-color var(--void-dur) var(--void-ease);
+}
+
+.void-minimal select:hover {
+	border-color: color-mix(in srgb, var(--vscode-foreground) 24%, transparent);
+}
+
+.void-minimal .void-segment {
+	display: inline-flex;
+	padding: 2px;
+	border: var(--void-border-subtle);
+	border-radius: var(--void-radius-md);
+	gap: 2px;
+}
+
+.void-minimal .void-segment > button {
+	height: 22px;
+	padding: 0 var(--void-space-2);
+	font-size: 11px;
+	border-radius: var(--void-radius-sm);
+}
+
+.void-minimal .void-segment > button[aria-selected='true'] {
+	background: color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+	color: var(--void-text-strong);
+}
+
+/* ===== チップ / バッジ ===== */
+.void-minimal .void-chip,
+.void-minimal .void-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--void-space-1);
+	height: 20px;
+	padding: 0 var(--void-space-2);
+	border: var(--void-border-subtle);
+	border-radius: 999px;
+	font-size: 11px;
+	color: var(--void-text-muted);
+	background: transparent;
+}
+
+/* ===== スクロールバー ===== */
+.void-minimal *::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+.void-minimal *::-webkit-scrollbar-thumb {
+	background: color-mix(in srgb, var(--vscode-foreground) 14%, transparent);
+	border-radius: 999px;
+}
+
+.void-minimal *::-webkit-scrollbar-thumb:hover {
+	background: color-mix(in srgb, var(--vscode-foreground) 28%, transparent);
+}
+
+.void-minimal *::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+/* ===== 区切り線 ===== */
+.void-minimal hr,
+.void-minimal .void-divider {
+	border: none;
+	border-top: var(--void-border-subtle);
+	margin: var(--void-space-4) 0;
+}
+
+/* ===== リンク ===== */
+.void-minimal a {
+	color: var(--vscode-textLink-foreground);
+	text-decoration: none;
+	border-bottom: 1px solid color-mix(in srgb, var(--vscode-textLink-foreground) 30%, transparent);
+	transition: border-color var(--void-dur) var(--void-ease);
+}
+
+.void-minimal a:hover {
+	border-bottom-color: var(--vscode-textLink-activeForeground, var(--vscode-textLink-foreground));
+}
+
+/* ===== 空状態 ===== */
+.void-minimal .void-empty {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: var(--void-space-2);
+	padding: var(--void-space-6) var(--void-space-4);
+	text-align: center;
+	color: var(--void-text-faint);
+}
+
+.void-minimal .void-empty__title {
+	font-size: 13px;
+	font-weight: 500;
+	color: var(--void-text-muted);
+}
+
+/* ===== モーション（控えめ） ===== */
+@media (prefers-reduced-motion: reduce) {
+	.void-minimal * {
+		transition: none !important;
+		animation: none !important;
+	}
+}
+
+.void-minimal .void-fade-in {
+	animation: void-fade-in var(--void-dur) var(--void-ease);
+}
+
+@keyframes void-fade-in {
+	from { opacity: 0; transform: translateY(2px); }
+	to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ===== フォーカスリング（アクセシビリティ） ===== */
+.void-minimal :focus-visible {
+	outline: 2px solid var(--vscode-focusBorder);
+	outline-offset: 2px;
+	border-radius: var(--void-radius-sm);
+}

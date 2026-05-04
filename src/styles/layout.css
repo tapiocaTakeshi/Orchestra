@@ -1,0 +1,61 @@
+/* =========================================================
+ * Layout — titlebar, app shell, content
+ * ========================================================= */
+.app {
+  display: grid;
+  grid-template-rows: var(--titlebar-height) 1fr;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Titlebar (frameless friendly) */
+.titlebar {
+  -webkit-app-region: drag;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--space-4);
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  letter-spacing: 0.04em;
+  user-select: none;
+}
+.titlebar__title {
+  font-weight: var(--fw-medium);
+}
+.titlebar__actions {
+  -webkit-app-region: no-drag;
+  position: absolute;
+  right: var(--space-3);
+  display: flex;
+  gap: var(--space-1);
+}
+
+.main {
+  overflow: auto;
+  background: var(--color-bg);
+}
+
+.container {
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-5);
+}
+
+.stack > * + * { margin-top: var(--space-4); }
+.stack-lg > * + * { margin-top: var(--space-6); }
+
+.row { display: flex; gap: var(--space-3); align-items: center; }
+.row--between { justify-content: space-between; }
+
+.muted { color: var(--color-text-muted); }
+.subtle { color: var(--color-text-subtle); }
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  font-weight: var(--fw-medium);
+}

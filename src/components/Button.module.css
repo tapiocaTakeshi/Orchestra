@@ -1,0 +1,100 @@
+.btn {
+  --btn-bg: var(--color-accent);
+  --btn-bg-hover: var(--color-accent-strong);
+  --btn-fg: #ffffff;
+  --btn-border: transparent;
+
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--btn-border);
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  user-select: none;
+  text-decoration: none;
+  transition:
+    transform var(--duration-fast) var(--ease-out),
+    background-color var(--duration-base) var(--ease-out),
+    box-shadow var(--duration-base) var(--ease-out),
+    border-color var(--duration-base) var(--ease-out),
+    color var(--duration-base) var(--ease-out);
+  box-shadow: var(--shadow-xs);
+}
+
+.btn:hover {
+  background: var(--btn-bg-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn:active {
+  transform: translateY(0);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Sizes */
+.s_sm {
+  height: 36px;
+  padding: 0 14px;
+  font-size: 0.875rem;
+}
+.s_md {
+  height: 44px;
+  padding: 0 18px;
+  font-size: 0.95rem;
+}
+.s_lg {
+  height: 52px;
+  padding: 0 24px;
+  font-size: 1rem;
+}
+
+/* Variants */
+.v_primary {
+  --btn-bg: var(--color-accent);
+  --btn-bg-hover: var(--color-accent-strong);
+  --btn-fg: #ffffff;
+  --btn-border: transparent;
+}
+
+.v_outline {
+  --btn-bg: transparent;
+  --btn-bg-hover: var(--color-accent-soft);
+  --btn-fg: var(--color-text);
+  --btn-border: var(--color-border-strong);
+}
+
+.v_outline:hover {
+  --btn-fg: var(--color-accent-strong);
+}
+
+.v_ghost {
+  --btn-bg: transparent;
+  --btn-bg-hover: var(--color-accent-soft);
+  --btn-fg: var(--color-text);
+  --btn-border: transparent;
+  box-shadow: none;
+}
+
+.v_ghost:hover {
+  --btn-fg: var(--color-accent-strong);
+  box-shadow: none;
+}

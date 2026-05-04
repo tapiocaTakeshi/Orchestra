@@ -1,0 +1,435 @@
+/* =========================================================================
+ * Void — Minimal Design Theme
+ * シンプルで余白を活かしたデザイン
+ *
+ * 方針:
+ *  - フラット（影なし / 不要なボーダーなし）
+ *  - 余白を一段広げて視認性を上げる
+ *  - 角丸は 4px に統一（過度な装飾を排除）
+ *  - 色はテーマ変数を尊重し、透過で陰影を表現
+ *  - フォーカス/ホバーはアウトライン主体
+ * ========================================================================= */
+
+:root {
+	/* ---- Spacing scale (8px base, やや広め) ---- */
+	--void-space-1: 4px;
+	--void-space-2: 8px;
+	--void-space-3: 12px;
+	--void-space-4: 16px;
+	--void-space-5: 24px;
+	--void-space-6: 32px;
+
+	/* ---- Radius ---- */
+	--void-radius-sm: 3px;
+	--void-radius-md: 4px;
+	--void-radius-lg: 6px;
+
+	/* ---- Typography ---- */
+	--void-font-size-xs: 11px;
+	--void-font-size-sm: 12px;
+	--void-font-size-md: 13px;
+	--void-font-size-lg: 14px;
+	--void-line-height: 1.55;
+
+	/* ---- Subtle palette (VSCode テーマ変数を透過で利用) ---- */
+	--void-border-subtle: color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+	--void-border-strong: color-mix(in srgb, var(--vscode-foreground) 22%, transparent);
+	--void-bg-soft:       color-mix(in srgb, var(--vscode-foreground)  4%, transparent);
+	--void-bg-hover:      color-mix(in srgb, var(--vscode-foreground)  8%, transparent);
+	--void-bg-active:     color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+	--void-fg-muted:      color-mix(in srgb, var(--vscode-foreground) 65%, transparent);
+
+	/* ---- Motion ---- */
+	--void-ease: cubic-bezier(0.2, 0, 0, 1);
+	--void-duration: 120ms;
+}
+
+/* -------------------------------------------------------------------------
+ * Base
+ * ------------------------------------------------------------------------- */
+.void-scope,
+[data-void-root] {
+	font-size: var(--void-font-size-md);
+	line-height: var(--void-line-height);
+	letter-spacing: 0.01em;
+	color: var(--vscode-foreground);
+	background: transparent;
+}
+
+.void-scope *,
+[data-void-root] * {
+	box-sizing: border-box;
+}
+
+/* スクロールバー: 細く・控えめに */
+.void-scope ::-webkit-scrollbar,
+[data-void-root] ::-webkit-scrollbar {
+	width: 6px;
+	height: 6px;
+}
+.void-scope ::-webkit-scrollbar-thumb,
+[data-void-root] ::-webkit-scrollbar-thumb {
+	background: var(--void-border-subtle);
+	border-radius: 999px;
+}
+.void-scope ::-webkit-scrollbar-thumb:hover,
+[data-void-root] ::-webkit-scrollbar-thumb:hover {
+	background: var(--void-border-strong);
+}
+
+/* -------------------------------------------------------------------------
+ * Sidebar / Chat container
+ * ------------------------------------------------------------------------- */
+.void-sidebar,
+[data-void-component="sidebar"] {
+	padding: var(--void-space-4);
+	gap: var(--void-space-4);
+	background: transparent;
+	border: none;
+}
+
+.void-chat-thread,
+[data-void-component="chat-thread"] {
+	display: flex;
+	flex-direction: column;
+	gap: var(--void-space-5);
+	padding: var(--void-space-2) 0;
+}
+
+/* -------------------------------------------------------------------------
+ * Message bubble — フラットに、左の細罫線だけで発話者を示す
+ * ------------------------------------------------------------------------- */
+.void-message,
+[data-void-component="message"] {
+	position: relative;
+	padding: var(--void-space-2) var(--void-space-4);
+	background: transparent;
+	border: none;
+	border-radius: 0;
+	box-shadow: none;
+}
+
+.void-message + .void-message {
+	margin-top: var(--void-space-3);
+}
+
+.void-message[data-role="user"],
+[data-void-component="message"][data-role="user"] {
+	border-left: 2px solid var(--void-border-strong);
+}
+
+.void-message[data-role="assistant"],
+[data-void-component="message"][data-role="assistant"] {
+	border-left: 2px solid color-mix(in srgb, var(--vscode-textLink-foreground) 60%, transparent);
+}
+
+.void-message[data-role="system"],
+[data-void-component="message"][data-role="system"] {
+	color: var(--void-fg-muted);
+	font-size: var(--void-font-size-sm);
+}
+
+.void-message-meta {
+	font-size: var(--void-font-size-xs);
+	color: var(--void-fg-muted);
+	margin-bottom: var(--void-space-1);
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.void-message-body {
+	font-size: var(--void-font-size-md);
+	line-height: var(--void-line-height);
+}
+
+.void-message-body p { margin: 0 0 var(--void-space-2) 0; }
+.void-message-body p:last-child { margin-bottom: 0; }
+
+/* -------------------------------------------------------------------------
+ * Code blocks inside messages
+ * ------------------------------------------------------------------------- */
+.void-message-body pre,
+.void-codeblock {
+	margin: var(--void-space-3) 0;
+	padding: var(--void-space-3) var(--void-space-4);
+	background: var(--void-bg-soft);
+	border: 1px solid var(--void-border-subtle);
+	border-radius: var(--void-radius-md);
+	font-size: var(--void-font-size-sm);
+	line-height: 1.5;
+	overflow-x: auto;
+}
+
+.void-message-body code,
+.void-inline-code {
+	padding: 1px 6px;
+	background: var(--void-bg-soft);
+	border-radius: var(--void-radius-sm);
+	font-size: 0.92em;
+}
+
+.void-message-body pre code {
+	padding: 0;
+	background: transparent;
+	border-radius: 0;
+}
+
+/* -------------------------------------------------------------------------
+ * Input area (chat composer)
+ * ------------------------------------------------------------------------- */
+.void-composer,
+[data-void-component="composer"] {
+	display: flex;
+	flex-direction: column;
+	gap: var(--void-space-2);
+	padding: var(--void-space-3);
+	background: transparent;
+	border: 1px solid var(--void-border-subtle);
+	border-radius: var(--void-radius-lg);
+	transition: border-color var(--void-duration) var(--void-ease);
+}
+
+.void-composer:focus-within,
+[data-void-component="composer"]:focus-within {
+	border-color: var(--vscode-focusBorder, var(--void-border-strong));
+}
+
+.void-composer textarea,
+.void-input,
+[data-void-component="composer"] textarea {
+	width: 100%;
+	min-height: 36px;
+	padding: var(--void-space-2);
+	background: transparent;
+	border: none;
+	outline: none;
+	resize: none;
+	color: var(--vscode-foreground);
+	font-family: var(--vscode-font-family);
+	font-size: var(--void-font-size-md);
+	line-height: var(--void-line-height);
+}
+
+.void-composer textarea::placeholder,
+.void-input::placeholder {
+	color: var(--void-fg-muted);
+}
+
+/* -------------------------------------------------------------------------
+ * Buttons — フラット、アウトライン主体
+ * ------------------------------------------------------------------------- */
+.void-button,
+[data-void-component="button"] {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--void-space-2);
+	height: 28px;
+	padding: 0 var(--void-space-3);
+	background: transparent;
+	color: var(--vscode-foreground);
+	border: 1px solid var(--void-border-subtle);
+	border-radius: var(--void-radius-md);
+	font-size: var(--void-font-size-sm);
+	font-family: inherit;
+	cursor: pointer;
+	transition:
+		background-color var(--void-duration) var(--void-ease),
+		border-color var(--void-duration) var(--void-ease),
+		color var(--void-duration) var(--void-ease);
+}
+
+.void-button:hover,
+[data-void-component="button"]:hover {
+	background: var(--void-bg-hover);
+	border-color: var(--void-border-strong);
+}
+
+.void-button:active,
+[data-void-component="button"]:active {
+	background: var(--void-bg-active);
+}
+
+.void-button:focus-visible,
+[data-void-component="button"]:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder, var(--void-border-strong));
+	outline-offset: 1px;
+	border-color: transparent;
+}
+
+.void-button[data-variant="primary"] {
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	border-color: transparent;
+}
+.void-button[data-variant="primary"]:hover {
+	background: var(--vscode-button-hoverBackground, var(--vscode-button-background));
+	filter: brightness(1.05);
+}
+
+.void-button[data-variant="ghost"] {
+	border-color: transparent;
+}
+.void-button[data-variant="ghost"]:hover {
+	background: var(--void-bg-hover);
+}
+
+.void-button[data-size="icon"] {
+	width: 28px;
+	height: 28px;
+	padding: 0;
+}
+
+/* -------------------------------------------------------------------------
+ * Toolbar / Actions row
+ * ------------------------------------------------------------------------- */
+.void-toolbar,
+[data-void-component="toolbar"] {
+	display: flex;
+	align-items: center;
+	gap: var(--void-space-1);
+	padding: 0;
+	background: transparent;
+	border: none;
+}
+
+.void-toolbar > * + * {
+	margin-left: 0;
+}
+
+/* -------------------------------------------------------------------------
+ * Settings / Forms
+ * ------------------------------------------------------------------------- */
+.void-settings,
+[data-void-component="settings"] {
+	display: flex;
+	flex-direction: column;
+	gap: var(--void-space-5);
+	padding: var(--void-space-5) var(--void-space-4);
+	max-width: 720px;
+}
+
+.void-settings-section {
+	display: flex;
+	flex-direction: column;
+	gap: var(--void-space-3);
+	padding-bottom: var(--void-space-5);
+	border-bottom: 1px solid var(--void-border-subtle);
+}
+.void-settings-section:last-child { border-bottom: none; }
+
+.void-settings-section h2,
+.void-settings-section-title {
+	margin: 0;
+	font-size: var(--void-font-size-lg);
+	font-weight: 600;
+	letter-spacing: 0.005em;
+}
+
+.void-settings-section-desc {
+	margin: 0;
+	color: var(--void-fg-muted);
+	font-size: var(--void-font-size-sm);
+}
+
+.void-field {
+	display: flex;
+	flex-direction: column;
+	gap: var(--void-space-2);
+}
+
+.void-field-label {
+	font-size: var(--void-font-size-sm);
+	color: var(--void-fg-muted);
+}
+
+.void-field input[type="text"],
+.void-field input[type="password"],
+.void-field input[type="number"],
+.void-field select,
+.void-text-input {
+	height: 30px;
+	padding: 0 var(--void-space-3);
+	background: var(--void-bg-soft);
+	color: var(--vscode-foreground);
+	border: 1px solid var(--void-border-subtle);
+	border-radius: var(--void-radius-md);
+	font-family: inherit;
+	font-size: var(--void-font-size-sm);
+	transition: border-color var(--void-duration) var(--void-ease);
+}
+
+.void-field input:focus,
+.void-field select:focus,
+.void-text-input:focus {
+	outline: none;
+	border-color: var(--vscode-focusBorder, var(--void-border-strong));
+}
+
+/* -------------------------------------------------------------------------
+ * Quick Edit popup
+ * ------------------------------------------------------------------------- */
+.void-quickedit,
+[data-void-component="quickedit"] {
+	padding: var(--void-space-3);
+	background: var(--vscode-editor-background);
+	border: 1px solid var(--void-border-subtle);
+	border-radius: var(--void-radius-lg);
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+}
+
+/* -------------------------------------------------------------------------
+ * Empty / Loading states
+ * ------------------------------------------------------------------------- */
+.void-empty-state {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: var(--void-space-2);
+	padding: var(--void-space-6) var(--void-space-4);
+	text-align: center;
+	color: var(--void-fg-muted);
+	font-size: var(--void-font-size-sm);
+}
+
+.void-loading-dots {
+	display: inline-flex;
+	gap: 4px;
+	padding: var(--void-space-2) 0;
+}
+.void-loading-dots > span {
+	width: 4px;
+	height: 4px;
+	border-radius: 999px;
+	background: var(--void-fg-muted);
+	animation: void-dot 1.2s var(--void-ease) infinite;
+}
+.void-loading-dots > span:nth-child(2) { animation-delay: 0.15s; }
+.void-loading-dots > span:nth-child(3) { animation-delay: 0.30s; }
+
+@keyframes void-dot {
+	0%, 60%, 100% { opacity: 0.25; transform: translateY(0); }
+	30%           { opacity: 1;    transform: translateY(-2px); }
+}
+
+/* -------------------------------------------------------------------------
+ * Divider / hr
+ * ------------------------------------------------------------------------- */
+.void-divider,
+.void-scope hr {
+	border: none;
+	border-top: 1px solid var(--void-border-subtle);
+	margin: var(--void-space-4) 0;
+}
+
+/* -------------------------------------------------------------------------
+ * Reduced motion
+ * ------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+	.void-scope *,
+	[data-void-root] * {
+		transition: none !important;
+		animation: none !important;
+	}
+}

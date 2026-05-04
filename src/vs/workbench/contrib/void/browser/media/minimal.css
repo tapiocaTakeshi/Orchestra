@@ -1,0 +1,4 @@
+/* media ローダ経由でも同 CSS を使えるようにするためのエイリアス。
+ * 内容は react/src2/styles/minimal.css と同一。重複保守を避けるため、
+ * ビルド構成によってはどちらか一方のみ import すれば足りる。 */
+@import url("../react/src2/styles/minimal.css");

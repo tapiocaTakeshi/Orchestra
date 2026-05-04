@@ -1,0 +1,108 @@
+/* =========================================================
+ * Design Tokens — Minimal
+ * 8px grid / neutral palette / single accent
+ * ========================================================= */
+:root {
+  /* Color — Light */
+  --color-bg:            #ffffff;
+  --color-bg-elevated:   #fafafa;
+  --color-bg-subtle:     #f4f4f5;
+  --color-border:        #e5e5e5;
+  --color-border-strong: #d4d4d4;
+  --color-text:          #18181b;
+  --color-text-muted:    #71717a;
+  --color-text-subtle:   #a1a1aa;
+  --color-accent:        #111111;
+  --color-accent-fg:     #ffffff;
+  --color-focus:         #2563eb;
+  --color-danger:        #dc2626;
+
+  /* Spacing — 8px grid */
+  --space-0:  0;
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  24px;
+  --space-6:  32px;
+  --space-7:  48px;
+  --space-8:  64px;
+  --space-9:  96px;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-pill: 999px;
+
+  /* Shadow — soft, minimal */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.06);
+
+  /* Typography */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text",
+               "Segoe UI", "Helvetica Neue", "Hiragino Sans",
+               "Noto Sans JP", "Yu Gothic UI", sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+
+  --fs-xs:   12px;
+  --fs-sm:   13px;
+  --fs-base: 14px;
+  --fs-md:   16px;
+  --fs-lg:   20px;
+  --fs-xl:   28px;
+  --fs-2xl:  36px;
+
+  --lh-tight:  1.25;
+  --lh-normal: 1.6;
+
+  --fw-regular: 400;
+  --fw-medium:  500;
+  --fw-semibold: 600;
+
+  /* Motion */
+  --ease:        cubic-bezier(0.2, 0, 0, 1);
+  --duration-1:  120ms;
+  --duration-2:  200ms;
+
+  /* Layout */
+  --content-max-width: 720px;
+  --titlebar-height:   38px;
+  --sidebar-width:     240px;
+}
+
+/* Dark theme — auto */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-bg:            #0b0b0c;
+    --color-bg-elevated:   #111113;
+    --color-bg-subtle:     #161618;
+    --color-border:        #232326;
+    --color-border-strong: #2e2e32;
+    --color-text:          #f4f4f5;
+    --color-text-muted:    #a1a1aa;
+    --color-text-subtle:   #71717a;
+    --color-accent:        #f4f4f5;
+    --color-accent-fg:     #0b0b0c;
+    --color-focus:         #60a5fa;
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* Explicit dark theme */
+:root[data-theme="dark"] {
+  --color-bg:            #0b0b0c;
+  --color-bg-elevated:   #111113;
+  --color-bg-subtle:     #161618;
+  --color-border:        #232326;
+  --color-border-strong: #2e2e32;
+  --color-text:          #f4f4f5;
+  --color-text-muted:    #a1a1aa;
+  --color-text-subtle:   #71717a;
+  --color-accent:        #f4f4f5;
+  --color-accent-fg:     #0b0b0c;
+  --color-focus:         #60a5fa;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.5);
+}

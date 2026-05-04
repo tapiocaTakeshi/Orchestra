@@ -1,0 +1,365 @@
+/* =========================================================
+   Modern UI — Design Tokens, Base, Utilities
+   Drop-in stylesheet. Additive only; does not override
+   existing component styles unless `.mui-*` classes are used.
+   ========================================================= */
+
+:root {
+  /* Brand */
+  --mui-brand-50:  #eef4ff;
+  --mui-brand-100: #dbe7ff;
+  --mui-brand-200: #b9ceff;
+  --mui-brand-300: #8aaeff;
+  --mui-brand-400: #5b87ff;
+  --mui-brand-500: #3b6bff;
+  --mui-brand-600: #2a52e6;
+  --mui-brand-700: #1f3fb3;
+  --mui-brand-800: #182f85;
+  --mui-brand-900: #0f1f5c;
+
+  /* Neutrals */
+  --mui-bg:        #ffffff;
+  --mui-bg-soft:   #f7f8fb;
+  --mui-bg-elev:   #ffffff;
+  --mui-fg:        #0b1020;
+  --mui-fg-muted:  #5b6478;
+  --mui-border:    #e6e8ef;
+  --mui-ring:      rgba(59, 107, 255, 0.45);
+
+  /* Semantic */
+  --mui-success: #10b981;
+  --mui-warning: #f59e0b;
+  --mui-danger:  #ef4444;
+
+  /* Radius */
+  --mui-radius-sm: 8px;
+  --mui-radius-md: 12px;
+  --mui-radius-lg: 16px;
+  --mui-radius-xl: 24px;
+  --mui-radius-full: 9999px;
+
+  /* Spacing scale */
+  --mui-space-1: 4px;
+  --mui-space-2: 8px;
+  --mui-space-3: 12px;
+  --mui-space-4: 16px;
+  --mui-space-5: 24px;
+  --mui-space-6: 32px;
+  --mui-space-7: 48px;
+  --mui-space-8: 64px;
+
+  /* Shadows (layered, soft) */
+  --mui-shadow-sm: 0 1px 2px rgba(11, 16, 32, 0.06);
+  --mui-shadow-md: 0 4px 12px rgba(11, 16, 32, 0.08), 0 1px 2px rgba(11, 16, 32, 0.04);
+  --mui-shadow-lg: 0 12px 32px rgba(11, 16, 32, 0.12), 0 2px 6px rgba(11, 16, 32, 0.06);
+  --mui-shadow-glow: 0 10px 40px -8px rgba(59, 107, 255, 0.45);
+
+  /* Motion */
+  --mui-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --mui-dur-fast: 120ms;
+  --mui-dur: 200ms;
+  --mui-dur-slow: 360ms;
+
+  /* Typography */
+  --mui-font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, "Noto Sans JP", "Hiragino Kaku Gothic ProN",
+    "Yu Gothic", Meiryo, sans-serif;
+  --mui-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* Fluid type scale */
+  --mui-text-sm:   clamp(0.82rem, 0.78rem + 0.2vw, 0.9rem);
+  --mui-text-base: clamp(0.95rem, 0.9rem + 0.3vw, 1.05rem);
+  --mui-text-lg:   clamp(1.1rem, 1rem + 0.5vw, 1.25rem);
+  --mui-text-xl:   clamp(1.35rem, 1.15rem + 1vw, 1.6rem);
+  --mui-text-2xl:  clamp(1.7rem, 1.4rem + 1.5vw, 2.25rem);
+  --mui-text-3xl:  clamp(2.1rem, 1.7rem + 2.2vw, 3rem);
+  --mui-text-display: clamp(2.6rem, 2rem + 3vw, 4rem);
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --mui-bg:       #0b0f1a;
+    --mui-bg-soft:  #0f1424;
+    --mui-bg-elev:  #131a2c;
+    --mui-fg:       #e8ecf6;
+    --mui-fg-muted: #9aa3b8;
+    --mui-border:   #1f2740;
+    --mui-ring:     rgba(139, 168, 255, 0.55);
+
+    --mui-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --mui-shadow-md: 0 4px 14px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.3);
+    --mui-shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.35);
+    --mui-shadow-glow: 0 12px 50px -10px rgba(91, 135, 255, 0.55);
+  }
+}
+
+/* Manual override hook */
+[data-theme="dark"] {
+  --mui-bg:       #0b0f1a;
+  --mui-bg-soft:  #0f1424;
+  --mui-bg-elev:  #131a2c;
+  --mui-fg:       #e8ecf6;
+  --mui-fg-muted: #9aa3b8;
+  --mui-border:   #1f2740;
+  --mui-ring:     rgba(139, 168, 255, 0.55);
+}
+
+/* ---------- Base polish (scoped to body to stay safe) ---------- */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--mui-font-sans);
+  font-size: var(--mui-text-base);
+  line-height: 1.6;
+  color: var(--mui-fg);
+  background: var(--mui-bg);
+}
+
+/* Better focus ring everywhere */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid transparent;
+  box-shadow: 0 0 0 3px var(--mui-ring);
+  border-radius: var(--mui-radius-sm);
+}
+
+/* Selection */
+::selection {
+  background: color-mix(in srgb, var(--mui-brand-500) 35%, transparent);
+  color: var(--mui-fg);
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---------- Modern utility classes (opt-in via .mui-*) ---------- */
+
+.mui-container {
+  width: 100%;
+  margin-inline: auto;
+  padding-inline: clamp(16px, 4vw, 32px);
+  max-width: 1200px;
+}
+
+.mui-stack > * + * { margin-top: var(--mui-space-4); }
+.mui-stack-lg > * + * { margin-top: var(--mui-space-6); }
+
+.mui-grid {
+  display: grid;
+  gap: var(--mui-space-5);
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+}
+
+.mui-card {
+  background: var(--mui-bg-elev);
+  border: 1px solid var(--mui-border);
+  border-radius: var(--mui-radius-lg);
+  box-shadow: var(--mui-shadow-sm);
+  padding: var(--mui-space-5);
+  transition: transform var(--mui-dur) var(--mui-ease),
+              box-shadow var(--mui-dur) var(--mui-ease),
+              border-color var(--mui-dur) var(--mui-ease);
+}
+.mui-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--mui-shadow-lg);
+  border-color: color-mix(in srgb, var(--mui-brand-500) 30%, var(--mui-border));
+}
+
+.mui-glass {
+  background: color-mix(in srgb, var(--mui-bg-elev) 70%, transparent);
+  backdrop-filter: saturate(160%) blur(14px);
+  -webkit-backdrop-filter: saturate(160%) blur(14px);
+  border: 1px solid color-mix(in srgb, var(--mui-border) 80%, transparent);
+}
+
+.mui-gradient-text {
+  background: linear-gradient(120deg, var(--mui-brand-500), #a855f7 60%, #06b6d4);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.mui-hero {
+  position: relative;
+  isolation: isolate;
+  padding-block: clamp(48px, 8vw, 96px);
+  overflow: hidden;
+}
+.mui-hero::before {
+  content: "";
+  position: absolute;
+  inset: -20% -10% auto auto;
+  width: 60vmax;
+  height: 60vmax;
+  background: radial-gradient(closest-side, rgba(59,107,255,0.35), transparent 70%);
+  filter: blur(20px);
+  z-index: -1;
+}
+.mui-hero::after {
+  content: "";
+  position: absolute;
+  inset: auto auto -30% -10%;
+  width: 55vmax;
+  height: 55vmax;
+  background: radial-gradient(closest-side, rgba(168,85,247,0.28), transparent 70%);
+  filter: blur(24px);
+  z-index: -1;
+}
+
+.mui-headline {
+  font-size: var(--mui-text-display);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  font-weight: 800;
+}
+.mui-subhead {
+  font-size: var(--mui-text-lg);
+  color: var(--mui-fg-muted);
+  max-width: 60ch;
+}
+
+/* Buttons */
+.mui-btn {
+  --_bg: var(--mui-brand-500);
+  --_fg: #ffffff;
+  --_bd: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 18px;
+  border-radius: var(--mui-radius-full);
+  font-weight: 600;
+  font-size: var(--mui-text-base);
+  letter-spacing: 0.01em;
+  background: var(--_bg);
+  color: var(--_fg);
+  border: 1px solid var(--_bd);
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform var(--mui-dur-fast) var(--mui-ease),
+              box-shadow var(--mui-dur) var(--mui-ease),
+              background var(--mui-dur) var(--mui-ease),
+              color var(--mui-dur) var(--mui-ease),
+              border-color var(--mui-dur) var(--mui-ease);
+  box-shadow: var(--mui-shadow-sm);
+}
+.mui-btn:hover { transform: translateY(-1px); box-shadow: var(--mui-shadow-glow); }
+.mui-btn:active { transform: translateY(0); }
+.mui-btn--secondary {
+  --_bg: var(--mui-bg-elev);
+  --_fg: var(--mui-fg);
+  --_bd: var(--mui-border);
+}
+.mui-btn--ghost {
+  --_bg: transparent;
+  --_fg: var(--mui-fg);
+  --_bd: transparent;
+  box-shadow: none;
+}
+.mui-btn--ghost:hover {
+  background: color-mix(in srgb, var(--mui-fg) 6%, transparent);
+  box-shadow: none;
+}
+.mui-btn[disabled],
+.mui-btn[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* Badge */
+.mui-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--mui-radius-full);
+  font-size: var(--mui-text-sm);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--mui-brand-500) 12%, transparent);
+  color: var(--mui-brand-700);
+  border: 1px solid color-mix(in srgb, var(--mui-brand-500) 25%, transparent);
+}
+@media (prefers-color-scheme: dark) {
+  .mui-badge { color: var(--mui-brand-200); }
+}
+
+/* Divider */
+.mui-divider {
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--mui-border), transparent);
+  border: 0;
+  margin-block: var(--mui-space-6);
+}
+
+/* Animations */
+@keyframes mui-fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.mui-animate-in {
+  animation: mui-fade-up var(--mui-dur-slow) var(--mui-ease) both;
+}
+
+/* Link polish */
+.mui-link {
+  color: var(--mui-brand-600);
+  text-decoration: none;
+  background-image: linear-gradient(var(--mui-brand-600), var(--mui-brand-600));
+  background-repeat: no-repeat;
+  background-size: 0% 2px;
+  background-position: 0 100%;
+  transition: background-size var(--mui-dur) var(--mui-ease), color var(--mui-dur) var(--mui-ease);
+}
+.mui-link:hover { background-size: 100% 2px; }
+@media (prefers-color-scheme: dark) {
+  .mui-link { color: var(--mui-brand-300); background-image: linear-gradient(var(--mui-brand-300), var(--mui-brand-300)); }
+}
+
+/* Form controls baseline */
+.mui-input,
+.mui-textarea,
+.mui-select {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  border-radius: var(--mui-radius-md);
+  border: 1px solid var(--mui-border);
+  background: var(--mui-bg-elev);
+  color: var(--mui-fg);
+  font: inherit;
+  transition: border-color var(--mui-dur) var(--mui-ease),
+              box-shadow var(--mui-dur) var(--mui-ease);
+}
+.mui-input:focus,
+.mui-textarea:focus,
+.mui-select:focus {
+  border-color: var(--mui-brand-500);
+  box-shadow: 0 0 0 3px var(--mui-ring);
+  outline: none;
+}
+.mui-textarea { min-height: 120px; resize: vertical; }
+
+/* Section */
+.mui-section {
+  padding-block: clamp(40px, 6vw, 80px);
+}

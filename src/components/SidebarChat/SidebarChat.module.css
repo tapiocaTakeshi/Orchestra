@@ -1,0 +1,772 @@
+/* ============================================================
+   SidebarChat — Design Refresh
+   ・デザイントークン (CSS Custom Properties) を導入
+   ・既存クラス名はすべて保持（TSX 側を変更しないため）
+   ・モダン / ミニマル / ビジネス寄りのトーン
+   ============================================================ */
+
+.container {
+  /* ---------- Design Tokens ---------- */
+  --brand: #0f172a;
+  --brand-hover: #1e293b;
+
+  --bg-panel: #ffffff;
+  --bg-soft: #f8fafc;
+  --bg-mute: #f1f5f9;
+
+  --text-main: #0f172a;
+  --text-sub: #475569;
+  --text-muted: #64748b;
+  --text-ghost: #94a3b8;
+
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --focus-ring: rgba(59, 130, 246, 0.18);
+  --focus-border: #3b82f6;
+
+  --user-bg: #0f172a;
+  --user-text: #ffffff;
+  --bot-bg: #f1f5f9;
+  --bot-text: #0f172a;
+
+  --error-bg: #fef2f2;
+  --error-border: #fecaca;
+  --error-text: #991b1b;
+  --error-title: #7f1d1d;
+  --error-btn-bg: #fee2e2;
+  --error-btn-hover: #fca5a5;
+
+  --warn: #b45309;
+  --over: #b91c1c;
+  --ok: #15803d;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-pill: 999px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.06);
+  --shadow-pop: 0 8px 24px rgba(15, 23, 42, 0.08);
+
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI",
+               Roboto, "Hiragino Kaku Gothic ProN", "Noto Sans JP",
+               Helvetica, Arial, sans-serif;
+
+  /* ---------- Layout ---------- */
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background: var(--bg-panel);
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+}
+
+/* ============================================================
+   Header
+   ============================================================ */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 5;
+}
+
+.title,
+.headerTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text-main);
+  letter-spacing: -0.01em;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.iconBtn {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+.iconBtn:hover {
+  background: var(--bg-mute);
+  color: var(--text-main);
+}
+.iconBtn:active { transform: scale(0.96); }
+.iconBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+.iconBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ============================================================
+   History (messages list)
+   ============================================================ */
+.history,
+.messages {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-6) var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  scroll-behavior: smooth;
+}
+
+.history::-webkit-scrollbar,
+.messages::-webkit-scrollbar { width: 8px; }
+.history::-webkit-scrollbar-thumb,
+.messages::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--radius-pill);
+}
+.history::-webkit-scrollbar-track,
+.messages::-webkit-scrollbar-track { background: transparent; }
+
+.empty {
+  margin: auto;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.7;
+  padding: var(--space-6);
+}
+
+/* ============================================================
+   Message bubbles
+   ============================================================ */
+.message,
+.messageItem,
+.messageRow {
+  display: flex;
+  flex-direction: column;
+  max-width: 88%;
+  gap: 4px;
+  animation: bubbleIn 0.22s ease-out;
+}
+
+@keyframes bubbleIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.user,
+.userMessage,
+.roleUser {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+.assistant,
+.bot,
+.botMessage,
+.roleAssistant {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+
+.bubble {
+  padding: 10px var(--space-4);
+  font-size: 14px;
+  line-height: 1.65;
+  word-break: break-word;
+  white-space: pre-wrap;
+  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-lg);
+  max-width: 100%;
+}
+
+.user .bubble,
+.userBubble {
+  background: var(--user-bg);
+  color: var(--user-text);
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);
+}
+
+.assistant .bubble,
+.bot .bubble,
+.botBubble {
+  background: var(--bot-bg);
+  color: var(--bot-text);
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-lg) var(--radius-sm);
+}
+
+/* pending / failed の状態 */
+.pending .bubble,
+.bubblePending {
+  opacity: 0.72;
+}
+.failed .bubble,
+.bubbleFailed {
+  background: var(--error-bg);
+  color: var(--error-text);
+  border: 1px solid var(--error-border);
+}
+
+.metaBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-mute);
+  border: 1px solid var(--border);
+}
+
+.timestamp {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* generating 中の "応答を生成中…" バブル */
+.generatingBubble,
+.loadingBubble {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--bot-bg);
+  color: var(--text-muted);
+  padding: 10px var(--space-4);
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-lg) var(--radius-sm);
+  font-style: italic;
+  font-size: 13px;
+}
+
+/* ============================================================
+   Error card (assistant 失敗時)
+   ============================================================ */
+.errorCard {
+  background: var(--error-bg);
+  border: 1px solid var(--error-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  color: var(--error-text);
+  max-width: 100%;
+  box-shadow: var(--shadow-sm);
+}
+
+.errorHeader,
+.errorTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--error-title);
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: var(--space-2);
+}
+
+.errorBody,
+.errorMessage,
+.errorUserMessage {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--error-text);
+  margin-bottom: var(--space-3);
+}
+
+.errorDetails {
+  margin-top: var(--space-2);
+}
+.errorDetails summary {
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--error-text);
+  opacity: 0.8;
+  user-select: none;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.errorDetails summary::-webkit-details-marker { display: none; }
+.errorDetails summary:hover { opacity: 1; }
+.errorDetails pre {
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--error-border);
+  border-radius: var(--radius-sm);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  color: var(--error-title);
+}
+
+.errorActions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.retryBtn,
+.errorRetryBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--error-btn-bg);
+  color: var(--error-title);
+  border: 1px solid var(--error-border);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.retryBtn:hover,
+.errorRetryBtn:hover { background: var(--error-btn-hover); }
+.retryBtn:active,
+.errorRetryBtn:active { transform: scale(0.97); }
+.retryBtn:focus-visible,
+.errorRetryBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+/* ============================================================
+   Input area
+   ============================================================ */
+.inputContainer,
+.inputArea {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 0 var(--space-5) var(--space-5);
+  background: var(--bg-panel);
+}
+
+/* 履歴とのフェード境界 */
+.inputContainer::before,
+.inputArea::before {
+  content: '';
+  position: absolute;
+  top: -24px;
+  left: 0;
+  right: 0;
+  height: 24px;
+  background: linear-gradient(to bottom, transparent, var(--bg-panel));
+  pointer-events: none;
+}
+
+/* ---- Suggestion chips ---- */
+.chips {
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+.chips::-webkit-scrollbar { display: none; }
+
+.chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-panel);
+  color: var(--text-sub);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease,
+              color 0.15s ease, transform 0.15s ease;
+}
+.chip:hover {
+  background: var(--bg-mute);
+  border-color: var(--border-strong);
+  color: var(--text-main);
+  transform: translateY(-1px);
+}
+.chip:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+.chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ---- Input wrapper ---- */
+.inputWrapper {
+  position: relative;
+  background: var(--bg-soft);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: 10px 48px 10px var(--space-4);
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.inputWrapper:focus-within {
+  background: var(--bg-panel);
+  border-color: var(--focus-border);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.inputError,
+.inputWrapper.inputError,
+.hasError {
+  border-color: var(--over);
+  background: #fff5f5;
+}
+.inputError:focus-within,
+.hasError:focus-within {
+  box-shadow: 0 0 0 3px rgba(185, 28, 28, 0.15);
+}
+
+.inputInner {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  min-height: 24px;
+}
+
+/* ---- Textarea ---- */
+.textarea {
+  flex: 1;
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  resize: none;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-main);
+  max-height: 180px;
+  overflow-y: auto;
+  position: relative;
+  z-index: 1;
+}
+.textarea::placeholder { color: var(--text-ghost); }
+.textarea:disabled {
+  cursor: not-allowed;
+  color: var(--text-muted);
+}
+
+/* ---- Ghost (Tab補完) ---- */
+.ghost {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-ghost);
+  white-space: pre-wrap;
+  word-break: break-word;
+  z-index: 0;
+}
+.ghostPrefix {
+  color: transparent;
+}
+.ghostSuffix {
+  color: var(--text-ghost);
+  font-style: italic;
+}
+
+.tabHint {
+  display: inline-flex;
+  align-items: center;
+  background: var(--border);
+  color: var(--text-sub);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: 6px;
+  vertical-align: middle;
+  letter-spacing: 0.04em;
+}
+
+/* ---- Action buttons (送信 / 停止) ---- */
+.sendBtn,
+.stopBtnInline {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
+  z-index: 2;
+}
+
+.sendBtn {
+  background: var(--brand);
+  color: #fff;
+}
+.sendBtn:hover { background: var(--brand-hover); transform: scale(1.05); }
+.sendBtn:active { transform: scale(0.96); }
+.sendBtn:disabled {
+  background: var(--border-strong);
+  color: var(--text-muted);
+  cursor: not-allowed;
+  transform: none;
+}
+.sendBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.stopBtnInline {
+  background: var(--text-main);
+  color: #fff;
+}
+.stopBtnInline:hover { background: #000; transform: scale(1.05); }
+.stopBtnInline:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+/* ============================================================
+   Status bar (counter / status)
+   ============================================================ */
+.statusBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 0 4px;
+  min-height: 18px;
+}
+
+.statusLeft,
+.statusInfo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.statusDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  display: inline-block;
+}
+.statusDot[data-state="success"] { background: var(--ok); }
+.statusDot[data-state="error"]   { background: var(--over); }
+.statusDot[data-state="sending"],
+.statusDot[data-state="generating"] {
+  background: var(--focus-border);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+
+.stopBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-sub);
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.stopBtn:hover {
+  background: var(--bg-mute);
+  color: var(--text-main);
+  border-color: var(--text-muted);
+}
+.stopBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+/* counter */
+.counter {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+.counter[data-warn="true"] { color: var(--warn); font-weight: 500; }
+.counter[data-over="true"] { color: var(--over); font-weight: 600; }
+
+/* ============================================================
+   Loading indicators
+   ============================================================ */
+.spinner {
+  animation: spin 1s linear infinite;
+  color: currentColor;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.dotFlashing {
+  position: relative;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: var(--text-muted);
+  animation: dotFlashing 1s infinite linear alternate;
+  animation-delay: 0.5s;
+  margin: 0 12px;
+  display: inline-block;
+}
+.dotFlashing::before,
+.dotFlashing::after {
+  content: '';
+  display: inline-block;
+  position: absolute;
+  top: 0;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: var(--text-muted);
+}
+.dotFlashing::before { left: -9px; animation: dotFlashing 1s infinite alternate; animation-delay: 0s; }
+.dotFlashing::after  { left:  9px; animation: dotFlashing 1s infinite alternate; animation-delay: 1s; }
+
+@keyframes dotFlashing {
+  0%        { background-color: var(--text-muted); }
+  50%, 100% { background-color: rgba(100, 116, 139, 0.2); }
+}
+
+/* ============================================================
+   Live region / SR only
+   ============================================================ */
+.srOnly,
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ============================================================
+   Responsive
+   ============================================================ */
+@media (max-width: 480px) {
+  .header        { padding: var(--space-3) var(--space-4); }
+  .history,
+  .messages      { padding: var(--space-4) var(--space-4); gap: var(--space-4); }
+  .inputContainer,
+  .inputArea     { padding: 0 var(--space-4) var(--space-4); }
+  .message,
+  .messageItem,
+  .messageRow    { max-width: 94%; }
+  .iconBtn       { width: 36px; height: 36px; } /* タッチ領域確保 */
+  .sendBtn,
+  .stopBtnInline { width: 36px; height: 36px; }
+}
+
+/* ============================================================
+   Reduced motion
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  .message,
+  .messageItem,
+  .messageRow,
+  .spinner,
+  .dotFlashing,
+  .dotFlashing::before,
+  .dotFlashing::after,
+  .statusDot {
+    animation: none !important;
+  }
+  .iconBtn,
+  .chip,
+  .sendBtn,
+  .stopBtnInline,
+  .retryBtn { transition: none !important; }
+}
+
+/* ============================================================
+   Dark mode (任意適用)
+   ============================================================ */
+@media (prefers-color-scheme: dark) {
+  .container {
+    --bg-panel: #0b1220;
+    --bg-soft:  #0f172a;
+    --bg-mute:  #1e293b;
+
+    --text-main: #f1f5f9;
+    --text-sub:  #cbd5e1;
+    --text-muted:#94a3b8;
+    --text-ghost:#64748b;
+
+    --border:        #1e293b;
+    --border-strong: #334155;
+
+    --user-bg: #2563eb;
+    --user-text: #ffffff;
+    --bot-bg:  #1e293b;
+    --bot-text:#f1f5f9;
+
+    --error-bg:     #2a0f12;
+    --error-border: #7f1d1d;
+    --error-text:   #fecaca;
+    --error-title:  #fca5a5;
+    --error-btn-bg: #3f1d1d;
+    --error-btn-hover: #7f1d1d;
+
+    background: var(--bg-panel);
+    color: var(--text-main);
+  }
+  .header { background: rgba(11, 18, 32, 0.85); }
+}

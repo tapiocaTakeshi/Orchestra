@@ -1,0 +1,4 @@
+/* このファイルは sidebar-chat-modern.css の SEARCH が一致しなかった場合の
+ * フォールバック。手動で sidebar-chat-modern.css の末尾に追記してもよい。
+ * 内容は sidebar-chat-modern.css 内の `.void-chat-modern { ... }` ブロックと同じ。 */
+@import './sidebar-chat-modern.css';

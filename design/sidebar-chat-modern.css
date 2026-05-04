@@ -1,0 +1,38 @@
+/*
+ * Orchestra Sidebar Chat — Modern Design Tokens
+ * Source of truth: design/sidebar-chat-modern.html
+ *
+ * 実プロジェクトへ適用する際は、このファイルを
+ *   src/vs/workbench/contrib/void/browser/react/src/sidebar-tsx/
+ * 配下にコピーし、SidebarChat.tsx の冒頭で import する想定。
+ */
+:root {
+  --bg-app: #f9fafb;
+  --bg-sidebar: #ffffff;
+  --bg-surface: #f3f4f6;
+  --bg-surface-hover: #e5e7eb;
+
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --text-tertiary: #9ca3af;
+
+  --border-color: #e5e7eb;
+  --border-focus: #cbd5e1;
+
+  --accent-color: #0f172a;
+
+  --user-msg-bg: #ffffff;
+  --user-msg-border: #e5e7eb;
+  --user-msg-text: #111827;
+
+  --ai-msg-text: #111827;
+
+  --status-yellow: #eab308;
+  --status-green: #22c55e;
+  --status-dark: #6b7280;
+
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-size-base: 13px;
+  --font-size-sm: 12px;
+  --font-size-xs: 11px;
+}

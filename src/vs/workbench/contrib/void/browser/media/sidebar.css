@@ -1,0 +1,31 @@
+/* sidebar.css */
+@import './minimal.css';
+
+/* ---- Minimal design overrides (scoped under .void-minimal) ----------------------------- */
+.void-minimal .sidebar {
+	padding: var(--void-space-4);
+	font-size: var(--void-font-size-md);
+	line-height: var(--void-line-height-normal);
+}
+.void-minimal .sidebar__header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: var(--void-space-2) 0 var(--void-space-3);
+	border-bottom: var(--void-border-subtle);
+	margin-bottom: var(--void-space-3);
+}
+.void-minimal .sidebar__title {
+	font-size: var(--void-font-size-lg);
+	font-weight: var(--void-font-weight-medium);
+	letter-spacing: 0.01em;
+}
+.void-minimal .sidebar__content {
+	display: flex;
+	flex-direction: column;
+	gap: var(--void-space-3);
+}
+.void-minimal .sidebar button,
+.void-minimal .sidebar .button {
+	border-radius: var(--void-radius-md);
+}

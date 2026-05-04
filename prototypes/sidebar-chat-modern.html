@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Orchestra AI Sidebar Chat - Modern</title>
+  <link rel="stylesheet" href="../src/vs/workbench/contrib/void/browser/react/src/sidebar-tsx/sidebar-chat-modern.css">
+</head>
+<body>
+  <main class="main-content">
+    <div class="main-content-text">Editor Area</div>
+  </main>
+
+  <aside class="sidebar">
+    <header class="header">
+      <button class="btn-text">ログイン</button>
+      <button class="icon-btn" title="設定">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+      </button>
+    </header>
+
+    <div class="history">
+      <div class="msg-user">
+        <div class="file-badges">
+          <div class="file-badge" title="src/vs/workbench/contrib/void/browser/react/src/sidebar-tsx/SidebarChat.tsx">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+            </svg>
+            SidebarChat.tsx (10-45)
+          </div>
+        </div>
+        <div class="text">
+          このコンポーネントのデザインをモダンでミニマルな方針に沿って改善したいです。パディングやアクセントカラーを整理してください。
+        </div>
+        <div class="edit-icon" title="メッセージを編集">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+          </svg>
+        </div>
+      </div>
+
+      <div class="msg-ai">
+        <div class="tool-header">
+          <div class="tool-header-left">
+            <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            <span class="tool-title"><span class="dot-pulse"></span> 2.8 秒間思考しました</span>
+          </div>
+        </div>
+
+        <div class="tool-header">
+          <div class="tool-header-left">
+            <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            <span class="tool-title">ファイルを読み込みました</span>
+            <span class="tool-desc">SidebarChat.tsx</span>
+          </div>
+        </div>
+
+        <div class="tool-header open">
+          <div class="tool-header-left">
+            <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            <span class="tool-title">ファイルを検索しました</span>
+            <span class="tool-desc">"css variables"</span>
+          </div>
+        </div>
+        <div class="tool-body">
+          <code>Found matches in common/helpers/colors.ts</code>
+        </div>
+
+        <div class="text">
+          <p>承知いたしました。<code>SidebarChat.tsx</code>の構造を確認しました。</p>
+          <p>UIをより洗練させるために、以下の変更を加えることを提案します。</p>
+          <p>1. <b>余白の活用:</b> コンテナ内のパディングを広げ、窮屈さを解消<br>
+             2. <b>控えめなボーダー:</b> 極細で淡いグレー（<code>var(--border-color)</code>）を使用<br>
+             3. <b>視覚的階層:</b> 重要なアクション以外は控えめな色にする</p>
+        </div>
+      </div>
+
+      <div class="msg-user">
+        <div class="text">
+          いいですね。さらに、入力欄の上にファイル変更の「ステータスバー（コマンドバー）」を追加してください。
+        </div>
+        <div class="edit-icon" title="メッセージを編集">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+          </svg>
+        </div>
+      </div>
+
+      <div class="msg-ai">
+        <div class="tool-header">
+          <div class="tool-header-left">
+            <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            <span class="tool-title"><span class="dot-pulse active"></span> 思考中</span>
+          </div>
+        </div>
+
+        <div class="tool-header">
+          <div class="tool-header-left">
+            <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            <span class="tool-title">
+              ファイルを編集中
+              <svg class="spinner" width="12" height="12" style="margin-left:4px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>
+            </span>
+            <span class="tool-desc">SidebarChat.tsx</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="command-bar">
+      <div class="command-bar-left">
+        <svg width="14" height="14" style="transform: rotate(180deg);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="18 15 12 9 6 15"></polyline>
+        </svg>
+        1件の変更されたファイル
+      </div>
+      <div class="command-bar-right">
+        <div class="action-icons">
+          <button class="icon-btn" title="コピー">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          </button>
+          <button class="icon-btn" title="すべて拒否">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+          <button class="icon-btn" title="すべて承認">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          </button>
+        </div>
+        <div class="status-indicator">
+          <div class="status-dot yellow"></div>
+          承認待ち
+        </div>
+      </div>
+    </div>
+
+    <div class="input-container">
+      <div class="input-wrapper">
+        <div class="input-inner" contenteditable="true" spellcheck="false" data-empty="true" data-placeholder="指示を入力... (@ で参照)"></div>
+
+        <div class="input-bottom">
+          <div class="input-controls-left">
+            <div class="model-dropdown">
+              Claude 3.5 Sonnet
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </div>
+          </div>
+
+          <div class="input-controls-right">
+            <button class="attach-btn" title="画像やファイルを添付">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+              </svg>
+            </button>
+            <button class="send-btn" title="送信">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 19V5"></path>
+                <path d="M5 12l7-7 7 7"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </aside>
+</body>
+</html>

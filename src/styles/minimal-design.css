@@ -1,0 +1,360 @@
+/* =========================================================
+ * Minimal Design Layer (Electron renderer)
+ * ---------------------------------------------------------
+ * 目的:
+ *   余白・タイポグラフィ・コントラストを整え、装飾を削ぎ
+ *   落としたミニマルな見た目を提供する追加スタイル。
+ *
+ * 適用方法:
+ *   <html data-design="minimal"> がついている時のみ有効。
+ *   src/renderer/applyMinimalDesign.ts が自動で付与する。
+ *
+ * 設計原則:
+ *   - 8pt スペーシングスケール
+ *   - 単色アクセント (--accent) のみ
+ *   - ボーダー1px / 影は最小限
+ *   - アニメは 120ms ease-out に統一
+ *   - prefers-reduced-motion / prefers-color-scheme 配慮
+ * ========================================================= */
+
+:root[data-design="minimal"] {
+	/* ---- Color tokens (light) ---- */
+	--md-bg:            #ffffff;
+	--md-bg-elevated:   #fafafa;
+	--md-bg-hover:      rgba(0, 0, 0, 0.04);
+	--md-bg-active:     rgba(0, 0, 0, 0.08);
+	--md-fg:            #111317;
+	--md-fg-muted:      #5b6270;
+	--md-fg-subtle:     #8a909b;
+	--md-border:        rgba(0, 0, 0, 0.08);
+	--md-border-strong: rgba(0, 0, 0, 0.16);
+	--md-accent:        #2563eb;
+	--md-accent-fg:     #ffffff;
+	--md-focus-ring:    rgba(37, 99, 235, 0.45);
+	--md-danger:        #dc2626;
+
+	/* ---- Spacing (8pt scale) ---- */
+	--md-space-0:  0;
+	--md-space-1:  4px;
+	--md-space-2:  8px;
+	--md-space-3: 12px;
+	--md-space-4: 16px;
+	--md-space-5: 24px;
+	--md-space-6: 32px;
+	--md-space-7: 48px;
+	--md-space-8: 64px;
+
+	/* ---- Radius ---- */
+	--md-radius-sm: 4px;
+	--md-radius-md: 6px;
+	--md-radius-lg: 10px;
+
+	/* ---- Typography ---- */
+	--md-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter",
+		"Helvetica Neue", Arial, "Hiragino Sans", "Noto Sans JP",
+		"Yu Gothic UI", Meiryo, sans-serif;
+	--md-font-mono: ui-monospace, SFMono-Regular, "JetBrains Mono",
+		Menlo, Consolas, "Liberation Mono", monospace;
+	--md-fs-xs:   12px;
+	--md-fs-sm:   13px;
+	--md-fs-base: 14px;
+	--md-fs-md:   16px;
+	--md-fs-lg:   20px;
+	--md-fs-xl:   28px;
+	--md-lh-tight: 1.3;
+	--md-lh-base:  1.6;
+
+	/* ---- Elevation (minimal) ---- */
+	--md-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+	--md-shadow-md: 0 2px 6px rgba(0, 0, 0, 0.08);
+
+	/* ---- Motion ---- */
+	--md-ease:     cubic-bezier(0.2, 0.0, 0.2, 1);
+	--md-duration: 120ms;
+}
+
+/* ---- Dark scheme override ---- */
+@media (prefers-color-scheme: dark) {
+	:root[data-design="minimal"] {
+		--md-bg:            #0f1115;
+		--md-bg-elevated:   #161922;
+		--md-bg-hover:      rgba(255, 255, 255, 0.06);
+		--md-bg-active:     rgba(255, 255, 255, 0.10);
+		--md-fg:            #e6e8ee;
+		--md-fg-muted:      #9aa0ad;
+		--md-fg-subtle:     #6a7180;
+		--md-border:        rgba(255, 255, 255, 0.08);
+		--md-border-strong: rgba(255, 255, 255, 0.18);
+		--md-accent:        #60a5fa;
+		--md-accent-fg:     #0b1020;
+		--md-focus-ring:    rgba(96, 165, 250, 0.55);
+		--md-danger:        #f87171;
+		--md-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.6);
+		--md-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.55);
+	}
+}
+
+/* ---- Base ---- */
+:root[data-design="minimal"],
+:root[data-design="minimal"] body {
+	background-color: var(--md-bg);
+	color: var(--md-fg);
+	font-family: var(--md-font-sans);
+	font-size: var(--md-fs-base);
+	line-height: var(--md-lh-base);
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	text-rendering: optimizeLegibility;
+}
+
+:root[data-design="minimal"] *,
+:root[data-design="minimal"] *::before,
+:root[data-design="minimal"] *::after {
+	box-sizing: border-box;
+}
+
+:root[data-design="minimal"] ::selection {
+	background: color-mix(in srgb, var(--md-accent) 30%, transparent);
+	color: var(--md-fg);
+}
+
+/* ---- Typography ---- */
+:root[data-design="minimal"] h1,
+:root[data-design="minimal"] h2,
+:root[data-design="minimal"] h3,
+:root[data-design="minimal"] h4 {
+	font-weight: 600;
+	line-height: var(--md-lh-tight);
+	letter-spacing: -0.01em;
+	margin: 0 0 var(--md-space-3);
+	color: var(--md-fg);
+}
+:root[data-design="minimal"] h1 { font-size: var(--md-fs-xl); }
+:root[data-design="minimal"] h2 { font-size: var(--md-fs-lg); }
+:root[data-design="minimal"] h3 { font-size: var(--md-fs-md); }
+:root[data-design="minimal"] h4 { font-size: var(--md-fs-base); }
+
+:root[data-design="minimal"] p,
+:root[data-design="minimal"] li {
+	max-width: 72ch;
+	color: var(--md-fg);
+}
+:root[data-design="minimal"] small,
+:root[data-design="minimal"] .md-muted {
+	color: var(--md-fg-muted);
+	font-size: var(--md-fs-sm);
+}
+
+:root[data-design="minimal"] code,
+:root[data-design="minimal"] pre,
+:root[data-design="minimal"] kbd {
+	font-family: var(--md-font-mono);
+	font-size: var(--md-fs-sm);
+}
+:root[data-design="minimal"] code {
+	background: var(--md-bg-elevated);
+	border: 1px solid var(--md-border);
+	border-radius: var(--md-radius-sm);
+	padding: 1px 6px;
+}
+:root[data-design="minimal"] pre {
+	background: var(--md-bg-elevated);
+	border: 1px solid var(--md-border);
+	border-radius: var(--md-radius-md);
+	padding: var(--md-space-4);
+	overflow: auto;
+}
+
+/* ---- Links ---- */
+:root[data-design="minimal"] a {
+	color: var(--md-accent);
+	text-decoration: none;
+	border-bottom: 1px solid transparent;
+	transition: border-color var(--md-duration) var(--md-ease);
+}
+:root[data-design="minimal"] a:hover {
+	border-bottom-color: var(--md-accent);
+}
+
+/* ---- Layout containers ---- */
+:root[data-design="minimal"] .md-container {
+	max-width: 920px;
+	margin: 0 auto;
+	padding: var(--md-space-6) var(--md-space-5);
+}
+:root[data-design="minimal"] .md-stack > * + * {
+	margin-top: var(--md-space-4);
+}
+:root[data-design="minimal"] .md-row {
+	display: flex;
+	gap: var(--md-space-3);
+	align-items: center;
+}
+
+/* ---- Surfaces ---- */
+:root[data-design="minimal"] .md-card,
+:root[data-design="minimal"] .card,
+:root[data-design="minimal"] .panel {
+	background: var(--md-bg-elevated);
+	border: 1px solid var(--md-border);
+	border-radius: var(--md-radius-lg);
+	padding: var(--md-space-5);
+	box-shadow: var(--md-shadow-sm);
+}
+
+/* ---- Buttons ---- */
+:root[data-design="minimal"] button,
+:root[data-design="minimal"] .md-btn {
+	appearance: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--md-space-2);
+	height: 32px;
+	padding: 0 var(--md-space-4);
+	font: inherit;
+	font-weight: 500;
+	color: var(--md-fg);
+	background: var(--md-bg-elevated);
+	border: 1px solid var(--md-border);
+	border-radius: var(--md-radius-md);
+	cursor: pointer;
+	transition:
+		background-color var(--md-duration) var(--md-ease),
+		border-color var(--md-duration) var(--md-ease),
+		color var(--md-duration) var(--md-ease);
+}
+:root[data-design="minimal"] button:hover,
+:root[data-design="minimal"] .md-btn:hover {
+	background: var(--md-bg-hover);
+	border-color: var(--md-border-strong);
+}
+:root[data-design="minimal"] button:active,
+:root[data-design="minimal"] .md-btn:active {
+	background: var(--md-bg-active);
+}
+:root[data-design="minimal"] button:focus-visible,
+:root[data-design="minimal"] .md-btn:focus-visible,
+:root[data-design="minimal"] input:focus-visible,
+:root[data-design="minimal"] textarea:focus-visible,
+:root[data-design="minimal"] select:focus-visible,
+:root[data-design="minimal"] a:focus-visible {
+	outline: none;
+	box-shadow: 0 0 0 3px var(--md-focus-ring);
+	border-color: var(--md-accent);
+}
+:root[data-design="minimal"] .md-btn--primary {
+	background: var(--md-accent);
+	border-color: var(--md-accent);
+	color: var(--md-accent-fg);
+}
+:root[data-design="minimal"] .md-btn--primary:hover {
+	filter: brightness(1.05);
+}
+:root[data-design="minimal"] .md-btn--ghost {
+	background: transparent;
+	border-color: transparent;
+}
+:root[data-design="minimal"] .md-btn--ghost:hover {
+	background: var(--md-bg-hover);
+}
+:root[data-design="minimal"] button[disabled],
+:root[data-design="minimal"] .md-btn[disabled] {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+/* ---- Inputs ---- */
+:root[data-design="minimal"] input,
+:root[data-design="minimal"] textarea,
+:root[data-design="minimal"] select {
+	width: 100%;
+	font: inherit;
+	color: var(--md-fg);
+	background: var(--md-bg);
+	border: 1px solid var(--md-border-strong);
+	border-radius: var(--md-radius-md);
+	padding: var(--md-space-2) var(--md-space-3);
+	transition: border-color var(--md-duration) var(--md-ease),
+		box-shadow var(--md-duration) var(--md-ease);
+}
+:root[data-design="minimal"] input::placeholder,
+:root[data-design="minimal"] textarea::placeholder {
+	color: var(--md-fg-subtle);
+}
+
+/* ---- Dividers / separators ---- */
+:root[data-design="minimal"] hr,
+:root[data-design="minimal"] .md-divider {
+	border: 0;
+	border-top: 1px solid var(--md-border);
+	margin: var(--md-space-5) 0;
+}
+
+/* ---- Lists ---- */
+:root[data-design="minimal"] ul,
+:root[data-design="minimal"] ol {
+	padding-left: var(--md-space-5);
+}
+:root[data-design="minimal"] li + li {
+	margin-top: var(--md-space-1);
+}
+
+/* ---- Scrollbar (Electron / Chromium) ---- */
+:root[data-design="minimal"] ::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+}
+:root[data-design="minimal"] ::-webkit-scrollbar-thumb {
+	background: var(--md-border-strong);
+	border-radius: 999px;
+	border: 2px solid transparent;
+	background-clip: padding-box;
+}
+:root[data-design="minimal"] ::-webkit-scrollbar-thumb:hover {
+	background: var(--md-fg-subtle);
+	background-clip: padding-box;
+}
+:root[data-design="minimal"] ::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+/* ---- App chrome (Electron specific) ---- */
+:root[data-design="minimal"] .md-titlebar {
+	-webkit-app-region: drag;
+	height: 36px;
+	display: flex;
+	align-items: center;
+	padding: 0 var(--md-space-4);
+	background: var(--md-bg);
+	border-bottom: 1px solid var(--md-border);
+	font-size: var(--md-fs-sm);
+	color: var(--md-fg-muted);
+	user-select: none;
+}
+:root[data-design="minimal"] .md-titlebar button,
+:root[data-design="minimal"] .md-titlebar a {
+	-webkit-app-region: no-drag;
+}
+:root[data-design="minimal"] .md-sidebar {
+	background: var(--md-bg);
+	border-right: 1px solid var(--md-border);
+	padding: var(--md-space-4) var(--md-space-3);
+}
+:root[data-design="minimal"] .md-statusbar {
+	background: var(--md-bg);
+	border-top: 1px solid var(--md-border);
+	color: var(--md-fg-muted);
+	font-size: var(--md-fs-xs);
+	padding: var(--md-space-1) var(--md-space-3);
+}
+
+/* ---- Reduced motion ---- */
+@media (prefers-reduced-motion: reduce) {
+	:root[data-design="minimal"] *,
+	:root[data-design="minimal"] *::before,
+	:root[data-design="minimal"] *::after {
+		transition: none !important;
+		animation: none !important;
+	}
+}
