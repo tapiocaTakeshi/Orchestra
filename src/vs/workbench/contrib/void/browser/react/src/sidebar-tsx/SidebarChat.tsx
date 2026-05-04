@@ -10,7 +10,7 @@ import './sidebar-chat-modern.css'
 import './sidebar-chat-redesign.css';
 
 
-import { useAccessor, useChatThreadsState, useChatThreadsStreamState, useSettingsState, useActiveURI, useCommandBarState, useFullChatThreadsStreamState, useDivisionProjects, useDivisionProjectConfig, useIsDark } from '../util/services.js';
+import { useAccessor, useChatThreadsState, useChatThreadsStreamState, useSettingsState, useActiveURI, useCommandBarState, useFullChatThreadsStreamState, useDivisionProjects, useDivisionProjectConfig, useIsDark, useOrchestraUpdateState } from '../util/services.js';
 import { FloatingPortal } from '@floating-ui/react';
 import { OrchestraLogoButton } from './OrchestraLogoButton.js';
 import { DivisionProjectConfig } from '../../../divisionProjectService.js';
@@ -30,7 +30,7 @@ import { AgentRole, ChatMode, displayInfoOfProviderName, contextTags, contextTag
 import { ICommandService } from '../../../../../../../platform/commands/common/commands.js';
 import { WarningBox } from '../void-settings-tsx/WarningBox.js';
 import { getModelCapabilities, getIsReasoningEnabledState } from '../../../../common/modelCapabilities.js';
-import { AlertTriangle, File, Ban, Check, ChevronDown, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text, Image as ImageIcon, Paperclip, Palette, Blocks, SendHorizontal, Code, Package, RotateCcw, Loader2 } from 'lucide-react';
+import { AlertTriangle, File, Ban, Check, ChevronDown, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text, Image as ImageIcon, Paperclip, Palette, Blocks, SendHorizontal, Code, Package, RotateCcw, Loader2, ListPlus, Sun, Moon, Flame, ClipboardCheck, CornerUpLeft, Download as DownloadIcon, ExternalLink as ExternalLinkIcon } from 'lucide-react';
 import { ChatMessage, CheckpointEntry, StagingSelectionItem, ToolMessage } from '../../../../common/chatThreadServiceTypes.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, ToolName, LintErrorItem, ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsServiceTypes.js';
 import { CopyButton, EditToolAcceptRejectButtonsHTML, IconShell1, JumpToFileButton, JumpToTerminalButton, StatusIndicator, StatusIndicatorForApplyButton, useApplyStreamState, useEditToolStreamState } from '../markdown/ApplyBlockHoverButtons.js';
@@ -44,7 +44,7 @@ import { ToolApprovalTypeSwitch } from '../void-settings-tsx/Settings.js';
 import { persistentTerminalNameOfId } from '../../../terminalToolService.js';
 import { removeMCPToolNamePrefix } from '../../../../common/mcpServiceTypes.js';
 import { LoginScreen } from '../void-login-tsx/LoginScreen.js';
-import { DivisionPipelinePanel } from './DivisionPipelinePanel.js';
+import { StorageScope, StorageTarget } from '../../../../../../../platform/storage/common/storage.js';
 
 
 
@@ -352,6 +352,13 @@ interface VoidChatAreaProps {
 	// Form controls
 	onSubmit: () => void;
 	onAbort: () => void;
+	/**
+	 * Optional. When provided AND `isStreaming` is true, the submit-side button
+	 * morphs into a "Queue" button that calls this instead of `onSubmit`.
+	 * Used by the chat composer to enqueue follow-up prompts while a stream
+	 * is still in flight (Cursor 風).
+	 */
+	onQueue?: () => void;
 	isStreaming: boolean;
 	isDisabled?: boolean;
 	divRef?: React.RefObject<HTMLDivElement | null>;
@@ -385,6 +392,7 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 	children,
 	onSubmit,
 	onAbort,
+	onQueue,
 	onClose,
 	onClickAnywhere,
 	divRef,
@@ -682,12 +690,22 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 
 					{/* 過去メッセージを編集中（onClickRevert が渡されている）の場合は、
 					    送信/停止ボタンを表示せずリバートボタンだけを置く。
-					    通常の入力欄では従来どおり Submit / Stop を表示する。 */}
+					    通常の入力欄では従来どおり Submit / Stop を表示する。
+					    ストリーミング中で onQueue が渡されている場合は
+					    Stop と並んで「キューに追加」ボタンを出す (Cursor 風)。 */}
 					{onClickRevert ? (
 						<ButtonRevert onClick={onClickRevert} />
 					) : (
 						isStreaming ? (
-							<ButtonStop onClick={onAbort} />
+							<>
+								{onQueue && (
+									<ButtonQueueAdd
+										onClick={onQueue}
+										disabled={isDisabled}
+									/>
+								)}
+								<ButtonStop onClick={onAbort} />
+							</>
 						) : (
 							<ButtonSubmit
 								onClick={onSubmit}
@@ -744,6 +762,31 @@ export const ButtonStop = ({ className, ...props }: ButtonHTMLAttributes<HTMLBut
 		{...props}
 	>
 		<IconSquare size={DEFAULT_BUTTON_SIZE} className="stroke-[3] p-[7px] relative z-10" />
+	</button>
+}
+
+// 「キューに追加」ボタン。 ストリーミング中だけ Stop と並んで表示される。
+// 見た目は ButtonSubmit と区別したいので、白い丸ではなく枠線+リスト追加アイコンの中性的なボタンにする。
+export const ButtonQueueAdd = ({ className, disabled, ...props }: ButtonProps & Required<Pick<ButtonProps, 'disabled'>>) => {
+	return <button
+		type='button'
+		className={`rounded-full flex-shrink-0 flex-grow-0 flex items-center justify-center
+			w-[22px] h-[22px]
+			transition-all duration-150
+			border
+			${disabled
+				? 'border-void-border-2 text-void-fg-4 opacity-50 cursor-default'
+				: 'border-void-border-1 text-void-fg-1 bg-void-bg-2 hover:bg-void-bg-3 cursor-pointer hover:scale-[1.06] active:scale-95'
+			}
+			${className ?? ''}
+		`}
+		data-tooltip-id='void-tooltip'
+		data-tooltip-content='キューに追加 (生成中の応答が終わったら自動送信)'
+		data-tooltip-place='top'
+		disabled={disabled}
+		{...props}
+	>
+		<ListPlus size={12} className='stroke-[2.2]' />
 	</button>
 }
 
@@ -1802,41 +1845,26 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 	return <div
 		ref={stickyRef}
 		className={`
-        group sticky top-0 w-full max-w-full rounded-lg overflow-hidden
+        group relative w-full max-w-full rounded-lg overflow-hidden mb-1.5
         ${mode === 'edit' ? 'pl-0 pr-0 py-0' : 'pl-2.5 pr-7 py-1'}
 
         ${isCheckpointGhost && !isMsgAfterCheckpoint ? 'opacity-50 pointer-events-none' : ''}
     `}
-		// Unified sticky stack for both display and edit modes. While pinned
-		// at the top of the scroll container, each previous prompt card
-		// shrinks / fades behind the newest one (depth 0 = active / fully
-		// visible). In edit mode we don't clamp height (the user needs room
-		// to type) but we still apply the same depth-based transforms so an
-		// open input card participates in the stack just like a collapsed
-		// display card.
+		// 過去はユーザーメッセージを `position: sticky` でビューポート上端に
+		// 重ね積みする Cursor 風 UI だったが、複数の入力欄が重なって見えるので
+		// やめた。 通常フローに戻し、1 枚ずつ縦に並ぶシンプル表示にする。
+		// stickyRef は sticky-stack コンテキストに残しているが、もはや何も pin
+		// されないため depth は常に -1 で、stackTransform 等は無効化される。
 		style={{
 			maxHeight: mode === 'display' ? '3.6em' : undefined,
 			background: mode === 'display'
-				? (isActiveTop
-					? 'color-mix(in srgb, var(--void-bg-1) 92%, transparent)'
-					: 'color-mix(in srgb, var(--void-bg-1) 80%, transparent)')
+				? 'color-mix(in srgb, var(--void-bg-1) 88%, transparent)'
 				: 'color-mix(in srgb, var(--void-bg-1) 94%, transparent)',
 			backdropFilter: 'blur(10px) saturate(130%)',
 			WebkitBackdropFilter: 'blur(10px) saturate(130%)',
 			border: '1px solid color-mix(in srgb, var(--void-border-3) 80%, transparent)',
-			boxShadow: isActiveTop
-				? '0 6px 18px -10px rgba(0,0,0,0.45), 0 1px 0 0 color-mix(in srgb, var(--void-fg-1) 3%, transparent) inset'
-				: '0 1px 2px 0 rgba(0,0,0,0.18), 0 0 0 1px color-mix(in srgb, var(--void-fg-1) 2%, transparent) inset',
-			transform: stackTransform,
-			transformOrigin: 'top center',
-			opacity: stackOpacity,
-			filter: stackFilter,
-			zIndex: stackZ,
-			// If an edit card falls back into the stack (depth > 0), disable
-			// pointer input so clicks / typing can't land on it accidentally.
-			pointerEvents: mode === 'edit' && depth > 0 ? 'none' : undefined,
-			transition: 'transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 240ms ease, filter 240ms ease, background-color 200ms ease, box-shadow 200ms ease',
-			willChange: 'transform, opacity',
+			boxShadow: '0 1px 2px 0 rgba(0,0,0,0.18), 0 0 0 1px color-mix(in srgb, var(--void-fg-1) 2%, transparent) inset',
+			transition: 'background-color 200ms ease, box-shadow 200ms ease',
 		}}
 		onMouseEnter={() => setIsHovered(true)}
 		onMouseLeave={() => setIsHovered(false)}
@@ -2287,43 +2315,22 @@ const detectFlowPhases = (messages: ChatMessage[], isRunning: IsRunningType, rea
 	return activatedPhases;
 };
 
-const FlowIndicator = ({ messages, isRunning, reasoningSoFar, displayContentSoFar }: {
+const FlowIndicator = ({ messages, isRunning, reasoningSoFar }: {
 	messages: ChatMessage[],
 	isRunning: IsRunningType,
 	reasoningSoFar?: string,
-	displayContentSoFar?: string,
+	displayContentSoFar?: string, // 後方互換: 旧シグネチャを温存
 }) => {
 	const settingsState = useSettingsState()
 	const modelSelection = settingsState.modelSelectionOfFeature['Chat']
 	const roleAssignments = settingsState.globalSettings.roleAssignments
 	const isDivision = modelSelection?.providerName === 'divisionAPI'
 
-	// Division API 利用時のテキストソース（ストリーミング中は displayContentSoFar、
-	// 完了後は最後の assistant メッセージのコンテンツ）
-	const lastAssistantText = useMemo(() => {
-		if (displayContentSoFar) return displayContentSoFar
-		for (let i = messages.length - 1; i >= 0; i--) {
-			const m = messages[i]
-			if (m.role === 'assistant') return m.displayContent || ''
-		}
-		return ''
-	}, [messages, displayContentSoFar])
-
+	// Division 利用時もロール割当があれば phase 検出には使う (ただしパイプライン UI は描画しない)
 	const phases = useMemo(() =>
 		detectFlowPhases(messages, isRunning, reasoningSoFar, isDivision ? roleAssignments : undefined),
 		[messages, isRunning, reasoningSoFar, isDivision, roleAssignments]
 	);
-
-	// Division API 利用時は専用のロールパイプラインパネルを表示する
-	if (isDivision) {
-		return (
-			<DivisionPipelinePanel
-				text={lastAssistantText}
-				isRunning={!!isRunning}
-				roleAssignments={roleAssignments}
-			/>
-		)
-	}
 
 	if (!isRunning || phases.length === 0) return null;
 
@@ -2424,6 +2431,335 @@ const CollapsibleFlowCard = ({
 	)
 }
 
+// ---------------------------------------------------------------------------
+// Cursor 風: 通常の AI 返答 (markdown) を見出し単位で折りたたみ可能に分割する。
+// ## / ### を境にセクション化し、それぞれを CollapsibleFlowCard で包む。
+// 見出しが無い場合は単一カードにフォールバック (auto-fold は呼び出し側で制御)。
+// コードフェンス内の `#` は無視する。
+// ---------------------------------------------------------------------------
+type AssistantSection = { title: string; level: number; body: string }
+
+const splitMarkdownByHeadings = (md: string): AssistantSection[] => {
+	const sections: AssistantSection[] = []
+	const lines = md.split('\n')
+	let current: { title: string; level: number; body: string[] } | null = null
+	let inCodeFence = false
+
+	const flush = () => {
+		if (!current) return
+		const body = current.body.join('\n').replace(/^\s+|\s+$/g, '')
+		// 見出し直前の preamble (level=0) は中身が空なら捨てる
+		if (current.level === 0 && !body) { current = null; return }
+		sections.push({ title: current.title, level: current.level, body })
+		current = null
+	}
+
+	for (const line of lines) {
+		if (/^\s*```/.test(line)) inCodeFence = !inCodeFence
+		const headingMatch = !inCodeFence ? line.match(/^(#{2,3})\s+(.+?)\s*#*\s*$/) : null
+		if (headingMatch) {
+			flush()
+			current = { title: headingMatch[2], level: headingMatch[1].length, body: [] }
+			continue
+		}
+		if (!current) current = { title: '', level: 0, body: [] }
+		current.body.push(line)
+	}
+	flush()
+	return sections
+}
+
+// オーケストレーションのストリーム出力をタスク (= ロール) 単位で分割する。
+// sendLLMMessage.impl.ts は各タスク開始時に
+//   `\n---\n\n### N. <role> — <title>\n\n`
+// という見出しを差し込んでいる。 これを境界としてカード化することで、
+// 見出しの ## / ### でバラバラに分割されるのを避け、
+// 「ロールごとに 1 枚のカード」 にする。
+type AssistantTaskSection = {
+	taskNumber: number
+	role: string
+	title: string
+	body: string
+}
+const splitMarkdownByTasks = (md: string): { preamble: string; tasks: AssistantTaskSection[] } | null => {
+	const lines = md.split('\n')
+	const tasks: AssistantTaskSection[] = []
+	const preambleLines: string[] = []
+	let current: { taskNumber: number; role: string; title: string; bodyLines: string[] } | null = null
+	let inCodeFence = false
+	// `### N. role — title` (— は EM DASH U+2014)。タイトルは空のことがある。
+	const taskHeaderRe = /^###\s+(\d+)\.\s+([^—\n]+?)(?:\s+—\s*(.*))?\s*$/
+
+	const flush = () => {
+		if (!current) return
+		const body = current.bodyLines.join('\n')
+			.replace(/^\s*-{3,}\s*$/gm, '')   // 区切り行を取り除く
+			.replace(/^\s+|\s+$/g, '')
+		tasks.push({
+			taskNumber: current.taskNumber,
+			role: current.role,
+			title: current.title,
+			body,
+		})
+		current = null
+	}
+
+	for (const line of lines) {
+		if (/^\s*```/.test(line)) inCodeFence = !inCodeFence
+		const headingMatch = !inCodeFence ? line.match(taskHeaderRe) : null
+		if (headingMatch) {
+			flush()
+			current = {
+				taskNumber: parseInt(headingMatch[1], 10),
+				role: (headingMatch[2] || '').trim(),
+				title: (headingMatch[3] || '').trim(),
+				bodyLines: [],
+			}
+			continue
+		}
+		if (current) current.bodyLines.push(line)
+		else preambleLines.push(line)
+	}
+	flush()
+
+	if (tasks.length === 0) return null
+	const preamble = preambleLines.join('\n').replace(/^\s*-{3,}\s*$/gm, '').replace(/^\s+|\s+$/g, '')
+	return { preamble, tasks }
+}
+
+// markdown の最初の意味のある行を 1 行プレビューに整形 (見出し記号や箇条書き記号は除去)。
+const previewFromMarkdown = (md: string, max = 60): string => {
+	const firstLine = md
+		.split('\n')
+		.map(l => l.replace(/^\s*#{1,6}\s*/, '').replace(/^\s*[-*+]\s+/, '').replace(/^\s*\d+\.\s+/, '').trim())
+		.find(l => !!l && !/^```/.test(l)) ?? ''
+	const cleaned = firstLine.replace(/[`*_~]/g, '').trim()
+	return cleaned.length > max ? cleaned.slice(0, max) + '…' : cleaned
+}
+
+// 通常の返答カード。 開閉は呼び出し側のヒント (defaultOpen / autoFold / isStreaming) と
+// ユーザー操作の両方で決まる。
+//   - 初期表示: defaultOpen をそのまま使う
+//   - autoFold が true に変化: 自動で閉じる (例: 履歴扱いになった)
+//   - isStreaming が true→false に変化: 自動で閉じる (= ストリーミング完了)
+//   - ユーザーがクリックでトグル: 以後の自動 close は無効化 (意思を尊重)
+const StaticCollapsibleCard = ({
+	title,
+	isStreaming,
+	defaultOpen,
+	autoFold,
+	children,
+}: {
+	title: React.ReactNode,
+	isStreaming?: boolean,
+	defaultOpen: boolean,
+	autoFold: boolean, // true になったら現在開いていても閉じる (例: 後続メッセージが来た)
+	children: React.ReactNode,
+}) => {
+	const [isOpen, setIsOpen] = useState(defaultOpen)
+	const userToggledRef = useRef(false)
+	const prevStreamingRef = useRef(!!isStreaming)
+
+	// autoFold が true に切り替わった瞬間 (= 履歴扱いになった) は閉じる。
+	// ただしユーザが明示的にトグル済みの場合はその意思を尊重する。
+	useEffect(() => {
+		if (autoFold && !userToggledRef.current) setIsOpen(false)
+	}, [autoFold])
+
+	// isStreaming が true→false へ落ちた瞬間 (= ストリーミング完了) も閉じる。
+	// ユーザー要望「生成が終わったら閉じてほしい」をここで反映する。
+	useEffect(() => {
+		const wasStreaming = prevStreamingRef.current
+		const nowStreaming = !!isStreaming
+		prevStreamingRef.current = nowStreaming
+		if (wasStreaming && !nowStreaming && !userToggledRef.current) {
+			setIsOpen(false)
+		}
+	}, [isStreaming])
+
+	const toggle = () => {
+		userToggledRef.current = true
+		setIsOpen(o => !o)
+	}
+
+	return (
+		<div className='rounded-md border border-void-border-2 bg-void-bg-2/60 overflow-hidden'>
+			<div
+				className='flex items-center gap-1.5 px-2 py-1 cursor-pointer select-none hover:bg-void-bg-3/60 transition-colors min-h-[24px]'
+				onClick={toggle}
+				role='button'
+				tabIndex={0}
+				aria-expanded={isOpen}
+				onKeyDown={(e) => {
+					if (e.key === 'Enter' || e.key === ' ') {
+						e.preventDefault()
+						toggle()
+					}
+				}}
+			>
+				<ChevronRight
+					className={`h-3 w-3 text-void-fg-4 transition-transform duration-150 flex-shrink-0 ${isOpen ? 'rotate-90' : ''}`}
+				/>
+				<span className='text-[12px] text-void-fg-2 font-medium truncate flex-1 min-w-0'>
+					{title}
+				</span>
+				{isStreaming && (
+					<Loader2 className='h-3 w-3 text-void-fg-3 animate-spin flex-shrink-0' />
+				)}
+			</div>
+			<div
+				className={`overflow-hidden transition-all duration-150 ${isOpen ? 'opacity-100' : 'max-h-0 opacity-0'}`}
+			>
+				<div className='px-2 py-1 border-t border-void-border-2/60'>
+					{children}
+				</div>
+			</div>
+		</div>
+	)
+}
+
+const CollapsibleAssistantResponse = ({
+	content,
+	chatMessageLocation,
+	isStreaming,
+	autoFold,
+}: {
+	content: string,
+	chatMessageLocation: ChatMessageLocation,
+	isStreaming: boolean,
+	autoFold: boolean,
+}) => {
+	// Hooks はトップレベルで一度ずつ呼び出す (条件分岐の前)。
+	const taskSplit = useMemo(() => splitMarkdownByTasks(content), [content])
+	const sections = useMemo(() => splitMarkdownByHeadings(content), [content])
+
+	// オーケストレーション出力 (`### N. role — title` で区切られる) を最優先で検出。
+	// 見つかれば「ロール (タスク) ごとに 1 枚のカード」 を生成する。
+	if (taskSplit && taskSplit.tasks.length > 0) {
+		const lastIdx = taskSplit.tasks.length - 1
+		return (
+			<div className='flex flex-col gap-1.5'>
+				{taskSplit.preamble && (
+					<div>
+						<SmallProseWrapper>
+							<ChatMarkdownRender
+								string={taskSplit.preamble}
+								chatMessageLocation={chatMessageLocation}
+								isApplyEnabled={true}
+								isLinkDetectionEnabled={true}
+							/>
+						</SmallProseWrapper>
+					</div>
+				)}
+				{taskSplit.tasks.map((task, i) => {
+					const roleKey = task.role.toLowerCase().replace(/[^a-z]/g, '')
+					const roleLabel = flowRoleLabel[roleKey] ?? task.role
+					const isCurrentlyStreaming = isStreaming && i === lastIdx
+					const sectionAutoFold = autoFold || (isStreaming && i !== lastIdx)
+					const titleNode = (
+						<span className='inline-flex items-center gap-1.5 min-w-0'>
+							<span className='text-[10px] text-void-fg-4 flex-shrink-0'>#{task.taskNumber}</span>
+							<span className='truncate'>{task.title || roleLabel}</span>
+							<span className='text-[10px] text-void-fg-4 px-1.5 py-0.5 rounded bg-void-bg-3 leading-none flex-shrink-0'>
+								{roleLabel}
+							</span>
+						</span>
+					)
+					return (
+						<StaticCollapsibleCard
+							key={`task-${task.taskNumber}-${i}`}
+							title={titleNode}
+							isStreaming={isCurrentlyStreaming}
+							defaultOpen={isCurrentlyStreaming}
+							autoFold={sectionAutoFold}
+						>
+							<SmallProseWrapper>
+								<ChatMarkdownRender
+									string={task.body || '_(出力待機中…)_'}
+									chatMessageLocation={chatMessageLocation}
+									isApplyEnabled={true}
+									isLinkDetectionEnabled={true}
+								/>
+							</SmallProseWrapper>
+						</StaticCollapsibleCard>
+					)
+				})}
+			</div>
+		)
+	}
+
+	const hasHeadings = sections.some(s => s.level > 0)
+
+	// 見出しが無い場合: 全体を 1 枚のカードで包む。
+	// Antigravity 風: ストリーミング中だけ開いて生成過程を見せ、完了したら自動で閉じる。
+	// (StaticCollapsibleCard 側に「isStreaming が true→false になったら閉じる」処理あり)
+	if (!hasHeadings) {
+		return (
+			<StaticCollapsibleCard
+				title={previewFromMarkdown(content) || '返答'}
+				isStreaming={isStreaming}
+				defaultOpen={isStreaming && !autoFold}
+				autoFold={autoFold}
+			>
+				<SmallProseWrapper>
+					<ChatMarkdownRender
+						string={content}
+						chatMessageLocation={chatMessageLocation}
+						isApplyEnabled={true}
+						isLinkDetectionEnabled={true}
+					/>
+				</SmallProseWrapper>
+			</StaticCollapsibleCard>
+		)
+	}
+
+	const lastIdx = sections.length - 1
+	return (
+		<div className='flex flex-col gap-1.5'>
+			{sections.map((section, i) => {
+				// preamble (見出し前) は折り畳まずそのまま prose で出す。
+				if (section.level === 0) {
+					return (
+						<div key={`preamble-${i}`}>
+							<SmallProseWrapper>
+								<ChatMarkdownRender
+									string={section.body}
+									chatMessageLocation={chatMessageLocation}
+									isApplyEnabled={true}
+									isLinkDetectionEnabled={true}
+								/>
+							</SmallProseWrapper>
+						</div>
+					)
+				}
+				// このセクションが「いま書かれている最後のセクション」かどうか。
+				// ストリーミング中に新しい見出しが下に増えたら、このセクションは
+				// 「最後ではなくなる」ので autoFold が true になり、自動で閉じる。
+				const isCurrentlyStreaming = isStreaming && i === lastIdx
+				const sectionAutoFold = autoFold || (isStreaming && i !== lastIdx)
+				return (
+					<StaticCollapsibleCard
+						key={`sec-${i}`}
+						title={section.title}
+						isStreaming={isCurrentlyStreaming}
+						defaultOpen={isCurrentlyStreaming}
+						autoFold={sectionAutoFold}
+					>
+						<SmallProseWrapper>
+							<ChatMarkdownRender
+								string={section.body || '_(空のセクション)_'}
+								chatMessageLocation={chatMessageLocation}
+								isApplyEnabled={true}
+								isLinkDetectionEnabled={true}
+							/>
+						</SmallProseWrapper>
+					</StaticCollapsibleCard>
+				)
+			})}
+		</div>
+	)
+}
+
 const DivisionOrchestrationComponent = ({ response, chatMessageLocation }: { response: any, chatMessageLocation: ChatMessageLocation }) => {
 	const tasks = response.tasks || [];
 
@@ -2433,14 +2769,16 @@ const DivisionOrchestrationComponent = ({ response, chatMessageLocation }: { res
 				const role = (task.role || '').toString().toLowerCase()
 				const roleLabel = flowRoleLabel[role] ?? task.role
 				const hasOutput = !!task.output && !!String(task.output).trim()
-				const isLast = i === tasks.length - 1
+				// ストリーミング中(=出力待ち)のタスクのみ開く。
+				// 出力が来た瞬間 isStreaming が false に変化し、CollapsibleFlowCard 側で
+				// 自動的に閉じる (生成終了 → 折り畳む)。
 				return (
 					<CollapsibleFlowCard
 						key={task.taskId || i}
 						title={task.title || `ステップ ${i + 1}`}
 						roleLabel={roleLabel}
 						isStreaming={!hasOutput}
-						defaultOpen={isLast && !hasOutput}
+						defaultOpen={!hasOutput}
 					>
 						{hasOutput ? (
 							<SmallProseWrapper>
@@ -2612,6 +2950,124 @@ const AssistantQuestionReply = ({ threadId }: { threadId: string }) => {
 
 
 
+// =====================================================================
+// Reviewer 出力の抽出 + 「次のプロンプトに挿入」ボタン
+// =====================================================================
+// Division オーケストレーションの最終 Reviewer 出力は assistant メッセージ末尾に
+//   <!-- DIVISION_REVIEWER_BEGIN -->
+//   ... reviewer markdown ...
+//   <!-- DIVISION_REVIEWER_END -->
+// として埋め込まれる (HTML コメント delimiter は markdown 上不可視)。
+// 既定では次回送信時に chatThreadService 側で自動 prepend されるが、
+// 「自分で編集してから送りたい」ケースのために、明示的に入力欄へ挿入する
+// ボタンも提供する。
+const REVIEWER_BEGIN_MARKER = '<!-- DIVISION_REVIEWER_BEGIN -->'
+const REVIEWER_END_MARKER = '<!-- DIVISION_REVIEWER_END -->'
+
+const extractReviewerNoteFromContent = (content: string | undefined | null): string | null => {
+	if (!content) return null
+	const beginIdx = content.lastIndexOf(REVIEWER_BEGIN_MARKER)
+	if (beginIdx < 0) return null
+	const endIdx = content.indexOf(REVIEWER_END_MARKER, beginIdx + REVIEWER_BEGIN_MARKER.length)
+	if (endIdx < 0) return null
+	const inner = content.slice(beginIdx + REVIEWER_BEGIN_MARKER.length, endIdx).trim()
+	return inner.length > 0 ? inner : null
+}
+
+const buildReviewerInsertText = (reviewerNote: string, existingInput: string): string => {
+	const reviewerSection = [
+		'## 直前ターンの Reviewer 指摘',
+		'',
+		'> Division Reviewer の所見を踏まえて以下に追記してください。',
+		'',
+		reviewerNote,
+		'',
+		'---',
+		'',
+	].join('\n')
+	const existing = existingInput.trim()
+	return existing ? `${reviewerSection}${existingInput}` : reviewerSection
+}
+
+const ReviewerInsertActions = ({ reviewerNote }: { reviewerNote: string }) => {
+	const accessor = useAccessor()
+	const chatThreadsService = accessor.get('IChatThreadService')
+	const clipboardService = accessor.get('IClipboardService')
+
+	const [feedback, setFeedback] = useState<'idle' | 'inserted' | 'copied' | 'error'>('idle')
+
+	useEffect(() => {
+		if (feedback === 'idle') return
+		const t = setTimeout(() => setFeedback('idle'), 1500)
+		return () => clearTimeout(t)
+	}, [feedback])
+
+	const onInsert = useCallback(async () => {
+		try {
+			const threadId = chatThreadsService.state.currentThreadId
+			const thread = chatThreadsService.state.allThreads[threadId]
+			const mounted = await thread?.state.mountedInfo?.whenMounted
+			if (!mounted) {
+				setFeedback('error')
+				return
+			}
+			const ta = mounted.textAreaRef.current
+			const existing = ta?.value ?? ''
+			const newValue = buildReviewerInsertText(reviewerNote, existing)
+			mounted.setInputText?.(newValue)
+			ta?.focus()
+			setFeedback('inserted')
+		} catch {
+			setFeedback('error')
+		}
+	}, [chatThreadsService, reviewerNote])
+
+	const onCopy = useCallback(async () => {
+		try {
+			await clipboardService.writeText(reviewerNote)
+			setFeedback('copied')
+		} catch {
+			setFeedback('error')
+		}
+	}, [clipboardService, reviewerNote])
+
+	const insertLabel = feedback === 'inserted'
+		? '挿入しました'
+		: feedback === 'error'
+			? '失敗'
+			: '次のプロンプトに挿入'
+
+	const copyLabel = feedback === 'copied' ? 'コピー済み' : 'コピー'
+
+	return (
+		<div className='mt-1.5 flex items-center gap-1.5 px-2 py-1 rounded-md border border-void-border-2 bg-void-bg-2/40'>
+			<ClipboardCheck className='h-3 w-3 text-void-fg-3 flex-shrink-0' />
+			<span className='text-[11px] text-void-fg-3 mr-auto truncate'>
+				Reviewer 指摘あり
+			</span>
+			<button
+				type='button'
+				onClick={onCopy}
+				className='inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-void-fg-2 hover:bg-void-bg-3 transition-colors'
+				title='Reviewer 出力をクリップボードにコピー'
+			>
+				<CopyIcon className='h-3 w-3' />
+				{copyLabel}
+			</button>
+			<button
+				type='button'
+				onClick={onInsert}
+				className='inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium text-[var(--vscode-button-foreground)] bg-[var(--vscode-button-background)] hover:bg-[var(--vscode-button-hoverBackground)] transition-colors'
+				title='現在の入力欄の先頭に Reviewer 出力を挿入する'
+			>
+				<CornerUpLeft className='h-3 w-3' />
+				{insertLabel}
+			</button>
+		</div>
+	)
+}
+
+
 const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted, messageIdx }: { chatMessage: ChatMessage & { role: 'assistant' }, isCheckpointGhost: boolean, messageIdx: number, isCommitted: boolean }) => {
 
 	const accessor = useAccessor()
@@ -2677,6 +3133,16 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 		&& !hasLaterVisibleMessage
 		&& looksLikeAssistantQuestion(chatMessage.displayContent || '')
 
+	// 既定で折り畳む方針: ストリーミング中だけ開いておき、コミット (=応答完了) した
+	// 瞬間に閉じる。 過去の返答も当然閉じたまま。 ユーザーがクリックで開いた場合は
+	// その意思を尊重する (StaticCollapsibleCard 側の userToggledRef で保護)。
+	const isStreamingThis = !isCommitted || (streamState?.isRunning && !hasLaterVisibleMessage)
+	const autoFold = isCommitted
+
+	// Division Reviewer 指摘ブロックを抽出。 ストリーミング中はまだ完成していない
+	// 可能性が高いので隠しておき、コミット済みのときだけボタンを露出する。
+	const reviewerNote = isCommitted ? extractReviewerNoteFromContent(chatMessage.displayContent) : null
+
 	return <div className="py-0.5">
 		{/* reasoning token */}
 		{hasReasoning &&
@@ -2705,18 +3171,19 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 			) : (
 				<div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
 					<AssistantTodoCard todos={todoItems} />
-					<ProseWrapper>
-						<ChatMarkdownRender
-							string={chatMessage.displayContent || ''}
-							chatMessageLocation={chatMessageLocation}
-							isApplyEnabled={true}
-							isLinkDetectionEnabled={true}
-						/>
-					</ProseWrapper>
+					<CollapsibleAssistantResponse
+						content={chatMessage.displayContent || ''}
+						chatMessageLocation={chatMessageLocation}
+						isStreaming={!!isStreamingThis}
+						autoFold={autoFold}
+					/>
 				</div>
 			)
 		)}
 		{shouldShowQuestionReply && <AssistantQuestionReply threadId={thread.id} />}
+		{reviewerNote && !isCheckpointGhost && (
+			<ReviewerInsertActions reviewerNote={reviewerNote} />
+		)}
 	</div>
 
 }
@@ -4019,7 +4486,7 @@ const FlowReviewComponent = ({ chatMessage, isCheckpointGhost }: {
 							key={o.mdFileName}
 							title={o.mdFileName}
 							roleLabel={roleLabel}
-							defaultOpen={i === 0}
+							defaultOpen={false}
 						>
 							{status === 'pending' && isEditing ? (
 								<textarea
@@ -4423,10 +4890,10 @@ const CommandBarInChat = () => {
 
 
 const EditToolSoFar = ({ toolCallSoFar, }: { toolCallSoFar: RawToolCallObj }) => {
+	// Rules of Hooks: フックは早期 return より前に呼び出す。
+	const accessor = useAccessor()
 
 	if (!isABuiltinToolName(toolCallSoFar.name)) return null
-
-	const accessor = useAccessor()
 
 	const uri = toolCallSoFar.rawParams.uri ? URI.file(toolCallSoFar.rawParams.uri) : undefined
 
@@ -4525,6 +4992,167 @@ const SidebarChatGlobalStyles = () => (
 )
 
 
+// ─── Theme Switcher ──────────────────────────────────────
+// 3 つのテーマ (Light / Dark / Sun Red) をサイクル切替するボタン。
+// 内部的には VS Code 設定 `workbench.colorTheme` を更新するだけ。
+type OrchestraThemeMode = 'light' | 'dark' | 'sunRed'
+const ORCHESTRA_THEME_NAMES: Record<OrchestraThemeMode, string> = {
+	light: 'Default Light Modern',
+	dark: 'Default Dark Modern',
+	sunRed: 'Sun Red',
+}
+const ORCHESTRA_THEME_LABELS: Record<OrchestraThemeMode, string> = {
+	light: 'ライト',
+	dark: 'ダーク',
+	sunRed: 'サンレッド',
+}
+const ORCHESTRA_THEME_ORDER: OrchestraThemeMode[] = ['light', 'dark', 'sunRed']
+
+export const detectOrchestraTheme = (currentName: string | undefined): OrchestraThemeMode => {
+	if (!currentName) return 'dark'
+	if (currentName === ORCHESTRA_THEME_NAMES.sunRed) return 'sunRed'
+	if (currentName === ORCHESTRA_THEME_NAMES.light || currentName.toLowerCase().includes('light')) return 'light'
+	return 'dark'
+}
+
+export const OrchestraThemeSwitcher = ({ compact }: { compact?: boolean }) => {
+	const accessor = useAccessor()
+	const configurationService = accessor.get('IConfigurationService') as any
+	// VS Code 設定が変更されたら再描画したいので useState + listener
+	const initialName = (configurationService.getValue('workbench.colorTheme') as string | undefined) ?? ''
+	const [currentName, setCurrentName] = useState<string>(initialName)
+	useEffect(() => {
+		const d = configurationService.onDidChangeConfiguration?.((e: any) => {
+			if (e?.affectsConfiguration?.('workbench.colorTheme')) {
+				setCurrentName((configurationService.getValue('workbench.colorTheme') as string | undefined) ?? '')
+			}
+		})
+		return () => { d?.dispose?.() }
+	}, [configurationService])
+
+	const current = detectOrchestraTheme(currentName)
+	const apply = useCallback(async (mode: OrchestraThemeMode) => {
+		try {
+			await configurationService.updateValue('workbench.colorTheme', ORCHESTRA_THEME_NAMES[mode])
+		} catch (e) { console.error('Failed to set theme:', e) }
+	}, [configurationService])
+
+	const iconOf = (mode: OrchestraThemeMode) => {
+		if (mode === 'light') return <Sun className='w-3.5 h-3.5' />
+		if (mode === 'dark') return <Moon className='w-3.5 h-3.5' />
+		return <Flame className='w-3.5 h-3.5' />
+	}
+
+	if (compact) {
+		// サイドバーヘッダー用: 1 ボタン (アイコンだけ) で次のテーマへサイクル切替。
+		const nextMode = ORCHESTRA_THEME_ORDER[(ORCHESTRA_THEME_ORDER.indexOf(current) + 1) % ORCHESTRA_THEME_ORDER.length]
+		return (
+			<button
+				onClick={() => apply(nextMode)}
+				title={`テーマ: ${ORCHESTRA_THEME_LABELS[current]} → ${ORCHESTRA_THEME_LABELS[nextMode]}`}
+				className='text-void-fg-3 hover:text-void-fg-1 transition-colors p-1 rounded-md hover:bg-void-bg-3'
+			>
+				{iconOf(current)}
+			</button>
+		)
+	}
+
+	return (
+		<div className='inline-flex items-center rounded-md border border-void-border-2 bg-void-bg-2/60 p-0.5'>
+			{ORCHESTRA_THEME_ORDER.map(mode => {
+				const isActive = mode === current
+				return (
+					<button
+						key={mode}
+						onClick={() => apply(mode)}
+						className={`flex items-center gap-1.5 px-2 py-1 text-[12px] rounded transition-colors ${
+							isActive
+								? 'bg-void-bg-3 text-void-fg-1 shadow-sm'
+								: 'text-void-fg-3 hover:text-void-fg-1 hover:bg-void-bg-3/60'
+						}`}
+						title={ORCHESTRA_THEME_LABELS[mode]}
+					>
+						{iconOf(mode)}
+						<span>{ORCHESTRA_THEME_LABELS[mode]}</span>
+					</button>
+				)
+			})}
+		</div>
+	)
+}
+
+// アップデートが利用可能な場合のみサイドバー上部に表示する小さいバナー
+// (一度ユーザーが「あとで」を押したら、そのバージョンに対しては再表示しない)
+const ORCHESTRA_DISMISSED_UPDATE_KEY = 'orchestra.updateBannerDismissedTag'
+const OrchestraUpdateBanner: React.FC = () => {
+	const accessor = useAccessor()
+	const openerService = accessor.get('IOpenerService')
+	const commandService = accessor.get('ICommandService') as ICommandService
+	const storageService = accessor.get('IStorageService')
+	const updateState = useOrchestraUpdateState()
+
+	const info = updateState.kind === 'ok' ? updateState.info : null
+	const dismissedTag = (() => {
+		try { return storageService.get(ORCHESTRA_DISMISSED_UPDATE_KEY, StorageScope.APPLICATION) ?? null }
+		catch { return null }
+	})()
+
+	const [isDismissed, setIsDismissed] = useState(false)
+	useEffect(() => {
+		if (info?.tagName && dismissedTag === info.tagName) setIsDismissed(true)
+		else setIsDismissed(false)
+	}, [info?.tagName, dismissedTag])
+
+	if (!info || !info.hasUpdate || isDismissed) return null
+
+	const onOpen = () => openerService.open(URI.parse(info.htmlUrl))
+	const onSettings = () => commandService.executeCommand(VOID_OPEN_SETTINGS_ACTION_ID)
+	const onDismiss = () => {
+		try { storageService.store(ORCHESTRA_DISMISSED_UPDATE_KEY, info.tagName, StorageScope.APPLICATION, StorageTarget.USER) }
+		catch { /* ignore storage errors */ }
+		setIsDismissed(true)
+	}
+
+	return (
+		<div className='shrink-0 px-3 py-2 border-b border-amber-500/30 bg-amber-500/10'>
+			<div className='flex items-center gap-2'>
+				<DownloadIcon className='w-3.5 h-3.5 text-amber-400 flex-shrink-0' />
+				<div className='flex-1 min-w-0'>
+					<div className='text-[12px] text-void-fg-1 leading-tight'>
+						新バージョン <span className='font-semibold'>{info.tagName}</span> が利用可能
+					</div>
+					<div className='text-[10px] text-void-fg-3 truncate'>
+						現在: v{info.currentVersion}
+					</div>
+				</div>
+				<button
+					onClick={onOpen}
+					className='flex items-center gap-1 text-[11px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 transition-colors'
+					title='GitHub のリリースページを開く'
+				>
+					<ExternalLinkIcon className='w-3 h-3' />
+					開く
+				</button>
+				<button
+					onClick={onSettings}
+					className='text-[11px] px-2 py-0.5 rounded text-void-fg-3 hover:text-void-fg-1 hover:bg-void-bg-3 transition-colors'
+					title='Settings の Updates タブで詳細を見る'
+				>
+					詳細
+				</button>
+				<button
+					onClick={onDismiss}
+					className='p-0.5 rounded text-void-fg-3 hover:text-void-fg-1 hover:bg-void-bg-3 transition-colors'
+					title='このバージョンの通知を非表示にする'
+				>
+					<X className='w-3 h-3' />
+				</button>
+			</div>
+		</div>
+	)
+}
+
+
 const SidebarHeader = ({ onLoginClick, activeTab, onTabChange }: { onLoginClick: () => void; activeTab: import('./OrchestraLogoButton.js').SidebarTab; onTabChange: (tab: import('./OrchestraLogoButton.js').SidebarTab) => void }) => {
 	const accessor = useAccessor()
 	const commandService = accessor.get('ICommandService') as ICommandService
@@ -4535,6 +5163,8 @@ const SidebarHeader = ({ onLoginClick, activeTab, onTabChange }: { onLoginClick:
 	return (
 		<div className="shrink-0 px-4 pt-2 pb-1.5 border-b border-void-border-3/60 bg-gradient-to-b from-void-bg-1 to-transparent">
 			<div className="flex items-center justify-end gap-2">
+
+				<OrchestraThemeSwitcher compact />
 
 				{!isLoggedIn ? (
 					<button
@@ -4576,6 +5206,76 @@ const SidebarHeader = ({ onLoginClick, activeTab, onTabChange }: { onLoginClick:
 }
 
 
+// 「キューに追加」されたユーザーメッセージのリスト表示。
+// 入力欄の真上に出して、現在の応答が終わると上から順に自動送信される旨をユーザーに示す。
+type QueueListItem = { id: string; text: string; selections: StagingSelectionItem[] }
+const MessageQueueList = ({
+	items,
+	onRemove,
+	onClear,
+}: {
+	items: QueueListItem[]
+	onRemove: (id: string) => void
+	onClear: () => void
+}) => {
+	if (items.length === 0) return null
+	return (
+		<div className='mb-1 rounded-md border border-void-border-2 bg-void-bg-2/70 overflow-hidden'>
+			<div className='flex items-center gap-1.5 px-2 py-1 border-b border-void-border-2/60'>
+				<ListPlus className='h-3 w-3 text-void-fg-3 flex-shrink-0' />
+				<span className='text-[11px] text-void-fg-2 font-medium flex-1'>
+					キュー <span className='text-void-fg-4'>({items.length})</span>
+				</span>
+				<button
+					type='button'
+					onClick={onClear}
+					className='text-[10px] text-void-fg-4 hover:text-void-fg-1 transition-colors px-1 py-0.5 rounded hover:bg-void-bg-3'
+					title='すべてキャンセル'
+				>
+					すべて削除
+				</button>
+			</div>
+			<ul className='divide-y divide-void-border-2/40 max-h-[140px] overflow-y-auto'>
+				{items.map((item, idx) => {
+					const oneLine = item.text.replace(/\s+/g, ' ').trim()
+					const preview = oneLine.length > 80 ? oneLine.slice(0, 80) + '…' : oneLine
+					const selCount = item.selections?.length ?? 0
+					return (
+						<li
+							key={item.id}
+							className='flex items-center gap-1.5 px-2 py-1 hover:bg-void-bg-3/40 transition-colors'
+						>
+							<span className='text-[10px] text-void-fg-4 w-4 text-right flex-shrink-0'>{idx + 1}.</span>
+							<span
+								className='text-[12px] text-void-fg-2 truncate flex-1 min-w-0'
+								title={item.text}
+							>
+								{preview || '(空のメッセージ)'}
+							</span>
+							{selCount > 0 && (
+								<span
+									className='text-[10px] text-void-fg-4 px-1 py-0.5 rounded bg-void-bg-3 border border-void-border-2 flex-shrink-0'
+									title={`${selCount} 件の選択を含む`}
+								>
+									+{selCount}
+								</span>
+							)}
+							<button
+								type='button'
+								onClick={() => onRemove(item.id)}
+								className='p-0.5 rounded text-void-fg-4 hover:text-void-fg-1 hover:bg-void-bg-3 transition-colors flex-shrink-0'
+								title='このキューを削除'
+							>
+								<X className='h-3 w-3' />
+							</button>
+						</li>
+					)
+				})}
+			</ul>
+		</div>
+	)
+}
+
 export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTab: import('./OrchestraLogoButton.js').SidebarTab; onTabChange: (tab: import('./OrchestraLogoButton.js').SidebarTab) => void; viewOverride?: React.ReactNode }) => {
 	const textAreaRef = useRef<HTMLTextAreaElement | null>(null)
 	const textAreaFnsRef = useRef<TextAreaFns | null>(null)
@@ -4615,34 +5315,115 @@ export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTa
 
 	const isDisabled = instructionsAreEmpty || !!isFeatureNameDisabled('Chat', settingsState)
 
+	// ----- メッセージキュー (per-thread) -----
+	// 生成中に「キューに追加」したプロンプトを溜めておき、
+	// 現在の応答が終わったら自動で順番に送信する。
+	// staging selections はキュー追加時点でスナップショットを取り、
+	// 送信時に渡すことで「いま貼った文脈で後で送る」が成立する。
+	type QueuedMessage = {
+		id: string;
+		text: string;
+		selections: StagingSelectionItem[];
+	}
+	const [queuesByThread, setQueuesByThread] = useState<Record<string, QueuedMessage[]>>({})
+	const currentQueue: QueuedMessage[] = queuesByThread[currentThread.id] ?? []
+
+	const updateQueueForThread = useCallback((threadId: string, updater: (prev: QueuedMessage[]) => QueuedMessage[]) => {
+		setQueuesByThread(prev => {
+			const next = updater(prev[threadId] ?? [])
+			return { ...prev, [threadId]: next }
+		})
+	}, [])
+
 	const sidebarRef = useRef<HTMLDivElement>(null)
 	const scrollContainerRef = useRef<HTMLDivElement | null>(null)
-	const onSubmit = useCallback(async (_forceSubmit?: string) => {
 
-		if (isDisabled && !_forceSubmit) return
-		// 実行中でも送信を許可（途中乱入）。chatThreadService 側が
-		// Division orchestration なら interject へ、それ以外なら abort+restart に振り分ける。
-
-		const threadId = chatThreadsService.state.currentThreadId
-
-		// send message to LLM
-		const userMessage = _forceSubmit || textAreaRef.current?.value || ''
-
+	// 実際にユーザーメッセージを送る共通処理 (textArea/staging のクリアつき)
+	const sendUserMessageImmediately = useCallback(async (
+		threadId: string,
+		userMessage: string,
+		_chatSelections?: StagingSelectionItem[],
+	) => {
 		try {
-			await chatThreadsService.addUserMessageAndStreamResponse({ userMessage, threadId })
+			await chatThreadsService.addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId })
 		} catch (e) {
 			console.error('Error while sending message in chat:', e)
 		}
+	}, [chatThreadsService])
 
-		setSelections([]) // clear staging
+	const onSubmit = useCallback(async (_forceSubmit?: string) => {
+
+		if (isDisabled && !_forceSubmit) return
+
+		const threadId = chatThreadsService.state.currentThreadId
+		const userMessage = _forceSubmit || textAreaRef.current?.value || ''
+		if (!userMessage.trim()) return
+
+		// 入力欄と staging を即クリア (UX 上、押した瞬間に空にする)
+		const snapshotSelections = selections.slice()
+		setSelections([])
 		textAreaFnsRef.current?.setValue('')
-		textAreaRef.current?.focus() // focus input after submit
+		textAreaRef.current?.focus()
 
-	}, [chatThreadsService, isDisabled, isRunning, textAreaRef, textAreaFnsRef, setSelections, settingsState])
+		await sendUserMessageImmediately(threadId, userMessage, snapshotSelections)
+	}, [chatThreadsService, isDisabled, textAreaRef, textAreaFnsRef, setSelections, selections, sendUserMessageImmediately])
+
+	// 「キューに追加」: 実行中に呼ばれる。 入力欄は即クリアし、
+	// 後で isRunning が落ちた瞬間に順次送る。
+	const onQueue = useCallback(() => {
+		if (isDisabled) return
+		const threadId = chatThreadsService.state.currentThreadId
+		const userMessage = textAreaRef.current?.value || ''
+		if (!userMessage.trim()) return
+
+		const snapshotSelections = selections.slice()
+		const item: QueuedMessage = {
+			id: `q_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+			text: userMessage,
+			selections: snapshotSelections,
+		}
+		updateQueueForThread(threadId, prev => [...prev, item])
+
+		// 入力欄 / staging をクリアして次のキュー待ち状態へ
+		setSelections([])
+		textAreaFnsRef.current?.setValue('')
+		textAreaRef.current?.focus()
+	}, [isDisabled, chatThreadsService, textAreaRef, textAreaFnsRef, setSelections, selections, updateQueueForThread])
+
+	// isRunning が「真→偽」に変わった瞬間 + キューに残りがある場合、
+	// 先頭を取り出して自動送信する。
+	const prevIsRunningRef = useRef<typeof isRunning>(isRunning)
+	useEffect(() => {
+		const wasRunning = !!prevIsRunningRef.current
+		const nowRunning = !!isRunning
+		prevIsRunningRef.current = isRunning
+
+		if (wasRunning && !nowRunning) {
+			const threadId = currentThread.id
+			const queue = queuesByThread[threadId] ?? []
+			if (queue.length === 0) return
+			const [next, ...rest] = queue
+			updateQueueForThread(threadId, () => rest)
+			// fire-and-forget; sendUserMessageImmediately 内で例外は握り潰している
+			void sendUserMessageImmediately(threadId, next.text, next.selections)
+		}
+	}, [isRunning, currentThread.id, queuesByThread, updateQueueForThread, sendUserMessageImmediately])
+
+	const onRemoveQueueItem = useCallback((id: string) => {
+		const threadId = currentThread.id
+		updateQueueForThread(threadId, prev => prev.filter(q => q.id !== id))
+	}, [currentThread.id, updateQueueForThread])
+
+	const onClearQueue = useCallback(() => {
+		const threadId = currentThread.id
+		updateQueueForThread(threadId, () => [])
+	}, [currentThread.id, updateQueueForThread])
 
 	const onAbort = async () => {
 		const threadId = currentThread.id
 		await chatThreadsService.abortRunning(threadId)
+		// abort したらキューも一緒に流したいケースがあるので、ユーザーが明示的に
+		// 残せるよう「キューも消すかどうか」は触らない。
 	}
 
 	const keybindingString = accessor.get('IKeybindingService').lookupKeybinding(VOID_CTRL_L_ACTION_ID)?.getLabel()
@@ -4659,6 +5440,9 @@ export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTa
 		chatThreadsState.allThreads[threadId]?.state.mountedInfo?._whenMountedResolver?.({
 			textAreaRef: textAreaRef,
 			scrollToBottom: () => scrollToBottom(scrollContainerRef),
+			setInputText: (text: string) => {
+				textAreaFnsRef.current?.setValue(text)
+			},
 		})
 
 	}, [chatThreadsState, threadId, textAreaRef, scrollContainerRef, isResolved])
@@ -4666,12 +5450,17 @@ export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTa
 
 
 
+	// stable key 戦略: コミット済み・ストリーミング中ともに `msg-{idx}` をキーに使う。
+	// こうすると「ストリーミング中バブル (idx=N)」と「ストリーム完了後にコミットされた
+	// バブル (同じく idx=N)」が同一 React インスタンスとして再利用されるため、
+	// isStreaming / isCommitted のプロップが真→偽に遷移する瞬間を子の useEffect が
+	// 検知できる (= CSS トランジションで滑らかに「閉じる」アニメーションが走る)。
 	const previousMessagesHTML = useMemo(() => {
 		// const lastMessageIdx = previousMessages.findLastIndex(v => v.role !== 'checkpoint')
 		// tool request shows up as Editing... if in progress
 		return previousMessages.map((message, i) => {
 			return <ChatBubble
-				key={i}
+				key={`msg-${i}`}
 				currCheckpointIdx={currCheckpointIdx}
 				chatMessage={message}
 				messageIdx={i}
@@ -4686,7 +5475,7 @@ export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTa
 	const streamingChatIdx = previousMessagesHTML.length
 	const currStreamingMessageHTML = reasoningSoFar || displayContentSoFar || isRunning ?
 		<ChatBubble
-			key={'curr-streaming-msg'}
+			key={`msg-${streamingChatIdx}`}
 			currCheckpointIdx={currCheckpointIdx}
 			chatMessage={{
 				role: 'assistant',
@@ -4733,7 +5522,7 @@ export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTa
 			{/* Generating tool */}
 			{generatingTool}
 
-			{/* Flow indicator - shows agent workflow phases (Division 利用時はロールパイプライン UI) */}
+			{/* Flow indicator - shows current agent workflow phase as a small caption */}
 			<FlowIndicator
 				messages={previousMessages}
 				isRunning={isRunning}
@@ -4768,16 +5557,30 @@ export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTa
 	}, [setInstructionsAreEmpty])
 	const onKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
 		if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-			onSubmit()
+			// 実行中なら通常の送信ではなく「キューに追加」へフォールバック (Cursor 風)
+			if (isRunning) {
+				onQueue()
+			} else {
+				onSubmit()
+			}
 		} else if (e.key === 'Escape' && isRunning) {
 			onAbort()
 		}
-	}, [onSubmit, onAbort, isRunning])
+	}, [onSubmit, onQueue, onAbort, isRunning])
+
+	const queueListHTML = currentQueue.length > 0 ? (
+		<MessageQueueList
+			items={currentQueue}
+			onRemove={onRemoveQueueItem}
+			onClear={onClearQueue}
+		/>
+	) : null
 
 	const inputChatArea = <VoidChatArea
 		featureName='Chat'
 		onSubmit={() => onSubmit()}
 		onAbort={onAbort}
+		onQueue={onQueue}
 		isStreaming={!!isRunning}
 		isDisabled={isDisabled}
 		showSelections={true}
@@ -4789,7 +5592,9 @@ export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTa
 		<VoidInputBox2
 			enableAtToMention
 			className={`min-h-[81px] px-0.5 py-0.5`}
-			placeholder={`@ to mention, ${keybindingString ? `${keybindingString} to add a selection. ` : ''}Enter instructions...`}
+			placeholder={isRunning
+				? `生成中: Enter でキューに追加, ${keybindingString ? `${keybindingString} で選択を追加, ` : ''}Esc で停止`
+				: `@ to mention, ${keybindingString ? `${keybindingString} to add a selection. ` : ''}Enter instructions...`}
 			onChangeText={onChangeText}
 			onKeyDown={onKeyDown}
 			onFocus={() => { chatThreadsService.setCurrentlyFocusedMessageIdx(undefined) }}
@@ -4851,6 +5656,7 @@ export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTa
 		<div className='px-4'>
 			<CommandBarInChat />
 		</div>
+		{queueListHTML && <div className='px-2'>{queueListHTML}</div>}
 		<div className='px-2 pb-2'>
 			{inputChatArea}
 		</div>
@@ -4858,6 +5664,7 @@ export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTa
 
 	const landingPageInput = <div>
 		{errorDisplayHTML && <div className='px-2'>{errorDisplayHTML}</div>}
+		{queueListHTML && <div className='px-2 pt-2'>{queueListHTML}</div>}
 		<div className='pt-8'>
 			{inputChatArea}
 		</div>
@@ -4918,6 +5725,7 @@ export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTa
 		<div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', overflow: 'hidden' }}>
 			<SidebarChatGlobalStyles />
 			<SidebarHeader onLoginClick={() => setShowLoginScreen(true)} activeTab={activeTab} onTabChange={onTabChange} />
+			<OrchestraUpdateBanner />
 			{showLoginScreen && <LoginScreen onClose={() => setShowLoginScreen(false)} />}
 			<div style={{ flex: '1 1 0', minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 				{viewOverride ? (

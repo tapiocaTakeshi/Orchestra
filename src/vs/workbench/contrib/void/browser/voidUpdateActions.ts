@@ -10,96 +10,74 @@ import { localize2 } from '../../../../nls.js';
 import { Action2, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { INotificationActions, INotificationHandle, INotificationService } from '../../../../platform/notification/common/notification.js';
 import { IMetricsService } from '../common/metricsService.js';
-import { IVoidUpdateService } from '../common/voidUpdateService.js';
+import { IOrchestraUpdateUiService, IVoidUpdateService } from '../common/voidUpdateService.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import * as dom from '../../../../base/browser/dom.js';
-import { IUpdateService } from '../../../../platform/update/common/update.js';
 import { VoidCheckUpdateRespose } from '../common/voidUpdateServiceTypes.js';
 import { IAction } from '../../../../base/common/actions.js';
+import { IOpenerService } from '../../../../platform/opener/common/opener.js';
+import { URI } from '../../../../base/common/uri.js';
 
 
+// "Open Release" action ID (Settings 画面と Sidebar から共通して呼び出す)
+export const VOID_OPEN_LATEST_RELEASE_ACTION_ID = 'orchestra.openLatestRelease'
+export const VOID_CHECK_UPDATE_ACTION_ID = 'void.voidCheckUpdate'
 
 
-const notifyUpdate = (res: VoidCheckUpdateRespose & { message: string }, notifService: INotificationService, updateService: IUpdateService): INotificationHandle => {
-	const message = res?.message || 'This is a very old version of Void, please download the latest version! [Void Editor](https://voideditor.com/download-beta)!'
+const openReleasePage = async (openerService: IOpenerService, voidUpdateService: IOrchestraUpdateUiService) => {
+	// 既知のキャッシュがあればそれを使う、なければ取り直す
+	let url: string | null = voidUpdateService.state.kind === 'ok' ? voidUpdateService.state.info.htmlUrl : null
+	if (!url) {
+		const res = await voidUpdateService.fetchLatestRelease()
+		if (!('error' in res)) url = res.htmlUrl
+	}
+	if (!url) {
+		// 最後の手段として GitHub のリリース一覧へ飛ばす
+		url = 'https://github.com/tapiocaTakeshi/Orchestra/releases/latest'
+	}
+	await openerService.open(URI.parse(url))
+}
+
+
+const notifyUpdate = (
+	res: VoidCheckUpdateRespose & { message: string },
+	notifService: INotificationService,
+	openerService: IOpenerService,
+	voidUpdateService: IOrchestraUpdateUiService,
+): INotificationHandle => {
+	const message = res?.message || 'Orchestra の最新版が利用可能です。GitHub リリースページから取得してください。'
 
 	let actions: INotificationActions | undefined
 
 	if (res?.action) {
 		const primary: IAction[] = []
 
-		if (res.action === 'reinstall') {
+		if (res.action === 'open_release') {
 			primary.push({
-				label: `Reinstall`,
+				label: `リリースを開く`,
+				id: 'orchestra.updater.openRelease',
+				enabled: true,
+				tooltip: '',
+				class: undefined,
+				run: () => openReleasePage(openerService, voidUpdateService),
+			})
+		} else if (res.action === 'reinstall') {
+			primary.push({
+				label: `再インストール`,
 				id: 'void.updater.reinstall',
 				enabled: true,
 				tooltip: '',
 				class: undefined,
-				run: () => {
-					const { window } = dom.getActiveWindow()
-					window.open('https://voideditor.com/download-beta')
-				}
+				run: () => openReleasePage(openerService, voidUpdateService),
 			})
 		}
-
-		if (res.action === 'download') {
-			primary.push({
-				label: `Download`,
-				id: 'void.updater.download',
-				enabled: true,
-				tooltip: '',
-				class: undefined,
-				run: () => {
-					updateService.downloadUpdate()
-				}
-			})
-		}
-
-
-		if (res.action === 'apply') {
-			primary.push({
-				label: `Apply`,
-				id: 'void.updater.apply',
-				enabled: true,
-				tooltip: '',
-				class: undefined,
-				run: () => {
-					updateService.applyUpdate()
-				}
-			})
-		}
-
-		if (res.action === 'restart') {
-			primary.push({
-				label: `Restart`,
-				id: 'void.updater.restart',
-				enabled: true,
-				tooltip: '',
-				class: undefined,
-				run: () => {
-					updateService.quitAndInstall()
-				}
-			})
-		}
-
-		primary.push({
-			id: 'void.updater.site',
-			enabled: true,
-			label: `Void Site`,
-			tooltip: '',
-			class: undefined,
-			run: () => {
-				const { window } = dom.getActiveWindow()
-				window.open('https://voideditor.com/')
-			}
-		})
 
 		actions = {
 			primary: primary,
 			secondary: [{
 				id: 'void.updater.close',
 				enabled: true,
-				label: `Keep current version`,
+				label: `現在のバージョンのまま`,
 				tooltip: '',
 				class: undefined,
 				run: () => {
@@ -108,30 +86,33 @@ const notifyUpdate = (res: VoidCheckUpdateRespose & { message: string }, notifSe
 			}]
 		}
 	}
-	else {
-		actions = undefined
-	}
 
 	const notifController = notifService.notify({
 		severity: Severity.Info,
 		message: message,
 		sticky: true,
-		progress: actions ? { worked: 0, total: 100 } : undefined,
 		actions: actions,
 	})
 
 	return notifController
-	// const d = notifController.onDidClose(() => {
-	// 	notifyYesUpdate(notifService, res)
-	// 	d.dispose()
-	// })
 }
-const notifyErrChecking = (notifService: INotificationService): INotificationHandle => {
-	const message = `Void Error: There was an error checking for updates. If this persists, please get in touch or reinstall Void [here](https://voideditor.com/download-beta)!`
+
+const notifyErrChecking = (notifService: INotificationService, openerService: IOpenerService): INotificationHandle => {
+	const message = `Orchestra: アップデート確認時にエラーが発生しました。GitHub リリースページから手動で確認してください。`
 	const notifController = notifService.notify({
 		severity: Severity.Info,
 		message: message,
 		sticky: true,
+		actions: {
+			primary: [{
+				id: 'orchestra.updater.openReleaseOnError',
+				enabled: true,
+				label: `リリースを開く`,
+				tooltip: '',
+				class: undefined,
+				run: () => openerService.open(URI.parse('https://github.com/tapiocaTakeshi/Orchestra/releases/latest')),
+			}],
+		},
 	})
 	return notifController
 }
@@ -140,35 +121,36 @@ const notifyErrChecking = (notifService: INotificationService): INotificationHan
 const performVoidCheck = async (
 	explicit: boolean,
 	notifService: INotificationService,
-	voidUpdateService: IVoidUpdateService,
+	voidUpdateService: IOrchestraUpdateUiService,
 	metricsService: IMetricsService,
-	updateService: IUpdateService,
+	openerService: IOpenerService,
 ): Promise<INotificationHandle | null> => {
 
 	const metricsTag = explicit ? 'Manual' : 'Auto'
 
-	metricsService.capture(`Void Update ${metricsTag}: Checking...`, {})
+	metricsService.capture(`Orchestra Update ${metricsTag}: Checking...`, {})
+	// fetchLatestRelease を経由することで browser 側の state も更新される
+	await voidUpdateService.fetchLatestRelease()
 	const res = await voidUpdateService.check(explicit)
 	if (!res) {
-		const notifController = notifyErrChecking(notifService);
-		metricsService.capture(`Void Update ${metricsTag}: Error`, { res })
+		const notifController = notifyErrChecking(notifService, openerService);
+		metricsService.capture(`Orchestra Update ${metricsTag}: Error`, { res })
 		return notifController
 	}
 	else {
 		if (res.message) {
-			const notifController = notifyUpdate(res, notifService, updateService)
-			metricsService.capture(`Void Update ${metricsTag}: Yes`, { res })
+			const notifController = notifyUpdate(res, notifService, openerService, voidUpdateService)
+			metricsService.capture(`Orchestra Update ${metricsTag}: Yes`, { res })
 			return notifController
 		}
 		else {
-			metricsService.capture(`Void Update ${metricsTag}: No`, { res })
+			metricsService.capture(`Orchestra Update ${metricsTag}: No`, { res })
 			return null
 		}
 	}
 }
 
 
-// Action
 let lastNotifController: INotificationHandle | null = null
 
 
@@ -176,19 +158,19 @@ registerAction2(class extends Action2 {
 	constructor() {
 		super({
 			f1: true,
-			id: 'void.voidCheckUpdate',
-			title: localize2('voidCheckUpdate', 'Void: Check for Updates'),
+			id: VOID_CHECK_UPDATE_ACTION_ID,
+			title: localize2('voidCheckUpdate', 'Orchestra: Check for Updates'),
 		});
 	}
 	async run(accessor: ServicesAccessor): Promise<void> {
 		const voidUpdateService = accessor.get(IVoidUpdateService)
 		const notifService = accessor.get(INotificationService)
 		const metricsService = accessor.get(IMetricsService)
-		const updateService = accessor.get(IUpdateService)
+		const openerService = accessor.get(IOpenerService)
 
 		const currNotifController = lastNotifController
 
-		const newController = await performVoidCheck(true, notifService, voidUpdateService, metricsService, updateService)
+		const newController = await performVoidCheck(true, notifService, voidUpdateService, metricsService, openerService)
 
 		if (newController) {
 			currNotifController?.close()
@@ -197,30 +179,46 @@ registerAction2(class extends Action2 {
 	}
 })
 
+
+registerAction2(class extends Action2 {
+	constructor() {
+		super({
+			f1: true,
+			id: VOID_OPEN_LATEST_RELEASE_ACTION_ID,
+			title: localize2('orchestraOpenRelease', 'Orchestra: Open Latest Release Page'),
+		});
+	}
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const voidUpdateService = accessor.get(IVoidUpdateService)
+		const openerService = accessor.get(IOpenerService)
+		await openReleasePage(openerService, voidUpdateService)
+	}
+})
+
+
 // on mount
 class VoidUpdateWorkbenchContribution extends Disposable implements IWorkbenchContribution {
 	static readonly ID = 'workbench.contrib.void.voidUpdate'
 	constructor(
-		@IVoidUpdateService voidUpdateService: IVoidUpdateService,
+		@IVoidUpdateService voidUpdateService: IOrchestraUpdateUiService,
 		@IMetricsService metricsService: IMetricsService,
 		@INotificationService notifService: INotificationService,
-		@IUpdateService updateService: IUpdateService,
+		@IOpenerService openerService: IOpenerService,
 	) {
 		super()
 
 		const autoCheck = () => {
-			performVoidCheck(false, notifService, voidUpdateService, metricsService, updateService)
+			performVoidCheck(false, notifService, voidUpdateService, metricsService, openerService)
 		}
 
-		// check once 5 seconds after mount
-		// check every 3 hours
 		const { window } = dom.getActiveWindow()
 
+		// 起動 5 秒後に 1 回チェック
 		const initId = window.setTimeout(() => autoCheck(), 5 * 1000)
 		this._register({ dispose: () => window.clearTimeout(initId) })
 
-
-		const intervalId = window.setInterval(() => autoCheck(), 3 * 60 * 60 * 1000) // every 3 hrs
+		// 以降 3 時間ごとにチェック
+		const intervalId = window.setInterval(() => autoCheck(), 3 * 60 * 60 * 1000)
 		this._register({ dispose: () => window.clearInterval(intervalId) })
 
 	}

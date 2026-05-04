@@ -152,7 +152,7 @@ export const BROWSER_RESTRICTED_PORTS: any = {
  */
 export function findFreePortFaster(startPort: number, giveUpAfter: number, timeout: number, hostname: string = '127.0.0.1'): Promise<number> {
 	let resolved: boolean = false;
-	let timeoutHandle: NodeJS.Timeout | undefined = undefined;
+	let timeoutHandle: ReturnType<typeof setTimeout> | undefined = undefined;
 	let countTried: number = 1;
 	const server = net.createServer({ pauseOnConnect: true });
 	function doResolve(port: number, resolve: (port: number) => void) {

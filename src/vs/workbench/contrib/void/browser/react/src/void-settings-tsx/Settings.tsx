@@ -14,7 +14,7 @@ import { ModelDropdown } from './ModelDropdown.js'
 import { ChatMarkdownRender } from '../markdown/ChatMarkdownRender.js'
 import { WarningBox } from './WarningBox.js'
 import { os } from '../../../../common/helpers/systemInfo.js'
-import { IconLoading } from '../sidebar-tsx/SidebarChat.js'
+import { IconLoading, OrchestraThemeSwitcher } from '../sidebar-tsx/SidebarChat.js'
 import { ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsServiceTypes.js'
 import Severity from '../../../../../../../base/common/severity.js'
 import { defaultModelsOfProvider, getModelCapabilities, modelOverrideKeys, ModelOverrides } from '../../../../common/modelCapabilities.js';
@@ -26,6 +26,7 @@ import { StorageScope, StorageTarget } from '../../../../../../../platform/stora
 
 import { LoginScreen } from '../void-login-tsx/LoginScreen.js';
 import { Lock } from 'lucide-react';
+import { OrchestraUpdatesPane } from './UpdatesPane.js';
 
 type Tab =
 	| 'models'
@@ -35,6 +36,7 @@ type Tab =
 	| 'mcp'
 	| 'division'
 	| 'general'
+	| 'updates'
 	| 'all';
 
 
@@ -1382,6 +1384,7 @@ export const Settings = () => {
 		{ tab: 'division', label: 'Division' },
 		{ tab: 'general', label: 'General' },
 		{ tab: 'mcp', label: 'MCP' },
+		{ tab: 'updates', label: 'Updates' },
 		{ tab: 'all', label: 'All Settings' },
 	];
 	const shouldShowTab = (tab: Tab) => selectedSection === 'all' || selectedSection === tab;
@@ -1838,6 +1841,15 @@ export const Settings = () => {
 
 
 
+								{/* Theme section */}
+								<div>
+									<ErrorBoundary>
+										<h2 className='text-3xl mb-2'>Theme</h2>
+										<h4 className='text-void-fg-3 mb-4'>{`エディタ全体の配色を切り替えます。Sun Red は暖色寄りのサンセット系カラー。`}</h4>
+										<OrchestraThemeSwitcher />
+									</ErrorBoundary>
+								</div>
+
 								{/* Built-in Settings section */}
 								<div>
 									<h2 className={`text-3xl mb-2`}>Built-in Settings</h2>
@@ -1954,6 +1966,11 @@ Use Model Context Protocol to provide Agent mode with more tools.
 										<MCPServersList />
 									</ErrorBoundary>
 								</ErrorBoundary>
+							</div>
+
+							{/* Updates section */}
+							<div className={shouldShowTab('updates') ? `` : 'hidden'}>
+								<OrchestraUpdatesPane />
 							</div>
 
 

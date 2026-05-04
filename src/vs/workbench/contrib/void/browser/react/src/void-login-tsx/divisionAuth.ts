@@ -128,6 +128,48 @@ export const signInWithDivision = async (
 	};
 };
 
+export type DivisionSignUpResult =
+	| { kind: 'signedIn'; auth: DivisionAuthResult }
+	// Supabase 側で「Confirm email」が ON のとき: signUp しても session が無い状態。
+	// ユーザーにメール確認を促し、確認後に signIn し直してもらう。
+	| { kind: 'needsEmailConfirmation'; email: string };
+
+/**
+ * Email / Password で Supabase に新規アカウントを作成する。
+ *  - 即時セッションが返れば signedIn (= signInWithDivision 同様 API キーまで取得)
+ *  - メール確認が必要な構成では needsEmailConfirmation を返す
+ */
+export const signUpWithDivision = async (
+	email: string,
+	password: string,
+): Promise<DivisionSignUpResult> => {
+	const sb = getDivisionSupabase();
+
+	const { data, error } = await sb.auth.signUp({ email, password });
+	if (error) throw new Error(error.message);
+
+	const session = data.session;
+	const user = data.user;
+
+	if (session && user) {
+		// 自動ログイン構成: そのまま API キーを取得して返す
+		const apiKey = await fetchOrCreateDivisionApiKey(user.id, session.access_token);
+		return {
+			kind: 'signedIn',
+			auth: {
+				userId: user.id,
+				email: user.email ?? email,
+				accessToken: session.access_token,
+				refreshToken: session.refresh_token ?? '',
+				apiKey,
+			},
+		};
+	}
+
+	// 「Confirm email」が ON: ユーザーにメール確認を案内する
+	return { kind: 'needsEmailConfirmation', email };
+};
+
 /**
  * 既存の refreshToken からセッションを復元し、Division API キーを再取得する。
  * 設定の永続化済みトークンから無人で再ログインする用途。

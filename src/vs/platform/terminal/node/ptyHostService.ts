@@ -63,8 +63,8 @@ export class PtyHostService extends Disposable implements IPtyHostService {
 	private _wasQuitRequested = false;
 	private _restartCount = 0;
 	private _isResponsive = true;
-	private _heartbeatFirstTimeout?: NodeJS.Timeout;
-	private _heartbeatSecondTimeout?: NodeJS.Timeout;
+	private _heartbeatFirstTimeout?: ReturnType<typeof setTimeout>;
+	private _heartbeatSecondTimeout?: ReturnType<typeof setTimeout>;
 
 	private readonly _onPtyHostExit = this._register(new Emitter<number>());
 	readonly onPtyHostExit = this._onPtyHostExit.event;

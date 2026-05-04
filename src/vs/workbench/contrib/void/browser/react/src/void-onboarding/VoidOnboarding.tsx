@@ -13,6 +13,7 @@ import { ColorScheme } from '../../../../../../../platform/theme/common/theme.js
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js';
 import { isLinux } from '../../../../../../../base/common/platform.js';
 import { LoginScreen } from '../void-login-tsx/LoginScreen.js';
+import { OrchestraThemeSwitcher } from '../sidebar-tsx/SidebarChat.js';
 
 const OVERRIDE_VALUE = false
 
@@ -837,13 +838,28 @@ const VoidOnboardingContent = () => {
 				<div>
 					<div className="text-5xl font-light text-center">Settings and Themes</div>
 
-					<div className="mt-8 text-center flex flex-col items-center gap-4 w-full max-w-md mx-auto">
-						<h4 className="text-void-fg-3 mb-4">Transfer your settings from an existing editor?</h4>
-						<OneClickSwitchButton className='w-full px-4 py-2' fromEditor="VS Code" />
-						<OneClickSwitchButton className='w-full px-4 py-2' fromEditor="Cursor" />
-						<OneClickSwitchButton className='w-full px-4 py-2' fromEditor="Windsurf" />
+					<div className="mt-8 flex flex-col items-center gap-4 w-full max-w-md mx-auto">
+						{/* テーマ選択 — ライト / ダーク / Sun Red の 3 択 */}
+						<div className="w-full text-left">
+							<h4 className="text-void-fg-3 mb-2">Choose your theme</h4>
+							<p className="text-xs text-void-fg-4 mb-3">
+								エディタ全体の配色を選んでください。Sun Red は暖色寄りのサンセット系カラーです。後から「歯車 → Settings → Theme」、またはサイドバー右上のアイコンでいつでも変更できます。
+							</p>
+							<div className="flex justify-center">
+								<OrchestraThemeSwitcher />
+							</div>
+						</div>
 
-						<div className="mt-8 pt-8 border-t border-void-border-4 w-full text-left">
+						<div className="w-full mt-6 pt-6 border-t border-void-border-4 text-center">
+							<h4 className="text-void-fg-3 mb-4">Transfer your settings from an existing editor?</h4>
+							<div className="flex flex-col items-center gap-3">
+								<OneClickSwitchButton className='w-full px-4 py-2' fromEditor="VS Code" />
+								<OneClickSwitchButton className='w-full px-4 py-2' fromEditor="Cursor" />
+								<OneClickSwitchButton className='w-full px-4 py-2' fromEditor="Windsurf" />
+							</div>
+						</div>
+
+						<div className="mt-6 pt-6 border-t border-void-border-4 w-full text-left">
 							<h4 className="text-void-fg-3 mb-4">Account</h4>
 							{voidSettingsState.globalSettings.isLoggedIn ? (
 								<div className="text-emerald-500 font-medium flex items-center gap-2 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20 w-fit">

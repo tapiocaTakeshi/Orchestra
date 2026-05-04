@@ -27,6 +27,23 @@ const watch = require('./watch');
 
 const reporter = createReporter();
 
+// `src/` 直下の React/Web 実験用フォルダ (`src/components/`, `src/renderer/`,
+// `src/app/`, `src/lib/`, `src/styles/`, `src/theme/` など) は VSCode/Void 本体の
+// `src/tsconfig.json` の `include` に含まれていない。だが gulp の `src/**` グロブは
+// これらも吸い込んでしまい、`tsb` 経由で意図せずコンパイル対象になり大量の
+// `Relative import paths need explicit file extensions ...` などのエラーを誘発する。
+// `src` 引数が `'src'` のとき (= 本体ビルド) のみ、これらのフォルダを glob レベルで除外する。
+function getSrcGlobs(src: string): string[] {
+	const globs: string[] = [`${src}/**`, `!${src}/**/node_modules/**`];
+	if (src === 'src') {
+		const experimentalTopLevel = ['components', 'renderer', 'app', 'lib', 'styles', 'theme'];
+		for (const folder of experimentalTopLevel) {
+			globs.push(`!${src}/${folder}/**`);
+		}
+	}
+	return globs;
+}
+
 function getTypeScriptCompilerOptions(src: string): ts.CompilerOptions {
 	const rootDir = path.join(__dirname, `../../${src}`);
 	const options: ts.CompilerOptions = {};
@@ -114,9 +131,9 @@ export function transpileTask(src: string, out: string, esbuild: boolean): task.
 	const task = () => {
 
 		const transpile = createCompile(src, { build: false, emitError: true, transpileOnly: { esbuild }, preserveEnglish: false });
-		// `src/` 配下にネストされた `node_modules/` (例: tsup 用サブプロジェクトの依存) は
-		// 本体ビルドの対象ではないため、必ず除外する。
-		const srcPipe = gulp.src([`${src}/**`, `!${src}/**/node_modules/**`], { base: `${src}` });
+		// `src/` 配下にネストされた `node_modules/` (例: tsup 用サブプロジェクトの依存) と
+		// 本体 tsconfig の include に含まれない React/Web 実験用フォルダを除外する。
+		const srcPipe = gulp.src(getSrcGlobs(src), { base: `${src}` });
 
 		return srcPipe
 			.pipe(transpile())
@@ -136,9 +153,9 @@ export function compileTask(src: string, out: string, build: boolean, options: {
 		}
 
 		const compile = createCompile(src, { build, emitError: true, transpileOnly: false, preserveEnglish: !!options.preserveEnglish });
-		// `src/` 配下にネストされた `node_modules/` (例: tsup 用サブプロジェクトの依存) は
-		// 本体ビルドの対象ではないため、必ず除外する。
-		const srcPipe = gulp.src([`${src}/**`, `!${src}/**/node_modules/**`], { base: `${src}` });
+		// `src/` 配下にネストされた `node_modules/` (例: tsup 用サブプロジェクトの依存) と
+		// 本体 tsconfig の include に含まれない React/Web 実験用フォルダを除外する。
+		const srcPipe = gulp.src(getSrcGlobs(src), { base: `${src}` });
 		const generator = new MonacoGenerator(false);
 		if (src === 'src') {
 			generator.execute();
@@ -183,8 +200,8 @@ export function watchTask(out: string, build: boolean, srcPath: string = 'src'):
 	const task = () => {
 		const compile = createCompile(srcPath, { build, emitError: false, transpileOnly: false, preserveEnglish: false });
 
-		// `srcPath/` 配下にネストされた `node_modules/` は対象外。
-		const src = gulp.src([`${srcPath}/**`, `!${srcPath}/**/node_modules/**`], { base: srcPath });
+		// `srcPath/` 配下にネストされた `node_modules/` と React/Web 実験用フォルダを除外。
+		const src = gulp.src(getSrcGlobs(srcPath), { base: srcPath });
 		const watchSrc = watch(`${srcPath}/**`, { base: srcPath, readDelay: 200, ignored: '**/node_modules/**' });
 
 		const generator = new MonacoGenerator(true);

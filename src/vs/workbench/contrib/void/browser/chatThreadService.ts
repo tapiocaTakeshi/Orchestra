@@ -39,11 +39,67 @@ import { IDirectoryStrService } from '../common/directoryStrService.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { IMCPService } from '../common/mcpService.js';
 import { RawMCPToolCall } from '../common/mcpServiceTypes.js';
+import { IEditorService } from '../../../services/editor/common/editorService.js';
 
 
 // related to retrying when LLM message has error
 const CHAT_RETRIES = 3
 const RETRY_DELAY = 2500
+
+
+// =====================================================================
+// Division Reviewer 自動添付
+// =====================================================================
+// 簡素化された Division オーケストレーションは、最終 Reviewer の出力を
+//   <!-- DIVISION_REVIEWER_BEGIN -->
+//   ... reviewer の生 markdown ...
+//   <!-- DIVISION_REVIEWER_END -->
+// で挟み、assistant メッセージ末尾に埋め込む。 HTML コメントなので
+// markdown レンダラ上は不可視。
+//
+// 次のユーザー送信時に「直前 assistant のレビュー出力」をユーザー入力に
+// 自動 prepend して送る。これで後続 AI はレビュー指摘を踏まえた回答が
+// できる。 「直前」とは thread.messages を末尾から走査して最初に見つかる
+// assistant ロールのメッセージ。 一度抽出しても元メッセージは書き換えない
+// (ChatMessage を mutate しない) が、 prepend されるのは「次の 1 ターン」
+// だけで自然に役目を終える: 次々ターンでは「直前 assistant」が新しく
+// 生成されたものに変わるため、同じレビューが二重添付されない。
+const DIVISION_REVIEWER_BEGIN = '<!-- DIVISION_REVIEWER_BEGIN -->'
+const DIVISION_REVIEWER_END = '<!-- DIVISION_REVIEWER_END -->'
+
+const extractLastReviewerNote = (messages: ChatMessage[]): string | null => {
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const m = messages[i]
+		if (m.role !== 'assistant') continue
+		const content = m.displayContent || ''
+		const beginIdx = content.lastIndexOf(DIVISION_REVIEWER_BEGIN)
+		if (beginIdx < 0) return null
+		const endIdx = content.indexOf(DIVISION_REVIEWER_END, beginIdx + DIVISION_REVIEWER_BEGIN.length)
+		if (endIdx < 0) return null
+		const inner = content
+			.slice(beginIdx + DIVISION_REVIEWER_BEGIN.length, endIdx)
+			.trim()
+		return inner.length > 0 ? inner : null
+	}
+	return null
+}
+
+const augmentWithLastReviewerNote = (userMessage: string, messages: ChatMessage[]): string => {
+	const reviewerNote = extractLastReviewerNote(messages)
+	if (!reviewerNote) return userMessage
+	return [
+		userMessage,
+		'',
+		'---',
+		'',
+		'## （自動添付）直前ターンの Reviewer 指摘',
+		'',
+		'> Division オーケストレーションが直前で生成した最終レビュー結果です。',
+		'> ユーザーの新規メッセージに沿って改善を進める際の参考にしてください。',
+		'',
+		reviewerNote,
+	].join('\n')
+}
 
 
 const findStagingSelectionIndex = (currentSelections: StagingSelectionItem[] | undefined, newSelection: StagingSelectionItem): number | null => {
@@ -113,6 +169,9 @@ const defaultMessageState: UserMessageState = {
 type WhenMounted = {
 	textAreaRef: { current: HTMLTextAreaElement | null }; // the textarea that this thread has, gets set in SidebarChat
 	scrollToBottom: () => void;
+	// 入力欄の値を上書きする (TextAreaFns.setValue と等価)。
+	// メッセージカード上のボタン (例: Reviewer 指摘の「次のプロンプトに挿入」) から呼び出される。
+	setInputText?: (text: string) => void;
 }
 
 
@@ -292,7 +351,7 @@ export interface IChatThreadService {
 	editUserMessageAndStreamResponse({ userMessage, messageIdx, threadId }: { userMessage: string, messageIdx: number, threadId: string }): Promise<void>;
 
 	// call to add a message
-	addUserMessageAndStreamResponse({ userMessage, threadId }: { userMessage: string, threadId: string }): Promise<void>;
+	addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId }: { userMessage: string, _chatSelections?: StagingSelectionItem[], threadId: string }): Promise<void>;
 
 	// approve/reject
 	approveLatestToolRequest(threadId: string): void;
@@ -343,6 +402,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		@IDirectoryStrService private readonly _directoryStringService: IDirectoryStrService,
 		@IFileService private readonly _fileService: IFileService,
 		@IMCPService private readonly _mcpService: IMCPService,
+		@IEditorService private readonly _editorService: IEditorService,
 	) {
 		super()
 		this.state = { allThreads: {}, currentThreadId: null as unknown as string } // default state
@@ -367,25 +427,28 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 					if (op.action === 'edit' && op.searchReplaceBlocks) {
 						// EDIT: Apply search/replace blocks through editCodeService for diff highlighting.
+						// 自動 accept はしない: 追加行 (緑) / 削除行 (赤) の diff をエディタ上に
+						// 残し、ユーザーが内容を確認してから明示的に Accept / Reject できるように
+						// する。 「変更されたファイル」バーから一括承諾も可能。
 						await this._voidModelService.initializeModel(uri);
 						await this._editCodeService.callBeforeApplyOrEdit(uri);
 						this._editCodeService.instantlyApplySearchReplaceBlocks({
 							uri,
 							searchReplaceBlocks: op.searchReplaceBlocks,
 						});
-						// Division API からの変更は auto-approve 設定に関わらず自動承諾する。
-						await this._editCodeService.acceptOrRejectAllDiffAreas({
-							uri,
-							removeCtrlKs: false,
-							behavior: 'accept',
-							_addToHistory: true,
-						});
-						await this._voidModelService.saveModel(uri);
-						console.log(`[FileOperation] Applied + auto-accepted + saved editor edit: ${op.filePath}`);
+						// 緑 / 赤の diff ハイライトはエディタ表示中のファイルにしか乗らない。
+						// 該当ファイルをアクティブにしてユーザーが必ず差分を見られるようにする。
+						try {
+							await this._editorService.openEditor({ resource: uri, options: { preserveFocus: true, pinned: false } });
+						} catch (openErr) {
+							console.warn(`[FileOperation] failed to reveal edited file ${op.filePath}:`, openErr);
+						}
+						console.log(`[FileOperation] Applied editor edit (pending accept): ${op.filePath}`);
 					} else if (op.action === 'create') {
 						// CREATE / OVERWRITE: route through editCodeService so the change is
 						// tracked as a diffZone. If the file doesn't exist yet, create an empty
 						// one first so the model can be initialized.
+						// edit と同様、自動 accept はしないでユーザーに緑/赤 diff を見せる。
 						const exists = await this._fileService.exists(uri);
 						if (!exists) {
 							try {
@@ -402,15 +465,12 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 							uri,
 							newContent: op.content ?? '',
 						});
-						// Division API からの作成/上書きも auto-approve 設定に関わらず自動承諾する。
-						await this._editCodeService.acceptOrRejectAllDiffAreas({
-							uri,
-							removeCtrlKs: false,
-							behavior: 'accept',
-							_addToHistory: true,
-						});
-						await this._voidModelService.saveModel(uri);
-						console.log(`[FileOperation] Applied + auto-accepted + saved create/overwrite: ${op.filePath}`);
+						try {
+							await this._editorService.openEditor({ resource: uri, options: { preserveFocus: true, pinned: false } });
+						} catch (openErr) {
+							console.warn(`[FileOperation] failed to reveal created/overwritten file ${op.filePath}:`, openErr);
+						}
+						console.log(`[FileOperation] Applied create/overwrite (pending accept): ${op.filePath}`);
 					}
 				} catch (err) {
 					console.error(`[FileOperation] Error processing ${op.action} for ${op.filePath}:`, err);
@@ -1483,6 +1543,13 @@ We only need to do it for files that were edited since `from`, ie files between 
 		const thread = this.state.allThreads[threadId];
 		if (!thread) return
 
+		// === Division orchestration が直前ターンで Reviewer 出力を埋め込んでいれば、
+		// それを次のユーザーメッセージに自動 prepend する (一度きりの自動添付)。
+		// Reviewer 出力は <!-- DIVISION_REVIEWER_BEGIN -->...<!-- DIVISION_REVIEWER_END -->
+		// で挟まれているので、ここで抽出して context として付ける。
+		// 「直前」とは thread.messages の末尾要素のうち最後の assistant ロール。
+		const augmentedUserMessage = augmentWithLastReviewerNote(userMessage, thread.messages);
+
 		// === 途中乱入（interject）: 実行中の Division orchestration があれば、abort+restart
 		// ではなく「走っている orchestration に新指示を流し込む」モードにする。
 		// チャットは中断されずに進み続け、次の AI ステップから追加リクエストが反映される。
@@ -1492,10 +1559,10 @@ We only need to do it for files that were edited since `from`, ie files between 
 		if (isLLMStreaming && running && isDivision) {
 			// チャット履歴にも user message を積み、UI 上で見失わないようにする。
 			const currSelns: StagingSelectionItem[] = _chatSelections ?? thread.state.stagingSelections;
-			const userMessageContent = await chat_userMessageContent(userMessage, currSelns, { directoryStrService: this._directoryStringService, fileService: this._fileService });
+			const userMessageContent = await chat_userMessageContent(augmentedUserMessage, currSelns, { directoryStrService: this._directoryStringService, fileService: this._fileService });
 			const userHistoryElt: ChatMessage = { role: 'user', content: userMessageContent, displayContent: userMessage, selections: currSelns, state: defaultMessageState };
 			this._addMessageToThread(threadId, userHistoryElt);
-			this._llmMessageService.interject(running.requestId, userMessage);
+			this._llmMessageService.interject(running.requestId, augmentedUserMessage);
 			return;
 		}
 
@@ -1518,7 +1585,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 		}
 
 		// Now call the original method to add the user message and stream the response
-		await this._addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId });
+		await this._addUserMessageAndStreamResponse({ userMessage: augmentedUserMessage, _chatSelections, threadId });
 
 	}
 

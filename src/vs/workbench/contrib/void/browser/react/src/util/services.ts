@@ -56,6 +56,9 @@ import { IMCPService } from '../../../../common/mcpService.js';
 import { IStorageService, StorageScope } from '../../../../../../../platform/storage/common/storage.js'
 import { OPT_OUT_KEY } from '../../../../common/storageKeys.js'
 import { DivisionProjectConfig, IDivisionProjectService } from '../../../divisionProjectService.js'
+import { IVoidUpdateService } from '../../../../../../../workbench/contrib/void/common/voidUpdateService.js'
+import { OrchestraUpdateState } from '../../../../../../../workbench/contrib/void/common/voidUpdateServiceTypes.js'
+import { IOpenerService } from '../../../../../../../platform/opener/common/opener.js'
 
 
 // normally to do this you'd use a useEffect that calls .onDidChangeState(), but useEffect mounts too late and misses initial state changes
@@ -91,6 +94,11 @@ const divisionProjectListeners: Set<(c: DivisionProjectConfig | null) => void> =
 const divisionProjectsListeners: Set<(projects: DivisionProjectConfig[]) => void> = new Set()
 
 
+// アップデート (GitHub Release) の取得結果を購読
+let orchestraUpdateState: OrchestraUpdateState = { kind: 'idle' }
+const orchestraUpdateStateListeners: Set<(s: OrchestraUpdateState) => void> = new Set()
+
+
 // must call this before you can use any of the hooks below
 // this should only be called ONCE! this is the only place you don't need to dispose onDidChange. If you use state.onDidChange anywhere else, make sure to dispose it!
 export const _registerServices = (accessor: ServicesAccessor) => {
@@ -108,9 +116,10 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 		voidCommandBarService: accessor.get(IVoidCommandBarService),
 		mcpService: accessor.get(IMCPService),
 		divisionProjectService: accessor.get(IDivisionProjectService),
+		voidUpdateService: accessor.get(IVoidUpdateService),
 	}
 
-	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, voidCommandBarService, mcpService, divisionProjectService } = stateServices
+	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, voidCommandBarService, mcpService, divisionProjectService, voidUpdateService } = stateServices
 
 
 
@@ -194,6 +203,14 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 		})
 	)
 
+	orchestraUpdateState = voidUpdateService.state
+	disposables.push(
+		voidUpdateService.onDidChangeUpdateState((s) => {
+			orchestraUpdateState = s
+			orchestraUpdateStateListeners.forEach(l => l(s))
+		})
+	)
+
 
 	return disposables
 }
@@ -248,6 +265,9 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 
 		IStorageService: accessor.get(IStorageService),
 		IDivisionProjectService: accessor.get(IDivisionProjectService),
+
+		IVoidUpdateService: accessor.get(IVoidUpdateService),
+		IOpenerService: accessor.get(IOpenerService),
 
 	} as const
 	return reactAccessor
@@ -440,6 +460,17 @@ export const useDivisionProjects = () => {
 		ss(divisionProjects)
 		divisionProjectsListeners.add(ss)
 		return () => { divisionProjectsListeners.delete(ss) }
+	}, [ss])
+	return s
+}
+
+
+export const useOrchestraUpdateState = () => {
+	const [s, ss] = useState(orchestraUpdateState)
+	useEffect(() => {
+		ss(orchestraUpdateState)
+		orchestraUpdateStateListeners.add(ss)
+		return () => { orchestraUpdateStateListeners.delete(ss) }
 	}, [ss])
 	return s
 }

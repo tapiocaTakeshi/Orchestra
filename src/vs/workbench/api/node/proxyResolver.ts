@@ -222,7 +222,7 @@ const fetchFeatureUse: FetchFeatureUseEvent = {
 	manualRedirect: 0,
 };
 
-let timer: NodeJS.Timeout | undefined;
+let timer: ReturnType<typeof setTimeout> | undefined;
 const enableFeatureUseTelemetry = false;
 function recordFetchFeatureUse(mainThreadTelemetry: MainThreadTelemetryShape, feature: keyof typeof fetchFeatureUse) {
 	if (enableFeatureUseTelemetry && !fetchFeatureUse[feature]++) {

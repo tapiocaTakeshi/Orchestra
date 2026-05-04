@@ -11,8 +11,11 @@ const sweepBG = new Color(new RGBA(100, 100, 100, .2));
 const highlightBG = new Color(new RGBA(100, 100, 100, .1));
 const sweepIdxBG = new Color(new RGBA(100, 100, 100, .5));
 
-const acceptBG = new Color(new RGBA(155, 185, 85, .1)); // default is RGBA(155, 185, 85, .2)
-const rejectBG = new Color(new RGBA(255, 0, 0, .1)); // default is RGBA(255, 0, 0, .2)
+// 追加行 (緑) / 削除行 (赤) のハイライト。 視認性 "全く分からない" との
+// フィードバックを受けて、塗りを大幅に強める (.45 ≒ 半透明) と同時に色味も
+// Tailwind green-500 / red-500 に寄せて diff の意味が一目で分かるようにする。
+const acceptBG = new Color(new RGBA(34, 197, 94, .45));
+const rejectBG = new Color(new RGBA(239, 68, 68, .45));
 
 // Widget colors
 export const acceptAllBg = 'rgb(30, 133, 56)'

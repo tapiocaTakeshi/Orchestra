@@ -20,7 +20,7 @@ type RefreshableState = ({
 	timeoutId: null,
 } | {
 	state: 'refreshing',
-	timeoutId: NodeJS.Timeout | null, // the timeoutId of the most recent call to refreshModels
+	timeoutId: ReturnType<typeof setTimeout> | null, // the timeoutId of the most recent call to refreshModels
 } | {
 	state: 'finished',
 	timeoutId: null,
@@ -180,10 +180,25 @@ export class RefreshModelService extends Disposable implements IRefreshModelServ
 				})
 
 				if (providerName === 'divisionAPI') {
+					// `division-orchestrator` は Division Project (マルチエージェント orchestrator) を指す
+					// 合成エントリで `/api/models` には含まれない可能性があるため、UI 既定値を維持するべく
+					// 必ず先頭に固定する。 単一モデル群はサーバが返す名称をそのまま反映 (重複排除付き)。
+					const seen = new Set<string>()
+					const orderedNames: string[] = ['division-orchestrator']
+					seen.add('division-orchestrator')
+					for (const n of modelNames) {
+						if (!n || seen.has(n)) continue
+						seen.add(n)
+						orderedNames.push(n)
+					}
 					this.voidSettingsService.setSettingOfProvider(
 						providerName,
 						'models',
-						modelNames.map(modelName => ({ modelName, type: 'autodetected', isHidden: false }))
+						orderedNames.map(modelName => ({
+							modelName,
+							type: modelName === 'division-orchestrator' ? 'default' : 'autodetected',
+							isHidden: false,
+						}))
 					)
 				}
 				else {
@@ -222,7 +237,7 @@ export class RefreshModelService extends Disposable implements IRefreshModelServ
 		}
 	}
 
-	private _setTimeoutId(providerName: RefreshableProviderName, timeoutId: NodeJS.Timeout | null) {
+	private _setTimeoutId(providerName: RefreshableProviderName, timeoutId: ReturnType<typeof setTimeout> | null) {
 		this.state[providerName].timeoutId = timeoutId
 	}
 

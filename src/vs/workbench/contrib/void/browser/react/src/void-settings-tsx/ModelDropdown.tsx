@@ -39,9 +39,23 @@ const ModelSelectBox = ({ options, featureName, className }: { options: ModelOpt
 		voidSettingsService.setModelSelectionOfFeature(featureName, newOption.selection)
 	}, [voidSettingsService, featureName])
 
+	// Division API のモデル名は `<providerId>/<modelId>` 形式で保存されているので、
+	// 表示用にモデル ID 部分だけ取り出す。 "/" を含まない値 (例: "division-orchestrator"
+	// や他プロバイダのモデル) はそのまま返す。
+	const splitDivisionModelName = (modelName: string): { providerId: string | null; modelId: string } => {
+		const idx = modelName.indexOf('/')
+		if (idx > 0 && idx < modelName.length - 1) {
+			return { providerId: modelName.slice(0, idx), modelId: modelName.slice(idx + 1) }
+		}
+		return { providerId: null, modelId: modelName }
+	}
+
 	const getDisplayName = useCallback((option: ModelOption) => {
 		if (isDivisionProjectOption(option.selection) && divisionProjectConfig) {
 			return `Division Project`
+		}
+		if (option.selection.providerName === 'divisionAPI') {
+			return splitDivisionModelName(option.selection.modelName).modelId
 		}
 		return option.selection.modelName
 	}, [divisionProjectConfig])
@@ -51,6 +65,11 @@ const ModelSelectBox = ({ options, featureName, className }: { options: ModelOpt
 			const suffix = divisionProjects.length > 1 ? ` (${divisionProjects.length})` : ''
 			return divisionProjectConfig.name + suffix
 		}
+		// Division API のモデル行ではホスティング先プロバイダを副表示する
+		if (option.selection.providerName === 'divisionAPI') {
+			const { providerId } = splitDivisionModelName(option.selection.modelName)
+			return providerId ?? ''
+		}
 		// プロバイダ名は group header で表示するので、行内では詳細を出さない
 		return ''
 	}, [divisionProjectConfig, divisionProjects])
@@ -58,6 +77,12 @@ const ModelSelectBox = ({ options, featureName, className }: { options: ModelOpt
 	const getGroupName = useCallback((option: ModelOption) => {
 		// Division Project はグループ化しない（トップ固定の特別項目）
 		if (isDivisionProjectOption(option.selection)) return undefined
+		// Division API 経由のモデルは `<providerId>/...` の providerId でグルーピング
+		if (option.selection.providerName === 'divisionAPI') {
+			const { providerId } = splitDivisionModelName(option.selection.modelName)
+			if (providerId) return `Division · ${providerId}`
+			return 'Division'
+		}
 		try {
 			return displayInfoOfProviderName(option.selection.providerName).title
 		} catch {

@@ -60,6 +60,12 @@
         "label": "%lightHcColorThemeLabel%",
         "uiTheme": "hc-light",
         "path": "./themes/hc_light.json"
+      },
+      {
+        "id": "Sun Red",
+        "label": "%sunRedColorThemeLabel%",
+        "uiTheme": "vs-dark",
+        "path": "./themes/sun_red.json"
       }
     ],
     "iconThemes": [

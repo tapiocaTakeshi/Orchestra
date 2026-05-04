@@ -110,9 +110,9 @@ export class TerminalProcess extends Disposable implements ITerminalChildProcess
 	private _processStartupComplete: Promise<void> | undefined;
 	private _windowsShellHelper: WindowsShellHelper | undefined;
 	private _childProcessMonitor: ChildProcessMonitor | undefined;
-	private _titleInterval: NodeJS.Timeout | null = null;
+	private _titleInterval: ReturnType<typeof setInterval> | null = null;
 	private _writeQueue: IWriteObject[] = [];
-	private _writeTimeout: NodeJS.Timeout | undefined;
+	private _writeTimeout: ReturnType<typeof setTimeout> | undefined;
 	private _delayedResizer: DelayedResizer | undefined;
 	private readonly _initialCwd: string;
 	private readonly _ptyOptions: IPtyForkOptions | IWindowsPtyForkOptions;
@@ -654,7 +654,7 @@ export class TerminalProcess extends Disposable implements ITerminalChildProcess
 class DelayedResizer extends Disposable {
 	rows: number | undefined;
 	cols: number | undefined;
-	private _timeout: NodeJS.Timeout;
+	private _timeout: ReturnType<typeof setTimeout>;
 
 	private readonly _onTrigger = this._register(new Emitter<{ rows?: number; cols?: number }>());
 	get onTrigger(): Event<{ rows?: number; cols?: number }> { return this._onTrigger.event; }

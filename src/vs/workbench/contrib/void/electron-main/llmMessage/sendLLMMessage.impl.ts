@@ -16,7 +16,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 /* eslint-enable */
 
-import { AnthropicLLMChatMessage, GeminiLLMChatMessage, LLMChatMessage, LLMFIMMessage, ModelListParams, OllamaModelResponse, OnError, OnFinalMessage, OnText, RawToolCallObj, RawToolParamsObj, FileOperationItem, CommandOperationItem, FlowOutputEntry, DivisionAPIModelResponse } from '../../common/sendLLMMessageTypes.js';
+import { AnthropicLLMChatMessage, GeminiLLMChatMessage, LLMChatMessage, LLMFIMMessage, ModelListParams, OllamaModelResponse, OnError, OnFinalMessage, OnText, RawToolCallObj, RawToolParamsObj, FileOperationItem, CommandOperationItem, DivisionAPIModelResponse } from '../../common/sendLLMMessageTypes.js';
 import { ChatMode, displayInfoOfProviderName, ModelSelectionOptions, OverridesOfModel, ProviderName, RoleAssignment, SettingsOfProvider } from '../../common/voidSettingsTypes.js';
 import { getSendableReasoningInfo, getModelCapabilities, getProviderCapabilities, defaultProviderSettings, getReservedOutputTokenSpace } from '../../common/modelCapabilities.js';
 import { extractReasoningWrapper, extractXMLToolsWrapper } from './extractGrammar.js';
@@ -439,39 +439,87 @@ const _openaiCompatibleList = async ({ onSuccess: onSuccess_, onError: onError_,
 	}
 }
 
+// Division API `/api/models` のレスポンス例 (実 API)
+// {
+//   providers: [
+//     { id: 'anthropic', name: 'Anthropic', apiType: 'anthropic', modelId: '',
+//       models: [ { modelId: 'claude-opus-4-7', displayName: 'Claude Opus 4.7' }, ... ] },
+//     { id: 'openai', ... },
+//   ]
+// }
+//
+// 単一モデルとしてユーザーに選ばせるため、`<providerId>/<modelId>` 形式の文字列を
+// modelName として返す。 こうすると後段 (callDivisionGenerateStream) で provider と
+// model を分離して `/api/generate/stream` に正しく投げられる。
+//
+// 後方互換として、他の構造 (data.models[], data.data[], 文字列等) も受け付ける。
+//   - models[] / data[] 直下の entry は providerId 不明なので modelId だけ返す。
+//   - 文字列 entry はそのまま使う。
 const getDivisionAPIModelNames = (data: any): string[] => {
-	const modelNames = new Set<string>(['division-orchestrator'])
-	const addName = (value: unknown) => {
-		if (typeof value === 'string' && value.trim()) {
-			modelNames.add(value.trim())
-		}
+	const orderedNames: string[] = []
+	const seen = new Set<string>()
+	const push = (name: string) => {
+		const trimmed = name.trim()
+		if (!trimmed || seen.has(trimmed)) return
+		seen.add(trimmed)
+		orderedNames.push(trimmed)
 	}
-	const addModel = (model: unknown) => {
-		if (typeof model === 'string') {
-			addName(model)
+	push('division-orchestrator')
+
+	const pickModelId = (model: unknown): string | null => {
+		if (typeof model === 'string') return model
+		if (!model || typeof model !== 'object') return null
+		const m = model as { modelId?: unknown; id?: unknown; name?: unknown; model?: unknown }
+		for (const v of [m.modelId, m.id, m.name, m.model]) {
+			if (typeof v === 'string' && v.trim()) return v.trim()
 		}
-		else if (model && typeof model === 'object') {
-			const m = model as { name?: unknown; id?: unknown; model?: unknown }
-			addName(m.name)
-			addName(m.id)
-			addName(m.model)
+		return null
+	}
+
+	const addProviderEntry = (provider: unknown) => {
+		if (!provider || typeof provider !== 'object') {
+			const single = pickModelId(provider)
+			if (single) push(single)
+			return
+		}
+		const p = provider as { id?: unknown; name?: unknown; apiType?: unknown; models?: unknown }
+		// providerId は id > apiType > name の優先で決定。 すべて欠けるなら "" 扱い。
+		const providerId = (
+			(typeof p.id === 'string' && p.id.trim()) ? p.id.trim()
+				: (typeof p.apiType === 'string' && p.apiType.trim()) ? p.apiType.trim()
+					: (typeof p.name === 'string' && p.name.trim()) ? p.name.trim()
+						: ''
+		)
+		if (Array.isArray(p.models)) {
+			for (const m of p.models) {
+				const modelId = pickModelId(m)
+				if (!modelId) continue
+				push(providerId ? `${providerId}/${modelId}` : modelId)
+			}
+		} else {
+			// 配下に models[] が無い provider entry は model として扱う後方互換
+			const single = pickModelId(provider)
+			if (single) push(single)
 		}
 	}
 
-	if (Array.isArray(data)) {
-		data.forEach(addModel)
-	}
-	if (Array.isArray(data?.providers)) {
-		data.providers.forEach(addModel)
-	}
+	if (Array.isArray(data)) data.forEach(addProviderEntry)
+	if (Array.isArray(data?.providers)) data.providers.forEach(addProviderEntry)
+	// providers の外側にフラットな models[] が並ぶ別レスポンスへの後方互換
 	if (Array.isArray(data?.models)) {
-		data.models.forEach(addModel)
+		for (const m of data.models) {
+			const modelId = pickModelId(m)
+			if (modelId) push(modelId)
+		}
 	}
 	if (Array.isArray(data?.data)) {
-		data.data.forEach(addModel)
+		for (const m of data.data) {
+			const modelId = pickModelId(m)
+			if (modelId) push(modelId)
+		}
 	}
 
-	return [...modelNames]
+	return orderedNames
 }
 
 const divisionAPIList = async ({ onSuccess: onSuccess_, onError: onError_, settingsOfProvider, divisionApiKey }: ListParams_Internal<DivisionAPIModelResponse>) => {
@@ -994,74 +1042,14 @@ const saveFlowResultAsMd = (
 	}
 };
 
-type OrchestrationState = {
-	approved: boolean;
-	sessionId?: string;
-	finalRole?: string;
-	currentInput?: string;
-	allFlowOutputs?: FlowOutputEntry[];
-	editedOutputs?: Array<{ mdFileName: string; mdContent: string }>;
-	// Timestamp so we can clean up stale state files
-	createdAt?: number;
-};
-
-const getOrchestrationStatePath = (workspaceFolderPath: string): string => {
-	return path.join(workspaceFolderPath, '.division', '.orchestration-state.json');
-};
-
-const readOrchestrationState = (workspaceFolderPath: string): OrchestrationState | null => {
-	try {
-		const p = getOrchestrationStatePath(workspaceFolderPath);
-		if (!fs.existsSync(p)) return null;
-		const raw = fs.readFileSync(p, 'utf-8');
-		return JSON.parse(raw) as OrchestrationState;
-	} catch (_e) {
-		return null;
-	}
-};
-
+// 旧フローでは `.division/.orchestration-state.json` にフロー承認用の中間状態を
+// 書いていた。 シンプル化版では承認ステップ自体が無いので、過去ファイルが残って
+// いた場合に掃除するだけのユーティリティを残す。
 const clearOrchestrationState = (workspaceFolderPath: string): void => {
 	try {
-		const p = getOrchestrationStatePath(workspaceFolderPath);
+		const p = path.join(workspaceFolderPath, '.division', '.orchestration-state.json');
 		if (fs.existsSync(p)) fs.unlinkSync(p);
 	} catch (_e) { /* ignore */ }
-};
-
-// Apply user-edited MD contents to the actual .division/*.md files so the final
-// flow picks up the edits.
-const applyEditedMdFiles = (
-	workspaceFolderPath: string,
-	editedOutputs: Array<{ mdFileName: string; mdContent: string }>,
-): void => {
-	const divisionDir = path.join(workspaceFolderPath, '.division');
-	try { fs.mkdirSync(divisionDir, { recursive: true }); } catch (_e) { /* ignore */ }
-	for (const out of editedOutputs) {
-		if (!out || !out.mdFileName) continue;
-		const filePath = path.join(divisionDir, out.mdFileName);
-		try {
-			fs.writeFileSync(filePath, out.mdContent ?? '', 'utf-8');
-		} catch (_e) { /* ignore */ }
-	}
-};
-
-// Load the (possibly user-edited) MD files from .division/ so they can be used
-// as context for the final synthesis flow.
-const loadFlowMdFiles = (
-	workspaceFolderPath: string,
-	entries: FlowOutputEntry[],
-): FlowOutputEntry[] => {
-	const result: FlowOutputEntry[] = [];
-	for (const e of entries) {
-		const filePath = path.join(workspaceFolderPath, '.division', e.mdFileName);
-		let mdContent = e.mdContent;
-		try {
-			if (fs.existsSync(filePath)) {
-				mdContent = fs.readFileSync(filePath, 'utf-8');
-			}
-		} catch (_e) { /* ignore */ }
-		result.push({ ...e, mdContent });
-	}
-	return result;
 };
 
 
@@ -1070,6 +1058,38 @@ const loadFlowMdFiles = (
 // For NEW files: creates them via fs (directories need creation)
 // For EDIT operations (SEARCH/REPLACE): returns FileOperationItem for renderer to apply via editCodeService
 // For commands (bash/terminal): returns CommandOperationItem for renderer to execute
+// SEARCH/REPLACE 区切り行を全バリアントに対応した正規表現で検出する。
+//
+// 検出対象 (1 行で1ペア):
+//   開始: <<<SEARCH | <<<<<<< SEARCH | <<<<<<< ORIGINAL  (山括弧 3 個以上)
+//   区切: === | ======= | =====... (= が 3 個以上)
+//   終端: >>>REPLACE | >>>>>>> REPLACE | >>>>>>> UPDATED (山括弧 3 個以上)
+//
+// 行末に余白があってもよい。 ラベル後に余白や追加文字があっても良い (`<<<<<<< SEARCH foo.ts` 等)
+// にゆるやかに対応するため、ラベルだけマッチさせ後ろは行末まで許容する。
+const SEARCH_REPLACE_PAIR_RE = /^[ \t]*<{3,}[ \t]*(?:SEARCH|ORIGINAL)\b[^\n]*\n([\s\S]*?)^[ \t]*={3,}[ \t]*\n([\s\S]*?)^[ \t]*>{3,}[ \t]*(?:REPLACE|UPDATED)\b[^\n]*$/gm;
+
+// SEARCH/REPLACE マーカーが少なくとも 1 ペア含まれているかの軽量判定。
+const hasSearchReplaceBlocks = (code: string): boolean => {
+	SEARCH_REPLACE_PAIR_RE.lastIndex = 0;
+	const found = SEARCH_REPLACE_PAIR_RE.test(code);
+	SEARCH_REPLACE_PAIR_RE.lastIndex = 0;
+	return found;
+};
+
+// 任意の SEARCH/REPLACE バリアントを editCodeService が期待する標準フォーマット
+// (<<<<<<< ORIGINAL / ======= / >>>>>>> UPDATED) に正規化する。
+// 連続した複数ペアもまとめて処理する。
+const normalizeSearchReplaceToEditorFormat = (code: string): string => {
+	SEARCH_REPLACE_PAIR_RE.lastIndex = 0;
+	return code.replace(SEARCH_REPLACE_PAIR_RE, (_match, orig: string, repl: string) => {
+		// 末尾の余分な改行は trimEnd で 1 つに整える
+		const origTrimmed = orig.replace(/\n+$/, '');
+		const replTrimmed = repl.replace(/\n+$/, '');
+		return `<<<<<<< ORIGINAL\n${origTrimmed}\n=======\n${replTrimmed}\n>>>>>>> UPDATED`;
+	});
+};
+
 const saveCodeBlocksFromOutput = (output: string, _sessionId: string, workspaceFolderPath?: string): { savedFiles: { filePath: string; language: string; action: 'created' | 'updated' }[]; fileOperations: FileOperationItem[]; commands: CommandOperationItem[] } => {
 	const savedFiles: { filePath: string; language: string; action: 'created' | 'updated' }[] = [];
 	const fileOperations: FileOperationItem[] = [];
@@ -1112,19 +1132,12 @@ const saveCodeBlocksFromOutput = (output: string, _sessionId: string, workspaceF
 				continue;
 			}
 
-			// Check if code contains SEARCH/REPLACE blocks
-			const searchReplaceRegex = /<<<SEARCH\n([\s\S]*?)\n===\n([\s\S]*?)\n>>>REPLACE/g;
-			const hasSearchReplace = searchReplaceRegex.test(code);
-			searchReplaceRegex.lastIndex = 0; // reset after test
-
-			if (hasSearchReplace && fs.existsSync(fullPath)) {
+			// SEARCH/REPLACE バリアントを検出 (Division 独自 / Aider 標準 / Void 標準 全部)
+			if (hasSearchReplaceBlocks(code) && fs.existsSync(fullPath)) {
 				// EDIT MODE: send search/replace blocks to renderer for editor-integrated editing
-				// Convert from Division API format (<<<SEARCH/===/>>>REPLACE) to
-				// editor format (<<<<<<< ORIGINAL/=======/>>>>>>> UPDATED)
-				let editorFormattedBlocks = code;
-				editorFormattedBlocks = editorFormattedBlocks.replace(/<<<SEARCH\n/g, '<<<<<<< ORIGINAL\n');
-				editorFormattedBlocks = editorFormattedBlocks.replace(/\n===\n/g, '\n=======\n');
-				editorFormattedBlocks = editorFormattedBlocks.replace(/\n>>>REPLACE/g, '\n>>>>>>> UPDATED');
+				// 全バリアント (`<<<SEARCH/===/>>>REPLACE`, `<<<<<<< SEARCH/=======/>>>>>>> REPLACE`,
+				// `<<<<<<< ORIGINAL/=======/>>>>>>> UPDATED`) を editor 標準形式に正規化する。
+				const editorFormattedBlocks = normalizeSearchReplaceToEditorFormat(code);
 
 				fileOperations.push({
 					filePath: fullPath,
@@ -1149,6 +1162,99 @@ const saveCodeBlocksFromOutput = (output: string, _sessionId: string, workspaceF
 				savedFiles.push({ filePath: fullPath, language, action: existed ? 'updated' : 'created' });
 			}
 		} catch (_e) { /* ignore write errors */ }
+	}
+
+	// =============================================================================
+	// 第 2 パス: フェンスで囲まれていない (= ```lang:path で wrap されていない) SEARCH/REPLACE
+	// ブロックを救済する。 モデルが命令を守らず、生 SEARCH/REPLACE をテキスト中に出した
+	// 場合でもコード変更を反映できるようにする。 直前 6 行以内に「ファイルパスらしき行」
+	// が出現していればそのファイルへの edit と判定する。
+	//
+	// 対応するファイルパス書式:
+	//   - `### path/to/foo.ts` (markdown 見出し)
+	//   - `**path/to/foo.ts**` (bold)
+	//   - `path/to/foo.ts:` (行末コロン)
+	//   - `「path/to/foo.ts」` / 「`path/to/foo.ts`」 等 (バッククォート)
+	//   - 単純に `path/to/foo.ts` 単体
+	//
+	// 既に第 1 パスで処理した範囲とのバッティングを避けるため、フェンス内に含まれる
+	// SEARCH/REPLACE はここではスキップする (フェンス範囲を別途記憶しておく)。
+	// =============================================================================
+	{
+		// フェンスで囲まれた範囲 [start, end) のリストを作る
+		const fenceRanges: { start: number; end: number }[] = [];
+		const fenceRe = /```[\s\S]*?```/g;
+		let fm: RegExpExecArray | null;
+		while ((fm = fenceRe.exec(output)) !== null) {
+			fenceRanges.push({ start: fm.index, end: fm.index + fm[0].length });
+		}
+		const insideFence = (idx: number) => fenceRanges.some(r => idx >= r.start && idx < r.end);
+
+		// ファイルパス推定用の正規表現。 拡張子付きの相対 / 絶対パスらしきものを抽出する。
+		// 1 文字以上のディレクトリ + ファイル名 + ピリオド + 拡張子 (英数 1-6 文字) の連続。
+		const FILE_PATH_LIKE = /(?:[\w@.\-]+\/)*[\w@.\-]+\.[A-Za-z0-9]{1,8}/;
+		const extractFilePath = (line: string): string | null => {
+			const trimmed = line.trim();
+			if (!trimmed) return null;
+			// `### foo.ts` / `**foo.ts**` / `\`foo.ts\`` / `foo.ts:` / `「foo.ts」` 等
+			const cleaned = trimmed
+				.replace(/^#{1,6}\s+/, '')
+				.replace(/^[*_]{1,3}|[*_]{1,3}$/g, '')
+				.replace(/^[`「『"']|[`」』"':]\s*$/g, '')
+				.trim();
+			const m = cleaned.match(FILE_PATH_LIKE);
+			if (!m) return null;
+			// 行が「ファイルパスっぽい何か」だけで構成されているか、ごく短いコンテキストかを軽く判定。
+			// 長い文章中にたまたま foo.ts が出てきたケースを誤検出しないため、抽出した文字列の長さが
+			// 行 cleaned 全体の半分以上を占める場合のみ採用する。
+			if (m[0].length * 2 < cleaned.length) return null;
+			return m[0];
+		};
+
+		// 既に第 1 パスで採用した filePath 集合 (重複登録防止)
+		const alreadyHandled = new Set<string>(fileOperations.filter(o => o.action === 'edit').map(o => o.filePath));
+
+		// 全文走査して SEARCH/REPLACE ペアを検出
+		SEARCH_REPLACE_PAIR_RE.lastIndex = 0;
+		let pm: RegExpExecArray | null;
+		while ((pm = SEARCH_REPLACE_PAIR_RE.exec(output)) !== null) {
+			const matchStart = pm.index;
+			if (insideFence(matchStart)) continue;
+
+			// 直前 6 行を遡ってファイルパスを探す
+			const prefix = output.slice(0, matchStart);
+			const linesBefore = prefix.split('\n');
+			let foundPath: string | null = null;
+			for (let i = linesBefore.length - 1; i >= 0 && i > linesBefore.length - 1 - 6; i--) {
+				foundPath = extractFilePath(linesBefore[i]);
+				if (foundPath) break;
+			}
+			if (!foundPath) continue;
+
+			try {
+				const fullPath = path.isAbsolute(foundPath)
+					? foundPath
+					: path.join(workspaceRoot, foundPath);
+				if (!fullPath.startsWith(workspaceRoot)) continue;
+				if (!fs.existsSync(fullPath)) continue;
+				if (alreadyHandled.has(fullPath)) continue;
+
+				// マッチしたペア部分だけを正規化して送る (周辺の散文は不要)
+				const pairText = pm[0];
+				const editorFormattedBlocks = normalizeSearchReplaceToEditorFormat(pairText);
+				const ext = path.extname(fullPath).slice(1).toLowerCase() || 'plaintext';
+
+				fileOperations.push({
+					filePath: fullPath,
+					language: ext,
+					action: 'edit',
+					searchReplaceBlocks: editorFormattedBlocks,
+				});
+				savedFiles.push({ filePath: fullPath, language: ext, action: 'updated' });
+				alreadyHandled.add(fullPath);
+			} catch (_e) { /* skip on any path / fs issue */ }
+		}
+		SEARCH_REPLACE_PAIR_RE.lastIndex = 0;
 	}
 
 	return { savedFiles, fileOperations, commands };
@@ -1176,12 +1282,30 @@ const callDivisionGenerateStream = async (
 		if (apiKey) {
 			headers['Authorization'] = `Bearer ${apiKey}`;
 		}
+		// `divisionModelName` は refreshModelService 経由で `<providerId>/<modelId>` 形式
+		// (例: "anthropic/claude-opus-4-7") で渡ってくる。
+		// Division API の `/api/generate/stream` は `provider` フィールドに **modelId**
+		// (例: "claude-opus-4-7") をそのまま渡す仕様 (provider 名 "anthropic" を渡すと
+		// 「Provider not found」で 404 になる)。 そのため "/" を含む場合は後ろ半分の
+		// modelId のみを provider として送り、追加で `model` 互換フィールドにも同値を
+		// 流し込む (将来 API 側で model フィールドをサポートしても整合性を保つため)。
+		// "/" を含まない場合 (例: "division-orchestrator", 後方互換でモデル名のみ) は
+		// そのまま単一値を provider として送る。
+		let bodyProvider = divisionModelName
+		let bodyModel: string | undefined = undefined
+		const slashIdx = divisionModelName.indexOf('/')
+		if (slashIdx > 0 && slashIdx < divisionModelName.length - 1) {
+			bodyModel = divisionModelName.slice(slashIdx + 1)
+			bodyProvider = bodyModel
+		}
+
 		const response = await fetch(`${endpointBase}/api/generate/stream`, {
 			method: 'POST',
 			headers,
 			body: JSON.stringify({
 				input,
-				provider: divisionModelName,
+				provider: bodyProvider,
+				...(bodyModel ? { model: bodyModel } : {}),
 				...(mode ? { mode } : {}),
 				...(sessionId ? { sessionId } : {}),
 				// Division APIがローカル実行時に file-searcher / coder でユーザーの
@@ -1463,42 +1587,6 @@ const TEXT_EXTENSIONS = new Set([
 const MAX_SEARCH_FILES = 400;
 const MAX_FILE_SIZE_BYTES = 100 * 1024; // 100KB
 const MAX_TOTAL_OUTPUT_CHARS = 180000;
-
-// Division API orchestration の各ループ最大試行回数のデフォルト値。
-// 実際の値はユーザー設定から sendChat 呼び出し時に渡される。
-// ユーザーは AbortController 経由でいつでも中断できる。
-const DEFAULT_MAX_REVIEW_ITERATIONS = 10;
-
-// レビュアー出力が「合格」かどうかを判定する。
-// 日本語/英語の典型的な合否表現と、明示的な不合格マーカーの両方を見る。
-const judgeReviewPass = (reviewOutput: string): boolean => {
-	if (!reviewOutput || !reviewOutput.trim()) return false;
-	const lower = reviewOutput.toLowerCase();
-
-	// 明示的な不合格マーカーがあれば即 fail
-	const failMarkers = [
-		'不合格', '要修正', '修正が必要', 'NG', '却下',
-		'fail', 'failed', 'rejected', 'not approved', 'needs fix', 'needs revision',
-		'requires change', 'must fix', 'must change',
-	];
-	for (const m of failMarkers) {
-		if (reviewOutput.includes(m) || lower.includes(m.toLowerCase())) return false;
-	}
-
-	// 合格マーカー
-	const passMarkers = [
-		'合格', '承認', '問題ありません', '問題なし', '完了', 'OK です', 'OKです',
-		'approved', 'pass', 'passed', 'lgtm', 'looks good', 'all good', 'no issues',
-		'no problems', 'ready to merge', 'ready to ship',
-	];
-	for (const m of passMarkers) {
-		if (reviewOutput.includes(m) || lower.includes(m.toLowerCase())) return true;
-	}
-
-	// どちらのマーカーも無い場合は、保守的に「不合格」とみなす
-	// （Reviewer が合格判定を明示していない = 改善点だけ列挙している可能性が高い）
-	return false;
-};
 
 // .divisionignore 読込み & マッチャ
 //
@@ -1871,29 +1959,6 @@ const searchWorkspaceFiles = (
 		+ `included=${matches.length} chars=${totalChars} skipped=${truncatedDueToBudget}`);
 
 	return { matches, summary, tree };
-};
-
-const buildFileSearchOutput = (workspaceFolderPath: string, query: string): string => {
-	const { matches, summary, tree } = searchWorkspaceFiles(workspaceFolderPath, query);
-	const lines: string[] = [
-		`## ワークスペース: \`${workspaceFolderPath}\``,
-		'',
-		summary,
-		'',
-		`### ディレクトリツリー（関連ファイルの追加読取が必要ならパスを明示してください）`,
-		'',
-		tree,
-		'',
-	];
-	for (const m of matches) {
-		const ext = path.extname(m.relativePath).slice(1) || 'text';
-		lines.push(`### \`${m.relativePath}\``);
-		lines.push('```' + ext);
-		lines.push(m.content);
-		lines.push('```');
-		lines.push('');
-	}
-	return lines.join('\n');
 };
 
 // 反復ファイルサーチ用：直前のマッチからクエリを拡張して再検索する。
@@ -2513,9 +2578,6 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		separateSystemMessage,
 		divisionProjectId: divisionProjectIdParam,
 		divisionApiKey,
-		divisionMaxBriefGateIterations,
-		divisionMaxReviewerIterations,
-		divisionMaxReviewIterations,
 		workspaceFolderPath,
 		modelName: selectedModel,
 		chatMode,
@@ -2523,18 +2585,9 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		takePendingInjection,
 	} = params
 
-	const normalizeIterationCap = (raw: number | undefined): number => {
-		if (typeof raw !== 'number' || !Number.isFinite(raw)) return DEFAULT_MAX_REVIEW_ITERATIONS;
-		if (raw < 1) return 1;
-		return Math.floor(raw);
-	};
-	const legacyMaxReviewIterations = normalizeIterationCap(divisionMaxReviewIterations);
-	const maxBriefGateIterations = divisionMaxBriefGateIterations === undefined
-		? legacyMaxReviewIterations
-		: normalizeIterationCap(divisionMaxBriefGateIterations);
-	const maxReviewerIterations = divisionMaxReviewerIterations === undefined
-		? legacyMaxReviewIterations
-		: normalizeIterationCap(divisionMaxReviewerIterations);
+	// 旧フローには Brief Gate / Reviewer のリトライループ + 最大試行回数があったが、
+	// シンプル化版では Reviewer は 1 回しか走らせないため、これらの設定は使わない。
+	// 互換のため params 側のキー (divisionMax*) は受け入れるが、ここでは無視する。
 
 	try {
 		const endpointBase = settingsOfProvider.divisionAPI.endpoint || 'https://api.division.he-ro.jp';
@@ -2641,14 +2694,14 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		}
 
 		// =============================================
-		// ORCHESTRATION MODE: /api/tasks/create + /api/tasks/execute
+		// ORCHESTRATION MODE (シンプル化版)
 		//
-		// Diagrammed orchestration flow:
-		//
-		// User → Leader → (Ideaman, Search, Research)
-		//      → (Designer, Image, Planner) → Leader(Todos)
-		//      → File Search → Coder/Writer → Reviewer
-		//      → OK: result / Not OK: File Search loop
+		//   1. Leader がユーザー入力をタスクに分解 (/api/tasks/create)
+		//   2. 各タスクを Leader の生成順に 1 回だけ実行 (/api/tasks/execute)
+		//   3. 最後に Reviewer が成果物全体をレビュー (1 回のみ、リトライなし)
+		//   4. Reviewer の出力は HTML コメントの delimiter で挟んで assistant
+		//      メッセージ末尾に埋め込み、次のユーザー送信時にレンダラ側が
+		//      自動的に context として userMessage に prepend する。
 		// =============================================
 
 		const extractContent = (msg: LLMChatMessage): string => {
@@ -2673,14 +2726,11 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			currentInput = prompt;
 		}
 
-		// Size caps to avoid "request entity too large" (HTTP 500) from the Division API.
-		// The server has an aggressive body-size limit, so we must cap *both* the
-		// intermediate flow outputs (.md files) and the raw chatHistory entries
-		// coming from the sidebar (the user may have pasted long logs as prompts).
-		const MAX_CHARS_PER_CONTEXT = 8_000;        // per flow output / per chatHistory entry
-		const MAX_TOTAL_CONTEXT_CHARS = 150_000;    // across all context entries combined
-		const MAX_CHARS_PER_HISTORY_MSG = 8_000;    // per raw chat message
-		const MAX_TOTAL_HISTORY_CHARS = 20_000;     // raw chatHistory total budget
+		// Size caps to avoid HTTP 500 from oversized request bodies
+		const MAX_CHARS_PER_CONTEXT = 8_000;
+		const MAX_TOTAL_CONTEXT_CHARS = 150_000;
+		const MAX_CHARS_PER_HISTORY_MSG = 8_000;
+		const MAX_TOTAL_HISTORY_CHARS = 20_000;
 		const truncateForContext = (s: string, max: number): string => {
 			if (!s) return '';
 			if (s.length <= max) return s;
@@ -2689,9 +2739,6 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			return `${head}\n\n... [中略 ${s.length - head.length - tail.length} 文字省略] ...\n\n${tail}`;
 		};
 
-		// Build the raw chatHistory but also cap it. Long pasted build logs in
-		// prior user prompts were causing synthesis POSTs to exceed the limit
-		// even before we added any intermediate context.
 		const rawChatHistory = messages.slice(0, -1)
 			.filter(msg => msg.role !== 'system' && msg.role !== 'developer')
 			.map(msg => ({
@@ -2700,8 +2747,6 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			}));
 		const chatHistory: { role: 'user' | 'assistant'; content: string }[] = [];
 		{
-			// Keep the most recent messages first (they're most relevant) and drop
-			// older ones once the total budget is exhausted.
 			let totalHistoryChars = 0;
 			const reversed = [...rawChatHistory].reverse();
 			const keptReversed: { role: 'user' | 'assistant'; content: string }[] = [];
@@ -2717,10 +2762,6 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 
 		const codeOutputInstructions = buildCodeOutputInstructions();
 
-		// ワークスペースの言語・フレームワークを 1 度だけ検出し、以降すべての AI 呼び出し
-		// （Leader / 中間タスク / Coder / Reviewer）で同じ assistant turn として添付する。
-		// これで downstream AI は「このプロジェクトは Flutter なのか Next.js なのか」を
-		// 確実に把握できる。
 		const stackContextMarkdown = workspaceFolderPath
 			? buildStackContextMarkdown(workspaceFolderPath)
 			: '';
@@ -2730,18 +2771,12 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			console.log('[DivisionAPI] Detected workspace stack context:\n' + stackContextMarkdown);
 		}
 
-		// Helper: prepend stack context (if any) to a chatHistory array.
 		const withStackContext = (
 			history: { role: 'user' | 'assistant'; content: string }[],
 		): { role: 'user' | 'assistant'; content: string }[] =>
 			stackContextTurn ? [stackContextTurn, ...history] : history;
 
-		// ---------- ユーザー割り込み（interject）のドレイン ----------
-		// orchestration 中に UI 側で「ちょっと待って、これも考慮して」と
-		// 追加メッセージが来たとき、次の注入ポイント（Leader / 各中間タスク /
-		// Coder / Reviewer / 再分解）の直前でここを呼び出し、currentInput と
-		// chatHistory に取り込む。以降の AI リクエストは拡張された currentInput を
-		// 見るので、「途中参加」が自然に反映される。
+		// orchestration 中の途中追加メッセージ (UI 側 interject) を取り込むユーティリティ。
 		const drainInjections = (): boolean => {
 			if (!takePendingInjection) return false;
 			const injected = takePendingInjection();
@@ -2756,8 +2791,6 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				'## ユーザーからの追加リクエスト（途中送信）',
 				injected,
 			].join('\n');
-			// chat history にも user turn として追記。これで Leader/Coder/Reviewer は
-			// 「ユーザーが会話を続けた」のと同じ形で新情報を受け取れる。
 			chatHistory.push({ role: 'user', content: injected });
 			return true;
 		};
@@ -2775,983 +2808,319 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			mode?: string;
 		};
 
-		// Helper to recognize file-searcher variants (reused by runIntermediateCycle and elsewhere)
 		const isFileSearchRole = (r: string): boolean => {
 			const role = (r || '').toLowerCase();
 			return role === 'file-search' || role === 'filesearch' || role === 'file_search'
 				|| role === 'file-searcher' || role === 'filesearcher';
 		};
-
-		const normalizeFlowRole = (r: string): string => (r || '').toLowerCase().replace(/[_\s-]+/g, '');
-		// Wave 1 (pre-wave): file-search のみ。ワークスペース全件読み込みを
-		// **必ず最初に単独で実行**してから後続ウェーブにコンテキストを渡す。
-		const isPreWaveRole = (r: string): boolean => isFileSearchRole(r || '');
-		// Wave 2: 情報収集系（filesearch を除く ideaman / search / research）
-		const isFirstWaveRole = (r: string): boolean => {
-			const role = normalizeFlowRole(r);
-			return role === 'ideaman' || role === 'idea' || role === 'search' || role === 'searcher'
-				|| role === 'research' || role === 'researcher' || role === 'deepresearch' || role === 'deepresearcher';
+		const isCoderLikeRole = (r: string): boolean => {
+			const role = (r || '').toLowerCase();
+			return role === 'coder' || role === 'coding' || role === 'code'
+				|| role === 'writer' || role === 'writing';
 		};
-		// Wave 3: 設計・画像・計画
-		const isSecondWaveRole = (r: string): boolean => {
-			const role = normalizeFlowRole(r);
-			return role === 'design' || role === 'designer' || role === 'image' || role === 'planner' || role === 'planning';
-		};
-		// 内部 rank は安定ソート用の番号で、UI 表示の wave 番号とは別物。
-		// rank 0 = wave1 (filesearch), rank 1 = wave2 (info gathering),
-		// rank 2 = wave3 (design/image/plan), rank 3 = wave4+ (others)。
-		const flowStageRank = (task: DivisionTask): number => {
-			if (isPreWaveRole(task.role)) return 0;
-			if (isFirstWaveRole(task.role)) return 1;
-			if (isSecondWaveRole(task.role)) return 2;
-			return 3;
-		};
-		// pre-wave 内に複数 file-search が来てもユーザー入力順を保つので
-		// intra ランクは現状不要だが、interface の互換のため残す。
-		const intraStageRank = (_task: DivisionTask): number => 0;
-		const orderedTaskStages = (tasks: DivisionTask[]): DivisionTask[] =>
-			tasks
-				.map((task, index) => ({ task, index }))
-				.sort((a, b) => {
-					const rankDiff = flowStageRank(a.task) - flowStageRank(b.task);
-					if (rankDiff !== 0) return rankDiff;
-					const intraDiff = intraStageRank(a.task) - intraStageRank(b.task);
-					if (intraDiff !== 0) return intraDiff;
-					return a.index - b.index;
-				})
-				.map(({ task }) => task);
 
-		// Shared helper: decompose user input via Leader AI and execute all intermediate
-		// (non-Coder/Reviewer) tasks, returning the collected flow outputs.
-		//
-		// Phase A の初回実行と、レビュー失敗後の再試行の両方から呼ぶ。
-		// 再試行時 (isRetry=true) はフロー承認用ポーズを行わず、呼び出し側が
-		// そのまま synthesis+review を走らせる。
-		const runIntermediateCycle = async (
-			cycleInput: string,
-			cycleLabel: string,
-		): Promise<{
-			flowOutputs: FlowOutputEntry[];
-			sessionId: string;
-			finalRole: string;
-			aborted: boolean;
-		}> => {
-			// Leader 呼び出し前の割り込み取り込み（cycleInput にも merge する）
-			if (drainInjections()) {
-				cycleInput = [
-					cycleInput,
-					'',
-					'---',
-					'',
-					'## ユーザーからの追加リクエスト（途中送信）',
-					// drainInjections がすでに currentInput に追記済みなので、その末尾を再利用
-					currentInput.split('## ユーザーからの追加リクエスト（途中送信）').pop()?.trim() || '',
-				].join('\n');
-			}
-			console.log(`[DivisionAPI] /api/tasks/create request (${cycleLabel}):`, JSON.stringify({
-				projectId,
-				inputLength: cycleInput.length,
-				inputPreview: cycleInput.substring(0, 100),
-				chatHistoryLength: chatHistory.length,
-			}));
+		// =============================================
+		// Phase 1: Leader がタスクを分解
+		// =============================================
+		appendText(`**Leader AI** がタスクを分析中...\n\n`);
+		const leaderHistory = withStackContext(chatHistory);
+		const leaderResult = await callDivisionTaskCreate(
+			endpointBase, projectId, currentInput, controller.signal,
+			divisionApiKey, leaderHistory.length > 0 ? leaderHistory : undefined,
+			workspaceFolderPath,
+		);
 
-			appendText(`**Leader AI** がタスクを分析中 (${cycleLabel})...\n\n`);
+		if (leaderResult.error) {
+			appendText(`❌ **Task Create Error:** ${leaderResult.error}\n\n`);
+			onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null });
+			flushCommandRunsAfterFinalMessage();
+			return;
+		}
 
-			// Leader にも技術スタックを伝えることで、スタックに合ったタスク分解を誘導する。
-			const leaderChatHistory = withStackContext(chatHistory);
-			const taskResult = await callDivisionTaskCreate(
-				endpointBase, projectId, cycleInput, controller.signal,
-				divisionApiKey, leaderChatHistory.length > 0 ? leaderChatHistory : undefined,
-				workspaceFolderPath,
-			);
+		const sessionId = leaderResult.sessionId || '';
+		if (sessionId) activeServerSessionIds.add(sessionId);
 
-			if (taskResult.error) {
-				appendText(`❌ **Task Create Error:** ${taskResult.error}\n\n`);
-				return { flowOutputs: [], sessionId: '', finalRole: '', aborted: true };
-			}
+		// Reviewer はサーバ側ではなく最後にローカルで一括実行する。
+		const EXCLUDED_ROLES = new Set(['review', 'reviewer']);
+		const tasks: DivisionTask[] = (leaderResult.tasks as DivisionTask[])
+			.filter(t => !EXCLUDED_ROLES.has((t.role || '').toLowerCase()));
 
-			const { sessionId: cycleSessionId, tasks: rawTasks, finalRole: cycleFinalRole } = taskResult;
-			// このサイクルの sessionId を追跡。abort 発火時に
-			// `POST /api/tasks/stop` で確実にサーバ側を停止できるようにする。
-			if (cycleSessionId) {
-				activeServerSessionIds.add(cycleSessionId);
-			}
+		// Coder/Writer が file-search の出力を確実に参照できるよう、Leader が
+		// filesearch タスクを生成しなかった場合は先頭に自動挿入する。
+		if (workspaceFolderPath && !tasks.some(t => isFileSearchRole(t.role))) {
+			tasks.unshift({
+				taskId: 'auto-filesearch',
+				role: 'filesearch',
+				title: 'ワークスペース全体の事前読み込み',
+				description: 'すべてのフォルダ・ファイルを走査し、後続エージェントに共有する',
+			});
+		}
 
-			// --- DEBUG: Leader が返した raw タスクを必ずログ出力する（filesearch 注入問題の調査用）
-			console.log(`[DivisionAPI][debug] Leader raw tasks (count=${rawTasks.length}):`,
-				rawTasks.map(t => ({ role: t.role, title: t.title, taskId: t.taskId })));
-			console.log(`[DivisionAPI][debug] workspaceFolderPath = ${workspaceFolderPath || '(empty)'}`);
+		if (tasks.length === 0) {
+			appendText(`Leader が実行可能なタスクを返しませんでした。終了します。\n`);
+			if (sessionId) activeServerSessionIds.delete(sessionId);
+			onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null });
+			flushCommandRunsAfterFinalMessage();
+			return;
+		}
 
-			// Filter out server-side Coder/Reviewer tasks (these run locally).
-			// File Search はワークスペース全体の事前読み込み担当として、search / research と
-			// 同じファースト・ウェーブで動かす（runFinalFlow 直前ではなく、情報収集と同時に実行）。
-			const EXCLUDED_SERVER_ROLES = new Set(['coder', 'coding', 'review', 'reviewer']);
-			const serverTasks = rawTasks.filter(t => !EXCLUDED_SERVER_ROLES.has((t.role || '').toLowerCase()));
+		appendText(`Leader が ${tasks.length} 件のタスクを生成しました:\n\n`);
+		for (let i = 0; i < tasks.length; i++) {
+			const t = tasks[i];
+			appendText(`${i + 1}. **${t.role}** — ${t.title || ''}\n`);
+		}
+		appendText(`\n`);
 
-			// Leader が file-search タスクを生成しなかった場合でも、ファースト・ウェーブで
-			// 必ずワークスペース全件読み込みを行うため、合成タスクを自動挿入する。
-			// 先頭に挿入することで、後続の Search / Research / Ideaman が
-			// 「実際のコードベース内容」を assistant 履歴経由で参照できる。
-			//
-			// NOTE: workspaceFolderPath が空でも、ワークスペース未指定スキップメッセージを
-			// task.output に入れて中間 markdown 化はする（ただし読み込みはしない）。
-			// 「filesearch が wave1 に出てこない」というユーザー報告を防ぐため、
-			// workspaceFolderPath の有無に関わらず必ず先頭に注入する。
-			const hasFileSearch = serverTasks.some(t => isFileSearchRole(t.role || ''));
-			if (!hasFileSearch) {
-				serverTasks.unshift({
-					taskId: 'auto-filesearch',
-					role: 'filesearch',
-					title: 'ワークスペース全件読み込み',
-					description: 'すべてのフォルダ・ファイルを走査し、後続エージェントにコンテキストとして共有する',
-				});
-				console.log(`[DivisionAPI] Auto-injected filesearch task at index 0 (Leader did not produce one).`);
-			} else {
-				const fsTask = serverTasks.find(t => isFileSearchRole(t.role || ''));
-				console.log(`[DivisionAPI] Leader already produced a file-search task (role="${fsTask?.role}"), skipping auto-inject.`);
-			}
+		// =============================================
+		// Phase 2: 各タスクを Leader の生成順に 1 回だけ実行
+		// =============================================
+		const taskOutputs: Array<{ role: string; title: string; output: string }> = [];
 
-			const tasks = orderedTaskStages(serverTasks);
-			const droppedCount = rawTasks.filter(t => EXCLUDED_SERVER_ROLES.has((t.role || '').toLowerCase())).length;
-			if (droppedCount > 0) {
-				console.log(`[DivisionAPI] Skipped ${droppedCount} server-side Coder/Reviewer task(s) — they run locally.`);
-			}
-
-			console.log(`[DivisionAPI][debug] Final ordered task list (count=${tasks.length}):`,
-				tasks.map((t, idx) => ({
-					idx,
-					role: t.role,
-					stage: isPreWaveRole(t.role)
-						? 'wave1'
-						: isFirstWaveRole(t.role)
-							? 'wave2'
-							: isSecondWaveRole(t.role)
-								? 'wave3'
-								: 'wave4+',
-					title: t.title,
-				})));
-
-			// Display task decomposition (wave 番号 + filesearch を強調)
-			if (tasks.length > 0) {
-				for (let i = 0; i < tasks.length; i++) {
-					const t = tasks[i];
-					const wave = isPreWaveRole(t.role)
-						? 'wave1'
-						: isFirstWaveRole(t.role)
-							? 'wave2'
-							: isSecondWaveRole(t.role)
-								? 'wave3'
-								: 'wave4+';
-					const displayRole = isFileSearchRole(t.role || '') ? 'filesearch' : t.role;
-					const marker = isFileSearchRole(t.role || '') ? '📂 ' : '';
-					appendText(`${i + 1}. [${wave}] ${marker}**${displayRole}** — ${t.title}\n`);
-				}
-				appendText(`\n`);
-			}
-			if (cycleFinalRole) {
-				appendText(`合成ロール: **${cycleFinalRole}**\n\n`);
-			}
-
-			// Context history built from prior task outputs (for downstream tasks)
-			const buildPriorContextHistory = (): { role: 'user' | 'assistant'; content: string }[] => {
-				const entries: { role: 'user' | 'assistant'; content: string }[] = [];
-				let total = 0;
-				for (const t of tasks) {
-					if (!t.output || !t.output.trim()) continue;
-					const truncated = truncateForContext(t.output.trim(), MAX_CHARS_PER_CONTEXT);
-					if (total + truncated.length > MAX_TOTAL_CONTEXT_CHARS) {
-						entries.push({
-							role: 'assistant',
-							content: `[${t.role}] 以降の先行出力は合計上限を超過したため省略されました。`,
-						});
-						break;
-					}
+		const buildPriorContextHistory = (): { role: 'user' | 'assistant'; content: string }[] => {
+			const entries: { role: 'user' | 'assistant'; content: string }[] = [];
+			let total = 0;
+			for (const o of taskOutputs) {
+				if (!o.output || !o.output.trim()) continue;
+				const truncated = truncateForContext(o.output.trim(), MAX_CHARS_PER_CONTEXT);
+				if (total + truncated.length > MAX_TOTAL_CONTEXT_CHARS) {
 					entries.push({
 						role: 'assistant',
-						content: `## 先行タスクの出力: ${t.role} — ${t.title || ''}\n\n${truncated}`,
+						content: `[${o.role}] 以降の先行出力は合計上限を超過したため省略されました。`,
 					});
-					total += truncated.length;
+					break;
 				}
-				return entries;
-			};
-
-			for (let i = 0; i < tasks.length; i++) {
-				// 各中間タスク実行前にも割り込みをチェック。次タスク以降の taskInput は
-				// cycleInput / currentInput を使って組み立てるので、drain により自動伝播する。
-				drainInjections();
-				const task = tasks[i];
-				const role = (task.role || '').toLowerCase();
-
-				if (isFileSearchRole(role)) {
-					// ファースト・ウェーブ (Wave 1) で動かすため、先行 Markdown は通常空。
-					// ランキング用のキーワード抽出はユーザーの元入力を主軸にし、
-					// Leader が付けたタスク詳細・先行出力（あれば）も補助で連結する。
-					//
-					// Wave 1 はマージしながらループ実行する：
-					//   1) 初回はユーザー入力ベースで広く走査
-					//   2) 直前マッチからキーワードを派生させて再走査
-					//   3) 結果を重複排除しつつ Map<relPath, content> でマージ
-					//   4) 新規発見が無くなれば早期終了、最大 3 反復
-					const priorMarkdown = buildPriorContextHistory()
-						.map(entry => entry.content)
-						.join('\n\n');
-					const query = [
-						cycleInput,
-						task.input || task.title || '',
-						priorMarkdown ? `\n\n## 先行 Markdown コンテキスト\n${priorMarkdown}` : '',
-					].filter(Boolean).join('\n');
-					appendText(`### ${i + 1}. file-search — ${task.title || ''}\n\n📂 ワークスペース全体を **マージしながらループ** 走査中…\n\n`);
-					try {
-						const rawOutput = workspaceFolderPath
-							? buildFileSearchOutputLooped(workspaceFolderPath, query, {
-								maxIterations: 3,
-								onIterationProgress: (text) => appendText(text),
-							})
-							: '(ワークスペース未指定のため file-search をスキップ)';
-						const capped = truncateForContext(rawOutput, MAX_CHARS_PER_CONTEXT);
-						task.output = capped;
-						const sizeMsg = rawOutput.length > capped.length
-							? `（${rawOutput.length.toLocaleString()} → ${capped.length.toLocaleString()} 文字に要約）`
-							: `（${capped.length.toLocaleString()} 文字）`;
-						appendText(`📂 file-search ループ完了 ${sizeMsg}\n\n`);
-					} catch (e: any) {
-						appendText(`⚠️ file-search エラー: ${e?.message || String(e)}\n\n`);
-						task.output = `(file-search failed: ${e?.message || String(e)})`;
-					}
-					continue;
-				}
-
-				if (task.output && task.output.trim()) {
-					appendText(`### ${i + 1}. ${task.role} — ${task.title || ''}\n\n(サーバー実行済み)\n\n`);
-					continue;
-				}
-
-				const isDesignerRole = role === 'design' || role === 'designer';
-				const taskInstruction = isDesignerRole
-					? [
-						`直前の assistant メッセージに先行タスクの出力が添付されています（ある場合）。それを踏まえ、ユーザーの要求を視覚化した **1 枚の自己完結型 HTML ファイル** を生成してください。`,
-						``,
-						`### 出力要件`,
-						`- 必ず ` + '```html' + ` ... ` + '```' + ` のコードブロック 1 つだけで返してください。説明文やプレーンテキストは書かないでください。`,
-						`- ` + '`<!DOCTYPE html>`' + ` から始まる完全な HTML ドキュメント（head / body / style / script すべて含むインライン構成）にしてください。外部 CSS / JS / 画像 URL は使わないでください。`,
-						`- スタイルは ` + '`<style>`' + ` タグ内のインライン CSS（必要なら簡素なアニメーションも可）で記述してください。`,
-						`- 実装コードではなく**デザインモック**です。レイアウト・配色・タイポグラフィ・主要コンポーネントの見た目がブラウザで確認できることが目的です。`,
-						`- モダンで洗練されたビジュアル、適切な余白、視覚的階層、アクセシブルなコントラストを意識してください。`,
-					].join('\n')
-					: `直前の assistant メッセージに先行タスクの出力が添付されています（ある場合）。それを参考に、あなたの担当タスクを遂行してください。出力は Markdown 形式で、後続エージェントが直接利用できるよう具体的・網羅的にまとめてください。`;
-
-				// 割り込みがあると currentInput が cycleInput より長くなっているので、
-				// 常に currentInput を優先して渡す（最新のユーザー意図を反映するため）。
-				const effectiveCycleInput = currentInput.length > cycleInput.length ? currentInput : cycleInput;
-				const taskInput = [
-					`## ユーザーの元のリクエスト`,
-					effectiveCycleInput,
-					``,
-					`## あなたの担当タスク`,
-					`- ロール: ${task.role}`,
-					`- タイトル: ${task.title || ''}`,
-					task.description ? `- 説明: ${task.description}` : '',
-					task.reason ? `- 目的: ${task.reason}` : '',
-					``,
-					`## 指示`,
-					taskInstruction,
-				].filter(Boolean).join('\n');
-
-				const taskChatHistory = withStackContext([...chatHistory, ...buildPriorContextHistory()]);
-
-				appendText(`### ${i + 1}. ${task.role} — ${task.title || ''}\n\n`);
-
-				const execResult = await callDivisionTaskExecute(
-					endpointBase, projectId, task.role, taskInput, controller.signal,
-					(chunk) => appendText(chunk),
-					divisionApiKey, cycleSessionId,
-					taskChatHistory,
-					workspaceFolderPath,
-				);
-
-				if (execResult.error) {
-					appendText(`\n\n⚠️ ${task.role} 実行エラー: ${execResult.error}\n\n`);
-					task.output = `(execution failed: ${execResult.error})`;
-					continue;
-				}
-
-				task.output = execResult.output || '';
-				const fences = (task.output.match(/```/g) || []).length;
-				if (fences % 2 !== 0) appendText(`\n\`\`\`\n`);
-				appendText(`\n\n`);
+				entries.push({
+					role: 'assistant',
+					content: `## 先行タスクの出力: ${o.role} — ${o.title || ''}\n\n${truncated}`,
+				});
+				total += truncated.length;
 			}
-
-			// The diagram returns all wave Markdown to Leader, then Leader emits Todos
-			// for File Search. Store this as LEADER.md so downstream File Search and
-			// Coder/Writer receive the final task list, not just raw wave outputs.
-			if (tasks.some(task => task.output && task.output.trim())) {
-				drainInjections();
-				appendText(`### ${tasks.length + 1}. leader — Todos 作成\n\n`);
-				const effectiveCycleInput = currentInput.length > cycleInput.length ? currentInput : cycleInput;
-				const leaderTodoPrompt = [
-					`## ユーザーの要求`,
-					effectiveCycleInput,
-					``,
-					`## あなたの役割`,
-					`あなたは Leader です。直前の assistant メッセージ群に、Ideaman / Search / Research / Designer / Image / Planner などの Markdown 出力が添付されています。`,
-					`それらを統合し、次の File Search と Coder/Writer が迷わず動ける Todo リストを作ってください。`,
-					``,
-					`## 出力要件`,
-					`- Markdown で出力してください。`,
-					`- 最終成果物がコード実装なら、調査すべき既存ファイル・編集対象・実装順・検証方法を Todo として具体化してください。`,
-					`- 最終成果物が文章なら、参照すべき情報・構成・執筆順・レビュー観点を Todo として具体化してください。`,
-					`- 後続の File Search に渡す検索観点を必ず含めてください。`,
-					`- 最後に「最終ロール: ${cycleFinalRole || 'coder'}」を明記してください。`,
-				].join('\n');
-
-				const leaderTodoResult = await callDivisionTaskExecute(
-					endpointBase, projectId, 'leader', leaderTodoPrompt, controller.signal,
-					(chunk) => appendText(chunk),
-					divisionApiKey, cycleSessionId,
-					withStackContext([...chatHistory, ...buildPriorContextHistory()]),
-					workspaceFolderPath,
-				);
-
-				if (leaderTodoResult.error) {
-					appendText(`\n\n⚠️ leader Todos 作成エラー: ${leaderTodoResult.error}\n\n`);
-					tasks.push({
-						taskId: 'leader-todos',
-						role: 'leader',
-						title: 'File Search / Coder Todos',
-						output: `(leader todo generation failed: ${leaderTodoResult.error})`,
-					});
-				}
-				else {
-					const output = leaderTodoResult.output || '';
-					tasks.push({
-						taskId: 'leader-todos',
-						role: 'leader',
-						title: 'File Search / Coder Todos',
-						output,
-					});
-					const fences = (output.match(/```/g) || []).length;
-					if (fences % 2 !== 0) appendText(`\n\`\`\`\n`);
-					appendText(`\n\n`);
-				}
-			}
-
-			// Build flowOutputs & persist MDs
-			const flowOutputs: FlowOutputEntry[] = [];
-			for (const task of tasks) {
-				if (!task.output) continue;
-				const roleKey = task.role.toLowerCase();
-				const isDesigner = roleKey === 'design' || roleKey === 'designer';
-
-				let sanitized = task.output;
-				const opens = (sanitized.match(/```/g) || []).length;
-				if (opens % 2 !== 0) sanitized += '\n```\n';
-
-				let contentToSave = sanitized;
-				if (isDesigner) {
-					const htmlMatch = sanitized.match(/```(?:html)?\s*\n([\s\S]*?)```/i);
-					if (htmlMatch && htmlMatch[1]) {
-						contentToSave = htmlMatch[1].trim() + '\n';
-					} else {
-						contentToSave = sanitized.replace(/```[a-zA-Z0-9]*\s*\n?/g, '').replace(/```/g, '').trim() + '\n';
-					}
-				}
-
-				if (workspaceFolderPath && sanitized.trim() && FLOW_ROLE_TO_FILENAME[roleKey]) {
-					const savedPath = saveFlowResultAsMd(workspaceFolderPath, task.role, task.title || '', contentToSave, cycleSessionId);
-					const mdFileName = FLOW_ROLE_TO_FILENAME[roleKey];
-					if (mdFileName) {
-						flowOutputs.push({
-							role: task.role,
-							mdFileName,
-							mdFilePath: savedPath || path.join(workspaceFolderPath, '.division', mdFileName),
-							mdContent: isDesigner ? contentToSave : sanitized,
-						});
-					}
-				}
-			}
-
-			// このサイクルは正常完了したので、stop 候補集合から外しておく。
-			// （以降に新たに作るサイクルは新しい sessionId で再追加される。）
-			if (cycleSessionId) {
-				activeServerSessionIds.delete(cycleSessionId);
-			}
-
-			return { flowOutputs, sessionId: cycleSessionId, finalRole: cycleFinalRole, aborted: false };
+			return entries;
 		};
 
-		// Shared helper: run the final File Search + synthesis + review flow given
-		// intermediate outputs. On review failure, feed the review feedback back to
-		// File Search first, then Coder/Writer, until approval or max iterations.
-		// （Leader による再分解は行わず、File Search → Coder/Writer → Reviewer のループ）
-		const runFinalFlow = async (
-			initialFinalRole: string,
-			initialSessionId: string,
-			initialFlowOutputs: FlowOutputEntry[],
-		): Promise<void> => {
-			let finalRoleArg = initialFinalRole;
-			let sessionIdArg = initialSessionId;
-			let flowOutputs = initialFlowOutputs;
-			let iteration = 0;
-			let briefGateAttempts = 0;
-			let reviewerAttempts = 0;
-			let lastReviewFeedback = '';
-			let lastBriefGateFeedback = '';
-			let retrySource: 'brief_gate' | 'reviewer' | null = null;
+		for (let i = 0; i < tasks.length; i++) {
+			drainInjections();
+			const task = tasks[i];
+			const role = (task.role || '').toLowerCase();
+			appendText(`\n---\n\n### ${i + 1}. ${task.role} — ${task.title || ''}\n\n`);
 
-			const runFileSearchBeforeCoder = async (reason: string, feedback: string = '', regenerateTodos: boolean = false): Promise<void> => {
-				if (!workspaceFolderPath) return;
-
-				// Reviewer Not OK で Todo を再生成するとき、image / planner / designer / ideaman /
-				// search / research などの中間 MD はユーザーが手動編集している可能性があるため、
-				// 必ずディスク (.division/*.md) から読み込み直してから File Search のクエリと
-				// Leader Todo 再生成プロンプトに反映する。
-				if (regenerateTodos) {
-					const reloadable = flowOutputs.filter(o => !isFileSearchRole(o.role) && !!o.mdFileName);
-					const others = flowOutputs.filter(o => isFileSearchRole(o.role) || !o.mdFileName);
-					const reloaded = loadFlowMdFiles(workspaceFolderPath, reloadable);
-					const reloadedTargets = reloaded
-						.map(o => o.mdFileName)
-						.filter((v, i, a) => v && a.indexOf(v) === i)
-						.join(', ');
-					if (reloadedTargets) {
-						appendText(`\n📥 中間 Markdown を再読込 (${reloadedTargets})\n`);
-					}
-					flowOutputs = [...reloaded, ...others];
+			// File Search はローカル実装でワークスペース全件走査
+			if (isFileSearchRole(role)) {
+				if (!workspaceFolderPath) {
+					const skipMsg = '(ワークスペース未指定のため file-search をスキップ)';
+					appendText(`${skipMsg}\n\n`);
+					taskOutputs.push({ role: 'filesearch', title: task.title || '', output: skipMsg });
+					continue;
 				}
-
-				const priorMarkdown = flowOutputs
-					.filter(o => !isFileSearchRole(o.role))
-					.map(o => `## ${o.role} の出力 (${o.mdFileName})\n\n${o.mdContent}`)
-					.join('\n\n');
 				const query = [
-					`## ユーザーの要求`,
 					currentInput,
-					priorMarkdown ? `\n\n## 先行 Markdown コンテキスト\n${priorMarkdown}` : '',
-					feedback.trim() ? `\n\n## 再調査要求\n${feedback}` : '',
-				].join('\n');
-
-				appendText(`\n---\n\n**File Search** (${reason}) 開始...\n\n`);
+					task.input || task.title || '',
+				].filter(Boolean).join('\n');
 				try {
-					const rawOutput = buildFileSearchOutput(workspaceFolderPath, query);
+					const rawOutput = buildFileSearchOutputLooped(workspaceFolderPath, query, {
+						maxIterations: 3,
+						onIterationProgress: (text) => appendText(text),
+					});
 					const capped = truncateForContext(rawOutput, MAX_CHARS_PER_CONTEXT);
-					const mdPath = saveFlowResultAsMd(workspaceFolderPath, 'file-search', reason, capped, sessionIdArg || 'file-search');
-					const fileSearchOutput: FlowOutputEntry = {
-						role: 'file-search',
-						mdFileName: FLOW_ROLE_TO_FILENAME['file-search'],
-						mdFilePath: mdPath || path.join(workspaceFolderPath, '.division', FLOW_ROLE_TO_FILENAME['file-search']),
-						mdContent: capped,
-					};
-					const existingIdx = flowOutputs.findIndex(o => isFileSearchRole(o.role));
-					if (existingIdx >= 0) {
-						flowOutputs = [
-							...flowOutputs.slice(0, existingIdx),
-							fileSearchOutput,
-							...flowOutputs.slice(existingIdx + 1),
-						];
-					} else {
-						flowOutputs = [...flowOutputs, fileSearchOutput];
+					taskOutputs.push({ role: 'filesearch', title: task.title || '', output: capped });
+					if (FLOW_ROLE_TO_FILENAME['file-search']) {
+						saveFlowResultAsMd(workspaceFolderPath, 'file-search', task.title || '', capped, sessionId || 'file-search');
 					}
 					const sizeMsg = rawOutput.length > capped.length
 						? `（${rawOutput.length.toLocaleString()} → ${capped.length.toLocaleString()} 文字に要約）`
 						: `（${capped.length.toLocaleString()} 文字）`;
-					appendText(`📂 File Search 完了 ${sizeMsg}\n\n`);
+					appendText(`📂 file-search 完了 ${sizeMsg}\n\n`);
 				} catch (e: any) {
-					appendText(`⚠️ File Search エラー: ${e?.message || String(e)}\n\n`);
+					const errMsg = `(file-search failed: ${e?.message || String(e)})`;
+					appendText(`⚠️ file-search エラー: ${e?.message || String(e)}\n\n`);
+					taskOutputs.push({ role: 'filesearch', title: task.title || '', output: errMsg });
 				}
+				continue;
+			}
 
-				if (!regenerateTodos) return;
+			// Server-side で既に output がついているケース
+			if (task.output && task.output.trim()) {
+				appendText(`(サーバー実行済み)\n\n${task.output}\n\n`);
+				taskOutputs.push({ role: task.role, title: task.title || '', output: task.output });
+				continue;
+			}
 
-				appendText(`\n---\n\n**Leader** (Todos 再生成) 開始...\n\n`);
-				const todoContext = flowOutputs
-					.map(o => `## ${o.role} の出力 (${o.mdFileName})\n\n${truncateForContext(o.mdContent, MAX_CHARS_PER_CONTEXT)}`)
-					.join('\n\n');
-				const todoPrompt = [
-					`## ユーザーの要求`,
-					currentInput,
+			const isDesigner = role === 'design' || role === 'designer';
+			const taskInstruction = isDesigner
+				? [
+					`直前の assistant メッセージに先行タスクの出力が添付されています（ある場合）。それを踏まえ、ユーザー要求を視覚化した **1 枚の自己完結型 HTML** を生成してください。`,
 					``,
-					`## Reviewer Not OK による再調査結果`,
-					feedback || '(レビュー指摘なし)',
-					``,
-					`## 現在の Markdown / File Search コンテキスト`,
-					todoContext,
-					``,
-					`## 指示`,
-					`Reviewer の不合格理由を踏まえて、File Search と Coder/Writer に渡す Todo を再生成してください。`,
-					`出力は Markdown の Todo リストにし、調査対象・編集対象・実装順・検証観点を具体化してください。`,
-				].join('\n');
+					`### 出力要件`,
+					`- 必ず ` + '```html' + ` ... ` + '```' + ` のコードブロック 1 つだけで返してください。`,
+					`- ` + '`<!DOCTYPE html>`' + ` から始まる完全な HTML（head / body / style / script すべてインライン）。`,
+					`- 外部 CSS / JS / 画像 URL は使わないでください。`,
+					`- 実装ではなく**デザインモック**です。レイアウト・配色・タイポグラフィが確認できることが目的。`,
+				].join('\n')
+				: `直前の assistant メッセージに先行タスクの出力が添付されています（ある場合）。それを参考に、あなたの担当タスクを遂行してください。出力は Markdown 形式で、後続エージェントが直接利用できるよう具体的・網羅的にまとめてください。`;
 
-				const todoResult = await callDivisionTaskExecute(
-					endpointBase, projectId, 'leader', todoPrompt, controller.signal,
-					(chunk) => appendText(chunk),
-					divisionApiKey, sessionIdArg,
-					withStackContext(chatHistory),
-					workspaceFolderPath,
-				);
-
-				const todoOutput = todoResult.error
-					? `(leader todo regeneration failed: ${todoResult.error})`
-					: (todoResult.output || '');
-				if (todoResult.error) appendText(`\n⚠️ Leader Todo 再生成エラー: ${todoResult.error}\n\n`);
-
-				const mdPath = saveFlowResultAsMd(workspaceFolderPath, 'leader', 'Reviewer feedback todos', todoOutput, sessionIdArg || 'leader');
-				const leaderOutput: FlowOutputEntry = {
-					role: 'leader',
-					mdFileName: FLOW_ROLE_TO_FILENAME['leader'],
-					mdFilePath: mdPath || path.join(workspaceFolderPath, '.division', FLOW_ROLE_TO_FILENAME['leader']),
-					mdContent: todoOutput,
-				};
-				const existingIdx = flowOutputs.findIndex(o => (o.role || '').toLowerCase() === 'leader');
-				if (existingIdx >= 0) {
-					flowOutputs = [
-						...flowOutputs.slice(0, existingIdx),
-						leaderOutput,
-						...flowOutputs.slice(existingIdx + 1),
-					];
-				} else {
-					flowOutputs = [...flowOutputs, leaderOutput];
-				}
-			};
-
-			const runLeaderProgressCheck = async (reason: string, feedback: string): Promise<void> => {
-				if (!workspaceFolderPath) return;
-
-				appendText(`\n---\n\n**Leader** (進捗確認: ${reason}) 開始...\n\n`);
-				const progressContext = flowOutputs
-					.map(o => `## ${o.role} の出力 (${o.mdFileName})\n\n${truncateForContext(o.mdContent, MAX_CHARS_PER_CONTEXT)}`)
-					.join('\n\n');
-				const progressPrompt = [
-					`## ユーザーの要求`,
-					currentInput,
-					``,
-					`## Brief Gate からの再調査要求`,
-					feedback || '(再調査要求なし)',
-					``,
-					`## File Search 後の現在コンテキスト`,
-					progressContext,
-					``,
-					`## 指示`,
-					`これは Brief Gate ループ中の進捗確認です。Todo は再生成しないでください。`,
-					`再調査結果が Brief Gate の懸念に対して十分か、Coder/Writer が次に反映すべき不足点が何かを短く整理してください。`,
-					`出力は Markdown で、以下を含めてください:`,
-					`- 進捗サマリー`,
-					`- まだ不足している情報`,
-					`- Coder/Writer への反映指示`,
-				].join('\n');
-
-				const progressResult = await callDivisionTaskExecute(
-					endpointBase, projectId, 'leader', progressPrompt, controller.signal,
-					(chunk) => appendText(chunk),
-					divisionApiKey, sessionIdArg,
-					withStackContext(chatHistory),
-					workspaceFolderPath,
-				);
-
-				const progressOutput = progressResult.error
-					? `(leader progress check failed: ${progressResult.error})`
-					: (progressResult.output || '');
-				if (progressResult.error) appendText(`\n⚠️ Leader 進捗確認エラー: ${progressResult.error}\n\n`);
-
-				const mdPath = saveFlowResultAsMd(workspaceFolderPath, 'leader', 'Brief Gate progress check', progressOutput, sessionIdArg || 'leader', true);
-				const progressEntry: FlowOutputEntry = {
-					role: 'leader-progress',
-					mdFileName: FLOW_ROLE_TO_FILENAME['leader'],
-					mdFilePath: mdPath || path.join(workspaceFolderPath, '.division', FLOW_ROLE_TO_FILENAME['leader']),
-					mdContent: progressOutput,
-				};
-				flowOutputs = [
-					...flowOutputs.filter(o => o.role !== 'leader-progress'),
-					progressEntry,
-				];
-			};
-
-			// Loop:
-			// Coder/Writer → Brief Gate(Leader) → Reviewer.
-			// Brief Gate Not OK: Reviewer をスキップし、File Search 再調査（Todos 再生成なし）→ Leader 進捗確認へ戻る。
-			// Reviewer Not OK: File Search 再調査（Todos 再生成あり）へ戻る。
-			while (true) {
-				// Coder（synthesis）実行前の割り込み取り込み
-				drainInjections();
-				if (iteration > 0) {
-					const feedback = retrySource === 'reviewer' ? lastReviewFeedback : lastBriefGateFeedback;
-					const regenerateTodos = retrySource === 'reviewer';
-					await runFileSearchBeforeCoder(
-						retrySource === 'reviewer'
-							? `Reviewer Not OK 反映 ${iteration + 1} 回目（Todos 再生成あり）`
-							: `Brief Gate Not OK 反映 ${iteration + 1} 回目（Todos 再生成なし）`,
-						feedback,
-						regenerateTodos,
-					);
-					if (retrySource === 'brief_gate') {
-						await runLeaderProgressCheck(`Brief Gate ループ ${iteration + 1} 回目`, feedback);
-					}
-				} else {
-					// 新フロー: ファースト・ウェーブの File Search は「ワークスペース全体の事前読み込み」、
-					// ここで走る 2 回目の File Search は「Leader Todos に絞った狙い撃ち再走査」を担当する。
-					// Leader が確定させた Todo / 計画が手元にある状態で Coder/Writer 前にもう一度
-					// 走らせることで、Coder/Writer が実装直前に最新かつ目的特化のファイル文脈を得られる。
-					await runFileSearchBeforeCoder('Leader Todos に基づく Coder/Writer 直前の再走査');
-				}
-				// Build synthesis context from current flowOutputs
-				const synthesisContextHistory: { role: 'user' | 'assistant'; content: string }[] = [];
-				let totalContextChars = 0;
-				for (const o of flowOutputs) {
-					if (!o.mdContent || !o.mdContent.trim()) continue;
-					const truncated = truncateForContext(o.mdContent, MAX_CHARS_PER_CONTEXT);
-					if (totalContextChars + truncated.length > MAX_TOTAL_CONTEXT_CHARS) {
-						synthesisContextHistory.push({
-							role: 'assistant',
-							content: `[${o.role}] 以降のコンテキストは合計上限 (${MAX_TOTAL_CONTEXT_CHARS} 文字) を超過したため省略されました。`,
-						});
-						break;
-					}
-					synthesisContextHistory.push({
-						role: 'assistant',
-						content: `## ${o.role} の出力 (${o.mdFileName})\n\n${truncated}`,
-					});
-					totalContextChars += truncated.length;
-				}
-
-				// On retries, add the prior review feedback as an additional assistant turn so
-				// the Coder knows exactly what was rejected in the previous attempt.
-				if (iteration > 0 && lastReviewFeedback.trim()) {
-					synthesisContextHistory.push({
-						role: 'assistant',
-						content: `## 前回レビューでの指摘（必ず反映してください）\n\n${truncateForContext(lastReviewFeedback, MAX_CHARS_PER_CONTEXT)}`,
-					});
-				}
-				if (iteration > 0 && lastBriefGateFeedback.trim()) {
-					synthesisContextHistory.push({
-						role: 'assistant',
-						content: `## 前回 Brief Gate での再調査要求（必ず反映してください）\n\n${truncateForContext(lastBriefGateFeedback, MAX_CHARS_PER_CONTEXT)}`,
-					});
-				}
-
-				const combinedChatHistory = withStackContext([...chatHistory, ...synthesisContextHistory]);
-
-				// Extract existing file paths from file-search output so Coder doesn't recreate them.
+			// Coder/Writer 系には実装指示と existing files を添付
+			let extraCoderBlock = '';
+			if (isCoderLikeRole(role)) {
 				const existingFilePaths: string[] = [];
-				for (const o of flowOutputs) {
+				for (const o of taskOutputs) {
 					if (!isFileSearchRole(o.role)) continue;
-					const lines = (o.mdContent || '').split('\n');
+					const lines = (o.output || '').split('\n');
 					for (const line of lines) {
 						const m = line.match(/^###\s+`([^`]+)`\s*$/);
 						if (m && m[1]) existingFilePaths.push(m[1]);
 					}
 				}
-				const existingFilesBlock = existingFilePaths.length > 0
+				const existingBlock = existingFilePaths.length > 0
 					? [
 						``,
-						`### ワークスペースに既に存在するファイル（必ず新規作成ではなく編集すること）`,
+						`### ワークスペースに既に存在するファイル（必ず編集すること）`,
 						...existingFilePaths.map(p => `- \`${p}\``),
 						``,
-						`上記ファイルはワークスペース内に既に存在します。ユーザー要求の実現に関連するものは、**必ず SEARCH/REPLACE 形式で差分編集** してください。新規作成ブロック（` + '```lang:path/to/file```' + `）で同じパスを上書きすると既存コードの意図が失われるため禁止です。既存ファイルを置き換えるほど大幅な刷新が必要な場合のみ、その旨を一言添えた上で ` + '```lang:path/to/file```' + ` を使ってください。`,
+						`上記ファイルは既に存在します。SEARCH/REPLACE 形式で**差分編集**してください。新規作成ブロックで同じパスを上書きしないでください。`,
 					].join('\n')
 					: '';
-
-				const retryNote = iteration > 0
-					? `\n> ⚠️ **${iteration + 1} 回目の試行です。** 直前の assistant コンテキストに前回レビューの指摘が含まれているので、それを必ず反映してください。同じ不具合を繰り返すと再度不合格になります。\n`
-					: '';
-
-				const coderMandate = [
-					`## あなたのタスク（必ず実行してください）`,
-					retryNote,
-					`あなたは ${finalRoleArg} です。**説明や提案だけで終わらせず、必ず以下のいずれかを行ってください**:`,
+				extraCoderBlock = [
 					``,
-					`1. **既存ファイルを編集する（最優先）** — 直前の assistant コンテキストに含まれる既存ファイルの内容を踏まえ、SEARCH/REPLACE 形式で差分のみを出力`,
-					`2. **新しいファイルを作成する（対応する既存ファイルが無い場合のみ）** — ` + '```lang:path/to/file```' + ` 形式で出力`,
-					`3. **セットアップコマンドを発行する** — 依存パッケージのインストール（npm install 等）、ファイル移動、ビルドなど、ファイル編集後に必要なコマンドを ` + '```bash```' + ` 形式で出力`,
-					``,
-					`コード変更とコマンド実行は併用可能です。ユーザーの要求を完遂するまで全ての操作を出力してください。`,
-					``,
-					`### 絶対禁止事項`,
-					``,
-					`- **既存ファイルをゼロから書き直してはいけません**。コンテキストに含まれる既存ファイルは、必要な差分だけを SEARCH/REPLACE で編集してください。既存の import / 構造 / 命名 / スタイルは維持すること。`,
-					`- **同じパスを ` + '```lang:path/to/file```' + ` で上書きしてはいけません**（既存ファイルを全文リセットするのと同じです）。どうしても全面刷新が必要な場合は、その理由を明記してから上書きしてください。`,
-					`- 探索系シェルコマンド（` + '`find`' + `, ` + '`ls`' + `, ` + '`cat`' + `, ` + '`grep`' + `, ` + '`head`' + `, ` + '`tail`' + ` など）を出力してはいけません。ワークスペースのファイル一覧や内容は既に **直前の assistant メッセージ（コンテキスト）** に揃っています。`,
-					`- 「まずプロジェクト構造を確認させてください」のような**前置き探索**を書かないでください。あなたは対話的 shell ではなくワンショット生成です。探索コマンドを出しても実行結果は返ってきません。`,
-					`- 「~~したらどうですか」「~~を検討してください」のような提案だけの回答は禁止です。実際にコードを書き、コマンドを発行してください。`,
-					`- 回答の最初から最後まで、コードブロック（SEARCH-REPLACE / ` + '```lang:path/to/file```' + ` / ` + '```bash```' + `）を必ず1つ以上含めてください。含まれていない回答は不合格です。`,
-					existingFilesBlock,
-				].filter(Boolean).join('\n');
-
-				const synthesisPrompt = [
-					coderMandate,
-					``,
-					`## ユーザーの要求`,
-					currentInput,
-					``,
-					synthesisContextHistory.length > 0
-						? `## コンテキスト参照\n直前の assistant メッセージとして添付された中間エージェントの出力（ideaman / file-searcher / designer / planner など）を参照し、ユーザーの要求を満たすコードを生成してください。**既存ファイルの内容は file-searcher の出力に含まれているため、それをベースに差分編集してください。**`
-						: '',
+					`### 出力フォーマット (必須)`,
+					`- 既存ファイルの編集: SEARCH/REPLACE ブロック`,
+					`- 新規ファイル: ` + '```lang:path/to/file```' + ` ブロック`,
+					`- セットアップコマンド: ` + '```bash```' + ` ブロック`,
+					`- 探索系コマンド (find / ls / cat / grep / head / tail) は禁止。コンテキストは既に揃っています。`,
+					existingBlock,
 					``,
 					codeOutputInstructions,
-				].filter(Boolean).join('\n');
+				].join('\n');
+			}
 
-				const iterLabel = iteration === 0 ? '' : ` (${iteration + 1} 回目)`;
-				appendText(`---\n\n**合成ステップ** (${finalRoleArg})${iterLabel} 開始...\n\n`);
+			const taskInput = [
+				`## ユーザーの元のリクエスト`,
+				currentInput,
+				``,
+				`## あなたの担当タスク`,
+				`- ロール: ${task.role}`,
+				`- タイトル: ${task.title || ''}`,
+				task.description ? `- 説明: ${task.description}` : '',
+				task.reason ? `- 目的: ${task.reason}` : '',
+				``,
+				`## 指示`,
+				taskInstruction,
+				extraCoderBlock,
+			].filter(Boolean).join('\n');
 
-				const synthesisResult = await callDivisionTaskExecute(
-					endpointBase, projectId, finalRoleArg, synthesisPrompt, controller.signal,
-					(chunk) => appendText(chunk),
-					divisionApiKey, sessionIdArg,
-					combinedChatHistory,
-					workspaceFolderPath,
-				);
+			const taskHistory = withStackContext([...chatHistory, ...buildPriorContextHistory()]);
 
-				if (synthesisResult.error) {
-					appendText(`\n❌ **Synthesis Error:** ${synthesisResult.error}\n`);
-					break;
-				}
+			const execResult = await callDivisionTaskExecute(
+				endpointBase, projectId, task.role, taskInput, controller.signal,
+				(chunk) => appendText(chunk),
+				divisionApiKey, sessionId,
+				taskHistory,
+				workspaceFolderPath,
+			);
 
-				const synthesisOutput = synthesisResult.output;
+			if (execResult.error) {
+				const errMsg = `(execution failed: ${execResult.error})`;
+				appendText(`\n\n⚠️ ${task.role} 実行エラー: ${execResult.error}\n\n`);
+				taskOutputs.push({ role: task.role, title: task.title || '', output: errMsg });
+				continue;
+			}
 
-				// Coder/Writer の成果物が空 or 極端に短い場合は Brief Gate 側の判断に必要な情報になるため、
-				// オーケストレーションログに警告を出す。Brief Gate は別途プロンプト本文に出力をインライン展開するが、
-				// ここで状況をユーザーに可視化しておく。
-				if (!synthesisOutput || synthesisOutput.trim().length === 0) {
-					appendText(`\n⚠️ **${finalRoleArg} の出力が空です。** Brief Gate に渡す Coder 成果物がないため、Brief Gate は不合格として扱われ、File Search 再調査に戻ります。\n`);
-				} else if (synthesisOutput.trim().length < 80) {
-					appendText(`\n⚠️ **${finalRoleArg} の出力が極端に短い** (${synthesisOutput.trim().length} 文字)。Brief Gate は不合格と判断する可能性が高いです。\n`);
-				}
+			const output = execResult.output || '';
+			const fences = (output.match(/```/g) || []).length;
+			if (fences % 2 !== 0) appendText(`\n\`\`\`\n`);
+			appendText(`\n\n`);
 
-				if (synthesisOutput && workspaceFolderPath) {
-					const { savedFiles, fileOperations, commands } = saveCodeBlocksFromOutput(synthesisOutput, sessionIdArg || 'synthesis', workspaceFolderPath);
-					if (savedFiles.length > 0) {
-						appendText(`\n`);
-						for (const sf of savedFiles) {
-							appendText(`${path.basename(sf.filePath)} — \`${sf.filePath}\`\n`);
-						}
-						appendText(`\n`);
-						if (fileOperations.length > 0 && onFileOperation) onFileOperation(fileOperations);
+			taskOutputs.push({ role: task.role, title: task.title || '', output });
+
+			// Coder 系: コードブロックを実ファイルに書き出す
+			if (output && workspaceFolderPath && isCoderLikeRole(role)) {
+				const { savedFiles, fileOperations, commands } = saveCodeBlocksFromOutput(output, sessionId || 'task', workspaceFolderPath);
+				if (savedFiles.length > 0) {
+					appendText(`\n`);
+					for (const sf of savedFiles) {
+						appendText(`${path.basename(sf.filePath)} — \`${sf.filePath}\`\n`);
 					}
-					queueCommandRuns(commands);
-
-					if (FLOW_ROLE_TO_FILENAME[finalRoleArg.toLowerCase()]) {
-						saveFlowResultAsMd(workspaceFolderPath, finalRoleArg, '', synthesisOutput, sessionIdArg);
-					}
+					appendText(`\n`);
+					if (fileOperations.length > 0 && onFileOperation) onFileOperation(fileOperations);
 				}
+				queueCommandRuns(commands);
+			}
 
-				// Brief Gate: Coder/Writer の成果物がレビュー可能な brief を満たしているかを Leader が判定する。
-				// Not OK の場合は Reviewer をスキップし、再調査要求を出して File Search に戻る。
-				drainInjections();
+			// 既知のロールは .division/*.md にも保存
+			if (output && workspaceFolderPath && FLOW_ROLE_TO_FILENAME[role]) {
+				saveFlowResultAsMd(workspaceFolderPath, task.role, task.title || '', output, sessionId || 'task');
+			}
+		}
 
-				briefGateAttempts++;
-				const briefGateAttemptLabel = briefGateAttempts === 1 ? '' : ` (${briefGateAttempts} 回目)`;
-				appendText(`\n---\n\n**Brief Gate** (leader)${briefGateAttemptLabel} 開始...\n\n`);
-				const gateContextHistory: { role: 'user' | 'assistant'; content: string }[] = [];
-				const truncatedSynthesisForGate = synthesisOutput && synthesisOutput.trim()
-					? truncateForContext(synthesisOutput, MAX_CHARS_PER_CONTEXT)
-					: '';
-				const flowOutputsBlockForGate = flowOutputs.length > 0
-					? flowOutputs
-						.map(o => `### ${o.role} の出力 (${o.mdFileName})\n\n${truncateForContext(o.mdContent, MAX_CHARS_PER_CONTEXT)}`)
-						.join('\n\n')
-					: '';
-				if (truncatedSynthesisForGate) {
-					gateContextHistory.push({
-						role: 'assistant',
-						content: `## ${finalRoleArg} が生成した成果物\n\n${truncatedSynthesisForGate}`,
-					});
-				}
-				if (flowOutputsBlockForGate) {
-					gateContextHistory.push({
-						role: 'assistant',
-						content: flowOutputsBlockForGate.replace(/^### /gm, '## '),
-					});
-				}
+		// =============================================
+		// Phase 3: Reviewer 最終レビュー (1 回のみ、リトライなし)
+		// =============================================
+		drainInjections();
+		appendText(`\n---\n\n### ${tasks.length + 1}. reviewer — 最終レビュー\n\n`);
 
-				const briefGatePrompt = [
-					`以下の Coder/Writer 成果物が、ユーザー要求と Leader Todo / File Search の要点を満たしており、Reviewer に渡す準備ができているかを判定してください。`,
-					``,
-					`## ユーザーの要求`,
-					currentInput,
-					``,
-					`## ${finalRoleArg} の成果物（直近の Coder/Writer 出力）`,
-					truncatedSynthesisForGate
-						? truncatedSynthesisForGate
-						: `> ⚠️ ${finalRoleArg} は今回の反復で空の出力を返しました。これは不合格と判断し、再調査要求として「${finalRoleArg} が実装/編集できていない理由」を分析してください。`,
-					``,
-					flowOutputsBlockForGate
-						? `## 中間エージェントの出力（参考）\n\n${flowOutputsBlockForGate}`
-						: '',
-					``,
-					`## 指示`,
-					`Reviewer に回す前の brief gate として、上記 ${finalRoleArg} 成果物について、要件漏れ・調査不足・実装不足・明らかな方向違いがないかを確認してください。`,
-					``,
-					`### 出力形式（厳守）`,
-					`1 行目に必ず以下のどちらかのマーカーを出力してください:`,
-					`- **OK** の場合: ` + '`判定: 合格`',
-					`- **Not OK** の場合: ` + '`判定: 不合格`',
-					``,
-					`不合格の場合は、Reviewer はスキップされます。File Search に渡す「再調査要求」を具体的に書いてください。Todo は再生成しません。`,
-				].filter(Boolean).join('\n');
-
-				const briefGateResult = await callDivisionTaskExecute(
-					endpointBase, projectId, 'leader', briefGatePrompt, controller.signal,
-					(chunk) => appendText(chunk),
-					divisionApiKey, sessionIdArg,
-					withStackContext(gateContextHistory),
-					workspaceFolderPath,
-				);
-
-				if (briefGateResult.error) {
-					appendText(`\n❌ **Brief Gate Error:** ${briefGateResult.error}\n`);
-					break;
-				}
-
-				const briefGateOutput = briefGateResult.output || '';
-				lastBriefGateFeedback = briefGateOutput;
-				if (briefGateOutput && workspaceFolderPath && FLOW_ROLE_TO_FILENAME['leader']) {
-					saveFlowResultAsMd(workspaceFolderPath, 'leader', 'Brief Gate', briefGateOutput, sessionIdArg, true);
-				}
-
-				const briefGatePassed = judgeReviewPass(briefGateOutput);
-				if (!briefGatePassed) {
-					if (briefGateAttempts >= maxBriefGateIterations) {
-						appendText(`\n\n⚠️ **Brief Gate 最大試行回数 (${maxBriefGateIterations}) に到達** — Brief Gate 合格に至らなかったためここで終了します。最新の再調査要求は LEADER.md を参照してください。\n`);
-						break;
-					}
-
-					iteration++;
-					retrySource = 'brief_gate';
-					drainInjections();
-					appendText(`\n\n🔄 **Brief Gate 不合格** — Reviewer をスキップし、File Search 再調査（Todos 再生成なし）に戻ります（${iteration + 1} 回目）...\n\n`);
-					continue;
-				}
-
-				// Reviewer 実行前の割り込み取り込み
-				drainInjections();
-
-				// Review step
-				reviewerAttempts++;
-				const reviewerAttemptLabel = reviewerAttempts === 1 ? '' : ` (${reviewerAttempts} 回目)`;
-				appendText(`\n---\n\n**レビューステップ** (reviewer)${reviewerAttemptLabel} 開始...\n\n`);
-
-				const reviewContextHistory: { role: 'user' | 'assistant'; content: string }[] = [...gateContextHistory];
-				if (briefGateOutput.trim()) {
+		const reviewContextHistory: { role: 'user' | 'assistant'; content: string }[] = [];
+		{
+			let total = 0;
+			for (const o of taskOutputs) {
+				if (!o.output || !o.output.trim()) continue;
+				const truncated = truncateForContext(o.output.trim(), MAX_CHARS_PER_CONTEXT);
+				if (total + truncated.length > MAX_TOTAL_CONTEXT_CHARS) {
 					reviewContextHistory.push({
 						role: 'assistant',
-						content: `## Brief Gate 判定\n\n${truncateForContext(briefGateOutput, MAX_CHARS_PER_CONTEXT)}`,
+						content: `[${o.role}] 以降は合計上限を超過したため省略。`,
 					});
-				}
-
-				const reviewPrompt = [
-					`以下の成果物をレビューしてください。品質・正確性・ユーザー要求の充足度を評価してください。`,
-					``,
-					`## ユーザーの要求`,
-					currentInput,
-					``,
-					`## ${finalRoleArg} の成果物（レビュー対象）`,
-					truncatedSynthesisForGate
-						? truncatedSynthesisForGate
-						: `> ⚠️ ${finalRoleArg} は今回の反復で空の出力を返しました。Coder が実装できていない原因を指摘し、不合格としてください。`,
-					``,
-					briefGateOutput.trim()
-						? `## Brief Gate 判定（参考）\n\n${truncateForContext(briefGateOutput, MAX_CHARS_PER_CONTEXT)}`
-						: '',
-					``,
-					`## 指示`,
-					`上記 ${finalRoleArg} の成果物について、評価結果を Markdown で返してください。`,
-					``,
-					`### 出力形式（厳守）`,
-					`1 行目に必ず以下のどちらかのマーカーを出力してください:`,
-					`- **合格** の場合: ` + '`判定: 合格`',
-					`- **不合格** の場合: ` + '`判定: 不合格`',
-					``,
-					`その下に、理由・具体的な改善点（不合格時は修正指示）を箇条書きで書いてください。改善点が無く完全に問題ない場合のみ合格にしてください。`,
-				].filter(Boolean).join('\n');
-
-				const reviewResult = await callDivisionTaskExecute(
-					endpointBase, projectId, 'review', reviewPrompt, controller.signal,
-					(chunk) => appendText(chunk),
-					divisionApiKey, sessionIdArg,
-					withStackContext(reviewContextHistory),
-					workspaceFolderPath,
-				);
-
-				if (reviewResult.error) {
-					appendText(`\n❌ **Review Error:** ${reviewResult.error}\n`);
 					break;
 				}
-
-				const reviewOutput = reviewResult.output || '';
-				lastReviewFeedback = reviewOutput;
-				if (reviewOutput && workspaceFolderPath && FLOW_ROLE_TO_FILENAME['review']) {
-					saveFlowResultAsMd(workspaceFolderPath, 'review', '', reviewOutput, sessionIdArg);
-				}
-
-				const passed = judgeReviewPass(reviewOutput);
-				if (passed) {
-					appendText(`\n\n✅ **レビュー合格** (${reviewerAttempts} 回目で合格) — 完了しました。\n`);
-					break;
-				}
-
-				if (reviewerAttempts >= maxReviewerIterations) {
-					appendText(`\n\n⚠️ **Reviewer 最大試行回数 (${maxReviewerIterations}) に到達** — レビュー合格に至らなかったためここで終了します。最新のレビュー指摘は REVIEW.md を参照してください。\n`);
-					break;
-				}
-
-				// Failed → Reviewer 指摘では Todo も再生成してから File Search / Coder に戻る
-				iteration++;
-				retrySource = 'reviewer';
-				// 次 Coder iteration 前の割り込み取り込み
-				drainInjections();
-				appendText(`\n\n🔄 **レビュー不合格** — File Search 再調査（Todos 再生成あり）に戻り、Coder/Writer を再実行します（${iteration + 1} 回目）...\n\n`);
-				// finalRoleArg / sessionIdArg / flowOutputs はそのまま流用。
-				// lastReviewFeedback は次ループ冒頭で synthesisContextHistory に積まれ、Leader Todo も再生成される。
-			}
-
-			if (workspaceFolderPath) clearOrchestrationState(workspaceFolderPath);
-			onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null });
-			flushCommandRunsAfterFinalMessage();
-		};
-
-		// ---------- Phase B: resume after flow_review approval ----------
-		if (workspaceFolderPath) {
-			const resumeState = readOrchestrationState(workspaceFolderPath);
-			if (resumeState && resumeState.approved && resumeState.finalRole) {
-				appendText(`✅ **全フロー承認完了** — 最終フロー (${resumeState.finalRole}) を実行します。\n\n`);
-
-				if (resumeState.editedOutputs && resumeState.editedOutputs.length > 0) {
-					applyEditedMdFiles(workspaceFolderPath, resumeState.editedOutputs);
-					appendText(`編集済みフロー出力 (${resumeState.editedOutputs.length} 件) を反映しました。\n\n`);
-				}
-
-				const baseOutputs = resumeState.allFlowOutputs ?? [];
-				const refreshedOutputs = loadFlowMdFiles(workspaceFolderPath, baseOutputs);
-
-				await runFinalFlow(
-					resumeState.finalRole,
-					resumeState.sessionId || '',
-					refreshedOutputs,
-				);
-				return;
+				reviewContextHistory.push({
+					role: 'assistant',
+					content: `## ${o.role} — ${o.title || ''}\n\n${truncated}`,
+				});
+				total += truncated.length;
 			}
 		}
 
-		// ---------- Phase A: initial invocation ----------
-		// Delegate decompose + intermediate task execution to the shared helper
-		// (runIntermediateCycle). Review-failure retries reuse the same helper inside
-		// runFinalFlow, so the Phase A path here is simple.
-		const initialCycle = await runIntermediateCycle(currentInput, 'initial');
-		if (initialCycle.aborted) {
-			// Fallback: single model via /api/generate/stream
-			appendText(`フォールバック: 単一モデルで生成中...\n\n`);
-			const fallbackResult = await callDivisionGenerateStream(
-				endpointBase, 'gpt-5.2', prompt, controller.signal,
-				(chunk) => appendText(chunk),
-				'chat', divisionApiKey, undefined, workspaceFolderPath,
-			);
-			if (fallbackResult.error) {
-				appendText(`\n❌ **Fallback Error:** ${fallbackResult.error}\n`);
-			}
-			onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null });
-			return;
+		const reviewPrompt = [
+			`## ユーザーの要求`,
+			currentInput,
+			``,
+			`## 指示`,
+			`直前の assistant メッセージとして、Leader が分解した各タスクの出力 (${taskOutputs.length} 件) が添付されています。`,
+			`それら全体を最終レビューし、評価結果と改善提案を Markdown で返してください。`,
+			``,
+			`### 出力要件`,
+			`- 1 行目に必ず ` + '`判定: 合格`' + ` または ` + '`判定: 不合格`' + ` を明記。`,
+			`- 続けて、観点別の所見・具体的な改善指示を箇条書きで。`,
+			``,
+			`このレビュー結果は **次のユーザーメッセージに自動的に context として添付** されます。`,
+			`次の AI がそのまま改善ステップに着手できるよう、修正対象ファイル / 関数 / 実装手順を具体的に書いてください。`,
+		].join('\n');
+
+		// Reviewer 出力をレンダラ側で抽出するための delimiter。
+		// HTML コメントなので markdown レンダラ上は不可視。
+		const REVIEWER_BEGIN = '<!-- DIVISION_REVIEWER_BEGIN -->';
+		const REVIEWER_END = '<!-- DIVISION_REVIEWER_END -->';
+
+		appendText(`\n${REVIEWER_BEGIN}\n`);
+
+		const reviewResult = await callDivisionTaskExecute(
+			endpointBase, projectId, 'review', reviewPrompt, controller.signal,
+			(chunk) => appendText(chunk),
+			divisionApiKey, sessionId,
+			withStackContext(reviewContextHistory),
+			workspaceFolderPath,
+		);
+
+		appendText(`\n${REVIEWER_END}\n`);
+
+		if (reviewResult.error) {
+			appendText(`\n⚠️ Reviewer エラー: ${reviewResult.error}\n`);
+		} else if (reviewResult.output && workspaceFolderPath && FLOW_ROLE_TO_FILENAME['review']) {
+			saveFlowResultAsMd(workspaceFolderPath, 'review', '', reviewResult.output, sessionId || 'review');
 		}
 
-		const { sessionId, finalRole, flowOutputs } = initialCycle;
-
-		await runFinalFlow(finalRole, sessionId, flowOutputs);
+		if (sessionId) activeServerSessionIds.delete(sessionId);
+		if (workspaceFolderPath) clearOrchestrationState(workspaceFolderPath);
+		onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null });
+		flushCommandRunsAfterFinalMessage();
 		return;
 
 	} catch (error: any) {

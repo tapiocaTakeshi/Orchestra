@@ -64,6 +64,18 @@ const ts = require("typescript");
 const watch = require('./watch');
 // --- gulp-tsb: compile and transpile --------------------------------
 const reporter = (0, reporter_1.createReporter)();
+// `src/` 直下の React/Web 実験用フォルダは本体 tsconfig の include 外なので、
+// gulp の `src/**` グロブから除外する (本体 build のときのみ)。
+function getSrcGlobs(src) {
+    const globs = [`${src}/**`, `!${src}/**/node_modules/**`];
+    if (src === 'src') {
+        const experimentalTopLevel = ['components', 'renderer', 'app', 'lib', 'styles', 'theme'];
+        for (const folder of experimentalTopLevel) {
+            globs.push(`!${src}/${folder}/**`);
+        }
+    }
+    return globs;
+}
 function getTypeScriptCompilerOptions(src) {
     const rootDir = path_1.default.join(__dirname, `../../${src}`);
     const options = {};
@@ -132,9 +144,8 @@ function createCompile(src, { build, emitError, transpileOnly, preserveEnglish }
 function transpileTask(src, out, esbuild) {
     const task = () => {
         const transpile = createCompile(src, { build: false, emitError: true, transpileOnly: { esbuild }, preserveEnglish: false });
-        // `src/` 配下にネストされた `node_modules/` (例: tsup 用サブプロジェクトの依存) は
-        // 本体ビルドの対象ではないため、必ず除外する。
-        const srcPipe = gulp_1.default.src([`${src}/**`, `!${src}/**/node_modules/**`], { base: `${src}` });
+        // `src/` 配下にネストされた `node_modules/` と React/Web 実験用フォルダを除外。
+        const srcPipe = gulp_1.default.src(getSrcGlobs(src), { base: `${src}` });
         return srcPipe
             .pipe(transpile())
             .pipe(gulp_1.default.dest(out));
@@ -148,9 +159,8 @@ function compileTask(src, out, build, options = {}) {
             throw new Error('compilation requires 4GB of RAM');
         }
         const compile = createCompile(src, { build, emitError: true, transpileOnly: false, preserveEnglish: !!options.preserveEnglish });
-        // `src/` 配下にネストされた `node_modules/` (例: tsup 用サブプロジェクトの依存) は
-        // 本体ビルドの対象ではないため、必ず除外する。
-        const srcPipe = gulp_1.default.src([`${src}/**`, `!${src}/**/node_modules/**`], { base: `${src}` });
+        // `src/` 配下にネストされた `node_modules/` と React/Web 実験用フォルダを除外。
+        const srcPipe = gulp_1.default.src(getSrcGlobs(src), { base: `${src}` });
         const generator = new MonacoGenerator(false);
         if (src === 'src') {
             generator.execute();
@@ -187,8 +197,8 @@ function compileTask(src, out, build, options = {}) {
 function watchTask(out, build, srcPath = 'src') {
     const task = () => {
         const compile = createCompile(srcPath, { build, emitError: false, transpileOnly: false, preserveEnglish: false });
-        // `srcPath/` 配下にネストされた `node_modules/` は対象外。
-        const src = gulp_1.default.src([`${srcPath}/**`, `!${srcPath}/**/node_modules/**`], { base: srcPath });
+        // `srcPath/` 配下にネストされた `node_modules/` と React/Web 実験用フォルダを除外。
+        const src = gulp_1.default.src(getSrcGlobs(srcPath), { base: srcPath });
         const watchSrc = watch(`${srcPath}/**`, { base: srcPath, readDelay: 200, ignored: '**/node_modules/**' });
         const generator = new MonacoGenerator(true);
         generator.execute();

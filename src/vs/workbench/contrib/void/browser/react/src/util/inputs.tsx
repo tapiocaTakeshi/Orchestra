@@ -2129,7 +2129,7 @@ const SingleDiffEditor = ({ block, lang }: { block: ExtractedSearchReplaceBlock,
 	}, [originalModel, modifiedModel, instantiationService]);
 
 	return (
-		<div className="w-full bg-void-bg-3 @@bg-editor-style-override" ref={divRef} />
+		<div className="w-full bg-void-bg-3 @@bg-editor-style-override @@void-chat-diff" ref={divRef} />
 	);
 };
 
