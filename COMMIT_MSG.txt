@@ -1,0 +1,37 @@
+feat(sidebar-chat): add send validation, preview modal, and collapsible tool blocks
+
+Implement Phase 1 (H1/H2) and Phase 2 (H3) of the SidebarChat UX
+improvement plan produced by the multi-agent pipeline (ideaman →
+researcher → designer → planner → coder).
+
+New React components and hook under
+`src/vs/workbench/contrib/void/browser/react/src/sidebar-chat/`:
+- hooks/useSendValidation.ts — centralizes send-blocking reasons
+  (empty / too-long / in-flight / indexing / no-model / uploading)
+  and renders actionable messages with severity.
+- components/DisableReason.tsx — inline, ARIA-live reason banner
+  shown near the input (案H1).
+- components/SendPreviewModal.tsx — pre-send confirmation dialog
+  with Esc to cancel and Cmd/Ctrl+Enter to confirm (案H2).
+- components/ChatInput.tsx — wires validation + preview + cancel
+  flow, char counter, and accessible send button.
+- components/ToolCallBlock.tsx — collapsible tool result block
+  with auto-collapse for long output, status icon, and summary
+  hint in the header (案H3 / M7).
+- components/index.ts, components/README.md — barrel + usage notes.
+
+Supporting changes:
+- util/inputs.tsx: extend `VoidCustomDropdownBox` with an optional
+  `getOptionGroupName` so adjacent options can render under a
+  sticky, non-selectable group header.
+- void-settings-tsx/ModelDropdown.tsx, Settings.tsx: use the new
+  grouping API and expose the related settings entry.
+- common/sendLLMMessageService.ts, sendLLMMessageTypes.ts,
+  voidSettingsTypes.ts, electron-main/llmMessage/sendLLMMessage*.ts:
+  thread a new option through the sendLLMMessage pipeline so the
+  sidebar-chat can drive the updated flow end-to-end.
+
+Docs (.division/*.md): refresh CODER / DESIGNER / PLANNING /
+RESEARCH / IDEAMAN / SEARCH / REVIEW / FILE-SEARCH to reflect the
+final plan, rationale, and traceability between roles addressed in
+the previous review round.

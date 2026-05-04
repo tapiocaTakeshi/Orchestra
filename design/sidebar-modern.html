@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="Orchestra AI Sidebar Chat — Modern design deliverable">
+  <title>Orchestra AI Sidebar Chat — Modern</title>
+  <link rel="preconnect" href="https://rsms.me/">
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+  <style>
+    /*
+      Color Palette & Typography
+      モダン・ミニマルなスレートとホワイトを基調
+    */
+    :root {
+      --bg-app: #f9fafb;
+      --bg-sidebar: #ffffff;
+      --bg-surface: #f3f4f6;
+      --bg-surface-hover: #e5e7eb;
+
+      --text-primary: #111827;
+      --text-secondary: #4b5563;
+      --text-tertiary: #9ca3af;
+
+      --border-color: #e5e7eb;
+      --border-focus: #cbd5e1;
+
+      --accent-color: #0f172a;
+
+      --user-msg-bg: #ffffff;
+      --user-msg-border: #e5e7eb;
+      --user-msg-text: #111827;
+
+      --ai-msg-text: #111827;
+
+      --status-yellow: #eab308;
+      --status-green: #22c55e;
+      --status-dark: #6b7280;
+
+      --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-size-base: 13px;
+      --font-size-sm: 12px;
+      --font-size-xs: 11px;
+    }
+
+    @supports (font-variation-settings: normal) {
+      :root { --font-family: 'Inter var', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    }
+
+    /* Reset & Base */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body { height: 100%; }
+
+    body {
+      font-family: var(--font-family);
+      background-color: var(--bg-app);
+      color: var(--text-primary);
+      overflow: hidden;
+      display: flex;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
+    }
+
+    /* Focus ring (a11y) */
+    :focus-visible {
+      outline: 2px solid var(--accent-color);
+      outline-offset: 2px;
+      border-radius: 4px;
+    }
+
+    button { font: inherit; }
+
+    /* Main Workspace Dummy */
+    .main-content {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-image: radial-gradient(var(--border-color) 1px, transparent 1px);
+      background-size: 24px 24px;
+      min-width: 0;
+    }
+    .main-content-text {
+      color: var(--text-tertiary);
+      font-size: 20px;
+      font-weight: 300;
+      letter-spacing: 0.05em;
+    }
+
+    /* Sidebar Container */
+    .sidebar {
+      width: 400px;
+      max-width: 100vw;
+      height: 100vh;
+      background-color: var(--bg-sidebar);
+      border-left: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      box-shadow: -8px 0 32px rgba(0, 0, 0, 0.03);
+      z-index: 10;
+      font-size: var(--font-size-base);
+    }
+
+    /* Header */
+    .header {
+      padding: 10px 16px;
+      border-bottom: 1px solid rgba(229, 231, 235, 0.6);
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 12px;
+      background: linear-gradient(to bottom, var(--bg-sidebar), transparent);
+    }
+    .btn-text {
+      font-size: var(--font-size-xs);
+      font-weight: 500;
+      padding: 4px 8px;
+      border-radius: 4px;
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: color 0.2s, background-color 0.2s;
+    }
+    .btn-text:hover {
+      color: var(--text-primary);
+      background-color: var(--bg-surface);
+    }
+    .icon-btn {
+      width: 26px;
+      height: 26px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      background: transparent;
+      color: var(--text-tertiary);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .icon-btn:hover {
+      background-color: var(--bg-surface);
+      color: var(--text-primary);
+    }
+
+    /* History / Messages Area */
+    .history {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      scroll-behavior: smooth;
+    }
+    .history::-webkit-scrollbar { width: 4px; }
+    .history::-webkit-scrollbar-track { background: transparent; }
+    .history::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 10px; }
+
+    /* Sticky User Card Style */
+    .msg-user {
+      background: var(--user-msg-bg);
+      border: 1px solid var(--user-msg-border);
+      border-radius: 12px;
+      padding: 14px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 0 0 1px rgba(255,255,255,0.8) inset;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      position: relative;
+      transition: box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+    .msg-user:hover {
+      border-color: var(--border-focus);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05), 0 0 0 1px rgba(255,255,255,0.8) inset;
+    }
+
+    /* File Selection Badges */
+    .file-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .file-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 8px;
+      background: var(--bg-sidebar);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      font-size: var(--font-size-xs);
+      color: var(--text-primary);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      user-select: none;
+      max-width: 100%;
+    }
+    .file-badge:hover {
+      border-color: var(--border-focus);
+      background: var(--bg-surface);
+    }
+    .file-badge svg {
+      color: var(--text-secondary);
+      flex-shrink: 0;
+    }
+
+    .msg-user .text {
+      color: var(--user-msg-text);
+      line-height: 1.5;
+      font-size: var(--font-size-base);
+      word-wrap: break-word;
+    }
+
+    .edit-icon {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      opacity: 0;
+      color: var(--text-tertiary);
+      cursor: pointer;
+      padding: 4px;
+      border: none;
+      background: transparent;
+      border-radius: 4px;
+      transition: all 0.2s ease;
+      display: inline-flex;
+    }
+    .msg-user:hover .edit-icon,
+    .msg-user:focus-within .edit-icon {
+      opacity: 1;
+    }
+    .edit-icon:hover {
+      color: var(--text-primary);
+      background: var(--bg-surface);
+    }
+
+    /* AI Message */
+    .msg-ai {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-left: 4px;
+    }
+
+    /* Tool / Reasoning Headers */
+    .tool-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 6px;
+      margin-left: -6px;
+      border: none;
+      background: transparent;
+      border-radius: 6px;
+      cursor: pointer;
+      user-select: none;
+      transition: background-color 0.15s ease;
+      width: calc(100% + 6px);
+      text-align: left;
+    }
+    .tool-header:hover {
+      background-color: var(--bg-surface);
+    }
+    .tool-header-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow: hidden;
+      min-width: 0;
+    }
+    .chevron {
+      color: var(--text-tertiary);
+      transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      flex-shrink: 0;
+    }
+    .tool-header.open .chevron {
+      transform: rotate(90deg);
+    }
+    .tool-title {
+      font-size: var(--font-size-sm);
+      color: var(--text-secondary);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    /* Flow indicator pulsing dot */
+    .dot-pulse {
+      width: 6px;
+      height: 6px;
+      background-color: var(--text-tertiary);
+      border-radius: 50%;
+      display: inline-block;
+      opacity: 0.5;
+      flex-shrink: 0;
+    }
+    .dot-pulse.active {
+      background-color: #3b82f6;
+      box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
+      animation: pulse 1.5s ease-in-out infinite;
+      opacity: 1;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(0.85); opacity: 0.6; }
+    }
+
+    .tool-desc {
+      font-size: var(--font-size-xs);
+      color: var(--text-tertiary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-left: 4px;
+      min-width: 0;
+    }
+
+    /* Tool details body (visible when open) */
+    .tool-body {
+      font-size: 12px;
+      color: var(--text-secondary);
+      padding: 8px 12px;
+      background: var(--bg-surface);
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      margin-top: 2px;
+      margin-bottom: 6px;
+      display: none;
+    }
+    .tool-header.open + .tool-body {
+      display: block;
+      animation: slideDown 0.2s ease-out;
+    }
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Spinner */
+    .spinner {
+      animation: spin 1s linear infinite;
+      color: var(--text-tertiary);
+    }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+
+    /* Markdown Text Simulation */
+    .msg-ai .text {
+      color: var(--ai-msg-text);
+      line-height: 1.6;
+      font-size: var(--font-size-base);
+      word-wrap: break-word;
+    }
+    .msg-ai .text p { margin-bottom: 12px; }
+    .msg-ai .text p:last-child { margin-bottom: 0; }
+    .msg-ai .text code {
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      font-size: 11px;
+      background: var(--bg-surface);
+      padding: 2px 5px;
+      border-radius: 4px;
+      color: var(--text-secondary);
+    }
+
+    /* Command Bar (File Changes Status) */
+    .command-bar {
+      background: var(--bg-surface);
+      border-top: 1px solid rgba(229,231,235, 0.5);
+      border-left: 1px solid rgba(229,231,235, 0.5);
+      border-right: 1px solid rgba(229,231,235, 0.5);
+      border-radius: 8px 8px 0 0;
+      padding: 8px 12px;
+      margin: 0 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: var(--font-size-xs);
+      color: var(--text-secondary);
+    }
+    .command-bar-left {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      transition: color 0.15s ease;
+      background: transparent;
+      border: none;
+      color: inherit;
+      font: inherit;
+      padding: 0;
+    }
+    .command-bar-left:hover {
+      color: var(--text-primary);
+    }
+    .command-bar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .action-icons {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .action-icons .icon-btn {
+      width: 22px;
+      height: 22px;
+    }
+    .status-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 500;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .status-dot.yellow { background-color: var(--status-yellow); box-shadow: 0 0 6px rgba(234, 179, 8, 0.4); }
+    .status-dot.green  { background-color: var(--status-green); }
+    .status-dot.dark   { background-color: var(--status-dark); }
+
+    /* Input Container */
+    .input-container {
+      padding: 0 8px 12px;
+      background-color: var(--bg-sidebar);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .input-wrapper {
+      background: linear-gradient(to bottom, #ffffff, #fcfcfc);
+      border: 1px solid var(--border-color);
+      border-radius: 0 0 12px 12px;
+      display: flex;
+      flex-direction: column;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      position: relative;
+    }
+    .command-bar + .input-wrapper { border-top: none; }
+    .input-wrapper:focus-within {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.04), 0 8px 24px -8px rgba(0,0,0,0.05);
+    }
+
+    .input-inner {
+      font-size: var(--font-size-base);
+      line-height: 1.5;
+      color: var(--text-primary);
+      outline: none;
+      padding: 12px 12px 8px 12px;
+      min-height: 64px;
+      max-height: 200px;
+      overflow-y: auto;
+      cursor: text;
+      word-wrap: break-word;
+    }
+    .input-inner[data-empty="true"]::before {
+      content: attr(data-placeholder);
+      color: var(--text-tertiary);
+      pointer-events: none;
+    }
+
+    .input-bottom {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      padding: 4px 8px 8px 8px;
+      gap: 8px;
+    }
+
+    .input-controls-left {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .model-dropdown {
+      font-size: 10px;
+      color: var(--text-secondary);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 2px 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+      width: fit-content;
+      transition: all 0.2s ease;
+      font-family: inherit;
+    }
+    .model-dropdown:hover {
+      border-color: var(--text-tertiary);
+      color: var(--text-primary);
+    }
+
+    .input-controls-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .attach-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-tertiary);
+      cursor: pointer;
+      padding: 6px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+    }
+    .attach-btn:hover {
+      color: var(--text-secondary);
+      background: var(--bg-surface);
+    }
+
+    .send-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #ffffff, #e4e4e7);
+      color: #000;
+      border: 1px solid rgba(0,0,0,0.1);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    .send-btn:hover {
+      transform: scale(1.06);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.9);
+    }
+    .send-btn:active { transform: scale(0.95); }
+
+    /* Visually hidden helper (a11y) */
+    .sr-only {
+      position: absolute;
+      width: 1px; height: 1px;
+      padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0,0,0,0);
+      white-space: nowrap; border: 0;
+    }
+
+    /* Reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+
+    /* Responsive */
+    @media (max-width: 720px) {
+      .main-content { display: none; }
+      .sidebar { width: 100vw; border-left: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Workspace Area Dummy -->
+  <main class="main-content" aria-hidden="true">
+    <div class="main-content-text">Editor Area</div>
+  </main>
+
+  <!-- Sidebar Chat -->
+  <aside class="sidebar" aria-label="Orchestra AI チャットサイドバー">
+    <!-- Header -->
+    <header class="header">
+      <button class="btn-text" type="button">ログイン</button>
+      <button class="icon-btn" type="button" title="設定" aria-label="設定">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+      </button>
+    </header>
+
+    <!-- Chat History -->
+    <div class="history" role="log" aria-live="polite" aria-label="チャット履歴">
+
+      <!-- User Message -->
+      <article class="msg-user" aria-label="ユーザーメッセージ">
+        <div class="file-badges">
+          <button type="button" class="file-badge" title="src/vs/workbench/contrib/void/browser/react/src/sidebar-tsx/SidebarChat.tsx">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+            </svg>
+            SidebarChat.tsx (10-45)
+          </button>
+        </div>
+        <div class="text">
+          このコンポーネントのデザインをモダンでミニマルな方針に沿って改善したいです。パディングやアクセントカラーを整理してください。
+        </div>
+        <button type="button" class="edit-icon" title="メッセージを編集" aria-label="メッセージを編集">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+          </svg>
+        </button>
+      </article>
+
+      <!-- AI Message -->
+      <article class="msg-ai" aria-label="AI 応答">
+
+        <!-- Reasoning Accordion -->
+        <button type="button" class="tool-header" aria-expanded="false">
+          <span class="tool-header-left">
+            <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            <span class="tool-title"><span class="dot-pulse" aria-hidden="true"></span> 2.8 秒間思考しました</span>
+          </span>
+        </button>
+
+        <!-- Tool Execution (Closed) -->
+        <button type="button" class="tool-header" aria-expanded="false">
+          <span class="tool-header-left">
+            <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            <span class="tool-title">ファイルを読み込みました</span>
+            <span class="tool-desc">SidebarChat.tsx</span>
+          </span>
+        </button>
+
+        <!-- Tool Execution (Open) -->
+        <button type="button" class="tool-header open" aria-expanded="true">
+          <span class="tool-header-left">
+            <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            <span class="tool-title">ファイルを検索しました</span>
+            <span class="tool-desc">"css variables"</span>
+          </span>
+        </button>
+        <div class="tool-body">
+          <code>Found matches in common/helpers/colors.ts</code>
+        </div>
+
+        <!-- Text Response -->
+        <div class="text">
+          <p>承知いたしました。<code>SidebarChat.tsx</code> の構造を確認しました。</p>
+          <p>UI をより洗練させるために、以下の変更を加えることを提案します。</p>
+          <p>1. <b>余白の活用:</b> コンテナ内のパディングを広げ、窮屈さを解消<br>
+             2. <b>控えめなボーダー:</b> 極細で淡いグレー（<code>var(--border-color)</code>）を使用<br>
+             3. <b>視覚的階層:</b> 重要なアクション以外は控えめな色にする</p>
+        </div>
+      </article>
+
+      <!-- User Message -->
+      <article class="msg-user" aria-label="ユーザーメッセージ">
+        <div class="text">
+          いいですね。さらに、入力欄の上にファイル変更の「ステータスバー（コマンドバー）」を追加してください。
+        </div>
+        <button type="button" class="edit-icon" title="メッセージを編集" aria-label="メッセージを編集">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+          </svg>
+        </button>
+      </article>
+
+      <!-- AI Message (Streaming / Active) -->
+      <article class="msg-ai" aria-label="AI 応答（ストリーミング中）">
+        <button type="button" class="tool-header" aria-expanded="false">
+          <span class="tool-header-left">
+            <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            <span class="tool-title"><span class="dot-pulse active" aria-hidden="true"></span> 思考中</span>
+          </span>
+        </button>
+
+        <button type="button" class="tool-header" aria-expanded="false">
+          <span class="tool-header-left">
+            <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            <span class="tool-title">
+              ファイルを編集中
+              <svg class="spinner" width="12" height="12" style="margin-left:4px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>
+              <span class="sr-only">処理中</span>
+            </span>
+            <span class="tool-desc">SidebarChat.tsx</span>
+          </span>
+        </button>
+      </article>
+
+    </div>
+
+    <!-- Command Bar (Above Input Area) -->
+    <div class="command-bar" role="status" aria-live="polite">
+      <button type="button" class="command-bar-left" aria-label="変更ファイル一覧を折りたたむ">
+        <svg width="14" height="14" style="transform: rotate(180deg);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="18 15 12 9 6 15"></polyline>
+        </svg>
+        1件の変更されたファイル
+      </button>
+      <div class="command-bar-right">
+        <div class="action-icons">
+          <button class="icon-btn" type="button" title="コピー" aria-label="差分をコピー">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          </button>
+          <button class="icon-btn" type="button" title="すべて拒否" aria-label="すべて拒否">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+          <button class="icon-btn" type="button" title="すべて承認" aria-label="すべて承認">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          </button>
+        </div>
+        <div class="status-indicator">
+          <span class="status-dot yellow" aria-hidden="true"></span>
+          承認待ち
+        </div>
+      </div>
+    </div>
+
+    <!-- Chat Input Area -->
+    <div class="input-container">
+      <label for="chat-input" class="sr-only">指示を入力</label>
+      <div class="input-wrapper">
+        <div id="chat-input"
+             class="input-inner"
+             role="textbox"
+             aria-multiline="true"
+             aria-label="指示を入力"
+             contenteditable="true"
+             spellcheck="false"
+             data-empty="true"
+             data-placeholder="指示を入力... (@ で参照)"></div>
+
+        <div class="input-bottom">
+          <div class="input-controls-left">
+            <button type="button" class="model-dropdown" aria-label="モデルを選択: Claude 3.5 Sonnet">
+              Claude 3.5 Sonnet
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
+          </div>
+
+          <div class="input-controls-right">
+            <button class="attach-btn" type="button" title="画像やファイルを添付" aria-label="画像やファイルを添付">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+              </svg>
+            </button>
+            <button class="send-btn" type="button" title="送信" aria-label="送信">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 19V5"></path>
+                <path d="M5 12l7-7 7 7"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </aside>
+
+  <script>
+    // Accordion toggling for tool-header (with aria-expanded sync)
+    document.querySelectorAll('.tool-header').forEach(function (h) {
+      h.addEventListener('click', function () {
+        var isOpen = h.classList.toggle('open');
+        h.setAttribute('aria-expanded', String(isOpen));
+      });
+    });
+
+    // contenteditable empty-state tracking
+    var input = document.getElementById('chat-input');
+    if (input) {
+      var sync = function () {
+        input.setAttribute('data-empty', input.textContent.trim().length === 0 ? 'true' : 'false');
+      };
+      input.addEventListener('input', sync);
+      input.addEventListener('blur', sync);
+      sync();
+    }
+  </script>
+
+</body>
+</html>

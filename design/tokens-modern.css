@@ -1,0 +1,52 @@
+/*
+ * Orchestra Modern Design Tokens
+ * 由来: design/sidebar-chat-modern.html
+ * 用途: SidebarChat / Header / CommandBar / Input 等のスタイル実装で参照
+ */
+:root {
+  /* Surfaces */
+  --bg-app: #f9fafb;
+  --bg-sidebar: #ffffff;
+  --bg-surface: #f3f4f6;
+  --bg-surface-hover: #e5e7eb;
+
+  /* Text */
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --text-tertiary: #9ca3af;
+
+  /* Borders */
+  --border-color: #e5e7eb;
+  --border-focus: #cbd5e1;
+
+  /* Accent */
+  --accent-color: #0f172a;
+
+  /* Message bubbles */
+  --user-msg-bg: #ffffff;
+  --user-msg-border: #e5e7eb;
+  --user-msg-text: #111827;
+  --ai-msg-text: #111827;
+
+  /* Status */
+  --status-yellow: #eab308;
+  --status-green: #22c55e;
+  --status-dark: #6b7280;
+
+  /* Typography */
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-size-base: 13px;
+  --font-size-sm: 12px;
+  --font-size-xs: 11px;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 12px;
+
+  /* Elevation */
+  --shadow-sidebar: -8px 0 32px rgba(0, 0, 0, 0.03);
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.04);
+  --shadow-card-hover: 0 4px 12px rgba(0,0,0,0.05);
+  --shadow-input-focus: 0 0 0 3px rgba(15, 23, 42, 0.04), 0 8px 24px -8px rgba(0,0,0,0.05);
+}

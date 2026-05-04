@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatGPT — 基本情報</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Sans+JP:wght@300;400;500;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --brand: #10a37f;
+            --brand-light: #1ec99d;
+            --brand-dark: #0b7a5f;
+            --accent: #6366f1;
+            --accent-2: #ec4899;
+            --bg: #0a0e1a;
+            --bg-soft: #111827;
+            --surface: rgba(255, 255, 255, 0.04);
+            --surface-hover: rgba(255, 255, 255, 0.07);
+            --border: rgba(255, 255, 255, 0.08);
+            --text: #e6edf7;
+            --text-muted: #9aa4b8;
+            --text-dim: #6b7489;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --radius: 18px;
+            --radius-sm: 12px;
+            --shadow-lg: 0 30px 80px -20px rgba(16, 163, 127, 0.25), 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Sans JP', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+            min-height: 100vh;
+            overflow-x: hidden;
+            position: relative;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* ----- Ambient background ----- */
+        body::before,
+        body::after {
+            content: '';
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(120px);
+            opacity: 0.35;
+            pointer-events: none;
+            z-index: 0;
+            animation: drift 18s ease-in-out infinite alternate;
+        }
+        body::before {
+            width: 520px;
+            height: 520px;
+            background: radial-gradient(circle, var(--brand) 0%, transparent 70%);
+            top: -180px;
+            left: -140px;
+        }
+        body::after {
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, var(--accent) 0%, transparent 70%);
+            bottom: -220px;
+            right: -180px;
+            animation-delay: -8s;
+        }
+
+        @keyframes drift {
+            0% { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(40px, -30px) scale(1.1); }
+        }
+
+        .wrap {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 5rem 1.5rem 4rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* ----- Hero ----- */
+        .hero {
+            text-align: center;
+            margin-bottom: 4.5rem;
+            animation: fadeUp 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 1rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            margin-bottom: 1.5rem;
+            backdrop-filter: blur(10px);
+        }
+        .badge .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--brand);
+            box-shadow: 0 0 12px var(--brand);
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .hero h1 {
+            font-size: clamp(2.5rem, 6vw, 4.5rem);
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            line-height: 1.1;
+            margin-bottom: 1.25rem;
+            background: linear-gradient(135deg, #fff 0%, var(--brand-light) 50%, var(--accent) 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hero p.lead {
+            font-size: 1.15rem;
+            color: var(--text-muted);
+            max-width: 620px;
+            margin: 0 auto;
+            font-weight: 300;
+        }
+
+        /* ----- Section ----- */
+        section {
+            margin-bottom: 4rem;
+            animation: fadeUp 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+        }
+        section:nth-of-type(2) { animation-delay: 0.1s; }
+        section:nth-of-type(3) { animation-delay: 0.2s; }
+        section:nth-of-type(4) { animation-delay: 0.3s; }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(24px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        h2 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-bottom: 1.75rem;
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        h2::before {
+            content: '';
+            width: 4px;
+            height: 1.5rem;
+            border-radius: 4px;
+            background: linear-gradient(180deg, var(--brand), var(--accent));
+        }
+
+        /* ----- Feature grid ----- */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1rem;
+        }
+
+        .card {
+            padding: 1.5rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            backdrop-filter: blur(12px);
+            transition: all 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        .card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, transparent 40%, rgba(16, 163, 127, 0.08) 100%);
+            opacity: 0;
+            transition: opacity 0.35s;
+        }
+        .card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(16, 163, 127, 0.4);
+            background: var(--surface-hover);
+            box-shadow: 0 20px 50px -20px rgba(16, 163, 127, 0.3);
+        }
+        .card:hover::before {
+            opacity: 1;
+        }
+
+        .card .icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: grid;
+            place-items: center;
+            background: linear-gradient(135deg, rgba(16, 163, 127, 0.2), rgba(99, 102, 241, 0.15));
+            border: 1px solid rgba(16, 163, 127, 0.3);
+            margin-bottom: 1rem;
+            font-size: 1.4rem;
+        }
+
+        .card h3 {
+            font-size: 1.05rem;
+            font-weight: 600;
+            margin-bottom: 0.4rem;
+            color: var(--text);
+        }
+
+        .card p {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        /* ----- Use cases list ----- */
+        .list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 0.75rem;
+            list-style: none;
+        }
+        .list li {
+            padding: 1rem 1.25rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            transition: all 0.25s;
+            font-size: 0.95rem;
+        }
+        .list li:hover {
+            border-color: var(--brand);
+            transform: translateX(4px);
+        }
+        .list li::before {
+            content: '→';
+            color: var(--brand);
+            font-weight: 700;
+            transition: transform 0.25s;
+        }
+        .list li:hover::before {
+            transform: translateX(2px);
+        }
+
+        /* ----- Pros / Cons ----- */
+        .split {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.25rem;
+        }
+
+        .panel {
+            padding: 1.75rem;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            background: var(--surface);
+            backdrop-filter: blur(12px);
+            position: relative;
+            overflow: hidden;
+        }
+        .panel.pros {
+            border-color: rgba(34, 197, 94, 0.25);
+        }
+        .panel.cons {
+            border-color: rgba(239, 68, 68, 0.25);
+        }
+        .panel.pros::after,
+        .panel.cons::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+        }
+        .panel.pros::after {
+            background: linear-gradient(90deg, transparent, var(--success), transparent);
+        }
+        .panel.cons::after {
+            background: linear-gradient(90deg, transparent, var(--danger), transparent);
+        }
+
+        .panel h3 {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .panel.pros h3 { color: var(--success); }
+        .panel.cons h3 { color: var(--danger); }
+
+        .panel ul {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+        }
+        .panel ul li {
+            padding-left: 1.5rem;
+            position: relative;
+            color: var(--text-muted);
+            font-size: 0.93rem;
+        }
+        .panel.pros ul li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: var(--success);
+            font-weight: 700;
+        }
+        .panel.cons ul li::before {
+            content: '!';
+            position: absolute;
+            left: 0.3rem;
+            color: var(--danger);
+            font-weight: 700;
+        }
+
+        /* ----- Footer ----- */
+        footer {
+            text-align: center;
+            margin-top: 5rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--border);
+            color: var(--text-dim);
+            font-size: 0.85rem;
+            letter-spacing: 0.02em;
+        }
+        footer .logo {
+            display: inline-block;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--brand), var(--accent));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+            font-size: 1rem;
+            letter-spacing: -0.01em;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .wrap { padding: 3rem 1rem 2.5rem; }
+            .hero { margin-bottom: 3rem; }
+            section { margin-bottom: 3rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <header class="hero">
+            <div class="badge"><span class="dot"></span>OpenAI · Conversational AI</div>
+            <h1>ChatGPT</h1>
+            <p class="lead">GPTモデルを基盤とした会話型AI。日常の問いかけから専門的なタスクまで、ひとつの対話で解き明かす。</p>
+        </header>
+
+        <section>
+            <h2>主要機能</h2>
+            <div class="grid">
+                <div class="card">
+                    <div class="icon">✍️</div>
+                    <h3>テキスト生成・要約</h3>
+                    <p>長文記事の要約から創作まで、自然な日本語・多言語出力。</p>
+                </div>
+                <div class="card">
+                    <div class="icon">💻</div>
+                    <h3>コード作成・デバッグ</h3>
+                    <p>主要言語のコード生成、バグ特定、リファクタリング支援。</p>
+                </div>
+                <div class="card">
+                    <div class="icon">🌐</div>
+                    <h3>翻訳・多言語対応</h3>
+                    <p>ニュアンスを保った自然な翻訳で、言語の壁を越える。</p>
+                </div>
+                <div class="card">
+                    <div class="icon">🎨</div>
+                    <h3>画像生成</h3>
+                    <p>DALL·E と連携し、テキストから高品質な画像を創出。</p>
+                </div>
+                <div class="card">
+                    <div class="icon">⚙️</div>
+                    <h3>カスタムGPT</h3>
+                    <p>Plus版でオリジナルのGPTを構築し、業務に最適化。</p>
+                </div>
+                <div class="card">
+                    <div class="icon">🔗</div>
+                    <h3>プラグイン拡張</h3>
+                    <p>外部サービスと連携し、AIの可能性を無限に広げる。</p>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <h2>活用シーン</h2>
+            <ul class="list">
+                <li>学習・質問回答</li>
+                <li>文章執筆の支援</li>
+                <li>プログラミング補助</li>
+                <li>ビジネスアイデア生成</li>
+                <li>データ分析のサポート</li>
+                <li>リサーチと情報整理</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>特徴</h2>
+            <div class="split">
+                <div class="panel pros">
+                    <h3>強み</h3>
+                    <ul>
+                        <li>高速かつ自然な応答</li>
+                        <li>長い文脈の保持</li>
+                        <li>豊富なプラグイン拡張</li>
+                        <li>幅広いドメイン知識</li>
+                    </ul>
+                </div>
+                <div class="panel cons">
+                    <h3>注意点</h3>
+                    <ul>
+                        <li>誤情報（幻覚）の可能性</li>
+                        <li>最新情報は限定的</li>
+                        <li>重要事項は事実確認が必須</li>
+                        <li>専門分野は人間の検証が必要</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <footer>
+            <div class="logo">ChatGPT Overview</div>
+            <div>生成日: 2026年2月 &nbsp;·&nbsp; Perplexity &amp; Claude ベース</div>
+        </footer>
+    </div>
+</body>
+</html>

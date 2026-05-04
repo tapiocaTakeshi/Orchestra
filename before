@@ -1,0 +1,24 @@
+<div className="my-panel">
+  <h2>Chat</h2>
+  <button>Send</button>
+</div>
+
+// After (Minimal 適用)
+<section className="void-section">
+  <header className="void-section__header">
+    <h2 className="void-section__title">Chat</h2>
+  </header>
+  <div className="void-stack">
+    <div className="void-message">
+      <span className="void-message__role">Assistant</span>
+      <div className="void-message__body">…</div>
+    </div>
+  </div>
+  <div className="void-composer">
+    <textarea className="void-input void-composer__textarea" placeholder="Ask Void…" />
+    <div className="void-composer__toolbar">
+      <span className="void-text--muted">⌘ + Enter で送信</span>
+      <button className="void-btn void-btn--primary">Send</button>
+    </div>
+  </div>
+</section>

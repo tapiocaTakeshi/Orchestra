@@ -1,0 +1,102 @@
+/*---------------------------------------------------------------------------------------------
+ *  Minimal hover design
+ *  - 余白を活かしたシンプルなレイアウト
+ *  - テーマトークン (--vscode-*) のみ使用し、独自カラーは指定しない
+ *--------------------------------------------------------------------------------------------*/
+
+.monaco-editor .monaco-hover {
+	/* shape */
+	border-radius: 4px;
+	border: 1px solid var(--vscode-editorHoverWidget-border);
+	background-color: var(--vscode-editorHoverWidget-background);
+	color: var(--vscode-editorHoverWidget-foreground);
+
+	/* depth: 影は極薄に */
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+
+	/* spacing: 余白を広めに */
+	padding: 0;
+	line-height: 1.55;
+
+	/* typography */
+	font-size: 13px;
+	letter-spacing: 0.01em;
+}
+
+.monaco-editor .monaco-hover .hover-row {
+	padding: 10px 14px;
+	border: none;
+}
+
+.monaco-editor .monaco-hover .hover-row + .hover-row {
+	border-top: 1px solid var(--vscode-editorHoverWidget-border);
+}
+
+.monaco-editor .monaco-hover .hover-row .hover-row-contents {
+	margin: 0;
+}
+
+/* code block: シンプルな余白だけ持たせる */
+.monaco-editor .monaco-hover code,
+.monaco-editor .monaco-hover .monaco-tokenized-source {
+	background-color: transparent;
+	padding: 0;
+	border-radius: 3px;
+}
+
+.monaco-editor .monaco-hover pre {
+	margin: 6px 0;
+	padding: 8px 10px;
+	background-color: var(--vscode-textCodeBlock-background);
+	border-radius: 4px;
+	border: 1px solid var(--vscode-editorHoverWidget-border);
+}
+
+/* status bar: 区切りを細い 1px に揃える */
+.monaco-editor .monaco-hover .hover-row.status-bar {
+	padding: 6px 14px;
+	font-size: 11px;
+	opacity: 0.85;
+	border-top: 1px solid var(--vscode-editorHoverWidget-border);
+}
+
+.monaco-editor .monaco-hover .hover-row.status-bar .actions {
+	display: flex;
+	gap: 12px;
+}
+
+.monaco-editor .monaco-hover .hover-row.status-bar .action-container {
+	padding: 0;
+}
+
+/* scroll area: 余計なボーダーを消す */
+.monaco-editor .monaco-hover .monaco-scrollable-element {
+	border: none;
+}
+
+/* link: 控えめに */
+.monaco-editor .monaco-hover a {
+	color: var(--vscode-textLink-foreground);
+	text-decoration: none;
+}
+
+.monaco-editor .monaco-hover a:hover {
+	color: var(--vscode-textLink-activeForeground);
+	text-decoration: underline;
+}
+
+/* heading: 太字を弱める */
+.monaco-editor .monaco-hover h1,
+.monaco-editor .monaco-hover h2,
+.monaco-editor .monaco-hover h3,
+.monaco-editor .monaco-hover h4 {
+	font-weight: 600;
+	margin: 6px 0 4px 0;
+}
+
+/* hr: 余白を活かしたごく薄い区切り */
+.monaco-editor .monaco-hover hr {
+	border: none;
+	border-top: 1px solid var(--vscode-editorHoverWidget-border);
+	margin: 8px 0;
+}

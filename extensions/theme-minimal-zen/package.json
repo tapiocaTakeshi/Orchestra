@@ -1,0 +1,41 @@
+{
+  "name": "theme-minimal-zen",
+  "displayName": "%displayName%",
+  "description": "%description%",
+  "categories": [
+    "Themes"
+  ],
+  "version": "1.0.0",
+  "publisher": "vscode",
+  "license": "MIT",
+  "icon": "icon.png",
+  "engines": {
+    "vscode": "*"
+  },
+  "extensionKind": [
+    "ui",
+    "workspace"
+  ],
+  "contributes": {
+    "themes": [
+      {
+        "id": "Minimal Zen Light",
+        "label": "Minimal Zen Light",
+        "uiTheme": "vs",
+        "path": "./themes/minimal-light-color-theme.json"
+      },
+      {
+        "id": "Minimal Zen Dark",
+        "label": "Minimal Zen Dark",
+        "uiTheme": "vs-dark",
+        "path": "./themes/minimal-dark-color-theme.json"
+      }
+    ]
+  },
+  "capabilities": {
+    "virtualWorkspaces": true,
+    "untrustedWorkspaces": {
+      "supported": true
+    }
+  }
+}

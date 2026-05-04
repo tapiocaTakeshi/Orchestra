@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Welcome</title>
+	<link rel="stylesheet" href="./welcomeMinimal.css" />
+</head>
+<body class="welcome-minimal">
+	<main class="welcome-minimal__container" role="main">
+		<header class="welcome-minimal__header">
+			<p class="welcome-minimal__eyebrow">Welcome</p>
+			<h1 class="welcome-minimal__title">Start something new.</h1>
+			<p class="welcome-minimal__subtitle">
+				A quiet space to write code. Fewer buttons, more focus.
+			</p>
+		</header>
+
+		<section class="welcome-minimal__section" aria-labelledby="start-heading">
+			<h2 id="start-heading" class="welcome-minimal__section-title">Start</h2>
+			<ul class="welcome-minimal__list">
+				<li class="welcome-minimal__item">
+					<button type="button" class="welcome-minimal__action" data-command="workbench.action.files.newUntitledFile">
+						<span class="welcome-minimal__action-label">New file</span>
+						<span class="welcome-minimal__action-shortcut">⌘ N</span>
+						<span class="welcome-minimal__action-arrow" aria-hidden="true">→</span>
+					</button>
+				</li>
+				<li class="welcome-minimal__item">
+					<button type="button" class="welcome-minimal__action" data-command="workbench.action.files.openFile">
+						<span class="welcome-minimal__action-label">Open file…</span>
+						<span class="welcome-minimal__action-shortcut">⌘ O</span>
+						<span class="welcome-minimal__action-arrow" aria-hidden="true">→</span>
+					</button>
+				</li>
+				<li class="welcome-minimal__item">
+					<button type="button" class="welcome-minimal__action" data-command="workbench.action.files.openFolder">
+						<span class="welcome-minimal__action-label">Open folder…</span>
+						<span class="welcome-minimal__action-shortcut">⌘ K ⌘ O</span>
+						<span class="welcome-minimal__action-arrow" aria-hidden="true">→</span>
+					</button>
+				</li>
+				<li class="welcome-minimal__item">
+					<button type="button" class="welcome-minimal__action" data-command="git.clone">
+						<span class="welcome-minimal__action-label">Clone repository…</span>
+						<span class="welcome-minimal__action-shortcut"></span>
+						<span class="welcome-minimal__action-arrow" aria-hidden="true">→</span>
+					</button>
+				</li>
+			</ul>
+		</section>
+
+		<section class="welcome-minimal__section" aria-labelledby="recent-heading">
+			<h2 id="recent-heading" class="welcome-minimal__section-title">Recent</h2>
+			<ul class="welcome-minimal__list" id="welcome-recent-list">
+				<li class="welcome-minimal__item">
+					<a class="welcome-minimal__recent" href="#" data-command="workbench.action.openRecent">
+						<span class="welcome-minimal__recent-name">No recent folders</span>
+						<span class="welcome-minimal__recent-path"></span>
+					</a>
+				</li>
+			</ul>
+		</section>
+
+		<footer class="welcome-minimal__footer">
+			<label class="welcome-minimal__checkbox">
+				<input type="checkbox" id="welcome-show-on-startup" checked />
+				<span>Show on startup</span>
+			</label>
+			<span>Minimal</span>
+		</footer>
+	</main>
+
+	<script>
+		(function () {
+			'use strict';
+			// Bridge clicks to the host (Electron / VS Code command service) when available.
+			const post = (command) => {
+				try {
+					if (typeof acquireVsCodeApi === 'function') {
+						const vscode = window.__vscode || (window.__vscode = acquireVsCodeApi());
+						vscode.postMessage({ type: 'command', command });
+						return;
+					}
+				} catch (_) { /* ignore */ }
+				if (window.parent && window.parent !== window) {
+					window.parent.postMessage({ type: 'command', command }, '*');
+				}
+			};
+
+			document.querySelectorAll('[data-command]').forEach((el) => {
+				el.addEventListener('click', (e) => {
+					const cmd = el.getAttribute('data-command');
+					if (!cmd) return;
+					e.preventDefault();
+					post(cmd);
+				});
+			});
+
+			const checkbox = document.getElementById('welcome-show-on-startup');
+			if (checkbox) {
+				checkbox.addEventListener('change', () => {
+					post(checkbox.checked
+						? 'welcome.showOnStartup.enable'
+						: 'welcome.showOnStartup.disable');
+				});
+			}
+		})();
+	</script>
+</body>
+</html>
