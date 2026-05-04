@@ -1,185 +1,357 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import ChatFlowSteps, { ChatStep } from './ChatFlowSteps';
-import ChatMessage, { Message } from './ChatMessage';
-import ChatInput from './ChatInput';
-import './AIChatSidebar.css';
-
-type Props = {
-  onSend?: (text: string) => Promise<string> | string;
-  initialMessages?: Message[];
-  title?: string;
-};
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import styles from './AIChatSidebar.module.css';
+import { useAIChat } from './aiChat/useAIChat';
+import type { ChatMessage, ChatStatus } from './aiChat/types';
 
 const SUGGESTIONS = [
-  'このコードを要約して',
-  '選択範囲をリファクタリング',
-  'テストを書いて',
-  'バグの原因を推測して',
+  { label: '要約する', prompt: '次の文章を3行で要約してください：\n' },
+  { label: 'コードを書く', prompt: 'TypeScript で次の処理を書いてください：' },
+  { label: 'アイデア出し', prompt: '次のテーマでアイデアを5つ提案して：' },
+  { label: '翻訳する', prompt: '次の文を自然な日本語に翻訳して：' },
 ];
 
-const AIChatSidebar: React.FC<Props> = ({
-  onSend,
-  initialMessages = [],
-  title = 'AI Assistant',
-}) => {
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
-  const [step, setStep] = useState<ChatStep>('idle');
-  const [collapsed, setCollapsed] = useState(false);
+interface Props {
+  /** サイドバーを開閉する必要がある場合に外部から制御 */
+  open?: boolean;
+  onClose?: () => void;
+  className?: string;
+}
+
+export const AIChatSidebar: React.FC<Props> = ({ open = true, onClose, className }) => {
+  const {
+    sessions,
+    active,
+    status,
+    error,
+    send,
+    stop,
+    createSession,
+    selectSession,
+    deleteSession,
+  } = useAIChat();
+
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [input, setInput] = useState('');
+  const taRef = useRef<HTMLTextAreaElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
 
-  // 自動スクロール
+  // textarea 自動リサイズ
+  useLayoutEffect(() => {
+    const ta = taRef.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
+  }, [input]);
+
+  // 末尾までスクロール
   useEffect(() => {
-    if (listRef.current) {
-      listRef.current.scrollTop = listRef.current.scrollHeight;
-    }
-  }, [messages, step]);
+    const el = listRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [active.messages, status]);
 
-  const callAI = useCallback(
-    async (text: string): Promise<string> => {
-      if (onSend) return await onSend(text);
-      // Electron preload が公開している API を優先
-      const w = window as unknown as {
-        electronAPI?: { chat?: (t: string) => Promise<string> };
-        api?: { chat?: (t: string) => Promise<string> };
-      };
-      const fn = w.electronAPI?.chat || w.api?.chat;
-      if (fn) return await fn(text);
-      // フォールバック（モック）
-      await new Promise((r) => setTimeout(r, 700));
-      return `（モック回答）「${text}」について整理しました。`;
-    },
-    [onSend],
-  );
+  if (!open) return null;
 
-  const handleSend = useCallback(
-    async (text: string) => {
-      const trimmed = text.trim();
-      if (!trimmed) return;
-
-      const userMsg: Message = {
-        id: `u-${Date.now()}`,
-        role: 'user',
-        content: trimmed,
-        createdAt: Date.now(),
-      };
-      setMessages((m) => [...m, userMsg]);
-      setStep('thinking');
-
-      try {
-        const reply = await callAI(trimmed);
-        setStep('responding');
-        const aiMsg: Message = {
-          id: `a-${Date.now()}`,
-          role: 'assistant',
-          content: reply,
-          createdAt: Date.now(),
-        };
-        // タイピング演出を一瞬挟む
-        await new Promise((r) => setTimeout(r, 120));
-        setMessages((m) => [...m, aiMsg]);
-        setStep('done');
-        setTimeout(() => setStep('idle'), 600);
-      } catch (e) {
-        const errMsg: Message = {
-          id: `e-${Date.now()}`,
-          role: 'assistant',
-          content: 'エラーが発生しました。もう一度お試しください。',
-          createdAt: Date.now(),
-          isError: true,
-        };
-        setMessages((m) => [...m, errMsg]);
-        setStep('idle');
-      }
-    },
-    [callAI],
-  );
-
-  const handleClear = () => {
-    setMessages([]);
-    setStep('idle');
+  const handleSend = () => {
+    if (!input.trim()) return;
+    send(input);
+    setInput('');
   };
 
-  const isEmpty = useMemo(() => messages.length === 0, [messages.length]);
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  const isBusy = status === 'thinking' || status === 'streaming';
 
   return (
-    <aside
-      className={`ai-sidebar ${collapsed ? 'is-collapsed' : ''}`}
-      aria-label="AI Chat Sidebar"
-    >
-      <header className="ai-sidebar__header">
-        <div className="ai-sidebar__title">
-          <span className="ai-sidebar__dot" aria-hidden />
-          <span className="ai-sidebar__title-text">{title}</span>
+    <aside className={[styles.sidebar, className].filter(Boolean).join(' ')} aria-label="AI チャット">
+      {/* ── ヘッダー ───────────────────── */}
+      <header className={styles.header}>
+        <div className={styles.headerLeft}>
+          <span className={styles.logo} aria-hidden>✦</span>
+          <div className={styles.titleBlock}>
+            <h2 className={styles.title}>AI チャット</h2>
+            <StatusBadge status={status} />
+          </div>
         </div>
-        <div className="ai-sidebar__header-actions">
+        <div className={styles.headerActions}>
           <button
-            className="ai-icon-btn"
-            onClick={handleClear}
-            title="会話をクリア"
-            aria-label="Clear conversation"
+            className={styles.iconBtn}
+            onClick={() => setHistoryOpen((v) => !v)}
+            aria-label="履歴"
+            title="履歴"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 6h18" />
-              <path d="M8 6V4h8v2" />
-              <path d="M19 6l-1 14H6L5 6" />
-            </svg>
+            <IconHistory />
           </button>
           <button
-            className="ai-icon-btn"
-            onClick={() => setCollapsed((v) => !v)}
-            title={collapsed ? '展開' : '折りたたみ'}
-            aria-label="Toggle sidebar"
+            className={styles.iconBtn}
+            onClick={createSession}
+            aria-label="新しい会話"
+            title="新しい会話"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-              <path d={collapsed ? 'M9 6l6 6-6 6' : 'M15 6l-6 6 6 6'} />
-            </svg>
+            <IconPlus />
           </button>
+          {onClose && (
+            <button
+              className={styles.iconBtn}
+              onClick={onClose}
+              aria-label="閉じる"
+              title="閉じる"
+            >
+              <IconClose />
+            </button>
+          )}
         </div>
       </header>
 
-      <ChatFlowSteps step={step} />
-
-      <div className="ai-sidebar__list" ref={listRef} role="log" aria-live="polite">
-        {isEmpty ? (
-          <div className="ai-empty">
-            <div className="ai-empty__title">何かお手伝いしますか？</div>
-            <div className="ai-empty__sub">
-              下の入力欄に質問を入れるか、よくある操作から選んでください。
-            </div>
-            <div className="ai-empty__suggestions">
-              {SUGGESTIONS.map((s) => (
+      {/* ── 履歴ドロワー ─────────────── */}
+      {historyOpen && (
+        <div className={styles.history}>
+          <div className={styles.historyHead}>
+            <span>履歴</span>
+            <button className={styles.linkBtn} onClick={createSession}>+ 新規</button>
+          </div>
+          <ul className={styles.historyList}>
+            {sessions.map((s) => (
+              <li
+                key={s.id}
+                className={[
+                  styles.historyItem,
+                  s.id === active.id ? styles.historyItemActive : '',
+                ].join(' ')}
+              >
                 <button
-                  key={s}
-                  className="ai-chip"
-                  onClick={() => handleSend(s)}
+                  className={styles.historyMain}
+                  onClick={() => {
+                    selectSession(s.id);
+                    setHistoryOpen(false);
+                  }}
                 >
-                  {s}
+                  <span className={styles.historyTitle}>{s.title || '無題'}</span>
+                  <span className={styles.historyMeta}>
+                    {s.messages.length} 件
+                  </span>
                 </button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          messages.map((m) => <ChatMessage key={m.id} message={m} />)
-        )}
+                <button
+                  className={styles.historyDel}
+                  onClick={() => deleteSession(s.id)}
+                  aria-label="削除"
+                  title="削除"
+                >
+                  <IconTrash />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
-        {step === 'thinking' && (
-          <div className="ai-thinking" aria-label="AI is thinking">
-            <span className="ai-thinking__badge">AI</span>
-            <span className="ai-thinking__dots">
-              <i /><i /><i />
-            </span>
-            <span className="ai-thinking__text">考えています…</span>
-          </div>
+      {/* ── メッセージ一覧 ───────────── */}
+      <div className={styles.messages} ref={listRef}>
+        {active.messages.length === 0 ? (
+          <EmptyState
+            onPick={(p) => {
+              setInput(p);
+              setTimeout(() => taRef.current?.focus(), 0);
+            }}
+          />
+        ) : (
+          <>
+            {active.messages.map((m) => (
+              <MessageRow key={m.id} message={m} />
+            ))}
+            {status === 'thinking' && <ThinkingRow />}
+          </>
         )}
       </div>
 
-      <ChatInput
-        disabled={step === 'thinking'}
-        onSubmit={handleSend}
-        placeholder="メッセージを入力（⌘/Ctrl + Enter で送信）"
-      />
+      {/* ── エラー表示 ───────────────── */}
+      {error && (
+        <div className={styles.errorBar} role="alert">
+          <IconAlert />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* ── 入力欄 ────────────────────── */}
+      <div className={styles.composer}>
+        <div className={styles.composerInner}>
+          <textarea
+            ref={taRef}
+            className={styles.textarea}
+            placeholder={isBusy ? 'AI が応答中…' : 'メッセージを入力（Enter で送信 / Shift+Enter で改行）'}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            rows={1}
+            disabled={isBusy}
+          />
+          <div className={styles.composerActions}>
+            <span className={styles.hint}>
+              {input.length > 0 ? `${input.length} 字` : ''}
+            </span>
+            {isBusy ? (
+              <button
+                className={`${styles.primaryBtn} ${styles.stopBtn}`}
+                onClick={stop}
+                aria-label="停止"
+              >
+                <IconStop />
+                <span>停止</span>
+              </button>
+            ) : (
+              <button
+                className={styles.primaryBtn}
+                onClick={handleSend}
+                disabled={!input.trim()}
+                aria-label="送信"
+              >
+                <span>送信</span>
+                <IconSend />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
     </aside>
   );
 };
+
+/* ─────────────────────────────────────
+ *  Sub components
+ * ───────────────────────────────────── */
+
+const StatusBadge: React.FC<{ status: ChatStatus }> = ({ status }) => {
+  const map: Record<ChatStatus, { dot: string; label: string }> = {
+    idle: { dot: styles.dotIdle, label: '待機中' },
+    thinking: { dot: styles.dotBusy, label: '考え中…' },
+    streaming: { dot: styles.dotBusy, label: '応答中…' },
+    error: { dot: styles.dotError, label: 'エラー' },
+  };
+  const v = map[status];
+  return (
+    <span className={styles.badge}>
+      <span className={`${styles.dot} ${v.dot}`} />
+      {v.label}
+    </span>
+  );
+};
+
+const EmptyState: React.FC<{ onPick: (prompt: string) => void }> = ({ onPick }) => (
+  <div className={styles.empty}>
+    <div className={styles.emptyIcon} aria-hidden>✦</div>
+    <h3 className={styles.emptyTitle}>何でも聞いてください</h3>
+    <p className={styles.emptyDesc}>
+      要約・翻訳・コード生成・アイデア出しなど。<br />
+      下の候補から始めるか、自由に入力できます。
+    </p>
+    <div className={styles.suggestions}>
+      {SUGGESTIONS.map((s) => (
+        <button
+          key={s.label}
+          className={styles.suggestion}
+          onClick={() => onPick(s.prompt)}
+        >
+          {s.label}
+        </button>
+      ))}
+    </div>
+    <ol className={styles.flow}>
+      <li><span>1</span>質問を入力</li>
+      <li><span>2</span>AI が考える</li>
+      <li><span>3</span>回答を受け取る</li>
+    </ol>
+  </div>
+);
+
+const MessageRow: React.FC<{ message: ChatMessage }> = ({ message }) => {
+  const isUser = message.role === 'user';
+  return (
+    <div className={`${styles.row} ${isUser ? styles.rowUser : styles.rowAssistant}`}>
+      <div className={styles.avatar} aria-hidden>
+        {isUser ? 'You' : 'AI'}
+      </div>
+      <div className={styles.bubbleWrap}>
+        <div className={styles.roleLabel}>
+          {isUser ? 'あなた' : 'アシスタント'}
+        </div>
+        <div className={`${styles.bubble} ${isUser ? styles.bubbleUser : styles.bubbleAssistant}`}>
+          {message.content || (message.pending ? <Caret /> : null)}
+          {message.pending && message.content && <Caret inline />}
+        </div>
+        {message.error && (
+          <div className={styles.msgError}>
+            <IconAlert /> {message.error}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const ThinkingRow: React.FC = () => (
+  <div className={`${styles.row} ${styles.rowAssistant}`}>
+    <div className={styles.avatar} aria-hidden>AI</div>
+    <div className={styles.bubbleWrap}>
+      <div className={styles.roleLabel}>アシスタント</div>
+      <div className={`${styles.bubble} ${styles.bubbleAssistant} ${styles.thinking}`}>
+        <span className={styles.tdot} />
+        <span className={styles.tdot} />
+        <span className={styles.tdot} />
+      </div>
+    </div>
+  </div>
+);
+
+const Caret: React.FC<{ inline?: boolean }> = ({ inline }) => (
+  <span className={`${styles.caret} ${inline ? styles.caretInline : ''}`} aria-hidden />
+);
+
+/* ─────────────────────────────────────
+ *  Icons (inline SVG, currentColor)
+ * ───────────────────────────────────── */
+
+const IconPlus = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <path d="M12 5v14M5 12h14" />
+  </svg>
+);
+const IconClose = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <path d="M6 6l12 12M18 6L6 18" />
+  </svg>
+);
+const IconHistory = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+    <path d="M3 3v5h5" />
+    <path d="M12 7v5l3 2" />
+  </svg>
+);
+const IconSend = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M5 12h14M13 6l6 6-6 6" />
+  </svg>
+);
+const IconStop = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+    <rect x="6" y="6" width="12" height="12" rx="2" />
+  </svg>
+);
+const IconTrash = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" />
+  </svg>
+);
+const IconAlert = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 9v4M12 17h.01" />
+    <path d="M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.4 0z" />
+  </svg>
+);
 
 export default AIChatSidebar;

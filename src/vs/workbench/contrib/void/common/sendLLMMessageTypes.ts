@@ -256,6 +256,9 @@ export type DivisionAPIModelResponse = {
 export type ModelListParams<ModelResponse> = {
 	providerName: ProviderName;
 	settingsOfProvider: SettingsOfProvider;
+	// Division API のモデル一覧取得 (`/api/models`) に Authorization ヘッダを付けるため、
+	// renderer 側のグローバル設定から流し込む。それ以外のプロバイダでは未使用。
+	divisionApiKey?: string;
 	onSuccess: (param: { models: ModelResponse[] }) => void;
 	onError: (param: { error: string }) => void;
 }

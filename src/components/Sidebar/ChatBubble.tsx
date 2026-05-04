@@ -1,25 +1,46 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { sidebarChatTheme as t } from '../../theme/sidebarChatTheme';
 
-type Props = {
-  role: 'user' | 'assistant';
+export type ChatRole = 'user' | 'assistant' | 'system';
+
+export interface ChatBubbleProps {
+  role: ChatRole;
   content: string;
-};
+  timestamp?: string;
+}
 
-const ChatBubble: React.FC<Props> = ({ role, content }) => {
+export const ChatBubble: React.FC<ChatBubbleProps> = ({ role, content, timestamp }) => {
   const isUser = role === 'user';
+  const isSystem = role === 'system';
+
+  if (isSystem) {
+    return (
+      <View style={styles.systemRow}>
+        <Text style={styles.systemText}>{content}</Text>
+      </View>
+    );
+  }
+
   return (
-    <View style={[styles.row, isUser ? styles.rowEnd : styles.rowStart]}>
-      {!isUser && <View style={styles.aiDot} />}
-      <View
-        style={[
-          styles.bubble,
-          isUser ? styles.userBubble : styles.aiBubble,
-        ]}
-      >
-        <Text style={[styles.text, isUser ? styles.userText : styles.aiText]}>
-          {content}
-        </Text>
+    <View style={[styles.row, isUser ? styles.rowUser : styles.rowAi]}>
+      {!isUser && <View style={styles.avatar}><Text style={styles.avatarText}>AI</Text></View>}
+      <View style={styles.bubbleWrap}>
+        <View
+          style={[
+            styles.bubble,
+            isUser ? styles.bubbleUser : styles.bubbleAi,
+          ]}
+        >
+          <Text style={[styles.bubbleText, isUser ? styles.bubbleTextUser : styles.bubbleTextAi]}>
+            {content}
+          </Text>
+        </View>
+        {!!timestamp && (
+          <Text style={[styles.meta, isUser ? styles.metaRight : styles.metaLeft]}>
+            {timestamp}
+          </Text>
+        )}
       </View>
     </View>
   );
@@ -28,46 +49,75 @@ const ChatBubble: React.FC<Props> = ({ role, content }) => {
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
+    marginBottom: t.spacing.md,
     alignItems: 'flex-end',
-    gap: 8,
-    width: '100%',
   },
-  rowStart: {
-    justifyContent: 'flex-start',
-  },
-  rowEnd: {
+  rowUser: {
     justifyContent: 'flex-end',
   },
-  aiDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#111111',
-    marginBottom: 10,
+  rowAi: {
+    justifyContent: 'flex-start',
+  },
+  avatar: {
+    width: 24,
+    height: 24,
+    borderRadius: t.radius.pill,
+    backgroundColor: t.colors.surfaceSunken,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: t.spacing.sm,
+  },
+  avatarText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: t.colors.inkMuted,
+    letterSpacing: 0.5,
+  },
+  bubbleWrap: {
+    maxWidth: '82%',
   },
   bubble: {
-    maxWidth: '85%',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 14,
+    paddingVertical: t.spacing.sm + 2,
+    paddingHorizontal: t.spacing.md,
+    borderRadius: t.radius.lg,
   },
-  userBubble: {
-    backgroundColor: '#111111',
-    borderBottomRightRadius: 4,
+  bubbleUser: {
+    backgroundColor: t.colors.bubbleUser,
+    borderBottomRightRadius: t.radius.sm,
   },
-  aiBubble: {
-    backgroundColor: '#F7F7F8',
-    borderBottomLeftRadius: 4,
+  bubbleAi: {
+    backgroundColor: t.colors.bubbleAi,
+    borderBottomLeftRadius: t.radius.sm,
   },
-  text: {
-    fontSize: 13.5,
+  bubbleText: {
+    fontSize: t.font.body,
     lineHeight: 20,
   },
-  userText: {
-    color: '#FFFFFF',
+  bubbleTextUser: {
+    color: t.colors.bubbleUserInk,
   },
-  aiText: {
-    color: '#111111',
+  bubbleTextAi: {
+    color: t.colors.bubbleAiInk,
+  },
+  meta: {
+    marginTop: 4,
+    fontSize: t.font.meta,
+    color: t.colors.inkSubtle,
+  },
+  metaLeft: {
+    textAlign: 'left',
+  },
+  metaRight: {
+    textAlign: 'right',
+  },
+  systemRow: {
+    alignItems: 'center',
+    marginVertical: t.spacing.sm,
+  },
+  systemText: {
+    fontSize: t.font.meta,
+    color: t.colors.inkSubtle,
+    letterSpacing: 0.3,
   },
 });
 

@@ -474,25 +474,40 @@ const getDivisionAPIModelNames = (data: any): string[] => {
 	return [...modelNames]
 }
 
-const divisionAPIList = async ({ onSuccess: onSuccess_, onError: onError_, settingsOfProvider }: ListParams_Internal<DivisionAPIModelResponse>) => {
+const divisionAPIList = async ({ onSuccess: onSuccess_, onError: onError_, settingsOfProvider, divisionApiKey }: ListParams_Internal<DivisionAPIModelResponse>) => {
+	const endpoint = settingsOfProvider.divisionAPI.endpoint || defaultProviderSettings.divisionAPI.endpoint
+	const url = `${endpoint.replace(/\/+$/, '')}/api/models`
+
 	try {
-		const endpoint = settingsOfProvider.divisionAPI.endpoint || defaultProviderSettings.divisionAPI.endpoint
-		const response = await fetch(`${endpoint.replace(/\/+$/, '')}/api/models`)
+		// 認証は (1) ユーザーが UI で設定した divisionApiKey, (2) 環境変数 DIVISION_API_KEY,
+		// の順にフォールバック。チャット送信側と同じ規約。空なら無認証で叩く。
+		const apiKey = (divisionApiKey || process.env.DIVISION_API_KEY || '').trim()
+		const headers: Record<string, string> = { 'Accept': 'application/json' }
+		if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`
+
+		const response = await fetch(url, { headers })
 		if (!response.ok) {
-			onError_({ error: `Division API model list failed: ${response.status} ${response.statusText}` })
+			let bodySnippet = ''
+			try { bodySnippet = (await response.text()).slice(0, 200) } catch { /* ignore */ }
+			const msg = `Division API /api/models failed: ${response.status} ${response.statusText}${bodySnippet ? ` — ${bodySnippet}` : ''}`
+			console.warn('[DivisionAPI]', msg, { url, hasApiKey: !!apiKey })
+			onError_({ error: msg })
 			return
 		}
 
 		const data = await response.json()
 		const models = getDivisionAPIModelNames(data).map(name => ({ name }))
 		if (models.length === 0) {
-			onError_({ error: 'Division API model list response did not contain any models.' })
+			const msg = 'Division API /api/models response did not contain any models.'
+			console.warn('[DivisionAPI]', msg, { url, data })
+			onError_({ error: msg })
 			return
 		}
 
 		onSuccess_({ models })
 	}
 	catch (error) {
+		console.warn('[DivisionAPI] /api/models fetch threw:', error, { url })
 		onError_({ error: error + '' })
 	}
 }

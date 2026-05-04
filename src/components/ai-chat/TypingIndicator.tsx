@@ -1,64 +1,90 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, View } from 'react-native';
+import { View, Text, StyleSheet, Animated, Easing } from 'react-native';
+import { colors, radius, spacing } from './theme';
 
-/**
- * AI が考え中であることを示す 3 ドットインジケータ。
- * Minimal デザインに合わせ、控えめなフェードのみ。
- */
-export const TypingIndicator: React.FC = () => {
-  const dots = [useRef(new Animated.Value(0.3)).current,
-                useRef(new Animated.Value(0.3)).current,
-                useRef(new Animated.Value(0.3)).current];
+const Dot: React.FC<{ delay: number }> = ({ delay }) => {
+  const v = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const animations = dots.map((d, i) =>
-      Animated.loop(
-        Animated.sequence([
-          Animated.delay(i * 160),
-          Animated.timing(d, {
-            toValue: 1,
-            duration: 360,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.timing(d, {
-            toValue: 0.3,
-            duration: 360,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-        ]),
-      ),
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(v, {
+          toValue: 1,
+          duration: 450,
+          delay,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(v, {
+          toValue: 0,
+          duration: 450,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
     );
-    animations.forEach((a) => a.start());
-    return () => animations.forEach((a) => a.stop());
-  }, [dots]);
+    anim.start();
+    return () => anim.stop();
+  }, [v, delay]);
 
+  const translateY = v.interpolate({ inputRange: [0, 1], outputRange: [0, -3] });
+  const opacity = v.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] });
+
+  return <Animated.View style={[styles.dot, { transform: [{ translateY }], opacity }]} />;
+};
+
+export const TypingIndicator: React.FC = () => {
   return (
-    <View style={styles.wrap}>
-      {dots.map((d, i) => (
-        <Animated.View key={i} style={[styles.dot, { opacity: d }]} />
-      ))}
+    <View style={styles.row}>
+      <View style={styles.avatar}>
+        <Text style={styles.avatarLabel}>AI</Text>
+      </View>
+      <View style={styles.bubble}>
+        <Dot delay={0} />
+        <Dot delay={150} />
+        <Dot delay={300} />
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  wrap: {
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+  },
+  avatar: {
+    width: 28,
+    height: 28,
+    borderRadius: radius.pill,
+    backgroundColor: colors.accentSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.sm,
+  },
+  avatarLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.accent,
+    letterSpacing: 0.5,
+  },
+  bubble: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    backgroundColor: '#F4F4F5',
-    borderRadius: 14,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.lg,
     borderTopLeftRadius: 4,
   },
   dot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#52525B',
+    backgroundColor: colors.textMuted,
+    marginHorizontal: 2,
   },
 });
 

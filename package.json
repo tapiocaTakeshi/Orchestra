@@ -2,9 +2,7 @@
   "name": "orchestra-dev",
   "version": "1.99.3",
   "distro": "21c8d8ea1e46d97c5639a7cabda6c0e063cc8dd5",
-  "author": {
-    "name": "He-ro Corporation"
-  },
+  "author": "He-ro Corporation",
   "license": "MIT",
   "main": "./out/main.js",
   "type": "module",
@@ -82,6 +80,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.40.0",
     "@c4312/eventsource-umd": "^3.0.5",
+    "@expo/vector-icons": "^15.1.1",
     "@floating-ui/react": "^0.27.8",
     "@google/genai": "^0.13.0",
     "@microsoft/1ds-core-js": "^3.2.13",
@@ -137,6 +136,8 @@
     "posthog-node": "^4.14.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
+    "react-native": "^0.85.2",
+    "react-native-safe-area-context": "^5.7.0",
     "react-tooltip": "^5.28.1",
     "tailwind-merge": "^3.5.0",
     "tas-client-umd": "0.2.0",
@@ -148,7 +149,6 @@
     "yazl": "^2.4.3"
   },
   "devDependencies": {
-    "scope-tailwind": "^1.4.2",
     "@electron-forge/cli": "^7.11.1",
     "@electron-forge/maker-deb": "^7.11.1",
     "@electron-forge/maker-rpm": "^7.11.1",
@@ -285,7 +285,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/microsoft/vscode.git"
+    "url": "git+https://github.com/microsoft/vscode.git"
   },
   "bugs": {
     "url": "https://github.com/microsoft/vscode/issues"
@@ -294,5 +294,13 @@
     "kerberos": "2.1.1",
     "native-keymap": "^3.3.9",
     "windows-foreground-love": "0.5.0"
-  }
+  },
+  "description": "<div align=\"center\"> \t<img \t\tsrc=\"./src/vs/workbench/browser/parts/editor/media/slice_of_void.png\" \t \talt=\"Orchestra\" \t\twidth=\"300\" \t \theight=\"300\" \t/>   <br />   <p><strong>最強のマルチエージェントを搭載した次世代 AI IDE</strong></p> </div>",
+  "directories": {
+    "doc": "docs",
+    "lib": "lib",
+    "test": "test"
+  },
+  "keywords": [],
+  "homepage": "https://github.com/microsoft/vscode#readme"
 }

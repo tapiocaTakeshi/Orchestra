@@ -1,32 +1,31 @@
 import React, { useState } from 'react';
 import {
-  Pressable,
-  StyleSheet,
-  TextInput,
   View,
+  TextInput,
+  Pressable,
   Text,
+  StyleSheet,
   Platform,
 } from 'react-native';
-import { chatTheme as t } from '../../theme/chatTheme';
+import { chatColors, chatSpacing, chatRadius, chatTypography } from './theme';
 
-interface Props {
+type Props = {
   onSend: (text: string) => void;
   disabled?: boolean;
   placeholder?: string;
-}
+};
 
 export const ChatInput: React.FC<Props> = ({
   onSend,
   disabled,
-  placeholder = 'Message AI…',
+  placeholder = 'AIに質問する…',
 }) => {
   const [value, setValue] = useState('');
-  const trimmed = value.trim();
-  const canSend = !disabled && trimmed.length > 0;
+  const canSend = !disabled && value.trim().length > 0;
 
   const handleSend = () => {
     if (!canSend) return;
-    onSend(trimmed);
+    onSend(value.trim());
     setValue('');
   };
 
@@ -34,95 +33,89 @@ export const ChatInput: React.FC<Props> = ({
     <View style={styles.wrap}>
       <View style={styles.field}>
         <TextInput
-          style={styles.input}
           value={value}
           onChangeText={setValue}
           placeholder={placeholder}
-          placeholderTextColor={t.color.textSubtle}
-          editable={!disabled}
+          placeholderTextColor={chatColors.textMuted}
+          style={styles.input}
           multiline
-          maxLength={2000}
+          editable={!disabled}
           onSubmitEditing={handleSend}
           blurOnSubmit={false}
           returnKeyType="send"
           underlineColorAndroid="transparent"
         />
         <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Send message"
           onPress={handleSend}
           disabled={!canSend}
+          accessibilityRole="button"
+          accessibilityLabel="送信"
           style={({ pressed }) => [
             styles.sendBtn,
-            !canSend && styles.sendBtnDisabled,
-            pressed && canSend && styles.sendBtnPressed,
+            {
+              backgroundColor: canSend
+                ? chatColors.accent
+                : chatColors.accentDisabled,
+              opacity: pressed && canSend ? 0.85 : 1,
+            },
           ]}
-          hitSlop={8}
         >
           <Text style={styles.sendIcon}>↑</Text>
         </Pressable>
       </View>
-      <Text style={styles.hint}>Enter to send · Shift+Enter for newline</Text>
+      <Text style={styles.hint}>Enterで送信 ・ Shift+Enterで改行</Text>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   wrap: {
-    paddingHorizontal: t.space.lg,
-    paddingTop: t.space.sm,
-    paddingBottom: t.space.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: t.color.hairline,
-    backgroundColor: t.color.bg,
+    paddingHorizontal: chatSpacing.lg,
+    paddingTop: chatSpacing.sm,
+    paddingBottom: chatSpacing.md,
+    backgroundColor: chatColors.surface,
+    borderTopWidth: 1,
+    borderTopColor: chatColors.border,
   },
   field: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: t.space.sm,
-    backgroundColor: t.color.surface,
+    backgroundColor: chatColors.surfaceMuted,
+    borderRadius: chatRadius.lg,
     borderWidth: 1,
-    borderColor: t.color.border,
-    borderRadius: t.radius.md,
-    paddingHorizontal: 10,
-    paddingVertical: Platform.OS === 'ios' ? 8 : 4,
+    borderColor: chatColors.border,
+    paddingLeft: chatSpacing.md,
+    paddingRight: chatSpacing.xs,
+    paddingVertical: chatSpacing.xs,
   },
   input: {
+    ...chatTypography.input,
     flex: 1,
-    fontSize: t.font.body,
-    color: t.color.text,
+    color: chatColors.textPrimary,
     maxHeight: 120,
-    paddingVertical: 6,
-    ...Platform.select({
-      web: { outlineStyle: 'none' as any },
-      default: {},
-    }),
+    paddingTop: Platform.OS === 'ios' ? 8 : 4,
+    paddingBottom: Platform.OS === 'ios' ? 8 : 4,
   },
   sendBtn: {
     width: 32,
     height: 32,
-    borderRadius: t.radius.pill,
-    backgroundColor: t.color.accent,
+    borderRadius: chatRadius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  sendBtnDisabled: {
-    backgroundColor: t.color.surfaceAlt,
-  },
-  sendBtnPressed: {
-    opacity: 0.8,
+    marginLeft: chatSpacing.xs,
+    marginBottom: 2,
   },
   sendIcon: {
-    color: t.color.accentText,
+    color: chatColors.textOnAccent,
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     lineHeight: 18,
   },
   hint: {
-    marginTop: 6,
-    fontSize: 11,
-    color: t.color.textSubtle,
-    textAlign: 'center',
+    ...chatTypography.meta,
+    color: chatColors.textMuted,
+    marginTop: chatSpacing.xs,
+    textAlign: 'right',
   },
 });
 

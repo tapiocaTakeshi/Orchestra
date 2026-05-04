@@ -1,14 +1,12 @@
-<<<SEARCH
+{
+  "name": "void-react-build",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Local build helpers for Void's React UI (runs scope-tailwind to namespace Tailwind classes).",
+  "scripts": {
+    "build": "node build.js"
+  },
   "devDependencies": {
-    "scope-tailwind": "^1.1.1",
-    "scope-tailwind": "^1.1.1",
-    "scope-tailwind": "^1.4.1",
-    "scope-tailwind": "^1.1.1",
-    "scope-tailwind": "^1.1.3",
-    "scope-tailwind": "^1.0.10",
-    "scope-tailwind": "^1.4.1",
-    "scope-tailwind": "^1.1.1",
->>>REPLACE
-  "devDependencies": {
-    "scope-tailwind": "^1.1.7",
->>>REPLACE
+    "scope-tailwind": "^1.0.9"
+  }
+}

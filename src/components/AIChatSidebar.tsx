@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,17 +10,17 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
+import { SuggestionChip } from './ai-chat/SuggestionChip';
+import { TypingDots } from './ai-chat/TypingDots';
 
 /**
- * AIChatSidebar
- * Minimal テーマのサイドバー用 AI チャット UI。
- *  - 余白・細字・モノトーン＋1アクセントカラー
- *  - 角丸ピル型入力、円形送信ボタン
- *  - 空状態のウェルカム表示
- *  - 末尾自動スクロール
+ * Minimal な AI チャットサイドバー
+ * - 余白を広めに、罫線は 1px、色はモノクロ + 1 アクセント（インディゴ）
+ * - メッセージは user / assistant で左右に分離
+ * - 空状態にサジェストチップを表示してわかりやすく
  */
 
-export type ChatRole = 'user' | 'assistant';
+export type ChatRole = 'user' | 'assistant' | 'system';
 
 export interface ChatMessage {
   id: string;
@@ -31,152 +31,194 @@ export interface ChatMessage {
 
 export interface AIChatSidebarProps {
   messages?: ChatMessage[];
+  onSend?: (text: string) => void | Promise<void>;
   isLoading?: boolean;
   title?: string;
-  placeholder?: string;
-  onSend?: (text: string) => void | Promise<void>;
+  subtitle?: string;
+  suggestions?: string[];
   onClose?: () => void;
 }
 
-const COLORS = {
+const colors = {
   bg: '#FFFFFF',
   surface: '#FAFAFA',
   border: '#ECECEC',
-  text: '#111111',
-  subtext: '#6B7280',
-  muted: '#9CA3AF',
-  accent: '#111111',
-  accentText: '#FFFFFF',
-  bubbleUser: '#111111',
+  borderStrong: '#D9D9D9',
+  text: '#1A1A1A',
+  textMuted: '#8A8A8A',
+  textSubtle: '#B5B5B5',
+  accent: '#4F46E5',
+  accentSoft: '#EEF0FF',
+  bubbleUser: '#1A1A1A',
   bubbleUserText: '#FFFFFF',
-  bubbleAi: '#F3F4F6',
-  bubbleAiText: '#111111',
-  online: '#10B981',
+  bubbleAssistant: '#F4F4F5',
+  bubbleAssistantText: '#1A1A1A',
+  online: '#22C55E',
 };
+
+const spacing = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
+};
+
+const radius = {
+  sm: 8,
+  md: 12,
+  lg: 16,
+  pill: 999,
+};
+
+const DEFAULT_SUGGESTIONS = [
+  '今日のタスクを整理して',
+  'このコードをレビューして',
+  '要点を3行でまとめて',
+  'アイデアを5つ出して',
+];
 
 export const AIChatSidebar: React.FC<AIChatSidebarProps> = ({
   messages = [],
-  isLoading = false,
-  title = 'AI Assistant',
-  placeholder = 'Message AI…',
   onSend,
+  isLoading = false,
+  title = 'AI アシスタント',
+  subtitle = 'いつでも質問できます',
+  suggestions = DEFAULT_SUGGESTIONS,
   onClose,
 }) => {
   const [input, setInput] = useState('');
-  const [sending, setSending] = useState(false);
-  const scrollRef = useRef<ScrollView | null>(null);
+  const [isFocused, setIsFocused] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
 
-  const canSend = useMemo(
-    () => input.trim().length > 0 && !sending && !isLoading,
-    [input, sending, isLoading]
-  );
+  const canSend = input.trim().length > 0 && !isLoading;
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
-    if (!text || !onSend) return;
-    try {
-      setSending(true);
-      setInput('');
-      await onSend(text);
-    } finally {
-      setSending(false);
-      requestAnimationFrame(() =>
-        scrollRef.current?.scrollToEnd({ animated: true })
-      );
-    }
-  }, [input, onSend]);
+    if (!text || isLoading) return;
+    setInput('');
+    if (onSend) await onSend(text);
+  }, [input, isLoading, onSend]);
 
-  const renderEmpty = () => (
-    <View style={styles.emptyWrap}>
-      <View style={styles.emptyBadge}>
-        <Text style={styles.emptyBadgeText}>AI</Text>
-      </View>
-      <Text style={styles.emptyTitle}>How can I help?</Text>
-      <Text style={styles.emptyHint}>
-        Ask anything. Short and clear questions work best.
-      </Text>
-    </View>
+  const handleSuggestion = useCallback(
+    async (text: string) => {
+      if (isLoading) return;
+      if (onSend) await onSend(text);
+    },
+    [isLoading, onSend],
+  );
+
+  useEffect(() => {
+    // メッセージ更新時に自動スクロール
+    const t = setTimeout(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    }, 50);
+    return () => clearTimeout(t);
+  }, [messages.length, isLoading]);
+
+  const isEmpty = useMemo(
+    () => messages.filter((m) => m.role !== 'system').length === 0,
+    [messages],
   );
 
   return (
     <KeyboardAvoidingView
+      style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={styles.root}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
     >
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <View style={styles.statusDot} />
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {title}
-          </Text>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>AI</Text>
+            <View style={styles.statusDot} />
+          </View>
+          <View style={{ marginLeft: spacing.md, flexShrink: 1 }}>
+            <Text style={styles.title} numberOfLines={1}>
+              {title}
+            </Text>
+            <Text style={styles.subtitle} numberOfLines={1}>
+              {subtitle}
+            </Text>
+          </View>
         </View>
-        {onClose ? (
+        {onClose && (
           <Pressable
             onPress={onClose}
             hitSlop={8}
             style={({ pressed }) => [
-              styles.closeBtn,
-              pressed && { opacity: 0.5 },
+              styles.iconBtn,
+              pressed && { opacity: 0.6 },
             ]}
-            accessibilityRole="button"
-            accessibilityLabel="Close chat"
+            accessibilityLabel="閉じる"
           >
-            <Text style={styles.closeIcon}>×</Text>
+            <Text style={styles.iconBtnText}>×</Text>
           </Pressable>
-        ) : null}
+        )}
       </View>
 
       <View style={styles.divider} />
 
-      {/* Messages */}
+      {/* Body */}
       <ScrollView
-        ref={(r) => {
-          scrollRef.current = r;
-        }}
-        style={styles.scroll}
-        contentContainerStyle={[
-          styles.scrollContent,
-          messages.length === 0 && styles.scrollContentEmpty,
-        ]}
-        onContentSizeChange={() =>
-          scrollRef.current?.scrollToEnd({ animated: true })
-        }
+        ref={scrollRef}
+        style={styles.body}
+        contentContainerStyle={styles.bodyContent}
         showsVerticalScrollIndicator={false}
       >
-        {messages.length === 0 ? (
-          renderEmpty()
+        {isEmpty ? (
+          <View style={styles.empty}>
+            <Text style={styles.emptyTitle}>こんにちは 👋</Text>
+            <Text style={styles.emptyDesc}>
+              何でも気軽に聞いてください。下のサジェストから始めることもできます。
+            </Text>
+            <Text style={styles.emptyLabel}>💡 こんなことが聞けます</Text>
+            <View style={styles.chipWrap}>
+              {suggestions.map((s) => (
+                <SuggestionChip
+                  key={s}
+                  label={s}
+                  onPress={() => handleSuggestion(s)}
+                />
+              ))}
+            </View>
+          </View>
         ) : (
-          messages.map((m) => (
-            <MessageBubble key={m.id} message={m} />
-          ))
+          messages
+            .filter((m) => m.role !== 'system')
+            .map((m) => <MessageBubble key={m.id} message={m} />)
         )}
 
-        {isLoading ? (
-          <View style={styles.typingRow}>
-            <View style={styles.typingBubble}>
+        {isLoading && (
+          <View style={styles.row}>
+            <View style={[styles.bubble, styles.bubbleAssistant]}>
               <TypingDots />
             </View>
           </View>
-        ) : null}
+        )}
       </ScrollView>
 
       {/* Composer */}
       <View style={styles.composerWrap}>
-        <View style={styles.composer}>
+        <View
+          style={[
+            styles.composer,
+            isFocused && { borderColor: colors.accent },
+          ]}
+        >
           <TextInput
             value={input}
             onChangeText={setInput}
-            placeholder={placeholder}
-            placeholderTextColor={COLORS.muted}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            placeholder="メッセージを入力…"
+            placeholderTextColor={colors.textSubtle}
             style={styles.input}
             multiline
-            maxLength={4000}
-            returnKeyType="send"
+            onSubmitEditing={handleSend}
             blurOnSubmit={false}
-            onSubmitEditing={() => {
-              if (canSend) handleSend();
-            }}
+            returnKeyType="send"
           />
           <Pressable
             onPress={handleSend}
@@ -184,21 +226,18 @@ export const AIChatSidebar: React.FC<AIChatSidebarProps> = ({
             style={({ pressed }) => [
               styles.sendBtn,
               !canSend && styles.sendBtnDisabled,
-              pressed && canSend && styles.sendBtnPressed,
+              pressed && canSend && { opacity: 0.85 },
             ]}
-            accessibilityRole="button"
-            accessibilityLabel="Send message"
+            accessibilityLabel="送信"
           >
-            {sending ? (
-              <ActivityIndicator size="small" color={COLORS.accentText} />
+            {isLoading ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
-              <Text style={styles.sendIcon}>↑</Text>
+              <Text style={styles.sendBtnText}>↑</Text>
             )}
           </Pressable>
         </View>
-        <Text style={styles.footerHint}>
-          AI may produce inaccurate information.
-        </Text>
+        <Text style={styles.hint}>Enter で送信 ・ Shift + Enter で改行</Text>
       </View>
     </KeyboardAvoidingView>
   );
@@ -207,27 +246,22 @@ export const AIChatSidebar: React.FC<AIChatSidebarProps> = ({
 const MessageBubble: React.FC<{ message: ChatMessage }> = ({ message }) => {
   const isUser = message.role === 'user';
   return (
-    <View
-      style={[
-        styles.bubbleRow,
-        isUser ? styles.bubbleRowUser : styles.bubbleRowAi,
-      ]}
-    >
+    <View style={[styles.row, isUser ? styles.rowEnd : styles.rowStart]}>
       {!isUser && (
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>AI</Text>
+        <View style={styles.smallAvatar}>
+          <Text style={styles.smallAvatarText}>AI</Text>
         </View>
       )}
       <View
         style={[
           styles.bubble,
-          isUser ? styles.bubbleUser : styles.bubbleAi,
+          isUser ? styles.bubbleUser : styles.bubbleAssistant,
         ]}
       >
         <Text
           style={[
             styles.bubbleText,
-            isUser ? styles.bubbleTextUser : styles.bubbleTextAi,
+            isUser ? styles.bubbleUserText : styles.bubbleAssistantText,
           ]}
         >
           {message.content}
@@ -237,246 +271,200 @@ const MessageBubble: React.FC<{ message: ChatMessage }> = ({ message }) => {
   );
 };
 
-const TypingDots: React.FC = () => {
-  return (
-    <View style={styles.dotsRow}>
-      <View style={[styles.dot, { opacity: 0.3 }]} />
-      <View style={[styles.dot, { opacity: 0.6 }]} />
-      <View style={[styles.dot, { opacity: 0.9 }]} />
-    </View>
-  );
-};
-
 const styles = StyleSheet.create({
-  root: {
+  container: {
     flex: 1,
-    backgroundColor: COLORS.bg,
+    backgroundColor: colors.bg,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: colors.border,
   },
-
   header: {
-    height: 52,
-    paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8 as unknown as number,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.online,
-    marginRight: 8,
-  },
-  headerTitle: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: COLORS.text,
-    letterSpacing: 0.2,
-  },
-  closeBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  closeIcon: {
-    fontSize: 20,
-    lineHeight: 20,
-    color: COLORS.subtext,
-    marginTop: -2,
-  },
-
-  divider: {
-    height: 1,
-    backgroundColor: COLORS.border,
-  },
-
-  scroll: { flex: 1 },
-  scrollContent: {
-    paddingHorizontal: 14,
-    paddingVertical: 16,
-    gap: 10 as unknown as number,
-  },
-  scrollContentEmpty: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  emptyWrap: {
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  emptyBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 14,
-  },
-  emptyBadgeText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.text,
-    letterSpacing: 0.5,
-  },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginBottom: 6,
-  },
-  emptyHint: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: COLORS.subtext,
-    textAlign: 'center',
-  },
-
-  bubbleRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    marginBottom: 10,
-  },
-  bubbleRowUser: {
-    justifyContent: 'flex-end',
-  },
-  bubbleRowAi: {
-    justifyContent: 'flex-start',
+    flexShrink: 1,
   },
   avatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    width: 36,
+    height: 36,
+    borderRadius: radius.pill,
+    backgroundColor: colors.accentSoft,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 8,
-    marginBottom: 2,
   },
   avatarText: {
-    fontSize: 10,
+    color: colors.accent,
+    fontWeight: '700',
+    fontSize: 12,
+    letterSpacing: 0.5,
+  },
+  statusDot: {
+    position: 'absolute',
+    right: -1,
+    bottom: -1,
+    width: 10,
+    height: 10,
+    borderRadius: radius.pill,
+    backgroundColor: colors.online,
+    borderWidth: 2,
+    borderColor: colors.bg,
+  },
+  title: {
+    fontSize: 15,
     fontWeight: '600',
-    color: COLORS.text,
+    color: colors.text,
+  },
+  subtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    color: colors.textMuted,
+  },
+  iconBtn: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.sm,
+  },
+  iconBtnText: {
+    fontSize: 22,
+    color: colors.textMuted,
+    lineHeight: 24,
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border,
+  },
+  body: {
+    flex: 1,
+  },
+  bodyContent: {
+    padding: spacing.lg,
+    paddingBottom: spacing.xl,
+    gap: spacing.md,
+  },
+  empty: {
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.lg,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: spacing.xs,
+  },
+  emptyDesc: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: colors.textMuted,
+    marginBottom: spacing.xl,
+  },
+  emptyLabel: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginBottom: spacing.sm,
+  },
+  chipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: spacing.sm,
+  },
+  rowStart: { justifyContent: 'flex-start' },
+  rowEnd: { justifyContent: 'flex-end' },
+  smallAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: radius.pill,
+    backgroundColor: colors.accentSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  smallAvatarText: {
+    color: colors.accent,
+    fontSize: 10,
+    fontWeight: '700',
   },
   bubble: {
     maxWidth: '82%',
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 16,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.lg,
   },
   bubbleUser: {
-    backgroundColor: COLORS.bubbleUser,
-    borderBottomRightRadius: 6,
+    backgroundColor: colors.bubbleUser,
+    borderBottomRightRadius: 4,
   },
-  bubbleAi: {
-    backgroundColor: COLORS.bubbleAi,
-    borderBottomLeftRadius: 6,
+  bubbleAssistant: {
+    backgroundColor: colors.bubbleAssistant,
+    borderBottomLeftRadius: 4,
   },
   bubbleText: {
     fontSize: 14,
     lineHeight: 20,
   },
-  bubbleTextUser: {
-    color: COLORS.bubbleUserText,
-  },
-  bubbleTextAi: {
-    color: COLORS.bubbleAiText,
-  },
-
-  typingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  typingBubble: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: COLORS.bubbleAi,
-    borderRadius: 16,
-    borderBottomLeftRadius: 6,
-  },
-  dotsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: COLORS.subtext,
-    marginHorizontal: 2,
-  },
-
+  bubbleUserText: { color: colors.bubbleUserText },
+  bubbleAssistantText: { color: colors.bubbleAssistantText },
   composerWrap: {
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 12,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    backgroundColor: COLORS.bg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    backgroundColor: colors.bg,
   },
   composer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 22,
-    paddingLeft: 14,
-    paddingRight: 6,
-    paddingVertical: 6,
-    minHeight: 44,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
   },
   input: {
     flex: 1,
     fontSize: 14,
     lineHeight: 20,
-    color: COLORS.text,
-    paddingVertical: 8,
-    paddingRight: 8,
+    color: colors.text,
     maxHeight: 120,
+    paddingVertical: Platform.OS === 'ios' ? 6 : 2,
   },
   sendBtn: {
     width: 32,
     height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.accent,
+    borderRadius: radius.pill,
+    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    alignSelf: 'flex-end',
-    marginBottom: 2,
   },
   sendBtnDisabled: {
-    backgroundColor: '#D1D5DB',
+    backgroundColor: colors.borderStrong,
   },
-  sendBtnPressed: {
-    opacity: 0.8,
-  },
-  sendIcon: {
-    color: COLORS.accentText,
+  sendBtnText: {
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
-    marginTop: -1,
+    lineHeight: 18,
   },
-
-  footerHint: {
-    marginTop: 8,
-    textAlign: 'center',
+  hint: {
+    marginTop: spacing.xs + 2,
     fontSize: 11,
-    color: COLORS.muted,
+    color: colors.textSubtle,
+    textAlign: 'right',
   },
 });
 

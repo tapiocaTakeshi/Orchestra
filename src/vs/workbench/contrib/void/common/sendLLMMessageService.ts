@@ -268,15 +268,18 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 	divisionAPIList = (params: ServiceModelListParams<DivisionAPIModelResponse>) => {
 		const { onSuccess, onError, ...proxyParams } = params
 
-		const { settingsOfProvider } = this.voidSettingsService.state
+		const { settingsOfProvider, globalSettings } = this.voidSettingsService.state
 
 		const requestId_ = generateUuid();
 		this.listHooks.divisionAPI.success[requestId_] = onSuccess
 		this.listHooks.divisionAPI.error[requestId_] = onError
 
+		// Division API は `/api/models` も Bearer 認証を要求する場合があるため、
+		// チャット送信と同じ apiKey を main プロセスに流す。
 		this.channel.call('divisionAPIList', {
 			...proxyParams,
 			settingsOfProvider,
+			divisionApiKey: globalSettings.divisionApiKey,
 			requestId: requestId_,
 		} satisfies MainModelListParams<DivisionAPIModelResponse>)
 	}

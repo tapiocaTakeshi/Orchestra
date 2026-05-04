@@ -1,336 +1,349 @@
 /*---------------------------------------------------------------------------------------------
- *  Chat Sidebar - Glassmorphism Theme
- *  Applies a translucent, blurred, layered look to the AI chat side panel
- *  and visualizes the conversation flow as a vertical timeline.
+ *  Chat Sidebar — Glassmorphism Theme + Flow Visualization
+ *
+ *  AIチャットサイドバーの見た目をガラス風に刷新し、
+ *  ユーザー → アシスタント → ツール呼び出し のフローを
+ *  ステップインジケータで視覚化する。
+ *
+ *  既存の .interactive-session / .interactive-item-container /
+ *  .chat-input-container / .interactive-input-part に対する
+ *  装飾レイヤーとして追加で読み込まれる想定。
  *--------------------------------------------------------------------------------------------*/
 
-/* ===== Root container ===== */
-.monaco-workbench .pane-body.interactive-session,
-.monaco-workbench .interactive-session {
+/* =========================================================================
+ *  ベースコンテナ — ガラスパネル化
+ * ========================================================================= */
+.interactive-session {
 	position: relative;
 	background:
-		radial-gradient(120% 80% at 0% 0%,
-			color-mix(in srgb, var(--vscode-sideBar-background) 70%, transparent) 0%,
-			transparent 60%),
-		radial-gradient(120% 80% at 100% 100%,
-			color-mix(in srgb, var(--vscode-editor-background) 60%, transparent) 0%,
-			transparent 60%),
-		color-mix(in srgb, var(--vscode-sideBar-background) 55%, transparent);
-	backdrop-filter: blur(22px) saturate(140%);
-	-webkit-backdrop-filter: blur(22px) saturate(140%);
+		linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--vscode-sideBar-background) 55%, transparent) 0%,
+			color-mix(in srgb, var(--vscode-sideBar-background) 35%, transparent) 100%
+		);
+	backdrop-filter: blur(18px) saturate(140%);
+	-webkit-backdrop-filter: blur(18px) saturate(140%);
+	isolation: isolate;
 }
 
-/* Subtle top border accent */
-.monaco-workbench .pane-body.interactive-session::before {
-	content: "";
+.interactive-session::before {
+	content: '';
 	position: absolute;
-	inset: 0 0 auto 0;
-	height: 1px;
-	background: linear-gradient(90deg,
-		transparent,
-		color-mix(in srgb, var(--vscode-focusBorder) 60%, transparent),
-		transparent);
+	inset: 0;
 	pointer-events: none;
-	z-index: 2;
+	background:
+		radial-gradient(
+			1200px 400px at 10% -10%,
+			color-mix(in srgb, var(--vscode-focusBorder) 18%, transparent) 0%,
+			transparent 60%
+		),
+		radial-gradient(
+			900px 320px at 110% 110%,
+			color-mix(in srgb, var(--vscode-textLink-foreground) 14%, transparent) 0%,
+			transparent 65%
+		);
+	z-index: -1;
 }
 
-/* ===== Welcome / empty state ===== */
-.monaco-workbench .interactive-session .interactive-welcome,
-.monaco-workbench .interactive-session .chat-welcome-view {
-	padding: 18px 16px;
-	margin: 12px;
-	border-radius: 14px;
-	background: color-mix(in srgb, var(--vscode-editor-background) 35%, transparent);
-	border: 1px solid color-mix(in srgb, var(--vscode-contrastBorder, var(--vscode-focusBorder)) 25%, transparent);
-	box-shadow:
-		0 8px 24px -12px rgba(0, 0, 0, 0.45),
-		inset 0 1px 0 color-mix(in srgb, white 8%, transparent);
-	backdrop-filter: blur(14px) saturate(130%);
-	-webkit-backdrop-filter: blur(14px) saturate(130%);
-}
-
-/* ===== Message list as a vertical timeline ===== */
-.monaco-workbench .interactive-list,
-.monaco-workbench .interactive-session .monaco-list {
-	padding: 8px 6px 12px 6px;
-}
-
-.monaco-workbench .interactive-list .monaco-list-row {
-	padding: 4px 0;
-}
-
-/* Each chat item becomes a glass card */
-.monaco-workbench .interactive-item-container,
-.monaco-workbench .interactive-session .interactive-item-container {
+/* =========================================================================
+ *  メッセージカード — ガラスバブル
+ * ========================================================================= */
+.interactive-list .interactive-item-container {
 	position: relative;
-	margin: 6px 10px 10px 32px;          /* leave room for timeline rail on the left */
-	padding: 12px 14px 12px 14px;
+	margin: 10px 12px;
+	padding: 14px 16px 14px 44px; /* 左にステップインジケータ用の余白 */
 	border-radius: 14px;
 	background: color-mix(in srgb, var(--vscode-editor-background) 45%, transparent);
-	border: 1px solid color-mix(in srgb, var(--vscode-panel-border, var(--vscode-focusBorder)) 35%, transparent);
+	border: 1px solid color-mix(in srgb, var(--vscode-contrastBorder, var(--vscode-focusBorder)) 25%, transparent);
 	box-shadow:
-		0 6px 18px -10px rgba(0, 0, 0, 0.5),
-		inset 0 1px 0 color-mix(in srgb, white 6%, transparent);
-	backdrop-filter: blur(16px) saturate(140%);
-	-webkit-backdrop-filter: blur(16px) saturate(140%);
-	transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
-	animation: chat-glass-fade-in 220ms ease-out both;
+		0 1px 0 color-mix(in srgb, white 8%, transparent) inset,
+		0 8px 24px -12px color-mix(in srgb, black 55%, transparent);
+	backdrop-filter: blur(14px) saturate(135%);
+	-webkit-backdrop-filter: blur(14px) saturate(135%);
+	transition:
+		transform 160ms ease,
+		border-color 160ms ease,
+		box-shadow 220ms ease,
+		background 220ms ease;
 }
 
-.monaco-workbench .interactive-item-container:hover {
-	border-color: color-mix(in srgb, var(--vscode-focusBorder) 55%, transparent);
+.interactive-list .interactive-item-container:hover {
+	border-color: color-mix(in srgb, var(--vscode-focusBorder) 60%, transparent);
 	box-shadow:
-		0 10px 28px -12px rgba(0, 0, 0, 0.55),
-		inset 0 1px 0 color-mix(in srgb, white 10%, transparent);
+		0 1px 0 color-mix(in srgb, white 12%, transparent) inset,
+		0 12px 32px -10px color-mix(in srgb, black 60%, transparent);
+	transform: translateY(-1px);
 }
 
-/* Differentiate user vs response */
-.monaco-workbench .interactive-item-container.interactive-request {
-	background: color-mix(in srgb, var(--vscode-textLink-foreground) 10%,
-		color-mix(in srgb, var(--vscode-editor-background) 50%, transparent));
+/* ユーザー発言は右寄り＆アクセントカラー寄せ */
+.interactive-list .interactive-item-container.interactive-request {
+	background:
+		linear-gradient(
+			135deg,
+			color-mix(in srgb, var(--vscode-textLink-foreground) 18%, transparent) 0%,
+			color-mix(in srgb, var(--vscode-editor-background) 50%, transparent) 100%
+		);
 	border-color: color-mix(in srgb, var(--vscode-textLink-foreground) 35%, transparent);
 }
 
-.monaco-workbench .interactive-item-container.interactive-response {
-	background: color-mix(in srgb, var(--vscode-editor-background) 55%, transparent);
+/* アシスタント発言は通常のガラス色 */
+.interactive-list .interactive-item-container.interactive-response {
+	background:
+		linear-gradient(
+			135deg,
+			color-mix(in srgb, var(--vscode-editor-background) 55%, transparent) 0%,
+			color-mix(in srgb, var(--vscode-sideBar-background) 35%, transparent) 100%
+		);
 }
 
-/* Timeline rail + node */
-.monaco-workbench .interactive-item-container::before {
-	content: "";
+/* =========================================================================
+ *  フロー可視化 — 左側ステップインジケータ + コネクタライン
+ * ========================================================================= */
+.interactive-list .interactive-item-container::before {
+	/* ステップドット */
+	content: '';
 	position: absolute;
-	left: -18px;
-	top: -6px;
+	left: 16px;
+	top: 18px;
+	width: 14px;
+	height: 14px;
+	border-radius: 50%;
+	background: color-mix(in srgb, var(--vscode-focusBorder) 90%, transparent);
+	box-shadow:
+		0 0 0 3px color-mix(in srgb, var(--vscode-focusBorder) 25%, transparent),
+		0 0 12px color-mix(in srgb, var(--vscode-focusBorder) 60%, transparent);
+	z-index: 1;
+}
+
+.interactive-list .interactive-item-container.interactive-request::before {
+	background: color-mix(in srgb, var(--vscode-textLink-foreground) 95%, transparent);
+	box-shadow:
+		0 0 0 3px color-mix(in srgb, var(--vscode-textLink-foreground) 28%, transparent),
+		0 0 12px color-mix(in srgb, var(--vscode-textLink-foreground) 55%, transparent);
+}
+
+.interactive-list .interactive-item-container.interactive-response::before {
+	background: color-mix(in srgb, var(--vscode-charts-green, #4ec9b0) 90%, transparent);
+	box-shadow:
+		0 0 0 3px color-mix(in srgb, var(--vscode-charts-green, #4ec9b0) 22%, transparent),
+		0 0 12px color-mix(in srgb, var(--vscode-charts-green, #4ec9b0) 50%, transparent);
+}
+
+.interactive-list .interactive-item-container::after {
+	/* 縦のコネクタライン（次の発言へ繋ぐ） */
+	content: '';
+	position: absolute;
+	left: 22px;
+	top: 38px;
 	bottom: -10px;
 	width: 2px;
-	background: linear-gradient(to bottom,
-		transparent 0%,
-		color-mix(in srgb, var(--vscode-focusBorder) 45%, transparent) 15%,
-		color-mix(in srgb, var(--vscode-focusBorder) 45%, transparent) 85%,
-		transparent 100%);
-	pointer-events: none;
+	background: linear-gradient(
+		to bottom,
+		color-mix(in srgb, var(--vscode-focusBorder) 45%, transparent) 0%,
+		color-mix(in srgb, var(--vscode-focusBorder) 5%, transparent) 100%
+	);
+	border-radius: 2px;
+	z-index: 0;
 }
 
-.monaco-workbench .interactive-item-container::after {
-	content: "";
-	position: absolute;
-	left: -23px;
-	top: 18px;
-	width: 12px;
-	height: 12px;
-	border-radius: 50%;
-	background: color-mix(in srgb, var(--vscode-editor-background) 70%, transparent);
-	border: 2px solid color-mix(in srgb, var(--vscode-focusBorder) 70%, transparent);
-	box-shadow: 0 0 0 4px color-mix(in srgb, var(--vscode-focusBorder) 12%, transparent);
+.interactive-list .interactive-item-container:last-child::after {
+	display: none;
 }
 
-.monaco-workbench .interactive-item-container.interactive-request::after {
-	border-color: color-mix(in srgb, var(--vscode-textLink-foreground) 80%, transparent);
-	background: color-mix(in srgb, var(--vscode-textLink-foreground) 25%, var(--vscode-editor-background));
+/* 進行中（ストリーミング中）はパルス */
+.interactive-list .interactive-item-container.interactive-response.in-progress::before,
+.interactive-list .interactive-item-container.interactive-response[data-loading="true"]::before {
+	animation: chat-flow-pulse 1.4s ease-in-out infinite;
 }
 
-/* Header row (avatar + username) */
-.monaco-workbench .interactive-item-container .header {
-	display: flex;
-	align-items: center;
+@keyframes chat-flow-pulse {
+	0%, 100% {
+		transform: scale(1);
+		opacity: 1;
+	}
+	50% {
+		transform: scale(1.25);
+		opacity: 0.7;
+	}
+}
+
+/* =========================================================================
+ *  ヘッダ（ユーザー名 / モデル名 / アバター）
+ * ========================================================================= */
+.interactive-list .interactive-item-container .header {
 	gap: 8px;
 	margin-bottom: 6px;
 	font-weight: 600;
-	letter-spacing: 0.2px;
-	opacity: 0.95;
+	letter-spacing: 0.01em;
+	opacity: 0.92;
 }
 
-.monaco-workbench .interactive-item-container .header .avatar,
-.monaco-workbench .interactive-item-container .avatar-container .avatar {
-	border-radius: 50% !important;
+.interactive-list .interactive-item-container .header .avatar-container .avatar {
+	border-radius: 50%;
 	box-shadow:
-		0 0 0 2px color-mix(in srgb, var(--vscode-editor-background) 80%, transparent),
-		0 0 0 3px color-mix(in srgb, var(--vscode-focusBorder) 50%, transparent);
+		0 0 0 1px color-mix(in srgb, white 18%, transparent),
+		0 4px 10px -4px color-mix(in srgb, black 50%, transparent);
 }
 
-/* Step / progress indicators inside a response (tool calls, "thinking", etc.) */
-.monaco-workbench .interactive-item-container .progress-step,
-.monaco-workbench .interactive-item-container .interactive-response-progress {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	margin: 6px 0;
-	padding: 6px 10px;
-	border-radius: 10px;
-	background: color-mix(in srgb, var(--vscode-editor-background) 35%, transparent);
-	border: 1px dashed color-mix(in srgb, var(--vscode-focusBorder) 35%, transparent);
-	font-size: 12px;
-	opacity: 0.9;
+/* =========================================================================
+ *  本文 — 可読性確保
+ * ========================================================================= */
+.interactive-list .interactive-item-container .value {
+	line-height: 1.55;
 }
 
-.monaco-workbench .interactive-item-container .progress-step .codicon,
-.monaco-workbench .interactive-item-container .interactive-response-progress .codicon {
-	color: color-mix(in srgb, var(--vscode-focusBorder) 80%, var(--vscode-foreground));
+.interactive-list .interactive-item-container .value pre,
+.interactive-list .interactive-item-container .value code {
+	background: color-mix(in srgb, var(--vscode-textCodeBlock-background) 70%, transparent) !important;
+	border: 1px solid color-mix(in srgb, var(--vscode-contrastBorder, var(--vscode-focusBorder)) 18%, transparent);
+	border-radius: 8px;
+	backdrop-filter: blur(6px);
+	-webkit-backdrop-filter: blur(6px);
 }
 
-/* Typing indicator pulse */
-.monaco-workbench .interactive-item-container.interactive-response.is-streaming::after {
-	animation: chat-glass-pulse 1.4s ease-in-out infinite;
-}
-
-/* Code blocks inside chat */
-.monaco-workbench .interactive-item-container .interactive-result-code-block,
-.monaco-workbench .interactive-item-container pre {
-	border-radius: 10px;
-	overflow: hidden;
-	border: 1px solid color-mix(in srgb, var(--vscode-panel-border, var(--vscode-focusBorder)) 30%, transparent);
-	background: color-mix(in srgb, var(--vscode-textCodeBlock-background, var(--vscode-editor-background)) 75%, transparent) !important;
-	backdrop-filter: blur(8px);
-	-webkit-backdrop-filter: blur(8px);
-}
-
-/* ===== Input area (the prompt box) ===== */
-.monaco-workbench .interactive-session .interactive-input-part,
-.monaco-workbench .interactive-session .chat-input-part {
-	margin: 8px 12px 12px 12px;
-	padding: 8px 8px 6px 8px;
+/* =========================================================================
+ *  入力エリア — 下部のガラスバー
+ * ========================================================================= */
+.interactive-input-part,
+.chat-input-container {
+	position: relative;
+	margin: 8px 12px 12px;
+	padding: 10px 12px;
 	border-radius: 16px;
-	background: color-mix(in srgb, var(--vscode-editor-background) 55%, transparent);
-	border: 1px solid color-mix(in srgb, var(--vscode-focusBorder) 40%, transparent);
+	background:
+		linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--vscode-input-background) 70%, transparent) 0%,
+			color-mix(in srgb, var(--vscode-input-background) 50%, transparent) 100%
+		);
+	border: 1px solid color-mix(in srgb, var(--vscode-input-border, var(--vscode-focusBorder)) 40%, transparent);
 	box-shadow:
-		0 14px 36px -18px rgba(0, 0, 0, 0.6),
-		inset 0 1px 0 color-mix(in srgb, white 8%, transparent);
+		0 1px 0 color-mix(in srgb, white 10%, transparent) inset,
+		0 10px 30px -12px color-mix(in srgb, black 60%, transparent);
 	backdrop-filter: blur(20px) saturate(150%);
 	-webkit-backdrop-filter: blur(20px) saturate(150%);
-	transition: border-color 160ms ease, box-shadow 160ms ease;
+	transition: border-color 160ms ease, box-shadow 220ms ease;
 }
 
-.monaco-workbench .interactive-session .interactive-input-part:focus-within,
-.monaco-workbench .interactive-session .chat-input-part:focus-within {
-	border-color: color-mix(in srgb, var(--vscode-focusBorder) 90%, transparent);
+.interactive-input-part:focus-within,
+.chat-input-container:focus-within {
+	border-color: color-mix(in srgb, var(--vscode-focusBorder) 85%, transparent);
 	box-shadow:
-		0 18px 44px -20px rgba(0, 0, 0, 0.7),
+		0 1px 0 color-mix(in srgb, white 14%, transparent) inset,
 		0 0 0 3px color-mix(in srgb, var(--vscode-focusBorder) 22%, transparent),
-		inset 0 1px 0 color-mix(in srgb, white 10%, transparent);
+		0 12px 36px -12px color-mix(in srgb, black 65%, transparent);
 }
 
-.monaco-workbench .interactive-session .interactive-input-part .monaco-editor,
-.monaco-workbench .interactive-session .interactive-input-part .monaco-editor .overflow-guard,
-.monaco-workbench .interactive-session .chat-input-part .monaco-editor,
-.monaco-workbench .interactive-session .chat-input-part .monaco-editor .overflow-guard {
+.interactive-input-part .monaco-editor,
+.interactive-input-part .monaco-editor .overflow-guard,
+.chat-input-container .monaco-editor,
+.chat-input-container .monaco-editor .overflow-guard {
 	background: transparent !important;
 }
 
-/* Toolbar inside input (send / model picker / attach) */
-.monaco-workbench .interactive-session .interactive-input-part .interactive-execute-toolbar,
-.monaco-workbench .interactive-session .chat-input-part .chat-execute-toolbar {
-	padding-top: 4px;
+.interactive-input-part .monaco-editor .margin,
+.chat-input-container .monaco-editor .margin {
+	background: transparent !important;
+}
+
+/* 送信ボタンなどのツールバー */
+.interactive-input-part .interactive-execute-toolbar,
+.chat-input-container .chat-execute-toolbar {
 	gap: 4px;
 }
 
-.monaco-workbench .interactive-session .interactive-input-part .action-item .action-label,
-.monaco-workbench .interactive-session .chat-input-part .action-item .action-label {
+.interactive-input-part .interactive-execute-toolbar .action-item .action-label,
+.chat-input-container .chat-execute-toolbar .action-item .action-label {
 	border-radius: 8px;
-	transition: background 140ms ease, transform 140ms ease;
+	transition: background 160ms ease, transform 120ms ease;
 }
 
-.monaco-workbench .interactive-session .interactive-input-part .action-item .action-label:hover,
-.monaco-workbench .interactive-session .chat-input-part .action-item .action-label:hover {
-	background: color-mix(in srgb, var(--vscode-focusBorder) 18%, transparent) !important;
+.interactive-input-part .interactive-execute-toolbar .action-item .action-label:hover,
+.chat-input-container .chat-execute-toolbar .action-item .action-label:hover {
+	background: color-mix(in srgb, var(--vscode-focusBorder) 25%, transparent) !important;
 	transform: translateY(-1px);
 }
 
-/* Primary "send" button */
-.monaco-workbench .interactive-session .interactive-input-part .codicon-send,
-.monaco-workbench .interactive-session .chat-input-part .codicon-send {
-	color: color-mix(in srgb, var(--vscode-button-foreground) 95%, white);
-	background: linear-gradient(135deg,
-		color-mix(in srgb, var(--vscode-button-background) 90%, transparent),
-		color-mix(in srgb, var(--vscode-focusBorder) 70%, var(--vscode-button-background)));
-	border-radius: 8px;
-	padding: 4px 6px;
-	box-shadow: 0 4px 14px -6px color-mix(in srgb, var(--vscode-focusBorder) 70%, transparent);
+/* =========================================================================
+ *  Welcome / 空状態 — 中央のガラスカード
+ * ========================================================================= */
+.interactive-session .chat-welcome-view,
+.interactive-session .interactive-welcome {
+	margin: 16px 12px;
+	padding: 18px;
+	border-radius: 16px;
+	background: color-mix(in srgb, var(--vscode-editor-background) 40%, transparent);
+	border: 1px solid color-mix(in srgb, var(--vscode-contrastBorder, var(--vscode-focusBorder)) 22%, transparent);
+	backdrop-filter: blur(16px) saturate(140%);
+	-webkit-backdrop-filter: blur(16px) saturate(140%);
+	box-shadow:
+		0 1px 0 color-mix(in srgb, white 10%, transparent) inset,
+		0 10px 28px -14px color-mix(in srgb, black 55%, transparent);
 }
 
-/* ===== Follow-ups / suggested actions ===== */
-.monaco-workbench .interactive-session .interactive-followups,
-.monaco-workbench .interactive-session .chat-followups {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 6px;
-	margin: 6px 12px 10px 42px;
+/* フォローアップ / 候補ボタン */
+.interactive-session .interactive-followups .monaco-button,
+.interactive-session .chat-followups .monaco-button {
+	border-radius: 999px;
+	padding: 4px 12px;
+	background: color-mix(in srgb, var(--vscode-button-secondaryBackground) 55%, transparent);
+	border: 1px solid color-mix(in srgb, var(--vscode-focusBorder) 35%, transparent);
+	backdrop-filter: blur(8px);
+	-webkit-backdrop-filter: blur(8px);
+	transition: background 160ms ease, transform 120ms ease, border-color 160ms ease;
 }
 
-.monaco-workbench .interactive-session .interactive-followup-reply,
-.monaco-workbench .interactive-session .chat-followup-reply {
-	border-radius: 999px !important;
-	padding: 4px 12px !important;
-	background: color-mix(in srgb, var(--vscode-editor-background) 50%, transparent) !important;
-	border: 1px solid color-mix(in srgb, var(--vscode-focusBorder) 45%, transparent) !important;
-	backdrop-filter: blur(10px);
-	-webkit-backdrop-filter: blur(10px);
-	transition: background 140ms ease, transform 140ms ease, border-color 140ms ease;
-}
-
-.monaco-workbench .interactive-session .interactive-followup-reply:hover,
-.monaco-workbench .interactive-session .chat-followup-reply:hover {
-	background: color-mix(in srgb, var(--vscode-focusBorder) 25%, var(--vscode-editor-background)) !important;
-	border-color: color-mix(in srgb, var(--vscode-focusBorder) 80%, transparent) !important;
+.interactive-session .interactive-followups .monaco-button:hover,
+.interactive-session .chat-followups .monaco-button:hover {
+	background: color-mix(in srgb, var(--vscode-button-secondaryHoverBackground) 75%, transparent);
+	border-color: color-mix(in srgb, var(--vscode-focusBorder) 70%, transparent);
 	transform: translateY(-1px);
 }
 
-/* ===== Scrollbar polish ===== */
-.monaco-workbench .interactive-session .monaco-scrollable-element > .scrollbar > .slider {
-	background: color-mix(in srgb, var(--vscode-focusBorder) 35%, transparent) !important;
+/* =========================================================================
+ *  スクロールバー — 控えめなガラス
+ * ========================================================================= */
+.interactive-session .monaco-scrollable-element > .scrollbar > .slider {
+	background: color-mix(in srgb, var(--vscode-scrollbarSlider-background) 60%, transparent) !important;
 	border-radius: 8px;
+	backdrop-filter: blur(6px);
+	-webkit-backdrop-filter: blur(6px);
 }
 
-/* ===== Animations ===== */
-@keyframes chat-glass-fade-in {
-	from {
-		opacity: 0;
-		transform: translateY(6px) scale(0.995);
-	}
-	to {
-		opacity: 1;
-		transform: translateY(0) scale(1);
-	}
+.interactive-session .monaco-scrollable-element > .scrollbar > .slider:hover {
+	background: color-mix(in srgb, var(--vscode-scrollbarSlider-hoverBackground) 80%, transparent) !important;
 }
 
-@keyframes chat-glass-pulse {
-	0%, 100% {
-		box-shadow: 0 0 0 4px color-mix(in srgb, var(--vscode-focusBorder) 12%, transparent);
-	}
-	50% {
-		box-shadow: 0 0 0 8px color-mix(in srgb, var(--vscode-focusBorder) 4%, transparent);
-	}
-}
-
-/* Reduced motion / transparency respect */
+/* =========================================================================
+ *  アクセシビリティ — モーション低減への配慮
+ * ========================================================================= */
 @media (prefers-reduced-motion: reduce) {
-	.monaco-workbench .interactive-item-container,
-	.monaco-workbench .interactive-session .interactive-followup-reply,
-	.monaco-workbench .interactive-session .chat-followup-reply {
-		animation: none !important;
+	.interactive-list .interactive-item-container,
+	.interactive-input-part,
+	.chat-input-container,
+	.interactive-session .interactive-followups .monaco-button,
+	.interactive-session .chat-followups .monaco-button {
 		transition: none !important;
 	}
-}
-
-@media (prefers-reduced-transparency: reduce) {
-	.monaco-workbench .pane-body.interactive-session,
-	.monaco-workbench .interactive-session .interactive-input-part,
-	.monaco-workbench .interactive-session .chat-input-part,
-	.monaco-workbench .interactive-item-container {
-		backdrop-filter: none !important;
-		-webkit-backdrop-filter: none !important;
-		background: var(--vscode-sideBar-background) !important;
+	.interactive-list .interactive-item-container.interactive-response.in-progress::before,
+	.interactive-list .interactive-item-container.interactive-response[data-loading="true"]::before {
+		animation: none !important;
 	}
 }
 
-/* High contrast theme: keep borders visible */
-.hc-black .monaco-workbench .interactive-item-container,
-.hc-light .monaco-workbench .interactive-item-container,
-.hc-black .monaco-workbench .interactive-session .interactive-input-part,
-.hc-light .monaco-workbench .interactive-session .interactive-input-part,
-.hc-black .monaco-workbench .interactive-session .chat-input-part,
-.hc-light .monaco-workbench .interactive-session .chat-input-part {
-	backdrop-filter: none;
-	-webkit-backdrop-filter: none;
-	background: var(--vscode-editor-background);
-	border-color: var(--vscode-contrastBorder);
+/* =========================================================================
+ *  ハイコントラスト — backdrop-filter は無効化し、不透明背景に
+ * ========================================================================= */
+.hc-black .interactive-session,
+.hc-light .interactive-session,
+.hc-black .interactive-list .interactive-item-container,
+.hc-light .interactive-list .interactive-item-container,
+.hc-black .interactive-input-part,
+.hc-light .interactive-input-part,
+.hc-black .chat-input-container,
+.hc-light .chat-input-container {
+	backdrop-filter: none !important;
+	-webkit-backdrop-filter: none !important;
+	background: var(--vscode-editor-background) !important;
+	border-color: var(--vscode-contrastBorder) !important;
 }

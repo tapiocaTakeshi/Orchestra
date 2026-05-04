@@ -198,6 +198,7 @@ import './contrib/speech/browser/speech.contribution.js';
 // Chat
 // Void - this is still registered to avoid console errors, we just commented it out in chatParticipant.contribution.ts
 import './contrib/chat/browser/chat.contribution.js';
+import './contrib/chat/browser/chatGlassmorphism.contribution.js';
 import './contrib/inlineChat/browser/inlineChat.contribution.js';
 import './contrib/mcp/browser/mcp.contribution.js';
 

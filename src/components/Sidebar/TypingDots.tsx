@@ -1,55 +1,50 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, View, StyleSheet } from 'react-native';
-import { palette } from './aiChatStyles';
+import { Animated, StyleSheet, View } from 'react-native';
+import { chatTheme } from './theme';
 
-const Dot: React.FC<{ delay: number }> = ({ delay }) => {
-  const opacity = useRef(new Animated.Value(0.3)).current;
+/**
+ * Minimal three-dot typing indicator.
+ */
+export const TypingDots: React.FC = () => {
+  const dots = [useRef(new Animated.Value(0.3)).current,
+                useRef(new Animated.Value(0.3)).current,
+                useRef(new Animated.Value(0.3)).current];
 
   useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, {
-          toValue: 1,
-          duration: 400,
-          delay,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 0.3,
-          duration: 400,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ]),
+    const animations = dots.map((v, i) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(i * 150),
+          Animated.timing(v, { toValue: 1, duration: 350, useNativeDriver: true }),
+          Animated.timing(v, { toValue: 0.3, duration: 350, useNativeDriver: true }),
+        ]),
+      ),
     );
-    loop.start();
-    return () => loop.stop();
-  }, [delay, opacity]);
+    animations.forEach(a => a.start());
+    return () => animations.forEach(a => a.stop());
+  }, [dots]);
 
-  return <Animated.View style={[styles.dot, { opacity }]} />;
+  return (
+    <View style={styles.row}>
+      {dots.map((v, i) => (
+        <Animated.View key={i} style={[styles.dot, { opacity: v }]} />
+      ))}
+    </View>
+  );
 };
-
-export const TypingDots: React.FC = () => (
-  <View style={styles.row}>
-    <Dot delay={0} />
-    <Dot delay={150} />
-    <Dot delay={300} />
-  </View>
-);
 
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 2,
+    paddingVertical: chatTheme.spacing.xs,
   },
   dot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: palette.muted,
     marginHorizontal: 2,
+    backgroundColor: chatTheme.colors.textMuted,
   },
 });
 

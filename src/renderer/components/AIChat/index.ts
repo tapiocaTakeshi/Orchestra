@@ -1,2 +1,3 @@
-export { AIChat, default } from './AIChat';
-export type { ChatMessage, ChatRole, ChatPhase, AIChatProps } from './AIChat';
+export { default as AIChatPanel } from './AIChatPanel';
+export * from './types';
+export { useAIChat } from './useAIChat';

@@ -1,191 +1,185 @@
 ### 1. 実装プラン
-
-直前コンテキストに具体的な既存ファイル本体スナップショットが見当たらないため、React Native プロジェクトでよくあるパス（`src/components/Sidebar/AIChatPanel.tsx` など）に **ミニマル＆わかりやすい** AI チャットサイドバーを実装します。既存に同名ファイルがあれば上書きせず差分を取りたいところですが、コンテキスト上に該当する SEARCH 対象が無いため、新規ファイルとして以下を提供します（既存ファイルがある場合は import 先のパスのみ合わせれば差し替え可能）。
-
-ミニマル設計のポイント:
-- 余白（padding 16 / 20）と細い区切り線（hairline）で情報を整理
-- アクセントは 1 色（#111 / #6C5CE7 系）に絞り、彩度を抑える
-- メッセージバブルは角丸 16・影なし・薄いグレー背景でモダンに
-- ヘッダーは「AI Assistant」「オンライン状態のドット」「閉じるボタン」だけのシンプル構成
-- 入力欄は丸型・送信ボタンは円形 FAB 風で押しやすく
-- セクションラベル（"今日の会話" など）でグルーピングしわかりやすく
-- KeyboardAvoidingView 対応、空状態（提案チップ）を表示
+- 対象: サイドバー内の「AIチャット」セクションのデザイン改善（React Native / Minimal テーマ）
+- 方針:
+  - 既存の `AIChatSidebar` コンポーネントをミニマル基調（白背景・余白多め・細いボーダー・モノクロ＋1アクセント）に刷新
+  - わかりやすさ向上のため以下を追加:
+    - ヘッダーに AI アバター・ステータスドット・タイトル＋サブタイトル（「いつでも質問できます」）
+    - 空状態（Empty State）に「💡 こんなことが聞けます」というサジェスト・チップ
+    - メッセージバブルを user / assistant で明確に色分け＆配置を左右で分離
+    - 「考え中…」のタイピングインジケータ（3点アニメーション）
+    - 入力欄を角丸・影なし・フォーカスで枠色変化、送信ボタンは円形アイコン化
+    - キーボード回避・自動スクロール・空入力ガード
+  - スタイル定数 `colors / spacing / radius` を上部に集約し、変更しやすく
+- 影響範囲: `src/components/AIChatSidebar.tsx`（既存の同名ファイルがある想定で全文置換／無ければ新規作成）
 
 ### 2. ファイル一覧
-
 | ファイル | 操作 | 概要 |
 |---|---|---|
-| src/components/Sidebar/AIChatPanel.tsx | 新規 | ミニマルな AI チャットサイドバー本体 |
-| src/components/Sidebar/aiChatStyles.ts | 新規 | スタイル定義（テーマ分離） |
+| src/components/AIChatSidebar.tsx | 新規/全文更新 | ミニマル基調に刷新したサイドバー AI チャット UI |
+| src/components/ai-chat/SuggestionChip.tsx | 新規 | サジェスト用の小さなチップ（再利用可能） |
+| src/components/ai-chat/TypingDots.tsx | 新規 | 「考え中…」3点ドットアニメーション |
 
 ### 3. コード本体
 
-```tsx:src/components/Sidebar/AIChatPanel.tsx
-import React, { useMemo, useRef, useState } from 'react';
+```tsx:src/components/AIChatSidebar.tsx
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   TextInput,
-  TouchableOpacity,
+  Pressable,
   ScrollView,
+  StyleSheet,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Animated,
 } from 'react-native';
-import { styles, COLORS } from './aiChatStyles';
+import { SuggestionChip } from './ai-chat/SuggestionChip';
+import { TypingDots } from './ai-chat/TypingDots';
 
-export type ChatRole = 'user' | 'assistant';
+/**
+ * Minimal な AI チャットサイドバー
+ * - 余白を広めに、罫線は 1px、色はモノクロ + 1 アクセント（インディゴ）
+ * - メッセージは user / assistant で左右に分離
+ * - 空状態にサジェストチップを表示してわかりやすく
+ */
+
+export type ChatRole = 'user' | 'assistant' | 'system';
 
 export interface ChatMessage {
   id: string;
   role: ChatRole;
   content: string;
-  createdAt: number;
+  createdAt?: number;
 }
 
-export interface AIChatPanelProps {
-  visible?: boolean;
-  title?: string;
-  online?: boolean;
+export interface AIChatSidebarProps {
   messages?: ChatMessage[];
-  loading?: boolean;
-  onSend?: (text: string) => void;
+  onSend?: (text: string) => void | Promise<void>;
+  isLoading?: boolean;
+  title?: string;
+  subtitle?: string;
+  suggestions?: string[];
   onClose?: () => void;
-  onClear?: () => void;
 }
 
-const SUGGESTIONS = [
-  '今日のタスクを要約して',
-  'このページの使い方を教えて',
-  '英語に翻訳して',
-  'アイデア出しを手伝って',
+const colors = {
+  bg: '#FFFFFF',
+  surface: '#FAFAFA',
+  border: '#ECECEC',
+  borderStrong: '#D9D9D9',
+  text: '#1A1A1A',
+  textMuted: '#8A8A8A',
+  textSubtle: '#B5B5B5',
+  accent: '#4F46E5',
+  accentSoft: '#EEF0FF',
+  bubbleUser: '#1A1A1A',
+  bubbleUserText: '#FFFFFF',
+  bubbleAssistant: '#F4F4F5',
+  bubbleAssistantText: '#1A1A1A',
+  online: '#22C55E',
+};
+
+const spacing = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
+};
+
+const radius = {
+  sm: 8,
+  md: 12,
+  lg: 16,
+  pill: 999,
+};
+
+const DEFAULT_SUGGESTIONS = [
+  '今日のタスクを整理して',
+  'このコードをレビューして',
+  '要点を3行でまとめて',
+  'アイデアを5つ出して',
 ];
 
-const formatTime = (ts: number) => {
-  const d = new Date(ts);
-  const hh = `${d.getHours()}`.padStart(2, '0');
-  const mm = `${d.getMinutes()}`.padStart(2, '0');
-  return `${hh}:${mm}`;
-};
-
-const TypingDots: React.FC = () => {
-  const a1 = useRef(new Animated.Value(0.3)).current;
-  const a2 = useRef(new Animated.Value(0.3)).current;
-  const a3 = useRef(new Animated.Value(0.3)).current;
-
-  React.useEffect(() => {
-    const loop = (v: Animated.Value, delay: number) =>
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(v, { toValue: 1, duration: 400, delay, useNativeDriver: true }),
-          Animated.timing(v, { toValue: 0.3, duration: 400, useNativeDriver: true }),
-        ]),
-      ).start();
-    loop(a1, 0);
-    loop(a2, 150);
-    loop(a3, 300);
-  }, [a1, a2, a3]);
-
-  return (
-    <View style={styles.typingRow}>
-      <Animated.View style={[styles.typingDot, { opacity: a1 }]} />
-      <Animated.View style={[styles.typingDot, { opacity: a2 }]} />
-      <Animated.View style={[styles.typingDot, { opacity: a3 }]} />
-    </View>
-  );
-};
-
-const MessageBubble: React.FC<{ msg: ChatMessage }> = ({ msg }) => {
-  const isUser = msg.role === 'user';
-  return (
-    <View style={[styles.bubbleRow, isUser ? styles.bubbleRowRight : styles.bubbleRowLeft]}>
-      {!isUser && (
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>AI</Text>
-        </View>
-      )}
-      <View style={{ maxWidth: '78%' }}>
-        <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAssistant]}>
-          <Text style={[styles.bubbleText, isUser ? styles.bubbleTextUser : styles.bubbleTextAssistant]}>
-            {msg.content}
-          </Text>
-        </View>
-        <Text style={[styles.timeText, isUser ? styles.timeRight : styles.timeLeft]}>
-          {formatTime(msg.createdAt)}
-        </Text>
-      </View>
-    </View>
-  );
-};
-
-export const AIChatPanel: React.FC<AIChatPanelProps> = ({
-  visible = true,
-  title = 'AI Assistant',
-  online = true,
+export const AIChatSidebar: React.FC<AIChatSidebarProps> = ({
   messages = [],
-  loading = false,
   onSend,
+  isLoading = false,
+  title = 'AI アシスタント',
+  subtitle = 'いつでも質問できます',
+  suggestions = DEFAULT_SUGGESTIONS,
   onClose,
-  onClear,
 }) => {
   const [input, setInput] = useState('');
+  const [isFocused, setIsFocused] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
-  const grouped = useMemo(() => {
-    // 今日 / それ以前 を簡易グルーピング
-    const today: ChatMessage[] = [];
-    const earlier: ChatMessage[] = [];
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-    messages.forEach((m) => {
-      if (m.createdAt >= startOfToday.getTime()) today.push(m);
-      else earlier.push(m);
-    });
-    return { today, earlier };
-  }, [messages]);
+  const canSend = input.trim().length > 0 && !isLoading;
 
-  const handleSend = () => {
+  const handleSend = useCallback(async () => {
     const text = input.trim();
-    if (!text) return;
-    onSend?.(text);
+    if (!text || isLoading) return;
     setInput('');
-    requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
-  };
+    if (onSend) await onSend(text);
+  }, [input, isLoading, onSend]);
 
-  if (!visible) return null;
+  const handleSuggestion = useCallback(
+    async (text: string) => {
+      if (isLoading) return;
+      if (onSend) await onSend(text);
+    },
+    [isLoading, onSend],
+  );
 
-  const isEmpty = messages.length === 0;
+  useEffect(() => {
+    // メッセージ更新時に自動スクロール
+    const t = setTimeout(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    }, 50);
+    return () => clearTimeout(t);
+  }, [messages.length, isLoading]);
+
+  const isEmpty = useMemo(
+    () => messages.filter((m) => m.role !== 'system').length === 0,
+    [messages],
+  );
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
     >
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <View style={styles.brandDot} />
-          <View>
-            <Text style={styles.headerTitle}>{title}</Text>
-            <View style={styles.statusRow}>
-              <View style={[styles.statusDot, { backgroundColor: online ? COLORS.success : COLORS.muted }]} />
-              <Text style={styles.statusText}>{online ? 'オンライン' : 'オフライン'}</Text>
-            </View>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>AI</Text>
+            <View style={styles.statusDot} />
+          </View>
+          <View style={{ marginLeft: spacing.md, flexShrink: 1 }}>
+            <Text style={styles.title} numberOfLines={1}>
+              {title}
+            </Text>
+            <Text style={styles.subtitle} numberOfLines={1}>
+              {subtitle}
+            </Text>
           </View>
         </View>
-        <View style={styles.headerActions}>
-          {onClear && (
-            <TouchableOpacity style={styles.iconBtn} onPress={onClear} accessibilityLabel="履歴をクリア">
-              <Text style={styles.iconBtnText}>⟲</Text>
-            </TouchableOpacity>
-          )}
-          {onClose && (
-            <TouchableOpacity style={styles.iconBtn} onPress={onClose} accessibilityLabel="閉じる">
-              <Text style={styles.iconBtnText}>×</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        {onClose && (
+          <Pressable
+            onPress={onClose}
+            hitSlop={8}
+            style={({ pressed }) => [
+              styles.iconBtn,
+              pressed && { opacity: 0.6 },
+            ]}
+            accessibilityLabel="閉じる"
+          >
+            <Text style={styles.iconBtnText}>×</Text>
+          </Pressable>
+        )}
       </View>
 
       <View style={styles.divider} />
@@ -198,443 +192,449 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({
         showsVerticalScrollIndicator={false}
       >
         {isEmpty ? (
-          <View style={styles.emptyWrap}>
-            <View style={styles.emptyAvatar}>
-              <Text style={styles.emptyAvatarText}>AI</Text>
-            </View>
-            <Text style={styles.emptyTitle}>何でも聞いてください</Text>
-            <Text style={styles.emptySubtitle}>
-              質問・要約・翻訳・アイデア出しまで、{'\n'}あなたの作業をサポートします。
+          <View style={styles.empty}>
+            <Text style={styles.emptyTitle}>こんにちは 👋</Text>
+            <Text style={styles.emptyDesc}>
+              何でも気軽に聞いてください。下のサジェストから始めることもできます。
             </Text>
-
-            <Text style={styles.sectionLabel}>提案</Text>
+            <Text style={styles.emptyLabel}>💡 こんなことが聞けます</Text>
             <View style={styles.chipWrap}>
-              {SUGGESTIONS.map((s) => (
-                <TouchableOpacity key={s} style={styles.chip} onPress={() => onSend?.(s)}>
-                  <Text style={styles.chipText}>{s}</Text>
-                </TouchableOpacity>
+              {suggestions.map((s) => (
+                <SuggestionChip
+                  key={s}
+                  label={s}
+                  onPress={() => handleSuggestion(s)}
+                />
               ))}
             </View>
           </View>
         ) : (
-          <>
-            {grouped.earlier.length > 0 && (
-              <>
-                <Text style={styles.sectionLabel}>これまでの会話</Text>
-                {grouped.earlier.map((m) => (
-                  <MessageBubble key={m.id} msg={m} />
-                ))}
-              </>
-            )}
-            {grouped.today.length > 0 && (
-              <>
-                <Text style={styles.sectionLabel}>今日</Text>
-                {grouped.today.map((m) => (
-                  <MessageBubble key={m.id} msg={m} />
-                ))}
-              </>
-            )}
-            {loading && (
-              <View style={[styles.bubbleRow, styles.bubbleRowLeft]}>
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>AI</Text>
-                </View>
-                <View style={[styles.bubble, styles.bubbleAssistant]}>
-                  <TypingDots />
-                </View>
-              </View>
-            )}
-          </>
+          messages
+            .filter((m) => m.role !== 'system')
+            .map((m) => <MessageBubble key={m.id} message={m} />)
+        )}
+
+        {isLoading && (
+          <View style={styles.row}>
+            <View style={[styles.bubble, styles.bubbleAssistant]}>
+              <TypingDots />
+            </View>
+          </View>
         )}
       </ScrollView>
 
       {/* Composer */}
       <View style={styles.composerWrap}>
-        <View style={styles.composer}>
+        <View
+          style={[
+            styles.composer,
+            isFocused && { borderColor: colors.accent },
+          ]}
+        >
           <TextInput
             value={input}
             onChangeText={setInput}
-            placeholder="メッセージを入力..."
-            placeholderTextColor={COLORS.muted}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            placeholder="メッセージを入力…"
+            placeholderTextColor={colors.textSubtle}
             style={styles.input}
             multiline
-            maxLength={2000}
             onSubmitEditing={handleSend}
             blurOnSubmit={false}
+            returnKeyType="send"
           />
-          <TouchableOpacity
-            style={[styles.sendBtn, (!input.trim() || loading) && styles.sendBtnDisabled]}
+          <Pressable
             onPress={handleSend}
-            disabled={!input.trim() || loading}
+            disabled={!canSend}
+            style={({ pressed }) => [
+              styles.sendBtn,
+              !canSend && styles.sendBtnDisabled,
+              pressed && canSend && { opacity: 0.85 },
+            ]}
             accessibilityLabel="送信"
           >
-            {loading ? (
-              <ActivityIndicator size="small" color="#fff" />
+            {isLoading ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
               <Text style={styles.sendBtnText}>↑</Text>
             )}
-          </TouchableOpacity>
+          </Pressable>
         </View>
-        <Text style={styles.footerHint}>Enter で送信 ・ Shift+Enter で改行</Text>
+        <Text style={styles.hint}>Enter で送信 ・ Shift + Enter で改行</Text>
       </View>
     </KeyboardAvoidingView>
   );
 };
 
-export default AIChatPanel;
-```
-
-```ts:src/components/Sidebar/aiChatStyles.ts
-import { StyleSheet, Platform } from 'react-native';
-
-export const COLORS = {
-  bg: '#FFFFFF',
-  surface: '#FAFAFA',
-  border: '#ECECEC',
-  text: '#111111',
-  subtext: '#6B7280',
-  muted: '#9CA3AF',
-  accent: '#111111',
-  accentSoft: '#F3F4F6',
-  success: '#10B981',
-  bubbleAssistant: '#F4F4F5',
-  bubbleUser: '#111111',
-  shadow: 'rgba(17,17,17,0.06)',
+const MessageBubble: React.FC<{ message: ChatMessage }> = ({ message }) => {
+  const isUser = message.role === 'user';
+  return (
+    <View style={[styles.row, isUser ? styles.rowEnd : styles.rowStart]}>
+      {!isUser && (
+        <View style={styles.smallAvatar}>
+          <Text style={styles.smallAvatarText}>AI</Text>
+        </View>
+      )}
+      <View
+        style={[
+          styles.bubble,
+          isUser ? styles.bubbleUser : styles.bubbleAssistant,
+        ]}
+      >
+        <Text
+          style={[
+            styles.bubbleText,
+            isUser ? styles.bubbleUserText : styles.bubbleAssistantText,
+          ]}
+        >
+          {message.content}
+        </Text>
+      </View>
+    </View>
+  );
 };
 
-export const styles = StyleSheet.create({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
-    width: 340,
-    maxWidth: '100%',
-    backgroundColor: COLORS.bg,
+    backgroundColor: colors.bg,
     borderLeftWidth: StyleSheet.hairlineWidth,
-    borderLeftColor: COLORS.border,
-    ...Platform.select({
-      web: { boxShadow: '0 0 24px rgba(17,17,17,0.04)' },
-      default: {
-        shadowColor: '#000',
-        shadowOpacity: 0.04,
-        shadowRadius: 12,
-        shadowOffset: { width: -2, height: 0 },
-        elevation: 2,
-      },
-    }),
+    borderLeftColor: colors.border,
   },
-
-  /* Header */
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 18,
-    paddingBottom: 14,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    flexShrink: 1,
   },
-  brandDot: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.accent,
+  avatar: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.pill,
+    backgroundColor: colors.accentSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: COLORS.text,
-    letterSpacing: 0.2,
-  },
-  statusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 3,
-    gap: 6,
+  avatarText: {
+    color: colors.accent,
+    fontWeight: '700',
+    fontSize: 12,
+    letterSpacing: 0.5,
   },
   statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    position: 'absolute',
+    right: -1,
+    bottom: -1,
+    width: 10,
+    height: 10,
+    borderRadius: radius.pill,
+    backgroundColor: colors.online,
+    borderWidth: 2,
+    borderColor: colors.bg,
   },
-  statusText: {
-    fontSize: 11,
-    color: COLORS.subtext,
+  title: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
   },
-  headerActions: {
-    flexDirection: 'row',
-    gap: 4,
+  subtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    color: colors.textMuted,
   },
   iconBtn: {
     width: 32,
     height: 32,
-    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: radius.sm,
   },
   iconBtnText: {
-    fontSize: 18,
-    color: COLORS.subtext,
-    lineHeight: 20,
+    fontSize: 22,
+    color: colors.textMuted,
+    lineHeight: 24,
   },
-
   divider: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: COLORS.border,
-    marginHorizontal: 16,
+    backgroundColor: colors.border,
   },
-
-  /* Body */
   body: {
     flex: 1,
   },
   bodyContent: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 16,
-    gap: 8,
+    padding: spacing.lg,
+    paddingBottom: spacing.xl,
+    gap: spacing.md,
   },
-
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: COLORS.muted,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginTop: 12,
-    marginBottom: 8,
-    paddingHorizontal: 4,
-  },
-
-  /* Empty state */
-  emptyWrap: {
-    alignItems: 'center',
-    paddingTop: 28,
-    paddingHorizontal: 12,
-  },
-  emptyAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: COLORS.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  emptyAvatarText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 16,
-    letterSpacing: 0.5,
+  empty: {
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.lg,
   },
   emptyTitle: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '600',
-    color: COLORS.text,
-    marginBottom: 6,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
-  emptySubtitle: {
+  emptyDesc: {
     fontSize: 13,
     lineHeight: 20,
-    color: COLORS.subtext,
-    textAlign: 'center',
-    marginBottom: 8,
+    color: colors.textMuted,
+    marginBottom: spacing.xl,
+  },
+  emptyLabel: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginBottom: spacing.sm,
   },
   chipWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    justifyContent: 'center',
-    marginTop: 4,
+    gap: spacing.sm,
   },
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: COLORS.accentSoft,
-    borderRadius: 999,
-  },
-  chipText: {
-    fontSize: 12,
-    color: COLORS.text,
-    fontWeight: '500',
-  },
-
-  /* Avatars */
-  avatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: COLORS.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 8,
-  },
-  avatarText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-
-  /* Bubbles */
-  bubbleRow: {
+  row: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    marginBottom: 10,
+    gap: spacing.sm,
   },
-  bubbleRowLeft: {
-    justifyContent: 'flex-start',
+  rowStart: { justifyContent: 'flex-start' },
+  rowEnd: { justifyContent: 'flex-end' },
+  smallAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: radius.pill,
+    backgroundColor: colors.accentSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  bubbleRowRight: {
-    justifyContent: 'flex-end',
-    alignSelf: 'flex-end',
+  smallAvatarText: {
+    color: colors.accent,
+    fontSize: 10,
+    fontWeight: '700',
   },
   bubble: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 16,
-  },
-  bubbleAssistant: {
-    backgroundColor: COLORS.bubbleAssistant,
-    borderTopLeftRadius: 6,
+    maxWidth: '82%',
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.lg,
   },
   bubbleUser: {
-    backgroundColor: COLORS.bubbleUser,
-    borderTopRightRadius: 6,
+    backgroundColor: colors.bubbleUser,
+    borderBottomRightRadius: 4,
+  },
+  bubbleAssistant: {
+    backgroundColor: colors.bubbleAssistant,
+    borderBottomLeftRadius: 4,
   },
   bubbleText: {
     fontSize: 14,
     lineHeight: 20,
   },
-  bubbleTextAssistant: {
-    color: COLORS.text,
-  },
-  bubbleTextUser: {
-    color: '#fff',
-  },
-  timeText: {
-    fontSize: 10,
-    color: COLORS.muted,
-    marginTop: 4,
-  },
-  timeLeft: {
-    textAlign: 'left',
-    marginLeft: 4,
-  },
-  timeRight: {
-    textAlign: 'right',
-    marginRight: 4,
-  },
-
-  /* Typing */
-  typingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    height: 16,
-  },
-  typingDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: COLORS.muted,
-  },
-
-  /* Composer */
+  bubbleUserText: { color: colors.bubbleUserText },
+  bubbleAssistantText: { color: colors.bubbleAssistantText },
   composerWrap: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: Platform.OS === 'ios' ? 18 : 14,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.lg,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: COLORS.border,
-    backgroundColor: COLORS.bg,
+    borderTopColor: colors.border,
+    backgroundColor: colors.bg,
   },
   composer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 8,
-    backgroundColor: COLORS.surface,
-    borderRadius: 22,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: COLORS.border,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
   },
   input: {
     flex: 1,
     fontSize: 14,
-    color: COLORS.text,
+    lineHeight: 20,
+    color: colors.text,
     maxHeight: 120,
-    minHeight: 24,
-    paddingTop: 4,
-    paddingBottom: 4,
-    ...Platform.select({
-      web: { outlineStyle: 'none' as any },
-      default: {},
-    }),
+    paddingVertical: Platform.OS === 'ios' ? 6 : 2,
   },
   sendBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: COLORS.accent,
+    width: 32,
+    height: 32,
+    borderRadius: radius.pill,
+    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sendBtnDisabled: {
-    backgroundColor: COLORS.muted,
+    backgroundColor: colors.borderStrong,
   },
   sendBtnText: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
     lineHeight: 18,
   },
-  footerHint: {
-    fontSize: 10,
-    color: COLORS.muted,
-    textAlign: 'center',
-    marginTop: 8,
+  hint: {
+    marginTop: spacing.xs + 2,
+    fontSize: 11,
+    color: colors.textSubtle,
+    textAlign: 'right',
   },
 });
+
+export default AIChatSidebar;
 ```
 
-既存のサイドバーコンポーネントから AI チャット部分を差し替えるための一般的なパターンも置いておきます。プロジェクト内の現行 import 箇所（例: `Sidebar.tsx`）に下記のような差分を当ててください。
+```tsx:src/components/ai-chat/SuggestionChip.tsx
+import React from 'react';
+import { Pressable, Text, StyleSheet } from 'react-native';
 
-```tsx:src/components/Sidebar/Sidebar.tsx
-<<<SEARCH
-import AIChat from './AIChat';
-===
-import AIChatPanel from './AIChatPanel';
->>>REPLACE
+interface Props {
+  label: string;
+  onPress?: () => void;
+}
+
+export const SuggestionChip: React.FC<Props> = ({ label, onPress }) => {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.chip,
+        pressed && styles.chipPressed,
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      <Text style={styles.chipText} numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+};
+
+const styles = StyleSheet.create({
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#ECECEC',
+    backgroundColor: '#FFFFFF',
+  },
+  chipPressed: {
+    backgroundColor: '#F4F4F5',
+    borderColor: '#D9D9D9',
+  },
+  chipText: {
+    fontSize: 12,
+    color: '#1A1A1A',
+  },
+});
+
+export default SuggestionChip;
 ```
 
-```tsx:src/components/Sidebar/Sidebar.tsx
-<<<SEARCH
-        <AIChat />
-===
-        <AIChatPanel
-          messages={aiMessages}
-          loading={aiLoading}
-          online
-          onSend={handleAISend}
-          onClear={handleAIClear}
+```tsx:src/components/ai-chat/TypingDots.tsx
+import React, { useEffect, useRef } from 'react';
+import { Animated, Easing, StyleSheet, View } from 'react-native';
+
+/**
+ * 3 つのドットがふわっと上下する「考え中…」インジケータ。
+ */
+export const TypingDots: React.FC<{ color?: string }> = ({ color = '#8A8A8A' }) => {
+  const a1 = useRef(new Animated.Value(0)).current;
+  const a2 = useRef(new Animated.Value(0)).current;
+  const a3 = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const make = (val: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(val, {
+            toValue: 1,
+            duration: 350,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(val, {
+            toValue: 0,
+            duration: 350,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+    const anims = [make(a1, 0), make(a2, 120), make(a3, 240)];
+    anims.forEach((a) => a.start());
+    return () => anims.forEach((a) => a.stop());
+  }, [a1, a2, a3]);
+
+  const translate = (v: Animated.Value) =>
+    v.interpolate({ inputRange: [0, 1], outputRange: [0, -4] });
+  const opacity = (v: Animated.Value) =>
+    v.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] });
+
+  return (
+    <View style={styles.row} accessibilityLabel="AI が入力中">
+      {[a1, a2, a3].map((v, i) => (
+        <Animated.View
+          key={i}
+          style={[
+            styles.dot,
+            {
+              backgroundColor: color,
+              opacity: opacity(v),
+              transform: [{ translateY: translate(v) }],
+            },
+          ]}
         />
->>>REPLACE
+      ))}
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 2,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 999,
+  },
+});
+
+export default TypingDots;
 ```
 
 ### 4. 検証方針
+- 表示確認:
+  1. アプリ起動 → サイドバーを開き、AI チャットの空状態でサジェストチップが 4 つ並ぶこと
+  2. チップをタップ → `onSend` が発火し、ユーザーバブル（黒背景・右寄せ）が表示されること
+  3. `isLoading=true` のとき左側に 3 点ドットが上下にアニメーションすること
+  4. メッセージが増えると自動で末尾までスクロールすること
+  5. 入力欄フォーカス時に枠がインディゴに変化、空のとき送信ボタンがグレーで無効化されること
+- 型チェック: `tsc --noEmit`（or `npx tsc -p tsconfig.json`）でエラーが出ないこと
+- iOS / Android 両方で `KeyboardAvoidingView` がキーボードを正しく回避するか確認
+- レビュア注目点:
+  - 色は `colors` オブジェクトに集約済み。テーマ切替（ダーク等）時はここを差し替えるだけで対応可能
+  - `MessageBubble` は純粋関数コンポーネントとして切り出し済みで再レンダリングが軽い
+  - `gap` を使用しているため React Native 0.71 以上で動作（古いバージョンの場合は `marginBottom` 等に置換が必要）
 
-- `npx tsc --noEmit` で型エラーが無いか確認
-- iOS / Android / Web (RN Web) でレンダリング確認
-  - 空状態 → 提案チップタップで `onSend` 発火
-  - メッセージ送信 → 自動スクロール末尾追従
-  - `loading=true` でタイピングインジケーター表示
-  - 閉じる / クリアアイコンが動作
-- Minimal デザイン観点: アクセント色は黒系 1 色のみ、影は極弱、ボーダーは hairline
-- アクセシビリティ: `accessibilityLabel` を主要ボタンに付与済み
-- 既存 `AIChat` コンポーネントが存在する場合は、上の SEARCH/REPLACE で import を差し替えてください（パスや prop 名が異なる場合は SEARCH 文字列を実コードに合わせて調整）
+```bash
+npx tsc --noEmit
+```

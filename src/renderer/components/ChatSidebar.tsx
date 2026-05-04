@@ -1,311 +1,324 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
-import styles from './ChatSidebar.module.css';
-import type { ChatMessage, ChatPhase } from './ChatSidebar.types';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useAutoResizeTextarea } from '../hooks/useAutoResizeTextarea';
+import './ChatSidebar.css';
 
-type Props = {
-  /** サイドバーのタイトル (デフォルト: "AI アシスタント") */
+export type ChatRole = 'user' | 'assistant' | 'system';
+
+export interface ChatMessage {
+  id: string;
+  role: ChatRole;
+  content: string;
+  createdAt?: number;
+}
+
+export interface ChatSidebarProps {
+  /** 親が制御する場合のメッセージ配列。未指定なら内部 state で動作 */
+  messages?: ChatMessage[];
+  /** メッセージ送信ハンドラ。未指定ならデモ動作（エコー） */
+  onSend?: (text: string) => void | Promise<void>;
+  /** 送信〜返答待ちのフラグ。親が制御する場合に渡す */
+  isLoading?: boolean;
+  /** New chat 押下時。未指定なら内部 state をクリア */
+  onNewChat?: () => void;
+  /** サイドバーの開閉。未指定なら常時表示 */
+  open?: boolean;
+  /** 閉じるボタン押下時 */
+  onClose?: () => void;
+  /** タイトル */
   title?: string;
-  /** 初期メッセージ (空配列で開始可) */
-  initialMessages?: ChatMessage[];
-  /** 任意: 送信時のハンドラ。未指定なら window.electronAPI.chat を呼ぶ */
-  onSend?: (input: string, history: ChatMessage[]) => Promise<string>;
-  /** 任意: 折りたたみ制御 */
-  collapsed?: boolean;
-  onToggleCollapsed?: (next: boolean) => void;
-};
+  /** 入力欄プレースホルダ */
+  placeholder?: string;
+}
 
-const PHASES: { key: ChatPhase; label: string }[] = [
-  { key: 'idle', label: '入力' },
-  { key: 'sending', label: '送信' },
-  { key: 'thinking', label: '思考中' },
-  { key: 'done', label: '回答' },
+const SUGGESTIONS = [
+  '選択中のコードを要約して',
+  'このファイルにテストを書いて',
+  'リファクタリング案を3つ提案',
 ];
 
-const uid = () =>
-  typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : `id-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+const STEPS = [
+  { n: 1, label: '質問を入力' },
+  { n: 2, label: 'Enter で送信' },
+  { n: 3, label: '回答を確認' },
+];
 
-export const ChatSidebar: React.FC<Props> = ({
-  title = 'AI アシスタント',
-  initialMessages = [],
+export const ChatSidebar: React.FC<ChatSidebarProps> = ({
+  messages: messagesProp,
   onSend,
-  collapsed = false,
-  onToggleCollapsed,
+  isLoading: isLoadingProp,
+  onNewChat,
+  open = true,
+  onClose,
+  title = 'AI Chat',
+  placeholder = 'メッセージを入力…  (Enter 送信 / Shift+Enter 改行)',
 }) => {
-  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  const [internalMessages, setInternalMessages] = useState<ChatMessage[]>([]);
+  const [internalLoading, setInternalLoading] = useState(false);
   const [input, setInput] = useState('');
-  const [phase, setPhase] = useState<ChatPhase>('idle');
-  const [error, setError] = useState<string | null>(null);
+
+  const messages = messagesProp ?? internalMessages;
+  const isLoading = isLoadingProp ?? internalLoading;
 
   const listRef = useRef<HTMLDivElement | null>(null);
-  const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  useAutoResizeTextarea(textareaRef, input, 160);
 
   // 自動スクロール
   useEffect(() => {
     const el = listRef.current;
     if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-  }, [messages, phase]);
+    el.scrollTop = el.scrollHeight;
+  }, [messages, isLoading]);
 
-  // 入力欄の自動高さ調整
-  useEffect(() => {
-    const ta = textAreaRef.current;
-    if (!ta) return;
-    ta.style.height = 'auto';
-    ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
-  }, [input]);
+  const handleSend = useCallback(
+    async (raw?: string) => {
+      const text = (raw ?? input).trim();
+      if (!text || isLoading) return;
 
-  const callBackend = useCallback(
-    async (text: string, history: ChatMessage[]): Promise<string> => {
-      if (onSend) return onSend(text, history);
-      const api = (window as unknown as {
-        electronAPI?: {
-          chat?: (payload: {
-            input: string;
-            history: ChatMessage[];
-          }) => Promise<string>;
+      if (onSend) {
+        await onSend(text);
+      } else {
+        // デモ動作: ローカルにエコー
+        const userMsg: ChatMessage = {
+          id: `u_${Date.now()}`,
+          role: 'user',
+          content: text,
+          createdAt: Date.now(),
         };
-      }).electronAPI;
-      if (api?.chat) return api.chat({ input: text, history });
-      // フォールバック (開発時用)
-      await new Promise((r) => setTimeout(r, 600));
-      return `（モック応答）「${text}」を受け取りました。`;
+        setInternalMessages((m) => [...m, userMsg]);
+        setInternalLoading(true);
+        setTimeout(() => {
+          setInternalMessages((m) => [
+            ...m,
+            {
+              id: `a_${Date.now()}`,
+              role: 'assistant',
+              content: `「${text}」について考えました。\n\n…ここに回答が入ります。`,
+              createdAt: Date.now(),
+            },
+          ]);
+          setInternalLoading(false);
+        }, 700);
+      }
+      setInput('');
     },
-    [onSend]
+    [input, isLoading, onSend],
   );
-
-  const handleSend = useCallback(async () => {
-    const text = input.trim();
-    if (!text || phase === 'sending' || phase === 'thinking') return;
-
-    const userMsg: ChatMessage = {
-      id: uid(),
-      role: 'user',
-      content: text,
-      createdAt: Date.now(),
-    };
-    const nextHistory = [...messages, userMsg];
-    setMessages(nextHistory);
-    setInput('');
-    setError(null);
-    setPhase('sending');
-
-    try {
-      // 送信フェーズの可視化のため意図的に短い遅延
-      await new Promise((r) => setTimeout(r, 120));
-      setPhase('thinking');
-      const reply = await callBackend(text, nextHistory);
-      const aiMsg: ChatMessage = {
-        id: uid(),
-        role: 'assistant',
-        content: reply,
-        createdAt: Date.now(),
-      };
-      setMessages((prev) => [...prev, aiMsg]);
-      setPhase('done');
-      // 一定時間後に idle に戻す
-      window.setTimeout(() => setPhase('idle'), 800);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : '送信に失敗しました';
-      setError(msg);
-      setPhase('idle');
-    }
-  }, [input, messages, phase, callBackend]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
         e.preventDefault();
         void handleSend();
+      } else if (e.key === 'Escape') {
+        setInput('');
       }
     },
-    [handleSend]
+    [handleSend],
   );
 
-  const clearAll = useCallback(() => {
-    setMessages([]);
-    setError(null);
-    setPhase('idle');
-  }, []);
+  const handleNewChat = useCallback(() => {
+    if (onNewChat) onNewChat();
+    else setInternalMessages([]);
+    setInput('');
+    textareaRef.current?.focus();
+  }, [onNewChat]);
 
-  const activePhaseIndex = useMemo(
-    () => Math.max(0, PHASES.findIndex((p) => p.key === phase)),
-    [phase]
+  const isEmpty = messages.length === 0;
+
+  const renderedMessages = useMemo(
+    () =>
+      messages.map((m) => (
+        <MessageRow key={m.id} message={m} />
+      )),
+    [messages],
   );
 
-  if (collapsed) {
-    return (
-      <aside className={`${styles.sidebar} ${styles.sidebarCollapsed}`}>
-        <button
-          type="button"
-          className={styles.collapseToggle}
-          onClick={() => onToggleCollapsed?.(false)}
-          aria-label="AI チャットを開く"
-          title="AI チャットを開く"
-        >
-          ◂
-        </button>
-      </aside>
-    );
-  }
+  if (!open) return null;
 
   return (
-    <aside className={styles.sidebar} aria-label="AI チャット">
-      {/* ── ヘッダー ───────────────────────────── */}
-      <header className={styles.header}>
-        <div className={styles.headerTitleWrap}>
-          <span className={styles.statusDot} data-phase={phase} aria-hidden />
-          <h2 className={styles.title}>{title}</h2>
+    <aside className="chat-sidebar" aria-label={title}>
+      <header className="chat-sidebar__header">
+        <div className="chat-sidebar__title">
+          <span className="chat-sidebar__dot" aria-hidden />
+          <h2>{title}</h2>
         </div>
-        <div className={styles.headerActions}>
+        <div className="chat-sidebar__header-actions">
           <button
             type="button"
-            className={styles.iconButton}
-            onClick={clearAll}
-            disabled={messages.length === 0}
-            aria-label="会話をクリア"
-            title="会話をクリア"
+            className="chat-sidebar__icon-btn"
+            onClick={handleNewChat}
+            title="新しいチャット"
+            aria-label="新しいチャット"
           >
-            クリア
+            <NewChatIcon />
           </button>
-          {onToggleCollapsed && (
+          {onClose && (
             <button
               type="button"
-              className={styles.iconButton}
-              onClick={() => onToggleCollapsed(true)}
-              aria-label="サイドバーを閉じる"
-              title="サイドバーを閉じる"
+              className="chat-sidebar__icon-btn"
+              onClick={onClose}
+              title="閉じる"
+              aria-label="閉じる"
             >
-              ▸
+              <CloseIcon />
             </button>
           )}
         </div>
       </header>
 
-      {/* ── ステッパー (フロー可視化) ──────────────── */}
-      <ol className={styles.stepper} aria-label="処理フロー">
-        {PHASES.map((p, i) => {
-          const state =
-            i < activePhaseIndex
-              ? 'done'
-              : i === activePhaseIndex
-              ? 'active'
-              : 'pending';
-          return (
-            <li key={p.key} className={styles.stepItem} data-state={state}>
-              <span className={styles.stepIndex}>{i + 1}</span>
-              <span className={styles.stepLabel}>{p.label}</span>
-              {i < PHASES.length - 1 && (
-                <span className={styles.stepConnector} aria-hidden />
-              )}
-            </li>
-          );
-        })}
-      </ol>
-
-      {/* ── メッセージ一覧 ───────────────────────── */}
-      <div ref={listRef} className={styles.list} role="log" aria-live="polite">
-        {messages.length === 0 && phase === 'idle' && (
-          <div className={styles.empty}>
-            <p className={styles.emptyTitle}>会話を始めましょう</p>
-            <p className={styles.emptyHint}>
-              下のテキスト欄に質問を入力して Enter で送信します。
-              <br />
-              Shift + Enter で改行できます。
-            </p>
-          </div>
-        )}
-
-        {messages.map((m) => (
-          <article
-            key={m.id}
-            className={`${styles.bubble} ${
-              m.role === 'user' ? styles.bubbleUser : styles.bubbleAssistant
-            }`}
-          >
-            <div className={styles.bubbleMeta}>
-              <span className={styles.bubbleRole}>
-                {m.role === 'user' ? 'You' : 'AI'}
-              </span>
-              <time className={styles.bubbleTime}>
-                {new Date(m.createdAt).toLocaleTimeString([], {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
-              </time>
-            </div>
-            <div className={styles.bubbleBody}>{m.content}</div>
-          </article>
-        ))}
-
-        {(phase === 'sending' || phase === 'thinking') && (
-          <div
-            className={`${styles.bubble} ${styles.bubbleAssistant} ${styles.bubbleThinking}`}
-            aria-label="AI が考えています"
-          >
-            <div className={styles.bubbleMeta}>
-              <span className={styles.bubbleRole}>AI</span>
-              <span className={styles.bubbleTime}>
-                {phase === 'sending' ? '送信中…' : '思考中…'}
-              </span>
-            </div>
-            <div className={styles.dots} aria-hidden>
-              <span />
-              <span />
-              <span />
-            </div>
-          </div>
-        )}
-
-        {error && (
-          <div className={styles.errorBox} role="alert">
-            {error}
-          </div>
+      <div
+        className="chat-sidebar__list"
+        ref={listRef}
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions"
+      >
+        {isEmpty ? (
+          <EmptyState
+            onPick={(s) => {
+              setInput(s);
+              textareaRef.current?.focus();
+            }}
+          />
+        ) : (
+          <>
+            {renderedMessages}
+            {isLoading && <ThinkingRow />}
+          </>
         )}
       </div>
 
-      {/* ── 入力エリア ──────────────────────────── */}
       <form
-        className={styles.inputArea}
+        className="chat-sidebar__composer"
         onSubmit={(e) => {
           e.preventDefault();
           void handleSend();
         }}
       >
-        <textarea
-          ref={textAreaRef}
-          className={styles.textarea}
-          placeholder="メッセージを入力…"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          rows={1}
-          disabled={phase === 'sending' || phase === 'thinking'}
-        />
-        <div className={styles.inputFooter}>
-          <span className={styles.inputHint}>
-            Enter で送信 / Shift + Enter で改行
-          </span>
-          <button
-            type="submit"
-            className={styles.sendButton}
-            disabled={
-              !input.trim() || phase === 'sending' || phase === 'thinking'
-            }
-          >
-            送信
-          </button>
+        <div className="chat-sidebar__composer-inner">
+          <textarea
+            ref={textareaRef}
+            className="chat-sidebar__textarea"
+            placeholder={placeholder}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            rows={1}
+            aria-label="メッセージ入力"
+          />
+          <div className="chat-sidebar__composer-bar">
+            <span className="chat-sidebar__hint">
+              Enter で送信 ・ Shift+Enter で改行
+            </span>
+            <button
+              type="submit"
+              className="chat-sidebar__send"
+              disabled={!input.trim() || isLoading}
+              aria-label="送信"
+            >
+              {isLoading ? <Spinner /> : <SendIcon />}
+              <span>{isLoading ? '送信中' : '送信'}</span>
+            </button>
+          </div>
         </div>
       </form>
     </aside>
   );
 };
+
+/* ---------- subcomponents ---------- */
+
+const MessageRow: React.FC<{ message: ChatMessage }> = ({ message }) => {
+  const isUser = message.role === 'user';
+  return (
+    <div
+      className={
+        'msg ' + (isUser ? 'msg--user' : message.role === 'system' ? 'msg--sys' : 'msg--ai')
+      }
+    >
+      {!isUser && (
+        <div className="msg__avatar" aria-hidden>
+          AI
+        </div>
+      )}
+      <div className="msg__bubble">
+        {message.content.split('\n').map((line, i) => (
+          <p key={i}>{line || '\u00A0'}</p>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const ThinkingRow: React.FC = () => (
+  <div className="msg msg--ai" aria-label="AI が考え中">
+    <div className="msg__avatar" aria-hidden>
+      AI
+    </div>
+    <div className="msg__bubble msg__bubble--thinking">
+      <span className="dot" />
+      <span className="dot" />
+      <span className="dot" />
+    </div>
+  </div>
+);
+
+const EmptyState: React.FC<{ onPick: (s: string) => void }> = ({ onPick }) => (
+  <div className="empty">
+    <div className="empty__title">何でも聞いてください</div>
+    <div className="empty__sub">3ステップで回答が得られます</div>
+
+    <ol className="empty__steps">
+      {STEPS.map((s) => (
+        <li key={s.n} className="empty__step">
+          <span className="empty__step-num">{s.n}</span>
+          <span className="empty__step-label">{s.label}</span>
+        </li>
+      ))}
+    </ol>
+
+    <div className="empty__suggest-title">サンプル</div>
+    <div className="empty__suggest">
+      {SUGGESTIONS.map((s) => (
+        <button
+          key={s}
+          type="button"
+          className="empty__chip"
+          onClick={() => onPick(s)}
+        >
+          {s}
+        </button>
+      ))}
+    </div>
+  </div>
+);
+
+/* ---------- icons ---------- */
+
+const NewChatIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 5v14M5 12h14" />
+  </svg>
+);
+
+const CloseIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M6 6l12 12M18 6L6 18" />
+  </svg>
+);
+
+const SendIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M22 2L11 13" />
+    <path d="M22 2l-7 20-4-9-9-4 20-7z" />
+  </svg>
+);
+
+const Spinner = () => (
+  <svg className="spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <path d="M21 12a9 9 0 1 1-6.2-8.55" />
+  </svg>
+);
 
 export default ChatSidebar;

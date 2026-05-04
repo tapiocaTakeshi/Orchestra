@@ -95,8 +95,12 @@ function createCompile(src, { build, emitError, transpileOnly, preserveEnglish }
         const bom = require('gulp-bom');
         const tsFilter = util.filter(data => /\.ts$/.test(data.path));
         const isUtf8Test = (f) => /(\/|\\)test(\/|\\).*utf8/.test(f.path);
-        const isRuntimeJs = (f) => f.path.endsWith('.js') && !f.path.includes('fixtures');
-        const isCSS = (f) => f.path.endsWith('.css') && !f.path.includes('fixtures');
+        // `f.contents` が Buffer でないエントリ (= ディレクトリ等) は弾く。
+        // 例えば `node_modules/fraction.js/` のように拡張子 `.js` のディレクトリを
+        // gulp.src が拾ってしまうと、`appendOwnPathSourceURL` 内で
+        // `Buffer` を期待している処理が "contents are not a buffer" で死ぬため。
+        const isRuntimeJs = (f) => f.path.endsWith('.js') && !f.path.includes('fixtures') && Buffer.isBuffer(f.contents);
+        const isCSS = (f) => f.path.endsWith('.css') && !f.path.includes('fixtures') && Buffer.isBuffer(f.contents);
         const noDeclarationsFilter = util.filter(data => !(/\.d\.ts$/.test(data.path)));
         const postcssNesting = require('postcss-nesting');
         const input = event_stream_1.default.through();
@@ -128,7 +132,9 @@ function createCompile(src, { build, emitError, transpileOnly, preserveEnglish }
 function transpileTask(src, out, esbuild) {
     const task = () => {
         const transpile = createCompile(src, { build: false, emitError: true, transpileOnly: { esbuild }, preserveEnglish: false });
-        const srcPipe = gulp_1.default.src(`${src}/**`, { base: `${src}` });
+        // `src/` 配下にネストされた `node_modules/` (例: tsup 用サブプロジェクトの依存) は
+        // 本体ビルドの対象ではないため、必ず除外する。
+        const srcPipe = gulp_1.default.src([`${src}/**`, `!${src}/**/node_modules/**`], { base: `${src}` });
         return srcPipe
             .pipe(transpile())
             .pipe(gulp_1.default.dest(out));
@@ -142,7 +148,9 @@ function compileTask(src, out, build, options = {}) {
             throw new Error('compilation requires 4GB of RAM');
         }
         const compile = createCompile(src, { build, emitError: true, transpileOnly: false, preserveEnglish: !!options.preserveEnglish });
-        const srcPipe = gulp_1.default.src(`${src}/**`, { base: `${src}` });
+        // `src/` 配下にネストされた `node_modules/` (例: tsup 用サブプロジェクトの依存) は
+        // 本体ビルドの対象ではないため、必ず除外する。
+        const srcPipe = gulp_1.default.src([`${src}/**`, `!${src}/**/node_modules/**`], { base: `${src}` });
         const generator = new MonacoGenerator(false);
         if (src === 'src') {
             generator.execute();
@@ -179,8 +187,9 @@ function compileTask(src, out, build, options = {}) {
 function watchTask(out, build, srcPath = 'src') {
     const task = () => {
         const compile = createCompile(srcPath, { build, emitError: false, transpileOnly: false, preserveEnglish: false });
-        const src = gulp_1.default.src(`${srcPath}/**`, { base: srcPath });
-        const watchSrc = watch(`${srcPath}/**`, { base: srcPath, readDelay: 200 });
+        // `srcPath/` 配下にネストされた `node_modules/` は対象外。
+        const src = gulp_1.default.src([`${srcPath}/**`, `!${srcPath}/**/node_modules/**`], { base: srcPath });
+        const watchSrc = watch(`${srcPath}/**`, { base: srcPath, readDelay: 200, ignored: '**/node_modules/**' });
         const generator = new MonacoGenerator(true);
         generator.execute();
         return watchSrc

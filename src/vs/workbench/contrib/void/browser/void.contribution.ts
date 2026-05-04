@@ -14,6 +14,9 @@ import './sidebarPane.js'
 // register quick edit (Ctrl+K)
 import './quickEditActions.js'
 
+// register editor diagnostic Quick Fix「Fix with Agent」 (送信先はチャットサイドバー)
+import './voidFixWithAgent.js'
+
 
 // register Autocomplete
 import './autocompleteService.js'

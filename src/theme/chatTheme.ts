@@ -1,45 +1,61 @@
-// Minimal theme tokens for the AI chat sidebar.
-// Keep tokens here so colors & spacings stay consistent across chat components.
+import { ColorSchemeName } from 'react-native';
 
-export const chatTheme = {
-  colors: {
-    background: '#FFFFFF',
-    surface: '#FAFAFA',
-    surfaceAlt: '#F4F4F5',
-    border: '#ECECEE',
-    borderStrong: '#E2E2E5',
-    textPrimary: '#111111',
-    textSecondary: '#6B7280',
-    textMuted: '#9CA3AF',
-    accent: '#111111',       // minimal: black as accent
-    accentText: '#FFFFFF',
-    bubbleUser: '#111111',
-    bubbleUserText: '#FFFFFF',
-    bubbleAi: '#F4F4F5',
-    bubbleAiText: '#111111',
-    danger: '#EF4444',
-    online: '#10B981',
-  },
-  radius: {
-    sm: 8,
-    md: 12,
-    lg: 16,
-    xl: 20,
-    pill: 999,
-  },
-  spacing: {
-    xs: 4,
-    sm: 8,
-    md: 12,
-    lg: 16,
-    xl: 24,
-  },
-  typography: {
-    title: 16,
-    body: 14,
-    small: 12,
-    tiny: 11,
-  },
+export type ChatPalette = {
+  background: string;
+  surface: string;
+  surfaceMuted: string;
+  border: string;
+  divider: string;
+  textPrimary: string;
+  textSecondary: string;
+  textMuted: string;
+  accent: string;
+  accentSoft: string;
+  bubbleUserBg: string;
+  bubbleUserText: string;
+  bubbleAiBg: string;
+  bubbleAiText: string;
+  online: string;
+  shadow: string;
 };
 
-export type ChatTheme = typeof chatTheme;
+const light: ChatPalette = {
+  background: '#FFFFFF',
+  surface: '#FFFFFF',
+  surfaceMuted: '#F7F7F8',
+  border: '#ECECEE',
+  divider: '#F0F0F2',
+  textPrimary: '#111114',
+  textSecondary: '#4B4B52',
+  textMuted: '#8A8A93',
+  accent: '#111114',
+  accentSoft: '#F2F2F4',
+  bubbleUserBg: '#111114',
+  bubbleUserText: '#FFFFFF',
+  bubbleAiBg: '#F4F4F6',
+  bubbleAiText: '#111114',
+  online: '#22C55E',
+  shadow: 'rgba(17,17,20,0.06)',
+};
+
+const dark: ChatPalette = {
+  background: '#0E0E10',
+  surface: '#141418',
+  surfaceMuted: '#1A1A1F',
+  border: '#26262C',
+  divider: '#22222A',
+  textPrimary: '#F4F4F5',
+  textSecondary: '#C7C7CC',
+  textMuted: '#8A8A93',
+  accent: '#F4F4F5',
+  accentSoft: '#1F1F25',
+  bubbleUserBg: '#F4F4F5',
+  bubbleUserText: '#111114',
+  bubbleAiBg: '#1E1E24',
+  bubbleAiText: '#F4F4F5',
+  online: '#22C55E',
+  shadow: 'rgba(0,0,0,0.4)',
+};
+
+export const getChatPalette = (scheme: ColorSchemeName): ChatPalette =>
+  scheme === 'dark' ? dark : light;

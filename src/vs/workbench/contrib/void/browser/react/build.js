@@ -7,19 +7,12 @@ import { execSync } from 'child_process'
 import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
+import { createRequire } from 'module'
+import { spawn } from 'cross-spawn'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-import { createRequire } from 'module'
 const require = createRequire(import.meta.url)
-import { spawn } from 'cross-spawn'
-// Added lines below
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // Load .env from project root
 const envPath = findDesiredPathFromLocalPath('.env', __dirname);
@@ -198,7 +191,7 @@ if (isWatch) {
 		try {
 			console.log('🔨 Running initial scope-tailwind build to create src2 folder...');
 			execSync(
-npx --no-install scope-tailwind ./src -o src2/ -s void-scope -c styles.css -p "void-"
+				'npx --no-install scope-tailwind ./src -o src2/ -s void-scope -c styles.css -p "void-"',
 				{ stdio: 'inherit' }
 			);
 			console.log('✅ src2/ created successfully.');
@@ -270,7 +263,7 @@ npx --no-install scope-tailwind ./src -o src2/ -s void-scope -c styles.css -p "v
 	console.log('📦 Building...');
 
 	// Run scope-tailwind once
-execSync('npx -y scope-tailwind ./src -o src2/ -s void-scope -c styles.css -p "void-"',
+	execSync('npx -y scope-tailwind ./src -o src2/ -s void-scope -c styles.css -p "void-"', { stdio: 'inherit' });
 
 	// Run tsup once
 	execSync('npx tsup', { stdio: 'inherit' });

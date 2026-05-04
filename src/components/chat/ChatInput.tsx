@@ -1,53 +1,50 @@
 import React, { useState } from 'react';
 import {
-  Platform,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
-import {
-  chatColors,
-  chatRadius,
-  chatSpacing,
-} from '../../theme/chatTheme';
+import { chatTheme as t } from '../../theme/chatTheme';
 
 export interface ChatInputProps {
+  onSend: (text: string) => void;
   placeholder?: string;
   disabled?: boolean;
-  onSend: (text: string) => void;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
-  placeholder = 'メッセージを入力…',
-  disabled,
   onSend,
+  placeholder = 'AI にメッセージを送る…',
+  disabled,
 }) => {
   const [value, setValue] = useState('');
+  const [height, setHeight] = useState(40);
+
   const canSend = value.trim().length > 0 && !disabled;
 
   const handleSend = () => {
     if (!canSend) return;
     onSend(value.trim());
     setValue('');
+    setHeight(40);
   };
 
   return (
-    <View style={styles.wrapper}>
+    <View style={styles.wrap}>
       <View style={styles.inputRow}>
         <TextInput
+          style={[styles.input, { height: Math.min(Math.max(40, height), 120) }]}
           value={value}
           onChangeText={setValue}
           placeholder={placeholder}
-          placeholderTextColor={chatColors.textTertiary}
-          style={styles.input}
+          placeholderTextColor={t.color.textMuted}
           multiline
-          maxLength={2000}
+          onContentSizeChange={(e) => setHeight(e.nativeEvent.contentSize.height + 12)}
           editable={!disabled}
-          onSubmitEditing={handleSend}
-          blurOnSubmit={false}
           returnKeyType="send"
+          blurOnSubmit={false}
         />
         <Pressable
           accessibilityRole="button"
@@ -56,73 +53,71 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           disabled={!canSend}
           style={({ pressed }) => [
             styles.sendBtn,
-            {
-              backgroundColor: canSend
-                ? chatColors.accent
-                : chatColors.accentDisabled,
-              opacity: pressed && canSend ? 0.85 : 1,
-            },
+            !canSend && styles.sendBtnDisabled,
+            pressed && canSend && styles.sendBtnPressed,
           ]}
         >
           <Text style={styles.sendIcon}>↑</Text>
         </Pressable>
       </View>
-      <Text style={styles.hint}>
-        AI は誤った情報を出すことがあります。重要な情報は確認してください。
-      </Text>
+      <Text style={styles.hint}>Enter で送信・Shift+Enter で改行</Text>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  wrapper: {
-    paddingHorizontal: chatSpacing.lg,
-    paddingTop: chatSpacing.md,
-    paddingBottom: Platform.OS === 'ios' ? chatSpacing.lg : chatSpacing.md,
+  wrap: {
+    paddingHorizontal: t.spacing.lg,
+    paddingTop: t.spacing.sm,
+    paddingBottom: t.spacing.md,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: chatColors.border,
-    backgroundColor: chatColors.background,
+    borderTopColor: t.color.border,
+    backgroundColor: t.color.bg,
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
+    backgroundColor: t.color.bgSubtle,
     borderWidth: 1,
-    borderColor: chatColors.border,
-    backgroundColor: chatColors.surfaceSubtle,
-    borderRadius: chatRadius.lg,
-    paddingLeft: 14,
-    paddingRight: 6,
-    paddingVertical: 6,
+    borderColor: t.color.border,
+    borderRadius: t.radius.lg,
+    paddingHorizontal: t.spacing.md,
+    paddingVertical: t.spacing.xs,
   },
   input: {
     flex: 1,
-    fontSize: 15,
-    lineHeight: 20,
-    color: chatColors.textPrimary,
+    fontSize: t.font.md,
+    color: t.color.textPrimary,
+    paddingVertical: t.spacing.sm,
+    paddingRight: t.spacing.sm,
     maxHeight: 120,
-    paddingTop: Platform.OS === 'ios' ? 6 : 4,
-    paddingBottom: 6,
   },
   sendBtn: {
     width: 32,
     height: 32,
     borderRadius: 16,
+    backgroundColor: t.color.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: chatSpacing.sm,
+    marginBottom: 4,
+  },
+  sendBtnDisabled: {
+    backgroundColor: t.color.borderStrong,
+  },
+  sendBtnPressed: {
+    opacity: 0.85,
   },
   sendIcon: {
-    color: chatColors.textOnAccent,
-    fontSize: 16,
+    color: '#fff',
+    fontSize: t.font.lg,
     fontWeight: '700',
-    marginTop: -1,
+    lineHeight: 20,
   },
   hint: {
-    marginTop: chatSpacing.sm,
-    fontSize: 11,
-    lineHeight: 14,
-    color: chatColors.textTertiary,
-    textAlign: 'center',
+    fontSize: t.font.xs,
+    color: t.color.textMuted,
+    marginTop: 6,
+    marginLeft: 4,
   },
 });
 

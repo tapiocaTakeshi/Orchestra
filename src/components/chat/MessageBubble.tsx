@@ -1,66 +1,48 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import {
-  chatColors,
-  chatRadius,
-  chatSpacing,
-  chatTypography,
-} from '../../theme/chatTheme';
+import { chatTheme as t } from '../../theme/chatTheme';
 
 export type ChatRole = 'user' | 'assistant';
 
 export interface MessageBubbleProps {
   role: ChatRole;
-  content: string;
+  text: string;
   timestamp?: string;
 }
 
-export const MessageBubble: React.FC<MessageBubbleProps> = ({
-  role,
-  content,
-  timestamp,
-}) => {
+export const MessageBubble: React.FC<MessageBubbleProps> = ({ role, text, timestamp }) => {
   const isUser = role === 'user';
 
   return (
-    <View
-      style={[
-        styles.row,
-        { justifyContent: isUser ? 'flex-end' : 'flex-start' },
-      ]}
-    >
+    <View style={[styles.row, isUser ? styles.rowEnd : styles.rowStart]}>
       {!isUser && (
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>AI</Text>
         </View>
       )}
 
-      <View style={{ maxWidth: '78%' }}>
+      <View style={styles.bubbleWrap}>
         <View
           style={[
             styles.bubble,
             isUser ? styles.bubbleUser : styles.bubbleAi,
+            isUser ? styles.bubbleUserCorner : styles.bubbleAiCorner,
           ]}
         >
           <Text
             style={[
-              chatTypography.body,
-              { color: isUser ? chatColors.textOnAccent : chatColors.textPrimary },
+              styles.bubbleText,
+              isUser ? styles.bubbleTextUser : styles.bubbleTextAi,
             ]}
           >
-            {content}
+            {text}
           </Text>
         </View>
-        {timestamp ? (
-          <Text
-            style={[
-              styles.timestamp,
-              { textAlign: isUser ? 'right' : 'left' },
-            ]}
-          >
+        {timestamp && (
+          <Text style={[styles.meta, isUser ? styles.metaEnd : styles.metaStart]}>
             {timestamp}
           </Text>
-        ) : null}
+        )}
       </View>
     </View>
   );
@@ -70,45 +52,59 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    marginBottom: chatSpacing.md,
-    paddingHorizontal: chatSpacing.lg,
+    marginVertical: t.spacing.xs,
+    paddingHorizontal: t.spacing.lg,
   },
+  rowStart: { justifyContent: 'flex-start' },
+  rowEnd: { justifyContent: 'flex-end' },
   avatar: {
     width: 26,
     height: 26,
-    borderRadius: 13,
-    backgroundColor: chatColors.surfaceMuted,
+    borderRadius: t.radius.pill,
+    backgroundColor: t.color.accentSoft,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: chatSpacing.sm,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: chatColors.border,
+    marginRight: t.spacing.sm,
   },
   avatarText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: chatColors.textSecondary,
+    color: t.color.accent,
+    fontSize: t.font.xs,
+    fontWeight: '700',
     letterSpacing: 0.4,
   },
+  bubbleWrap: {
+    maxWidth: '78%',
+  },
   bubble: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: chatRadius.lg,
+    paddingHorizontal: t.spacing.md,
+    paddingVertical: t.spacing.sm + 2,
+    borderRadius: t.radius.lg,
   },
   bubbleAi: {
-    backgroundColor: chatColors.bubbleAi,
-    borderTopLeftRadius: 4,
+    backgroundColor: t.color.bubbleAiBg,
   },
   bubbleUser: {
-    backgroundColor: chatColors.bubbleUser,
-    borderTopRightRadius: 4,
+    backgroundColor: t.color.bubbleUserBg,
   },
-  timestamp: {
-    ...chatTypography.caption,
-    color: chatColors.textTertiary,
+  bubbleAiCorner: {
+    borderTopLeftRadius: 4,
+  },
+  bubbleUserCorner: {
+    borderBottomRightRadius: 4,
+  },
+  bubbleText: {
+    fontSize: t.font.md,
+    lineHeight: 21,
+  },
+  bubbleTextAi: { color: t.color.bubbleAiText },
+  bubbleTextUser: { color: t.color.bubbleUserText },
+  meta: {
+    fontSize: t.font.xs,
+    color: t.color.textMuted,
     marginTop: 4,
-    paddingHorizontal: 4,
   },
+  metaStart: { textAlign: 'left' },
+  metaEnd: { textAlign: 'right' },
 });
 
 export default MessageBubble;

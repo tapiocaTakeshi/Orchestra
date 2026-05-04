@@ -23,6 +23,7 @@ import { IProductService } from '../../../../platform/product/common/productServ
 import { PromptsConfig } from '../../../../platform/prompts/common/config.js';
 import { DEFAULT_SOURCE_FOLDER as PROMPT_FILES_DEFAULT_SOURCE_FOLDER, PROMPT_FILE_EXTENSION } from '../../../../platform/prompts/common/constants.js';
 import { Registry } from '../../../../platform/registry/common/platform.js';
+import './media/chatGlassmorphism.contribution.js';
 import { EditorPaneDescriptor, IEditorPaneRegistry } from '../../../browser/editor.js';
 import { Extensions, IConfigurationMigrationRegistry } from '../../../common/configuration.js';
 import { IWorkbenchContribution, WorkbenchPhase, registerWorkbenchContribution2 } from '../../../common/contributions.js';

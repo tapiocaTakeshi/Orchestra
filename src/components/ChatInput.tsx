@@ -1,120 +1,125 @@
 import React, { useState } from 'react';
 import {
-  View,
-  TextInput,
   Pressable,
   StyleSheet,
   Text,
-  Platform,
+  TextInput,
+  View,
 } from 'react-native';
-import { colors, radii, spacing } from '../theme/colors';
+import {
+  chatColors,
+  chatRadius,
+  chatSpacing,
+  chatTypography,
+} from '../theme/chatTheme';
 
-type Props = {
-  onSubmit: (text: string) => void;
-  disabled?: boolean;
+export interface ChatInputProps {
+  value: string;
+  onChangeText: (v: string) => void;
+  onSubmit: () => void;
   placeholder?: string;
-};
+  disabled?: boolean;
+}
 
-export const ChatInput: React.FC<Props> = ({
+export const ChatInput: React.FC<ChatInputProps> = ({
+  value,
+  onChangeText,
   onSubmit,
-  disabled,
   placeholder = 'メッセージを入力…',
+  disabled,
 }) => {
-  const [value, setValue] = useState('');
+  const [focused, setFocused] = useState(false);
   const canSend = value.trim().length > 0 && !disabled;
 
-  const submit = () => {
-    if (!canSend) return;
-    onSubmit(value);
-    setValue('');
-  };
-
   return (
-    <View style={styles.wrap}>
-      <View style={styles.inner}>
-        <TextInput
-          style={styles.input}
-          value={value}
-          onChangeText={setValue}
-          placeholder={placeholder}
-          placeholderTextColor={colors.textMuted}
-          multiline
-          maxLength={2000}
-          editable={!disabled}
-          returnKeyType="send"
-          blurOnSubmit={false}
-          onSubmitEditing={submit}
-        />
-        <Pressable
-          accessibilityLabel="送信"
-          onPress={submit}
-          disabled={!canSend}
-          style={({ pressed }) => [
-            styles.sendBtn,
-            !canSend && styles.sendBtnDisabled,
-            pressed && canSend && { opacity: 0.85 },
+    <View
+      style={[
+        styles.wrapper,
+        focused && styles.wrapperFocused,
+      ]}
+    >
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={chatColors.textMuted}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        style={styles.input}
+        multiline
+        editable={!disabled}
+        onSubmitEditing={canSend ? onSubmit : undefined}
+        returnKeyType="send"
+        blurOnSubmit
+      />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="送信"
+        onPress={canSend ? onSubmit : undefined}
+        style={({ pressed }) => [
+          styles.sendButton,
+          !canSend && styles.sendButtonDisabled,
+          pressed && canSend && styles.sendButtonPressed,
+        ]}
+      >
+        <Text
+          style={[
+            styles.sendLabel,
+            !canSend && styles.sendLabelDisabled,
           ]}
         >
-          <Text style={styles.sendIcon}>↑</Text>
-        </Pressable>
-      </View>
-      <Text style={styles.hint}>Enter で送信 / Shift+Enter で改行</Text>
+          送信
+        </Text>
+      </Pressable>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  wrap: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.md,
-    backgroundColor: colors.background,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.divider,
-  },
-  inner: {
+  wrapper: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    backgroundColor: colors.surface,
-    borderRadius: radii.xl,
+    gap: chatSpacing.xs,
+    paddingHorizontal: chatSpacing.sm,
+    paddingVertical: chatSpacing.xs,
+    backgroundColor: chatColors.surface,
+    borderRadius: chatRadius.xl,
     borderWidth: 1,
-    borderColor: colors.border,
-    paddingLeft: spacing.md,
-    paddingRight: spacing.xs,
-    paddingVertical: Platform.OS === 'ios' ? 6 : 2,
+    borderColor: chatColors.border,
+  },
+  wrapperFocused: {
+    borderColor: chatColors.borderStrong,
+    backgroundColor: chatColors.background,
   },
   input: {
     flex: 1,
-    fontSize: 14,
-    lineHeight: 20,
-    color: colors.textPrimary,
+    minHeight: 36,
     maxHeight: 120,
-    paddingVertical: Platform.OS === 'ios' ? 8 : 6,
-    paddingRight: spacing.sm,
+    paddingHorizontal: chatSpacing.xs,
+    paddingVertical: chatSpacing.xs,
+    color: chatColors.textPrimary,
+    ...chatTypography.body,
   },
-  sendBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: radii.pill,
-    backgroundColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 2,
+  sendButton: {
+    paddingHorizontal: chatSpacing.md,
+    paddingVertical: chatSpacing.xs + 2,
+    borderRadius: chatRadius.pill,
+    backgroundColor: chatColors.accent,
   },
-  sendBtnDisabled: {
-    backgroundColor: colors.borderStrong,
+  sendButtonDisabled: {
+    backgroundColor: chatColors.surfaceMuted,
   },
-  sendIcon: {
-    color: colors.accentOn,
-    fontSize: 16,
-    fontWeight: '700',
-    lineHeight: 18,
+  sendButtonPressed: {
+    opacity: 0.85,
   },
-  hint: {
-    marginTop: 6,
-    marginLeft: spacing.sm,
-    fontSize: 11,
-    color: colors.textMuted,
+  sendLabel: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
+  sendLabelDisabled: {
+    color: chatColors.textMuted,
   },
 });
 

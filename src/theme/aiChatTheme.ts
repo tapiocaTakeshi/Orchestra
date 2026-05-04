@@ -41,6 +41,14 @@ export const aiChatTheme = {
     small: 12,
     tiny: 11,
   },
+  // 各テキスト用途のプリセット。コンポーネント側で `...t.typography.title` のように
+  // spread して使う。React Native の TextStyle 互換。
+  typography: {
+    title: { fontSize: 16, fontWeight: '600' as const, lineHeight: 22 },
+    body: { fontSize: 14, fontWeight: '400' as const, lineHeight: 20 },
+    small: { fontSize: 12, fontWeight: '400' as const, lineHeight: 16 },
+    tiny: { fontSize: 11, fontWeight: '400' as const, lineHeight: 14 },
+  },
 };
 
 export type AIChatTheme = typeof aiChatTheme;

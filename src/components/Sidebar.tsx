@@ -1,5 +1,7 @@
 <<<SEARCH
 import React from 'react';
+import AIChat from './Sidebar/AIChat';
+import AIChatSidebar from './AIChatSidebar';
 import AIChatSidebar from './AIChatSidebar';
 import AIChatSidebar from './AIChatSidebar';
 import AIChatPanel from './AIChatPanel';

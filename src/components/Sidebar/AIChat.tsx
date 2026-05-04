@@ -1,55 +1,53 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  Pressable,
   FlatList,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { styles, palette } from './AIChat.styles';
+import ChatInput from './ChatInput';
+import MessageBubble, { ChatMessage } from './MessageBubble';
+import TypingDots from './TypingDots';
+import { chatTheme } from './theme';
 
-export type ChatRole = 'user' | 'assistant';
-
-export interface ChatMessage {
-  id: string;
-  role: ChatRole;
-  content: string;
-  createdAt: number;
-}
-
-export interface AIChatProps {
-  /** 既存の送信ハンドラ（無ければダミー応答） */
-  onSend?: (text: string) => Promise<string> | string;
-  /** 初期メッセージ */
-  initialMessages?: ChatMessage[];
-  /** ヘッダータイトル */
+interface Props {
+  /** 任意。AI 応答ハンドラを差し替え可能 */
+  onAskAI?: (text: string, history: ChatMessage[]) => Promise<string>;
+  /** 任意。タイトル */
   title?: string;
-  /** オンライン状態 */
-  online?: boolean;
+  /** 任意。初期メッセージ */
+  initialMessages?: ChatMessage[];
 }
+
+const DEFAULT_GREETING: ChatMessage = {
+  id: 'sys-greet',
+  role: 'assistant',
+  content: 'こんにちは。何かお手伝いできることはありますか？',
+  createdAt: Date.now(),
+};
+
+const SUGGESTIONS = [
+  '今日のタスクを要約',
+  'アイデアを膨らませて',
+  '英語に翻訳',
+];
 
 /**
- * Sidebar 内 AI チャット — Minimal Design
- * - 余白を広く、装飾を最小化
- * - モノトーン + 1色アクセント
- * - シャドウなし、薄いボーダーのみ
+ * Sidebar 内の AI チャット。Minimal デザイン。
  */
-export const AIChat: React.FC<AIChatProps> = ({
-  onSend,
-  initialMessages = [],
+export const AIChat: React.FC<Props> = ({
+  onAskAI,
   title = 'AI Assistant',
-  online = true,
+  initialMessages,
 }) => {
-  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [focused, setFocused] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>(
+    initialMessages && initialMessages.length > 0 ? initialMessages : [DEFAULT_GREETING],
+  );
+  const [pending, setPending] = useState(false);
   const listRef = useRef<FlatList<ChatMessage>>(null);
-
-  const canSend = input.trim().length > 0 && !loading;
 
   const scrollToEnd = useCallback(() => {
     requestAnimationFrame(() => {
@@ -57,93 +55,56 @@ export const AIChat: React.FC<AIChatProps> = ({
     });
   }, []);
 
-  const handleSend = useCallback(async () => {
-    const text = input.trim();
-    if (!text || loading) return;
-
-    const userMsg: ChatMessage = {
-      id: `u_${Date.now()}`,
-      role: 'user',
-      content: text,
-      createdAt: Date.now(),
-    };
-    setMessages((prev) => [...prev, userMsg]);
-    setInput('');
-    setLoading(true);
+  useEffect(() => {
     scrollToEnd();
+  }, [messages.length, pending, scrollToEnd]);
 
-    try {
-      const reply = onSend
-        ? await onSend(text)
-        : 'これはサンプル応答です。実装時に onSend を渡してください。';
-      const aiMsg: ChatMessage = {
-        id: `a_${Date.now()}`,
-        role: 'assistant',
-        content: typeof reply === 'string' ? reply : '',
-        createdAt: Date.now(),
-      };
-      setMessages((prev) => [...prev, aiMsg]);
-    } catch (e) {
-      const errMsg: ChatMessage = {
-        id: `e_${Date.now()}`,
-        role: 'assistant',
-        content: '応答の取得に失敗しました。',
-        createdAt: Date.now(),
-      };
-      setMessages((prev) => [...prev, errMsg]);
-    } finally {
-      setLoading(false);
-      scrollToEnd();
-    }
-  }, [input, loading, onSend, scrollToEnd]);
-
-  const renderItem = useCallback(({ item }: { item: ChatMessage }) => {
-    const isUser = item.role === 'user';
-    return (
-      <View
-        style={[
-          styles.row,
-          isUser ? styles.rowUser : styles.rowAssistant,
-        ]}
-      >
-        {!isUser && (
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>AI</Text>
-          </View>
-        )}
-        <View
-          style={[
-            styles.bubble,
-            isUser ? styles.bubbleUser : styles.bubbleAssistant,
-          ]}
-        >
-          <Text
-            style={[
-              styles.bubbleText,
-              isUser ? styles.bubbleTextUser : styles.bubbleTextAssistant,
-            ]}
-          >
-            {item.content}
-          </Text>
-        </View>
-      </View>
-    );
+  const fakeAI = useCallback(async (text: string): Promise<string> => {
+    // フォールバック: シンプルなエコー応答
+    await new Promise(r => setTimeout(r, 600));
+    return `「${text}」について考えています…まずは要点を3つに整理しましょう。`;
   }, []);
 
-  const empty = useMemo(
-    () => (
-      <View style={styles.emptyWrap}>
-        <View style={styles.emptyBadge}>
-          <Text style={styles.emptyBadgeText}>AI</Text>
-        </View>
-        <Text style={styles.emptyTitle}>何でも聞いてください</Text>
-        <Text style={styles.emptySubtitle}>
-          コードの説明、要約、アイデア出しなど{'\n'}気軽にチャットできます
-        </Text>
-      </View>
-    ),
-    []
+  const send = useCallback(
+    async (text: string) => {
+      const userMsg: ChatMessage = {
+        id: `u-${Date.now()}`,
+        role: 'user',
+        content: text,
+        createdAt: Date.now(),
+      };
+      setMessages(prev => [...prev, userMsg]);
+      setPending(true);
+      try {
+        const responder = onAskAI ?? ((t: string) => fakeAI(t));
+        const reply = await responder(text, [...messages, userMsg]);
+        const aiMsg: ChatMessage = {
+          id: `a-${Date.now()}`,
+          role: 'assistant',
+          content: reply,
+          createdAt: Date.now(),
+        };
+        setMessages(prev => [...prev, aiMsg]);
+      } catch (e) {
+        setMessages(prev => [
+          ...prev,
+          {
+            id: `a-err-${Date.now()}`,
+            role: 'assistant',
+            content: '応答の取得に失敗しました。もう一度お試しください。',
+            createdAt: Date.now(),
+          },
+        ]);
+      } finally {
+        setPending(false);
+      }
+    },
+    [fakeAI, messages, onAskAI],
   );
+
+  const clear = useCallback(() => {
+    setMessages([{ ...DEFAULT_GREETING, id: `sys-${Date.now()}`, createdAt: Date.now() }]);
+  }, []);
 
   return (
     <KeyboardAvoidingView
@@ -154,92 +115,128 @@ export const AIChat: React.FC<AIChatProps> = ({
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <View
-            style={[
-              styles.statusDot,
-              { backgroundColor: online ? palette.accent : palette.muted },
-            ]}
-          />
-          <Text style={styles.headerTitle}>{title}</Text>
+          <View style={styles.statusDot} />
+          <Text style={styles.title}>{title}</Text>
         </View>
-        <Pressable
-          hitSlop={8}
-          onPress={() => setMessages([])}
-          style={({ pressed }) => [
-            styles.clearBtn,
-            pressed && styles.pressed,
-          ]}
-          accessibilityLabel="チャットをクリア"
-        >
-          <Text style={styles.clearBtnText}>Clear</Text>
-        </Pressable>
+        <TouchableOpacity onPress={clear} accessibilityLabel="Clear conversation" hitSlop={8}>
+          <Text style={styles.clearBtn}>Clear</Text>
+        </TouchableOpacity>
       </View>
-
-      <View style={styles.divider} />
 
       {/* Messages */}
-      {messages.length === 0 ? (
-        empty
-      ) : (
-        <FlatList
-          ref={listRef}
-          data={messages}
-          keyExtractor={(m) => m.id}
-          renderItem={renderItem}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          onContentSizeChange={scrollToEnd}
-        />
-      )}
+      <FlatList
+        ref={listRef}
+        data={messages}
+        keyExtractor={item => item.id}
+        renderItem={({ item }) => <MessageBubble message={item} />}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        onContentSizeChange={scrollToEnd}
+        ListFooterComponent={
+          pending ? (
+            <View style={styles.typingWrap}>
+              <View style={styles.typingBubble}>
+                <TypingDots />
+              </View>
+            </View>
+          ) : null
+        }
+      />
 
-      {loading && (
-        <View style={styles.typingWrap}>
-          <View style={styles.typingDot} />
-          <View style={[styles.typingDot, styles.typingDotMid]} />
-          <View style={styles.typingDot} />
-          <Text style={styles.typingText}>考え中…</Text>
+      {/* Suggestion chips (only when conversation is fresh) */}
+      {messages.length <= 1 && !pending && (
+        <View style={styles.suggestions}>
+          {SUGGESTIONS.map(s => (
+            <TouchableOpacity
+              key={s}
+              style={styles.chip}
+              activeOpacity={0.7}
+              onPress={() => send(s)}
+            >
+              <Text style={styles.chipText}>{s}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
       )}
 
-      {/* Input */}
-      <View
-        style={[
-          styles.inputWrap,
-          focused && styles.inputWrapFocused,
-        ]}
-      >
-        <TextInput
-          style={styles.input}
-          value={input}
-          onChangeText={setInput}
-          placeholder="メッセージを入力…"
-          placeholderTextColor={palette.placeholder}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          multiline
-          maxLength={2000}
-          onSubmitEditing={handleSend}
-          blurOnSubmit={false}
-        />
-        <Pressable
-          onPress={handleSend}
-          disabled={!canSend}
-          style={({ pressed }) => [
-            styles.sendBtn,
-            !canSend && styles.sendBtnDisabled,
-            pressed && canSend && styles.sendBtnPressed,
-          ]}
-          accessibilityLabel="送信"
-        >
-          {loading ? (
-            <ActivityIndicator size="small" color={palette.surface} />
-          ) : (
-            <Text style={styles.sendBtnText}>↑</Text>
-          )}
-        </Pressable>
-      </View>
+      <ChatInput onSend={send} disabled={pending} />
     </KeyboardAvoidingView>
   );
 };
+
+const __unused_styles = (null as unknown) as any; /* moved to AIChat.styles.ts */
+const __legacy = StyleSheet => StyleSheet?.create?.({
+  container: {
+    flex: 1,
+    backgroundColor: chatTheme.colors.background,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: chatTheme.spacing.lg,
+    paddingVertical: chatTheme.spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: chatTheme.colors.border,
+    backgroundColor: chatTheme.colors.background,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: chatTheme.colors.online,
+    marginRight: chatTheme.spacing.sm,
+  },
+  title: {
+    fontSize: chatTheme.typography.title,
+    fontWeight: '600',
+    color: chatTheme.colors.text,
+    letterSpacing: 0.2,
+  },
+  clearBtn: {
+    fontSize: chatTheme.typography.caption,
+    color: chatTheme.colors.textMuted,
+  },
+  listContent: {
+    paddingTop: chatTheme.spacing.lg,
+    paddingBottom: chatTheme.spacing.sm,
+    flexGrow: 1,
+  },
+  typingWrap: {
+    paddingHorizontal: chatTheme.spacing.md,
+    marginBottom: chatTheme.spacing.lg,
+    alignItems: 'flex-start',
+  },
+  typingBubble: {
+    paddingHorizontal: chatTheme.spacing.md,
+    paddingVertical: chatTheme.spacing.sm,
+    backgroundColor: chatTheme.colors.surface,
+    borderRadius: chatTheme.radius.lg,
+    borderBottomLeftRadius: 6,
+    marginLeft: 34, // align with assistant bubbles (avatar offset)
+  },
+  suggestions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: chatTheme.spacing.md,
+    paddingBottom: chatTheme.spacing.sm,
+  },
+  chip: {
+    paddingHorizontal: chatTheme.spacing.md,
+    paddingVertical: chatTheme.spacing.sm,
+    backgroundColor: chatTheme.colors.surface,
+    borderRadius: chatTheme.radius.pill,
+    marginRight: chatTheme.spacing.sm,
+    marginBottom: chatTheme.spacing.sm,
+  },
+  chipText: {
+    fontSize: chatTheme.typography.caption,
+    color: chatTheme.colors.text,
+  },
+});
 
 export default AIChat;

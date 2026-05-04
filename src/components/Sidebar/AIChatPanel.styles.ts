@@ -1,42 +1,30 @@
 import { StyleSheet } from 'react-native';
 
-/** Minimal デザイン用のカラートークン */
-export const palette = {
-  bg: '#FFFFFF',
-  bgSubtle: '#FAFAFA',
+export const COLORS = {
+  background: '#FFFFFF',
+  surface: '#FFFFFF',
+  surfaceAlt: '#F6F6F7',
   border: '#ECECEE',
   borderStrong: '#E2E2E5',
-  text: '#1A1A1F',
-  textSubtle: '#5B5B66',
-  textMuted: '#9A9AA3',
-  accent: '#2F6FEB',
-  accentText: '#FFFFFF',
-  bubbleUserBg: '#1A1A1F',
-  bubbleUserText: '#FFFFFF',
-  bubbleAIBg: '#F5F5F7',
-  bubbleAIText: '#1A1A1F',
+  text: '#111113',
+  textSub: '#5A5A60',
+  muted: '#9A9AA2',
+  primary: '#111113',
+  primaryDisabled: '#C9C9CE',
+  online: '#22C55E',
 };
 
-const radius = {
-  sm: 8,
-  md: 12,
-  lg: 16,
+const RADIUS = {
+  bubble: 14,
+  bubbleSharp: 4,
   pill: 999,
-};
-
-const space = {
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
-  xxl: 24,
+  input: 12,
 };
 
 export const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: palette.bg,
+    backgroundColor: COLORS.background,
   },
 
   /* Header */
@@ -44,258 +32,200 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: space.lg,
-    paddingTop: space.lg,
-    paddingBottom: space.md,
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 14,
+    backgroundColor: COLORS.background,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
   },
-  headerDot: {
-    width: 8,
-    height: 8,
-    borderRadius: radius.pill,
-    backgroundColor: palette.accent,
-    marginRight: space.sm,
+  headerTexts: {
+    marginLeft: 12,
+    flex: 1,
   },
   headerTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: palette.text,
-    letterSpacing: 0.2,
+    color: COLORS.text,
+    letterSpacing: 0.1,
   },
-  headerActions: {
+  headerStatusRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginTop: 3,
   },
-  iconBtn: {
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 6,
+  },
+  headerStatus: {
+    fontSize: 11.5,
+    color: COLORS.textSub,
+    letterSpacing: 0.2,
+  },
+  headerAction: {
     width: 32,
     height: 32,
-    borderRadius: radius.sm,
+    borderRadius: RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: space.xs,
   },
-  iconBtnPressed: {
-    backgroundColor: palette.bgSubtle,
-  },
-  iconGlyph: {
+  headerActionText: {
     fontSize: 18,
-    color: palette.textSubtle,
-    lineHeight: 20,
+    color: COLORS.muted,
+    marginTop: -4,
   },
 
   divider: {
     height: 1,
-    backgroundColor: palette.border,
-    marginHorizontal: space.lg,
+    backgroundColor: COLORS.border,
+    marginHorizontal: 0,
   },
 
-  /* List */
-  listContent: {
-    paddingHorizontal: space.lg,
-    paddingTop: space.lg,
-    paddingBottom: space.md,
+  /* Messages */
+  messages: {
+    flex: 1,
+    backgroundColor: COLORS.background,
   },
-
-  /* Bubble */
-  bubbleRow: {
+  messagesContent: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
+  },
+  messageRow: {
     flexDirection: 'row',
-    marginBottom: space.lg,
     alignItems: 'flex-end',
+    marginBottom: 12,
+    maxWidth: '100%',
   },
-  bubbleRowUser: {
+  messageRowUser: {
     justifyContent: 'flex-end',
   },
-  bubbleRowAI: {
+  messageRowAssistant: {
     justifyContent: 'flex-start',
   },
-  bubbleColumn: {
-    maxWidth: '82%',
-  },
-  avatar: {
-    width: 26,
-    height: 26,
-    borderRadius: radius.pill,
-    backgroundColor: palette.bgSubtle,
-    borderWidth: 1,
-    borderColor: palette.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: space.sm,
-  },
-  avatarText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: palette.textSubtle,
-    letterSpacing: 0.5,
-  },
+
   bubble: {
-    paddingVertical: space.md - 2,
-    paddingHorizontal: space.md + 2,
-    borderRadius: radius.lg,
+    maxWidth: '78%',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: RADIUS.bubble,
+    marginHorizontal: 8,
+  },
+  bubbleAssistant: {
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderBottomLeftRadius: RADIUS.bubbleSharp,
   },
   bubbleUser: {
-    backgroundColor: palette.bubbleUserBg,
-    borderTopRightRadius: radius.sm,
-  },
-  bubbleAI: {
-    backgroundColor: palette.bubbleAIBg,
-    borderTopLeftRadius: radius.sm,
+    backgroundColor: COLORS.surfaceAlt,
+    borderBottomRightRadius: RADIUS.bubbleSharp,
   },
   bubbleText: {
     fontSize: 14,
     lineHeight: 20,
   },
+  bubbleTextAssistant: {
+    color: COLORS.text,
+  },
   bubbleTextUser: {
-    color: palette.bubbleUserText,
+    color: COLORS.text,
   },
-  bubbleTextAI: {
-    color: palette.bubbleAIText,
+
+  /* Avatar */
+  avatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  timestamp: {
-    fontSize: 10,
-    color: palette.textMuted,
-    marginTop: space.xs,
+  avatarAssistant: {
+    backgroundColor: COLORS.primary,
   },
-  timestampLeft: {
-    textAlign: 'left',
-    marginLeft: space.xs,
+  avatarUser: {
+    backgroundColor: COLORS.surfaceAlt,
+    borderWidth: 1,
+    borderColor: COLORS.borderStrong,
   },
-  timestampRight: {
-    textAlign: 'right',
-    marginRight: space.xs,
+  avatarText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  avatarTextAssistant: {
+    color: COLORS.surface,
+  },
+  avatarTextUser: {
+    color: COLORS.text,
   },
 
   /* Typing */
-  typingBubble: {
+  typingRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingVertical: 2,
   },
-  typingText: {
-    marginLeft: space.sm,
-    fontSize: 13,
-    color: palette.textSubtle,
-  },
-
-  /* Empty state */
-  emptyWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: space.xl,
-  },
-  emptyBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.pill,
-    backgroundColor: palette.bgSubtle,
-    borderWidth: 1,
-    borderColor: palette.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: space.md,
-  },
-  emptyBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: palette.textSubtle,
-    letterSpacing: 0.6,
-  },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: palette.text,
-    marginBottom: space.xs,
-  },
-  emptySubtitle: {
-    fontSize: 13,
-    color: palette.textMuted,
-    textAlign: 'center',
-    lineHeight: 19,
-    marginBottom: space.xl,
-    maxWidth: 280,
-  },
-  suggestRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-  },
-  suggestChip: {
-    paddingVertical: space.sm,
-    paddingHorizontal: space.md,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: palette.borderStrong,
-    backgroundColor: palette.bg,
-    marginRight: space.sm,
-    marginBottom: space.sm,
-  },
-  suggestChipPressed: {
-    backgroundColor: palette.bgSubtle,
-  },
-  suggestChipText: {
-    fontSize: 12,
-    color: palette.textSubtle,
+  typingDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.muted,
+    marginHorizontal: 2,
   },
 
-  /* Composer */
-  composerWrap: {
-    paddingHorizontal: space.lg,
-    paddingTop: space.sm,
-    paddingBottom: space.lg,
-    borderTopWidth: 1,
-    borderTopColor: palette.border,
-    backgroundColor: palette.bg,
-  },
-  composer: {
+  /* Input */
+  inputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    backgroundColor: palette.bgSubtle,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: Platform.select ? 14 : 14,
+    backgroundColor: COLORS.background,
+  },
+  inputWrap: {
+    flex: 1,
+    minHeight: 44,
+    maxHeight: 120,
     borderWidth: 1,
-    borderColor: palette.border,
-    borderRadius: radius.lg,
-    paddingVertical: space.sm,
-    paddingHorizontal: space.md,
+    borderColor: COLORS.borderStrong,
+    borderRadius: RADIUS.input,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: COLORS.surface,
+    justifyContent: 'center',
   },
   input: {
-    flex: 1,
     fontSize: 14,
     lineHeight: 20,
-    color: palette.text,
-    maxHeight: 120,
-    paddingVertical: space.xs,
-    paddingHorizontal: 0,
+    color: COLORS.text,
+    padding: 0,
+    margin: 0,
   },
-  sendBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.pill,
-    backgroundColor: palette.accent,
+  sendButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: space.sm,
+    marginLeft: 10,
   },
-  sendBtnPressed: {
-    opacity: 0.85,
+  sendButtonDisabled: {
+    backgroundColor: COLORS.primaryDisabled,
   },
-  sendBtnDisabled: {
-    backgroundColor: palette.borderStrong,
-  },
-  sendGlyph: {
-    color: palette.accentText,
-    fontSize: 16,
+  sendButtonIcon: {
+    color: COLORS.surface,
+    fontSize: 18,
     fontWeight: '700',
-    lineHeight: 18,
-  },
-  sendGlyphDisabled: {
-    color: palette.bg,
-  },
-  footnote: {
-    marginTop: space.sm,
-    fontSize: 11,
-    color: palette.textMuted,
-    textAlign: 'center',
+    marginTop: -2,
   },
 });
+
+import { Platform } from 'react-native';

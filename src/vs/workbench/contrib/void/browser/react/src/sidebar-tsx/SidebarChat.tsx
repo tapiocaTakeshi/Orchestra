@@ -1706,8 +1706,8 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 					textOverflow: 'ellipsis',
 					whiteSpace: 'normal',
 					wordBreak: 'break-word',
-					maxHeight: '3.2em',
-					lineHeight: '1.4em',
+					maxHeight: '2.8em',
+					lineHeight: '1.35em',
 				}}
 				title={chatMessage.displayContent}
 			>
@@ -1803,7 +1803,7 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 		ref={stickyRef}
 		className={`
         group sticky top-0 w-full max-w-full rounded-lg overflow-hidden
-        ${mode === 'edit' ? 'pl-0 pr-0 py-0' : 'pl-3 pr-8 py-1.5'}
+        ${mode === 'edit' ? 'pl-0 pr-0 py-0' : 'pl-2.5 pr-7 py-1'}
 
         ${isCheckpointGhost && !isMsgAfterCheckpoint ? 'opacity-50 pointer-events-none' : ''}
     `}
@@ -1815,7 +1815,7 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 		// open input card participates in the stack just like a collapsed
 		// display card.
 		style={{
-			maxHeight: mode === 'display' ? '4.4em' : undefined,
+			maxHeight: mode === 'display' ? '3.6em' : undefined,
 			background: mode === 'display'
 				? (isActiveTop
 					? 'color-mix(in srgb, var(--void-bg-1) 92%, transparent)'
@@ -1853,7 +1853,7 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 			className={`
             text-left max-w-full
             ${mode === 'edit' ? ''
-					: mode === 'display' ? 'flex flex-col text-void-fg-1 overflow-hidden cursor-pointer text-[13px] leading-[1.4]' : ''
+					: mode === 'display' ? 'flex flex-col text-void-fg-1 overflow-hidden cursor-pointer text-[12.5px] leading-[1.35]' : ''
 				}
         `}
 			onClick={() => { if (mode === 'display') { onOpenEdit() } }}
@@ -2169,22 +2169,32 @@ prose
 prose-sm
 break-words
 prose-p:block
-prose-hr:my-4
-prose-pre:my-2
+prose-p:my-1.5
+prose-hr:my-3
+prose-pre:my-1.5
 marker:text-inherit
 prose-ol:list-outside
 prose-ol:list-decimal
+prose-ol:my-1.5
 prose-ul:list-outside
 prose-ul:list-disc
+prose-ul:my-1.5
 prose-li:my-0
 prose-code:before:content-none
 prose-code:after:content-none
 prose-headings:prose-sm
 prose-headings:font-bold
+prose-h1:my-2.5
+prose-h2:my-2.5
+prose-h3:my-2
+prose-h4:my-1.5
 
-prose-p:leading-normal
-prose-ol:leading-normal
-prose-ul:leading-normal
+prose-p:leading-snug
+prose-ol:leading-snug
+prose-ul:leading-snug
+
+[&>:first-child]:!mt-0
+[&>:last-child]:!mb-0
 
 max-w-none
 '
@@ -2326,25 +2336,127 @@ const FlowIndicator = ({ messages, isRunning, reasoningSoFar, displayContentSoFa
 		</div>
 	);
 };
+// 各フローを Cursor 風に 1 件ずつ折りたためるカード。
+// `DivisionOrchestrationComponent` と `FlowReviewComponent` で共有。
+const flowRoleLabel: Record<string, string> = {
+	leader: 'リーダー',
+	coder: 'コーダー',
+	planner: 'プランナー',
+	search: '検索',
+	research: 'リサーチ',
+	design: 'デザイン',
+	writing: 'ライティング',
+	ideaman: 'アイデア',
+	filesearch: 'ファイル検索',
+	image: 'イメージ',
+	review: 'レビュー',
+}
+
+type CollapsibleFlowCardProps = {
+	title: React.ReactNode
+	roleLabel?: React.ReactNode
+	isStreaming?: boolean
+	defaultOpen?: boolean
+	rightAction?: React.ReactNode
+	children: React.ReactNode
+}
+
+const CollapsibleFlowCard = ({
+	title,
+	roleLabel,
+	isStreaming,
+	defaultOpen = false,
+	rightAction,
+	children,
+}: CollapsibleFlowCardProps) => {
+	const [isOpen, setIsOpen] = useState(defaultOpen)
+
+	// ストリーミングが終わった瞬間は開いていれば閉じてあげる(完了済み履歴を畳む)。
+	const prevStreamingRef = useRef(isStreaming)
+	useEffect(() => {
+		if (prevStreamingRef.current && !isStreaming) setIsOpen(false)
+		prevStreamingRef.current = isStreaming
+	}, [isStreaming])
+
+	return (
+		<div className='rounded-md border border-void-border-2 bg-void-bg-2/60 overflow-hidden'>
+			<div
+				className='flex items-center gap-1.5 px-2 py-1 cursor-pointer select-none hover:bg-void-bg-3/60 transition-colors min-h-[24px]'
+				onClick={() => setIsOpen(o => !o)}
+				role='button'
+				tabIndex={0}
+				aria-expanded={isOpen}
+				onKeyDown={(e) => {
+					if (e.key === 'Enter' || e.key === ' ') {
+						e.preventDefault()
+						setIsOpen(o => !o)
+					}
+				}}
+			>
+				<ChevronRight
+					className={`h-3 w-3 text-void-fg-4 transition-transform duration-150 flex-shrink-0 ${isOpen ? 'rotate-90' : ''}`}
+				/>
+				<span className='text-[12px] text-void-fg-2 font-medium truncate flex-1 min-w-0'>
+					{title}
+				</span>
+				{roleLabel && (
+					<span className='text-[10px] text-void-fg-4 px-1.5 py-0.5 rounded bg-void-bg-3 leading-none flex-shrink-0'>
+						{roleLabel}
+					</span>
+				)}
+				{isStreaming && (
+					<Loader2 className='h-3 w-3 text-void-fg-3 animate-spin flex-shrink-0' />
+				)}
+				{rightAction && (
+					<div className='flex-shrink-0' onClick={(e) => e.stopPropagation()}>
+						{rightAction}
+					</div>
+				)}
+			</div>
+			<div
+				className={`overflow-hidden transition-all duration-150 ${isOpen ? 'opacity-100' : 'max-h-0 opacity-0'}`}
+			>
+				<div className='px-2 py-1 border-t border-void-border-2/60'>
+					{children}
+				</div>
+			</div>
+		</div>
+	)
+}
+
 const DivisionOrchestrationComponent = ({ response, chatMessageLocation }: { response: any, chatMessageLocation: ChatMessageLocation }) => {
 	const tasks = response.tasks || [];
 
 	return (
-		<div className="flex flex-col gap-2 my-1">
-			{tasks.map((task: any, i: number) => (
-				<div key={i}>
-					{task.output ? (
-						<ProseWrapper>
-							<ChatMarkdownRender
-								string={task.output}
-								chatMessageLocation={chatMessageLocation}
-								isApplyEnabled={true}
-								isLinkDetectionEnabled={true}
-							/>
-						</ProseWrapper>
-					) : null}
-				</div>
-			))}
+		<div className='flex flex-col gap-1.5 my-1'>
+			{tasks.map((task: any, i: number) => {
+				const role = (task.role || '').toString().toLowerCase()
+				const roleLabel = flowRoleLabel[role] ?? task.role
+				const hasOutput = !!task.output && !!String(task.output).trim()
+				const isLast = i === tasks.length - 1
+				return (
+					<CollapsibleFlowCard
+						key={task.taskId || i}
+						title={task.title || `ステップ ${i + 1}`}
+						roleLabel={roleLabel}
+						isStreaming={!hasOutput}
+						defaultOpen={isLast && !hasOutput}
+					>
+						{hasOutput ? (
+							<SmallProseWrapper>
+								<ChatMarkdownRender
+									string={task.output}
+									chatMessageLocation={chatMessageLocation}
+									isApplyEnabled={true}
+									isLinkDetectionEnabled={true}
+								/>
+							</SmallProseWrapper>
+						) : (
+							<div className='text-[11px] text-void-fg-4 py-0.5'>出力を待機中...</div>
+						)}
+					</CollapsibleFlowCard>
+				)
+			})}
 		</div>
 	);
 };
@@ -2565,7 +2677,7 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 		&& !hasLaterVisibleMessage
 		&& looksLikeAssistantQuestion(chatMessage.displayContent || '')
 
-	return <div className="py-1">
+	return <div className="py-0.5">
 		{/* reasoning token */}
 		{hasReasoning &&
 			<div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
@@ -3863,7 +3975,6 @@ const FlowReviewComponent = ({ chatMessage, isCheckpointGhost }: {
 		return initial
 	})
 
-	const [activeTab, setActiveTab] = useState(flowOutputs[0]?.mdFileName || '')
 	const [isEditing, setIsEditing] = useState(false)
 
 	const { status } = chatMessage
@@ -3895,90 +4006,77 @@ const FlowReviewComponent = ({ chatMessage, isCheckpointGhost }: {
 		} catch (e) { console.error('Error rejecting flow review:', e) }
 	}, [chatThreadsService])
 
-	const activeOutput = flowOutputs.find(o => o.mdFileName === activeTab) || flowOutputs[0]
-
 	return (
-		<div className={`${isCheckpointGhost ? 'opacity-50 pointer-events-none' : ''} my-2`}>
-			{/* Tabs */}
-			{flowOutputs.length > 1 && (
-				<div className="flex gap-1 pb-1 flex-wrap">
-					{flowOutputs.map(o => (
-						<button
+		<div className={`${isCheckpointGhost ? 'opacity-50 pointer-events-none' : ''} my-1.5`}>
+			{/* Accordion: 各フロー出力を 1 件ずつ折りたためる */}
+			<div className='flex flex-col gap-1.5'>
+				{flowOutputs.map((o, i) => {
+					const role = (o.role || '').toString().toLowerCase()
+					const roleLabel = flowRoleLabel[role] ?? o.role
+					const value = editedContents[o.mdFileName] ?? o.mdContent
+					return (
+						<CollapsibleFlowCard
 							key={o.mdFileName}
-							onClick={() => setActiveTab(o.mdFileName)}
-							className={`text-[11px] px-2 py-0.5 rounded cursor-pointer ${
-								activeTab === o.mdFileName
-									? 'text-void-fg-1 bg-void-bg-3'
-									: 'text-void-fg-4 hover:text-void-fg-2'
-							}`}
+							title={o.mdFileName}
+							roleLabel={roleLabel}
+							defaultOpen={i === 0}
 						>
-							{o.mdFileName}
-						</button>
-					))}
-				</div>
-			)}
-
-			{flowOutputs.length === 1 && (
-				<div className="text-void-fg-3 text-[12px] pb-1">{activeOutput?.mdFileName}</div>
-			)}
-
-			{/* Content */}
-			{activeOutput && (
-				status === 'pending' && isEditing ? (
-					<textarea
-						className="w-full min-h-[200px] p-2 text-[12px] font-mono bg-void-bg-1 text-void-fg-2 border border-void-border-1 rounded resize-y outline-none"
-						value={editedContents[activeOutput.mdFileName] ?? activeOutput.mdContent}
-						onChange={(e) => {
-							setEditedContents(prev => ({ ...prev, [activeOutput.mdFileName]: e.target.value }))
-						}}
-					/>
-				) : (
-					<div className="pb-1">
-						<ProseWrapper>
-							<ChatMarkdownRender
-								string={editedContents[activeOutput.mdFileName] ?? activeOutput.mdContent}
-								chatMessageLocation={{ threadId: chatThreadsService.state.currentThreadId, messageIdx: 0 }}
-								isApplyEnabled={true}
-								isLinkDetectionEnabled={true}
-							/>
-						</ProseWrapper>
-					</div>
-				)
-			)}
+							{status === 'pending' && isEditing ? (
+								<textarea
+									className='w-full min-h-[160px] p-2 text-[12px] font-mono bg-void-bg-1 text-void-fg-2 border border-void-border-1 rounded resize-y outline-none'
+									value={value}
+									onChange={(e) => {
+										setEditedContents(prev => ({ ...prev, [o.mdFileName]: e.target.value }))
+									}}
+								/>
+							) : (
+								<SmallProseWrapper>
+									<ChatMarkdownRender
+										string={value}
+										chatMessageLocation={{ threadId: chatThreadsService.state.currentThreadId, messageIdx: 0 }}
+										isApplyEnabled={true}
+										isLinkDetectionEnabled={true}
+									/>
+								</SmallProseWrapper>
+							)}
+						</CollapsibleFlowCard>
+					)
+				})}
+			</div>
 
 			{/* Progress */}
-			<div className="text-void-fg-4 text-[10px] py-0.5">{currentIdx + 1}/{totalTasks}</div>
+			<div className='text-void-fg-4 text-[10px] py-0.5'>{currentIdx + 1}/{totalTasks}</div>
 
 			{/* Actions */}
 			{status === 'pending' && (
-				<div className="flex gap-2 pt-1">
+				<div className='flex gap-2 pt-1'>
 					<button
 						onClick={onApprove}
-						className="text-[12px] text-void-fg-3 hover:text-void-fg-1 cursor-pointer"
+						className='text-[12px] text-void-fg-3 hover:text-void-fg-1 cursor-pointer'
 					>
 						承認して実行
 					</button>
-					<span className="text-void-fg-4 text-[12px]">|</span>
+					<span className='text-void-fg-4 text-[12px]'>|</span>
 					<button
 						onClick={() => setIsEditing(!isEditing)}
-						className="text-[12px] text-void-fg-3 hover:text-void-fg-1 cursor-pointer"
+						className='text-[12px] text-void-fg-3 hover:text-void-fg-1 cursor-pointer'
 					>
 						{isEditing ? 'プレビュー' : '編集'}
 					</button>
-					<span className="text-void-fg-4 text-[12px]">|</span>
+					<span className='text-void-fg-4 text-[12px]'>|</span>
 					<button
 						onClick={onReject}
-						className="text-[12px] text-void-fg-3 hover:text-void-fg-1 cursor-pointer"
+						className='text-[12px] text-void-fg-3 hover:text-void-fg-1 cursor-pointer'
 					>
 						やり直す
 					</button>
 				</div>
 			)}
 			{status === 'approved' && (
-				<div className="text-[11px] text-void-fg-4">承認済み</div>
+				<div className='text-[11px] text-void-fg-4'>承認済み</div>
 			)}
 			{status === 'rejected' && (
-				<div className="text-[11px] text-void-fg-4">却下</div>
+				<div className='text-[11px] text-void-fg-4'>却下</div>
 			)}
 		</div>
 	)

@@ -24,3 +24,7 @@ export const VOID_REJECT_FILE_ACTION_ID = 'void.rejectFile'
 export const VOID_ACCEPT_ALL_DIFFS_ACTION_ID = 'void.acceptAllDiffs'
 
 export const VOID_REJECT_ALL_DIFFS_ACTION_ID = 'void.rejectAllDiffs'
+
+// Editor の赤波線(エラー/警告)上で表示する Quick Fix「Fix with Agent」のコマンドID。
+// 押すと該当エラーの内容と周辺コードをチャットへ転送して即ストリーミングを開始する。
+export const VOID_FIX_WITH_AGENT_ACTION_ID = 'void.fixWithAgent'

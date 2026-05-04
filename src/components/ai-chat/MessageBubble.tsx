@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { aiChatTheme as t } from './theme';
+import { colors, radius, spacing, typography } from './theme';
 
-export type ChatRole = 'user' | 'assistant' | 'system';
+export type ChatRole = 'user' | 'assistant';
 
 export interface ChatMessage {
   id: string;
@@ -18,50 +18,53 @@ interface Props {
 const formatTime = (ts?: number) => {
   if (!ts) return '';
   const d = new Date(ts);
-  return `${d.getHours().toString().padStart(2, '0')}:${d
-    .getMinutes()
-    .toString()
-    .padStart(2, '0')}`;
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
 };
 
 export const MessageBubble: React.FC<Props> = ({ message }) => {
   const isUser = message.role === 'user';
-  const isSystem = message.role === 'system';
-
-  if (isSystem) {
-    return (
-      <View style={styles.systemRow}>
-        <Text style={styles.systemText}>{message.content}</Text>
-      </View>
-    );
-  }
 
   return (
-    <View style={[styles.row, isUser ? styles.rowUser : styles.rowAi]}>
+    <View
+      style={[
+        styles.row,
+        { justifyContent: isUser ? 'flex-end' : 'flex-start' },
+      ]}
+    >
       {!isUser && (
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>AI</Text>
+          <Text style={styles.avatarLabel}>AI</Text>
         </View>
       )}
-      <View style={styles.bubbleWrap}>
+
+      <View style={{ maxWidth: '78%' }}>
         <View
           style={[
             styles.bubble,
-            isUser ? styles.bubbleUser : styles.bubbleAi,
+            isUser ? styles.bubbleUser : styles.bubbleAssistant,
           ]}
         >
           <Text
             style={[
-              styles.bubbleText,
-              isUser ? styles.bubbleUserText : styles.bubbleAiText,
+              typography.body,
+              isUser ? styles.textUser : styles.textAssistant,
             ]}
           >
             {message.content}
           </Text>
         </View>
-        <Text style={[styles.time, isUser ? styles.timeRight : styles.timeLeft]}>
-          {formatTime(message.createdAt)}
-        </Text>
+        {message.createdAt ? (
+          <Text
+            style={[
+              styles.time,
+              { textAlign: isUser ? 'right' : 'left' },
+            ]}
+          >
+            {formatTime(message.createdAt)}
+          </Text>
+        ) : null}
       </View>
     </View>
   );
@@ -70,78 +73,49 @@ export const MessageBubble: React.FC<Props> = ({ message }) => {
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
-    marginBottom: t.spacing(3),
     alignItems: 'flex-end',
-  },
-  rowUser: {
-    justifyContent: 'flex-end',
-  },
-  rowAi: {
-    justifyContent: 'flex-start',
+    marginVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
   },
   avatar: {
     width: 28,
     height: 28,
-    borderRadius: 14,
-    backgroundColor: t.color.accentSoft,
+    borderRadius: radius.pill,
+    backgroundColor: colors.accentSoft,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: t.spacing(2),
+    marginRight: spacing.sm,
   },
-  avatarText: {
-    fontSize: t.font.xs,
+  avatarLabel: {
+    fontSize: 10,
     fontWeight: '700',
-    color: t.color.accent,
+    color: colors.accent,
     letterSpacing: 0.5,
   },
-  bubbleWrap: {
-    maxWidth: '78%',
-  },
   bubble: {
-    paddingHorizontal: t.spacing(3),
-    paddingVertical: t.spacing(2.5),
-    borderRadius: t.radius.lg,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.lg,
   },
   bubbleUser: {
-    backgroundColor: t.color.bubbleUser,
-    borderBottomRightRadius: t.radius.sm,
+    backgroundColor: colors.accent,
+    borderTopRightRadius: 4,
   },
-  bubbleAi: {
-    backgroundColor: t.color.bubbleAi,
-    borderBottomLeftRadius: t.radius.sm,
+  bubbleAssistant: {
+    backgroundColor: colors.surfaceAlt,
+    borderTopLeftRadius: 4,
   },
-  bubbleText: {
-    fontSize: t.font.md,
-    lineHeight: 20,
+  textUser: {
+    color: colors.accentText,
   },
-  bubbleUserText: {
-    color: t.color.bubbleUserText,
-  },
-  bubbleAiText: {
-    color: t.color.bubbleAiText,
+  textAssistant: {
+    color: colors.text,
   },
   time: {
-    fontSize: t.font.xs,
-    color: t.color.textSubtle,
+    ...typography.caption,
     marginTop: 4,
-  },
-  timeRight: {
-    textAlign: 'right',
-  },
-  timeLeft: {
-    textAlign: 'left',
-  },
-  systemRow: {
-    alignItems: 'center',
-    marginVertical: t.spacing(2),
-  },
-  systemText: {
-    fontSize: t.font.xs,
-    color: t.color.textSubtle,
-    backgroundColor: t.color.surfaceAlt,
-    paddingHorizontal: t.spacing(3),
-    paddingVertical: 4,
-    borderRadius: t.radius.pill,
-    overflow: 'hidden',
+    paddingHorizontal: 4,
   },
 });
+
+export default MessageBubble;

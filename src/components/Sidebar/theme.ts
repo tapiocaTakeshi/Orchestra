@@ -1,39 +1,58 @@
-// Minimal テーマトークン。既存のテーマがある場合はここを薄いラッパーに置き換える。
-export const sidebarTheme = {
-  colors: {
-    bg: '#FFFFFF',
-    surface: '#FAFAFA',
-    surfaceMuted: '#F4F4F5',
-    border: '#ECECEC',
-    borderStrong: '#D4D4D8',
-    text: '#111111',
-    textMuted: '#6B7280',
-    textSubtle: '#9CA3AF',
-    accent: '#111111',
-    bubbleUser: '#F2F2F2',
-    bubbleAssistant: 'transparent',
-    placeholder: '#B5B5B5',
-  },
-  spacing: {
-    xs: 4,
-    sm: 8,
-    md: 12,
-    lg: 16,
-    xl: 24,
-    xxl: 32,
-  },
-  radius: {
-    sm: 8,
-    md: 10,
-    lg: 14,
-    pill: 999,
-  },
-  font: {
-    title: 15,
-    body: 14,
-    small: 12,
-    micro: 11,
-  },
+// Minimal テーマトークン。色やサイズはここに集約し、
+// 各コンポーネントから参照することで一貫したデザインを保つ。
+
+export const chatColors = {
+  // 背景
+  surface: '#FFFFFF',
+  surfaceMuted: '#F7F7F8',
+  surfaceSunken: '#FAFAFA',
+
+  // 線
+  border: '#ECECEE',
+  borderStrong: '#DCDCE0',
+
+  // テキスト
+  textPrimary: '#111114',
+  textSecondary: '#5B5B66',
+  textMuted: '#9A9AA5',
+  textOnAccent: '#FFFFFF',
+
+  // アクセント（Minimal: 1色のみ）
+  accent: '#111114',
+  accentSoft: '#1F1F25',
+  accentDisabled: '#D4D4DA',
+
+  // 状態
+  online: '#22C55E',
+  shadow: 'rgba(17, 17, 20, 0.06)',
+
+  // ロール別バブル
+  userBubble: '#111114',
+  userBubbleText: '#FFFFFF',
+  aiBubble: '#F2F2F4',
+  aiBubbleText: '#111114',
 } as const;
 
-export type SidebarTheme = typeof sidebarTheme;
+export const chatSpacing = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
+  xxl: 32,
+} as const;
+
+export const chatRadius = {
+  sm: 8,
+  md: 12,
+  lg: 16,
+  pill: 999,
+} as const;
+
+export const chatTypography = {
+  title: { fontSize: 15, fontWeight: '600' as const, letterSpacing: 0.1 },
+  subtitle: { fontSize: 11, fontWeight: '400' as const, letterSpacing: 0.2 },
+  body: { fontSize: 14, fontWeight: '400' as const, lineHeight: 20 },
+  meta: { fontSize: 11, fontWeight: '500' as const, letterSpacing: 0.3 },
+  input: { fontSize: 14, fontWeight: '400' as const, lineHeight: 20 },
+};
