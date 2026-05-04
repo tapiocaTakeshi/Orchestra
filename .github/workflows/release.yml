@@ -1,0 +1,247 @@
+name: Release
+
+# タグ ("v*") を push すると 3 OS でビルドし、
+# 成果物を GitHub Release にアップロードする。
+# 手動トリガーも可能 (workflow_dispatch)。
+#
+# 注意:
+# - macOS arm64 ジョブは macos-14 (Apple Silicon) を使う (gulp vscode-darwin-arm64 が必要)。
+# - Windows / Linux は x64 ビルド。arm64 が要るなら matrix を増やす。
+# - 全 OS でフルビルドが走るため 1 回 30〜90 分かかる想定。
+# - 一部 OS だけ自動化したい場合は不要なジョブを削除/コメントアウトする。
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'リリースタグ (例: v1.4.10)。タグが未存在なら作成して push される。'
+        required: true
+        default: 'v0.0.0-test'
+      draft:
+        description: 'ドラフトリリースとして作成する'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+env:
+  ORCHESTRA_REPO: tapiocaTakeshi/Orchestra
+  NPM_CONFIG_LEGACY_PEER_DEPS: 'true'
+  CHILD_CONCURRENCY: '1'
+  # push 時は ref_name (= タグ), workflow_dispatch 時は inputs.tag
+  RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+
+jobs:
+  # ---------- macOS (arm64) ----------
+  build-macos:
+    name: Build macOS (arm64)
+    runs-on: macos-14
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (release-macos)
+        run: npm run release-macos
+
+      - name: Create DMG
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          APP_DIR="$(cd .. && pwd)/VSCode-darwin-arm64"
+          if [ ! -d "$APP_DIR/Orchestra.app" ]; then
+            echo "ERROR: Orchestra.app not found at $APP_DIR"
+            ls -la "$APP_DIR" || true
+            exit 1
+          fi
+          # シンプルな圧縮 DMG (UDZO) を作成
+          hdiutil create \
+            -volname "Orchestra" \
+            -srcfolder "$APP_DIR/Orchestra.app" \
+            -ov \
+            -format UDZO \
+            "artifacts/Orchestra-${RELEASE_TAG}-darwin-arm64.dmg"
+          # zip 版もあると便利なので両方作る
+          (cd "$APP_DIR" && zip -ry "$GITHUB_WORKSPACE/artifacts/Orchestra-${RELEASE_TAG}-darwin-arm64.zip" Orchestra.app)
+          ls -la artifacts/
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: orchestra-macos-arm64
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 7
+
+  # ---------- Windows (x64) ----------
+  build-windows:
+    name: Build Windows (x64)
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (release-windows)
+        run: npm run release-windows
+
+      - name: Package zip
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          $appDir = Resolve-Path "..\VSCode-win32-x64"
+          if (-not (Test-Path "$appDir")) {
+            Write-Error "Build output not found at $appDir"
+          }
+          $tag = "$env:RELEASE_TAG"
+          $zipName = "Orchestra-$tag-win32-x64.zip"
+          Compress-Archive -Path "$appDir\*" -DestinationPath "artifacts\$zipName" -Force
+          Get-ChildItem artifacts
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: orchestra-windows-x64
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 7
+
+  # ---------- Linux (x64) ----------
+  build-linux:
+    name: Build Linux (x64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            libsecret-1-dev \
+            libxkbfile-dev \
+            libkrb5-dev \
+            libx11-dev \
+            libxss-dev \
+            libgbm-dev \
+            libnss3-dev \
+            libgtk-3-dev \
+            fakeroot \
+            rpm
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (release-linux)
+        run: npm run release-linux
+
+      - name: Package tar.gz
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          APP_DIR="$(cd .. && pwd)/VSCode-linux-x64"
+          if [ ! -d "$APP_DIR" ]; then
+            echo "ERROR: build output not found at $APP_DIR"
+            exit 1
+          fi
+          TAG="${RELEASE_TAG}"
+          (cd "$(dirname "$APP_DIR")" && tar -czf "$GITHUB_WORKSPACE/artifacts/Orchestra-$TAG-linux-x64.tar.gz" "$(basename "$APP_DIR")")
+          ls -la artifacts/
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: orchestra-linux-x64
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 7
+
+  # ---------- Release ----------
+  release:
+    name: Create GitHub Release
+    needs: [build-macos, build-windows, build-linux]
+    runs-on: ubuntu-latest
+    # 3 OS が全て成功した時だけ実行
+    if: ${{ always() && (needs.build-macos.result == 'success' || needs.build-windows.result == 'success' || needs.build-linux.result == 'success') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List downloaded artifacts
+        run: |
+          ls -la artifacts/
+          echo "---- file sizes ----"
+          du -h artifacts/* || true
+
+      - name: Create / update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${RELEASE_TAG}"
+          echo "Releasing tag: $TAG"
+          DRAFT_FLAG=''
+          if [ "${{ inputs.draft }}" = "true" ]; then
+            DRAFT_FLAG='--draft'
+          fi
+          # リリースが既にあればアセットを上書きアップロード、無ければ作成
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists. Uploading assets (clobber)…"
+            gh release upload "$TAG" artifacts/* --clobber
+          else
+            echo "Creating new release $TAG…"
+            gh release create "$TAG" \
+              --title "Orchestra $TAG" \
+              --generate-notes \
+              $DRAFT_FLAG \
+              artifacts/*
+          fi

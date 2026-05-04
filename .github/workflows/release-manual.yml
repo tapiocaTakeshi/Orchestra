@@ -1,0 +1,70 @@
+name: Release (manual upload)
+
+# CI で全 OS をフルビルドすると 1 〜 2 時間掛かるため、
+# ローカルでビルドした成果物を手動で GitHub Release に紐付けたい場合の
+# 簡易ワークフロー。タグだけ push し、後から `gh release upload` で添付する。
+#
+# 使い方:
+#   1. ローカルで `npm run release-macos` などを実行して artifacts を作成
+#   2. タグを切って push (e.g. `git tag v1.4.10 && git push origin v1.4.10`)
+#   3. このワークフローで「ドラフトリリース」を作成 (workflow_dispatch)
+#   4. ローカルから:
+#        gh release upload v1.4.10 ./Orchestra-darwin-arm64.dmg
+#      でアセットをアップロード
+#   5. GitHub の Releases ページで「Publish」する
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'リリースタグ (例: v1.4.10)'
+        required: true
+      title:
+        description: 'リリースタイトル'
+        required: false
+        default: ''
+      draft:
+        description: 'ドラフトとして作成する'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create empty / draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG='${{ inputs.tag }}'
+          TITLE='${{ inputs.title }}'
+          if [ -z "$TITLE" ]; then TITLE="Orchestra $TAG"; fi
+          DRAFT_FLAG=''
+          if [ "${{ inputs.draft }}" = "true" ]; then
+            DRAFT_FLAG='--draft'
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists. Skipping creation."
+          else
+            gh release create "$TAG" \
+              --title "$TITLE" \
+              --generate-notes \
+              $DRAFT_FLAG
+          fi
+
+      - name: 説明
+        run: |
+          echo "✅ ドラフトリリースを作成しました。"
+          echo "ローカルから以下を実行してアセットをアップロードしてください:"
+          echo ""
+          echo "  gh release upload ${{ inputs.tag }} \\"
+          echo "    Orchestra-darwin-arm64.dmg \\"
+          echo "    Orchestra-win32-x64.zip \\"
+          echo "    Orchestra-linux-x64.tar.gz"

@@ -7,7 +7,6 @@ node_modules/
 .build/
 .vscode/extensions/**/out/
 extensions/**/dist/
-/out*/
 /extensions/**/out/
 build/node_modules
 coverage/
@@ -15,6 +14,7 @@ test_data/
 test-results/
 test-results.xml
 vscode.lsif
+out*/
 vscode.db
 /.profile-oss
 /cli/target
@@ -22,7 +22,7 @@ vscode.db
 product.overrides.json
 *.snap.actual
 .vscode-test
-
+out-build/
 .env
 .history/
 .tmp/
@@ -46,3 +46,9 @@ package.json
 *.crt
 *.p12
 .*
+# 「.*」で全ドット始まりが無視される副作用を打ち消すために、
+# プロジェクトに必要な隠しフォルダを明示的に無視対象から外す。
+!.github/
+!.github/**
+!.gitignore
+!.gitattributes
