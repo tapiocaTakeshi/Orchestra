@@ -147,7 +147,6 @@ jobs:
           set -euo pipefail
           APP_DIR="$(cd .. && pwd)/VSCode-darwin-arm64"
           APP="$APP_DIR/Orchestra.app"
-          FRAMEWORKS="$APP/Contents/Frameworks"
           ENT_DIR="$GITHUB_WORKSPACE/build/azure-pipelines/darwin"
 
           if [ ! -d "$APP" ]; then
@@ -156,12 +155,10 @@ jobs:
             exit 1
           fi
 
-          # 既存の拡張属性 (com.apple.quarantine, com.apple.metadata:* 等) は
-          # 署名後に Notary 検証を弱らせる原因になるので一度クリアする。
+          # 既存の拡張属性 (quarantine 等) は Notary 検証を弱らせるので一度クリア
           xattr -cr "$APP"
 
-          # codesign の共通フラグ。hardened runtime + secure timestamp は notarization 必須。
-          CODESIGN_FLAGS=(
+          CSF=(
             --force
             --options runtime
             --timestamp
@@ -169,84 +166,70 @@ jobs:
             --sign "$MACOS_CODESIGN_IDENTITY"
           )
 
-          echo "::group::Sign embedded dylibs / .so"
-          while IFS= read -r -d '' f; do
-            echo "  $f"
-            codesign "${CODESIGN_FLAGS[@]}" "$f"
-          done < <(find "$APP" -type f \( -name '*.dylib' -o -name '*.so' \) -print0)
-          echo "::endgroup::"
-
-          echo "::group::Sign embedded executables (chrome_crashpad_handler 等)"
-          # Frameworks 配下の non-bundle 実行ファイル (ELF/Mach-O バイナリ) を拾う
-          while IFS= read -r -d '' f; do
-            # 通常ファイルかつ実行可能で、bundle 内 (.app/.framework) 経路ではない
-            if [ -x "$f" ] && [ -f "$f" ]; then
-              case "$f" in
-                *.app/*|*.framework/*) continue ;;
-              esac
-              # Mach-O ヘッダ判定 (cffaedfe / cefaedfe / cffaedfe / cafebabe)
-              MAGIC=$(xxd -p -l 4 "$f" 2>/dev/null || true)
-              case "$MAGIC" in
-                cffaedfe|cefaedfe|feedfacf|feedface|cafebabe)
-                  echo "  $f"
-                  codesign "${CODESIGN_FLAGS[@]}" "$f"
-                  ;;
-              esac
-            fi
-          done < <(find "$FRAMEWORKS" -type f -print0)
-          echo "::endgroup::"
-
-          echo "::group::Sign frameworks"
-          for fw in "$FRAMEWORKS"/*.framework; do
-            [ -d "$fw" ] || continue
-            echo "  $(basename "$fw")"
-            codesign "${CODESIGN_FLAGS[@]}" "$fw"
-          done
-          echo "::endgroup::"
-
-          echo "::group::Sign helper apps with specific entitlements"
-          sign_helper () {
-            local helper="$1" ent_file="$2"
-            if [ -d "$FRAMEWORKS/$helper" ]; then
-              echo "  $helper (entitlements=$ent_file)"
-              codesign "${CODESIGN_FLAGS[@]}" \
-                --entitlements "$ENT_DIR/$ent_file" \
-                "$FRAMEWORKS/$helper"
-            else
-              echo "  (skip: $helper not present)"
-            fi
-          }
-          sign_helper "Orchestra Helper (GPU).app"      helper-gpu-entitlements.plist
-          sign_helper "Orchestra Helper (Renderer).app" helper-renderer-entitlements.plist
-          sign_helper "Orchestra Helper (Plugin).app"   helper-plugin-entitlements.plist
-          echo "::endgroup::"
-
-          echo "::group::Sign remaining helper apps"
-          for helper_app in "$FRAMEWORKS"/*.app; do
-            [ -d "$helper_app" ] || continue
-            base=$(basename "$helper_app")
-            case "$base" in
-              "Orchestra Helper (GPU).app"|"Orchestra Helper (Renderer).app"|"Orchestra Helper (Plugin).app")
-                continue
-                ;;
+          # Mach-O magic 判定 (cffaedfe / cefaedfe / feedfacf / feedface /
+          # cafebabe (universal) / bebafeca (universal byte-swapped))
+          is_macho() {
+            local f="$1"
+            [ -f "$f" ] && [ ! -L "$f" ] || return 1
+            local m
+            m=$(xxd -p -l 4 "$f" 2>/dev/null || true)
+            case "$m" in
+              cffaedfe|cefaedfe|feedfacf|feedface|cafebabe|bebafeca) return 0 ;;
+              *) return 1 ;;
             esac
-            echo "  $base (default entitlements)"
-            codesign "${CODESIGN_FLAGS[@]}" \
-              --entitlements "$ENT_DIR/app-entitlements.plist" \
-              "$helper_app"
-          done
+          }
+
+          # 5 段階の depth-first 署名:
+          #   Phase 1: 全 Mach-O ファイル (.node / .dylib / 実行ファイル) を最深から
+          #   Phase 2: .framework バンドルを最深から
+          #   Phase 3: 入れ子の .app バンドルを最深から (helper は専用 entitlements)
+          #   Phase 4: メイン Contents/MacOS/Electron に entitlements 付き再署名
+          #   Phase 5: トップレベル .app バンドルに entitlements 付き署名
+
+          echo "::group::Phase 1: sign all Mach-O files (depth-first)"
+          SIGNED_COUNT=0
+          while IFS= read -r -d '' f; do
+            if is_macho "$f"; then
+              echo "  $f"
+              codesign "${CSF[@]}" "$f"
+              SIGNED_COUNT=$((SIGNED_COUNT+1))
+            fi
+          done < <(find "$APP" -depth -type f -print0)
+          echo "Phase 1 signed $SIGNED_COUNT Mach-O file(s)."
           echo "::endgroup::"
 
-          echo "::group::Sign main Electron binary"
-          codesign "${CODESIGN_FLAGS[@]}" \
-            --entitlements "$ENT_DIR/app-entitlements.plist" \
+          echo "::group::Phase 2: sign frameworks (depth-first)"
+          while IFS= read -r -d '' fw; do
+            echo "  $fw"
+            codesign "${CSF[@]}" "$fw"
+          done < <(find "$APP" -depth -mindepth 1 -name "*.framework" -type d -print0)
+          echo "::endgroup::"
+
+          echo "::group::Phase 3: sign nested .app bundles (depth-first)"
+          while IFS= read -r -d '' subapp; do
+            base=$(basename "$subapp")
+            case "$base" in
+              "Orchestra Helper (GPU).app")
+                ent="$ENT_DIR/helper-gpu-entitlements.plist" ;;
+              "Orchestra Helper (Renderer).app")
+                ent="$ENT_DIR/helper-renderer-entitlements.plist" ;;
+              "Orchestra Helper (Plugin).app")
+                ent="$ENT_DIR/helper-plugin-entitlements.plist" ;;
+              *)
+                ent="$ENT_DIR/app-entitlements.plist" ;;
+            esac
+            echo "  $base  (entitlements=$(basename "$ent"))"
+            codesign "${CSF[@]}" --entitlements "$ent" "$subapp"
+          done < <(find "$APP" -depth -mindepth 1 -name "*.app" -type d -print0)
+          echo "::endgroup::"
+
+          echo "::group::Phase 4: re-sign main Electron binary with entitlements"
+          codesign "${CSF[@]}" --entitlements "$ENT_DIR/app-entitlements.plist" \
             "$APP/Contents/MacOS/Electron"
           echo "::endgroup::"
 
-          echo "::group::Sign main app bundle"
-          codesign "${CODESIGN_FLAGS[@]}" \
-            --entitlements "$ENT_DIR/app-entitlements.plist" \
-            "$APP"
+          echo "::group::Phase 5: sign main app bundle"
+          codesign "${CSF[@]}" --entitlements "$ENT_DIR/app-entitlements.plist" "$APP"
           echo "::endgroup::"
 
           echo "::group::Verify"
