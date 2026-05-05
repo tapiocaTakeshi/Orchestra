@@ -143,17 +143,116 @@ jobs:
 
       - name: Code sign with Developer ID
         if: env.MACOS_CODESIGN_IDENTITY != ''
-        env:
-          AGENT_BUILDDIRECTORY: ${{ runner.workspace }}
-          AGENT_TEMPDIRECTORY: ${{ runner.temp }}
-          VSCODE_ARCH: arm64
-          CODESIGN_IDENTITY: ${{ secrets.MACOS_CODESIGN_IDENTITY }}
         run: |
           set -euo pipefail
-          # VSCode 標準の electron-osx-sign ベース署名スクリプトを使う。
-          # hardened runtime + entitlements が自動的に付与される。
-          cd build
-          node darwin/sign.js "$AGENT_BUILDDIRECTORY"
+          APP_DIR="$(cd .. && pwd)/VSCode-darwin-arm64"
+          APP="$APP_DIR/Orchestra.app"
+          FRAMEWORKS="$APP/Contents/Frameworks"
+          ENT_DIR="$GITHUB_WORKSPACE/build/azure-pipelines/darwin"
+
+          if [ ! -d "$APP" ]; then
+            echo "::error::$APP not found"
+            ls -la "$APP_DIR" || true
+            exit 1
+          fi
+
+          # 既存の拡張属性 (com.apple.quarantine, com.apple.metadata:* 等) は
+          # 署名後に Notary 検証を弱らせる原因になるので一度クリアする。
+          xattr -cr "$APP"
+
+          # codesign の共通フラグ。hardened runtime + secure timestamp は notarization 必須。
+          CODESIGN_FLAGS=(
+            --force
+            --options runtime
+            --timestamp
+            --keychain "$KEYCHAIN_PATH"
+            --sign "$MACOS_CODESIGN_IDENTITY"
+          )
+
+          echo "::group::Sign embedded dylibs / .so"
+          while IFS= read -r -d '' f; do
+            echo "  $f"
+            codesign "${CODESIGN_FLAGS[@]}" "$f"
+          done < <(find "$APP" -type f \( -name '*.dylib' -o -name '*.so' \) -print0)
+          echo "::endgroup::"
+
+          echo "::group::Sign embedded executables (chrome_crashpad_handler 等)"
+          # Frameworks 配下の non-bundle 実行ファイル (ELF/Mach-O バイナリ) を拾う
+          while IFS= read -r -d '' f; do
+            # 通常ファイルかつ実行可能で、bundle 内 (.app/.framework) 経路ではない
+            if [ -x "$f" ] && [ -f "$f" ]; then
+              case "$f" in
+                *.app/*|*.framework/*) continue ;;
+              esac
+              # Mach-O ヘッダ判定 (cffaedfe / cefaedfe / cffaedfe / cafebabe)
+              MAGIC=$(xxd -p -l 4 "$f" 2>/dev/null || true)
+              case "$MAGIC" in
+                cffaedfe|cefaedfe|feedfacf|feedface|cafebabe)
+                  echo "  $f"
+                  codesign "${CODESIGN_FLAGS[@]}" "$f"
+                  ;;
+              esac
+            fi
+          done < <(find "$FRAMEWORKS" -type f -print0)
+          echo "::endgroup::"
+
+          echo "::group::Sign frameworks"
+          for fw in "$FRAMEWORKS"/*.framework; do
+            [ -d "$fw" ] || continue
+            echo "  $(basename "$fw")"
+            codesign "${CODESIGN_FLAGS[@]}" "$fw"
+          done
+          echo "::endgroup::"
+
+          echo "::group::Sign helper apps with specific entitlements"
+          sign_helper () {
+            local helper="$1" ent_file="$2"
+            if [ -d "$FRAMEWORKS/$helper" ]; then
+              echo "  $helper (entitlements=$ent_file)"
+              codesign "${CODESIGN_FLAGS[@]}" \
+                --entitlements "$ENT_DIR/$ent_file" \
+                "$FRAMEWORKS/$helper"
+            else
+              echo "  (skip: $helper not present)"
+            fi
+          }
+          sign_helper "Orchestra Helper (GPU).app"      helper-gpu-entitlements.plist
+          sign_helper "Orchestra Helper (Renderer).app" helper-renderer-entitlements.plist
+          sign_helper "Orchestra Helper (Plugin).app"   helper-plugin-entitlements.plist
+          echo "::endgroup::"
+
+          echo "::group::Sign remaining helper apps"
+          for helper_app in "$FRAMEWORKS"/*.app; do
+            [ -d "$helper_app" ] || continue
+            base=$(basename "$helper_app")
+            case "$base" in
+              "Orchestra Helper (GPU).app"|"Orchestra Helper (Renderer).app"|"Orchestra Helper (Plugin).app")
+                continue
+                ;;
+            esac
+            echo "  $base (default entitlements)"
+            codesign "${CODESIGN_FLAGS[@]}" \
+              --entitlements "$ENT_DIR/app-entitlements.plist" \
+              "$helper_app"
+          done
+          echo "::endgroup::"
+
+          echo "::group::Sign main Electron binary"
+          codesign "${CODESIGN_FLAGS[@]}" \
+            --entitlements "$ENT_DIR/app-entitlements.plist" \
+            "$APP/Contents/MacOS/Electron"
+          echo "::endgroup::"
+
+          echo "::group::Sign main app bundle"
+          codesign "${CODESIGN_FLAGS[@]}" \
+            --entitlements "$ENT_DIR/app-entitlements.plist" \
+            "$APP"
+          echo "::endgroup::"
+
+          echo "::group::Verify"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          spctl -a -t exec -vvv "$APP" || true
+          echo "::endgroup::"
 
       - name: Ad-hoc sign (fallback)
         if: env.MACOS_CODESIGN_IDENTITY == ''
