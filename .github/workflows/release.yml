@@ -199,31 +199,31 @@ jobs:
           echo "Phase 0 stripped signatures from $STRIPPED Mach-O file(s)."
           echo "::endgroup::"
 
-          # bundle main executable 判定: */Contents/MacOS/<basename(parent of MacOS) without .app>
-          # と */Versions/<v>/<basename(parent of Versions) without .framework>
-          # これらは bundle 署名の一部として再署名されるので Phase 1 から除外。
+          # bundle main executable 判定。Phase 1 ではこれらを除外し、Phase 2/3/4 の
+          # bundle 署名で初めて署名する。
+          # 1. */Contents/MacOS/* 直下のファイルは全て .app の main exec として扱う
+          #    (Electron app は bundle 名 != binary 名なので名前比較は使わない)
+          # 2. *.framework/Versions/<v>/<framework_name> も framework の main lib
           is_bundle_main () {
             local f="$1"
             case "$f" in
               */Contents/MacOS/*)
-                local parent_mac parent_app app_name exe_name
-                parent_mac=$(dirname "$f")          # .../Contents/MacOS
-                parent_app=$(dirname "$(dirname "$parent_mac")")  # .../<X>.app
-                app_name=$(basename "$parent_app" .app)
-                exe_name=$(basename "$f")
-                [ "$exe_name" = "$app_name" ] && return 0
+                return 0
                 ;;
-              */.framework/Versions/*/*|*.framework/Versions/*/*)
-                # .framework/Versions/A/<framework_name> パターン
-                local parent_ver fw fw_name exe_name
-                parent_ver=$(dirname "$f")          # .../Versions/A
-                fw=$(dirname "$(dirname "$parent_ver")")  # .../<X>.framework
-                fw_name=$(basename "$fw" .framework)
-                exe_name=$(basename "$f")
-                # Versions/A/<fw_name> 直下のみ main lib (Helpers/ や Libraries/ は除く)
-                [ "$exe_name" = "$fw_name" ] && [ "$(basename "$parent_ver")" != "Helpers" ] \
-                  && [ "$(basename "$parent_ver")" != "Libraries" ] \
-                  && [ "$(basename "$parent_ver")" != "Resources" ] && return 0
+              *.framework/Versions/*)
+                # f = .../<X>.framework/Versions/<v>/<file>...
+                # f の grandparent が .../<X>.framework/Versions ならファイルは
+                # Versions/<v>/ 直下にいる。さらに basename が framework 名と
+                # 一致すれば main lib。
+                local grand
+                grand=$(dirname "$(dirname "$f")")
+                if [ "$(basename "$grand")" = "Versions" ]; then
+                  local fw fw_name exe_name
+                  fw=$(dirname "$grand")
+                  fw_name=$(basename "$fw" .framework)
+                  exe_name=$(basename "$f")
+                  [ "$exe_name" = "$fw_name" ] && return 0
+                fi
                 ;;
             esac
             return 1
