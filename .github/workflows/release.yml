@@ -42,6 +42,10 @@ jobs:
     name: Build macOS (arm64)
     runs-on: macos-14
     timeout-minutes: 120
+    # @vscode/ripgrep の postinstall が GitHub Releases API を叩いて 403 になるのを回避するため、
+    # ジョブ全体に GITHUB_TOKEN を渡しておく。
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -96,6 +100,8 @@ jobs:
     name: Build Windows (x64)
     runs-on: windows-latest
     timeout-minutes: 120
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -143,6 +149,8 @@ jobs:
     name: Build Linux (x64)
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
