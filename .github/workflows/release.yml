@@ -33,6 +33,9 @@ env:
   ORCHESTRA_REPO: tapiocaTakeshi/Orchestra
   NPM_CONFIG_LEGACY_PEER_DEPS: 'true'
   CHILD_CONCURRENCY: '1'
+  # VSCode のフルビルドはデフォルトの 2GB ヒープでは OOM するため広めに確保する。
+  # ランナーの RAM (mac-14: 7GB / windows/linux: 16GB) より大きい値は意味がないので 6144 程度で十分。
+  NODE_OPTIONS: '--max-old-space-size=6144'
   # push 時は ref_name (= タグ), workflow_dispatch 時は inputs.tag
   RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
 
