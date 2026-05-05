@@ -198,17 +198,60 @@ jobs:
         if: env.MACOS_CODESIGN_IDENTITY != '' && env.MACOS_NOTARIZATION_APPLE_ID != ''
         run: |
           set -euo pipefail
-          echo "Submitting $DMG_PATH to Apple notary service..."
-          xcrun notarytool submit "$DMG_PATH" \
-            --apple-id "$MACOS_NOTARIZATION_APPLE_ID" \
-            --team-id "$MACOS_NOTARIZATION_TEAM_ID" \
-            --password "$MACOS_NOTARIZATION_PASSWORD" \
-            --wait
-          echo "Stapling notarization ticket..."
-          xcrun stapler staple "$DMG_PATH"
-          echo "Verifying..."
-          xcrun stapler validate "$DMG_PATH"
+          echo "::group::Submit to Apple notary service"
+          SUBMIT_OUT=$(mktemp)
+          if ! xcrun notarytool submit "$DMG_PATH" \
+              --apple-id "$MACOS_NOTARIZATION_APPLE_ID" \
+              --team-id "$MACOS_NOTARIZATION_TEAM_ID" \
+              --password "$MACOS_NOTARIZATION_PASSWORD" \
+              --wait \
+              --output-format json \
+              | tee "$SUBMIT_OUT"; then
+            echo "::error::notarytool submit failed."
+            exit 1
+          fi
+          STATUS=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('status',''))" "$SUBMIT_OUT")
+          SUB_ID=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('id',''))" "$SUBMIT_OUT")
+          echo "Submission ID: $SUB_ID"
+          echo "Status:        $STATUS"
+          echo "::endgroup::"
+
+          if [ "$STATUS" != "Accepted" ]; then
+            echo "::group::notarytool log (submission $SUB_ID)"
+            xcrun notarytool log "$SUB_ID" \
+              --apple-id "$MACOS_NOTARIZATION_APPLE_ID" \
+              --team-id "$MACOS_NOTARIZATION_TEAM_ID" \
+              --password "$MACOS_NOTARIZATION_PASSWORD" || true
+            echo "::endgroup::"
+            echo "::error::Notarization rejected (status=$STATUS). 上のログで原因を確認してください。"
+            exit 1
+          fi
+
+          echo "::group::Staple notarization ticket (with retry)"
+          # CloudKit 伝播ラグで最初の数十秒〜数分はチケットが取れず Error 65 になることがある。
+          # 6 回 × 30 秒 = 最大 3 分リトライする。
+          STAPLED=0
+          for attempt in 1 2 3 4 5 6; do
+            if xcrun stapler staple "$DMG_PATH"; then
+              echo "Stapling succeeded on attempt $attempt."
+              STAPLED=1
+              break
+            fi
+            echo "Stapling attempt $attempt failed (CloudKit propagation lag); retry in 30s..."
+            sleep 30
+          done
+
+          if [ "$STAPLED" -ne 1 ]; then
+            echo "::warning::Stapling failed after retries. DMG はオンライン Notarization 済みなので動作はしますが,"
+            echo "::warning::オフライン起動時に Gatekeeper の確認ダイアログが出る可能性があります。"
+            echo "::warning::必要なら後で 'xcrun stapler staple <dmg>' を手動で実行してください (submission ID: $SUB_ID)。"
+          fi
+          echo "::endgroup::"
+
+          echo "::group::Verify"
+          xcrun stapler validate "$DMG_PATH" || true
           spctl -a -t open --context context:primary-signature -vvv "$DMG_PATH" || true
+          echo "::endgroup::"
 
       - name: Cleanup keychain
         if: always() && env.KEYCHAIN_PATH != ''
