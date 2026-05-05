@@ -143,11 +143,16 @@ jobs:
 
       - name: Code sign with Developer ID
         if: env.MACOS_CODESIGN_IDENTITY != ''
+        env:
+          # build/darwin/sign.js が参照する環境変数
+          AGENT_TEMPDIRECTORY: ${{ runner.temp }}
+          VSCODE_ARCH: arm64
+          CODESIGN_IDENTITY: ${{ secrets.MACOS_CODESIGN_IDENTITY }}
+          DEBUG: electron-osx-sign*
         run: |
           set -euo pipefail
           APP_DIR="$(cd .. && pwd)/VSCode-darwin-arm64"
           APP="$APP_DIR/Orchestra.app"
-          ENT_DIR="$GITHUB_WORKSPACE/build/azure-pipelines/darwin"
 
           if [ ! -d "$APP" ]; then
             echo "::error::$APP not found"
@@ -155,125 +160,20 @@ jobs:
             exit 1
           fi
 
-          # 既存の拡張属性 (quarantine 等) は Notary 検証を弱らせるので一度クリア
+          # 拡張属性 (quarantine 等) を全部クリア。これがあると Notary 検証で
+          # 「signature is invalid」になることがある。
           xattr -cr "$APP"
 
-          CSF=(
-            --force
-            --options runtime
-            --timestamp
-            --keychain "$KEYCHAIN_PATH"
-            --sign "$MACOS_CODESIGN_IDENTITY"
-          )
+          # build/darwin/sign.js は引数として "buildDir" (= VSCode-darwin-<arch>
+          # の親ディレクトリ) を受け取る。Microsoft の Azure CI と同じ呼び方。
+          BUILD_DIR="$(cd .. && pwd)"
 
-          # Mach-O magic 判定 (cffaedfe / cefaedfe / feedfacf / feedface /
-          # cafebabe (universal) / bebafeca (universal byte-swapped))
-          is_macho() {
-            local f="$1"
-            [ -f "$f" ] && [ ! -L "$f" ] || return 1
-            local m
-            m=$(xxd -p -l 4 "$f" 2>/dev/null || true)
-            case "$m" in
-              cffaedfe|cefaedfe|feedfacf|feedface|cafebabe|bebafeca) return 0 ;;
-              *) return 1 ;;
-            esac
-          }
+          # sign.js は keychain 名を AGENT_TEMPDIRECTORY/buildagent.keychain で
+          # 探す。本ワークフローも同じパスで作っているため上の env だけで OK。
+          ls -la "$AGENT_TEMPDIRECTORY/buildagent.keychain" || true
 
-          # 5 段階の depth-first 署名:
-          #   Phase 0: 全 Mach-O から既存署名 (build-time ad-hoc 等) を完全に除去
-          #   Phase 1: bundle main executable を除く全 Mach-O を最深から個別署名
-          #   Phase 2: .framework バンドルを最深から (内部の main lib も含めて再署名される)
-          #   Phase 3: 入れ子の .app バンドルを最深から (helper は専用 entitlements)
-          #   Phase 4: トップレベル .app バンドルに entitlements 付き署名
-          #            (Contents/MacOS/Electron はこの段階で唯一署名される)
-
-          echo "::group::Phase 0: strip existing signatures from all Mach-O files"
-          STRIPPED=0
-          while IFS= read -r -d '' f; do
-            if is_macho "$f"; then
-              if codesign --remove-signature "$f" 2>/dev/null; then
-                STRIPPED=$((STRIPPED+1))
-              fi
-            fi
-          done < <(find "$APP" -type f -print0)
-          echo "Phase 0 stripped signatures from $STRIPPED Mach-O file(s)."
-          echo "::endgroup::"
-
-          # bundle main executable 判定。Phase 1 ではこれらを除外し、Phase 2/3/4 の
-          # bundle 署名で初めて署名する。
-          # 1. */Contents/MacOS/* 直下のファイルは全て .app の main exec として扱う
-          #    (Electron app は bundle 名 != binary 名なので名前比較は使わない)
-          # 2. *.framework/Versions/<v>/<framework_name> も framework の main lib
-          is_bundle_main () {
-            local f="$1"
-            case "$f" in
-              */Contents/MacOS/*)
-                return 0
-                ;;
-              *.framework/Versions/*)
-                # f = .../<X>.framework/Versions/<v>/<file>...
-                # f の grandparent が .../<X>.framework/Versions ならファイルは
-                # Versions/<v>/ 直下にいる。さらに basename が framework 名と
-                # 一致すれば main lib。
-                local grand
-                grand=$(dirname "$(dirname "$f")")
-                if [ "$(basename "$grand")" = "Versions" ]; then
-                  local fw fw_name exe_name
-                  fw=$(dirname "$grand")
-                  fw_name=$(basename "$fw" .framework)
-                  exe_name=$(basename "$f")
-                  [ "$exe_name" = "$fw_name" ] && return 0
-                fi
-                ;;
-            esac
-            return 1
-          }
-
-          echo "::group::Phase 1: sign individual Mach-O files (skip bundle main executables)"
-          SIGNED_COUNT=0
-          SKIPPED_COUNT=0
-          while IFS= read -r -d '' f; do
-            if is_macho "$f"; then
-              if is_bundle_main "$f"; then
-                echo "  [skip-main] $f"
-                SKIPPED_COUNT=$((SKIPPED_COUNT+1))
-                continue
-              fi
-              echo "  $f"
-              codesign "${CSF[@]}" "$f"
-              SIGNED_COUNT=$((SIGNED_COUNT+1))
-            fi
-          done < <(find "$APP" -depth -type f -print0)
-          echo "Phase 1 signed $SIGNED_COUNT files (skipped $SKIPPED_COUNT bundle main executables)."
-          echo "::endgroup::"
-
-          echo "::group::Phase 2: sign frameworks (depth-first)"
-          while IFS= read -r -d '' fw; do
-            echo "  $fw"
-            codesign "${CSF[@]}" "$fw"
-          done < <(find "$APP" -depth -mindepth 1 -name "*.framework" -type d -print0)
-          echo "::endgroup::"
-
-          echo "::group::Phase 3: sign nested .app bundles (depth-first)"
-          while IFS= read -r -d '' subapp; do
-            base=$(basename "$subapp")
-            case "$base" in
-              "Orchestra Helper (GPU).app")
-                ent="$ENT_DIR/helper-gpu-entitlements.plist" ;;
-              "Orchestra Helper (Renderer).app")
-                ent="$ENT_DIR/helper-renderer-entitlements.plist" ;;
-              "Orchestra Helper (Plugin).app")
-                ent="$ENT_DIR/helper-plugin-entitlements.plist" ;;
-              *)
-                ent="$ENT_DIR/app-entitlements.plist" ;;
-            esac
-            echo "  $base  (entitlements=$(basename "$ent"))"
-            codesign "${CSF[@]}" --entitlements "$ent" "$subapp"
-          done < <(find "$APP" -depth -mindepth 1 -name "*.app" -type d -print0)
-          echo "::endgroup::"
-
-          echo "::group::Phase 4: sign main app bundle (signs Contents/MacOS/Electron too)"
-          codesign "${CSF[@]}" --entitlements "$ENT_DIR/app-entitlements.plist" "$APP"
+          echo "::group::Run Microsoft VS Code sign.js (electron-osx-sign)"
+          node build/darwin/sign.js "$BUILD_DIR"
           echo "::endgroup::"
 
           echo "::group::Diagnose Electron binary signature"
