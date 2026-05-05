@@ -180,22 +180,71 @@ jobs:
           }
 
           # 5 段階の depth-first 署名:
-          #   Phase 1: 全 Mach-O ファイル (.node / .dylib / 実行ファイル) を最深から
-          #   Phase 2: .framework バンドルを最深から
+          #   Phase 0: 全 Mach-O から既存署名 (build-time ad-hoc 等) を完全に除去
+          #   Phase 1: bundle main executable を除く全 Mach-O を最深から個別署名
+          #   Phase 2: .framework バンドルを最深から (内部の main lib も含めて再署名される)
           #   Phase 3: 入れ子の .app バンドルを最深から (helper は専用 entitlements)
-          #   Phase 4: メイン Contents/MacOS/Electron に entitlements 付き再署名
-          #   Phase 5: トップレベル .app バンドルに entitlements 付き署名
+          #   Phase 4: トップレベル .app バンドルに entitlements 付き署名
+          #            (Contents/MacOS/Electron はこの段階で唯一署名される)
 
-          echo "::group::Phase 1: sign all Mach-O files (depth-first)"
-          SIGNED_COUNT=0
+          echo "::group::Phase 0: strip existing signatures from all Mach-O files"
+          STRIPPED=0
           while IFS= read -r -d '' f; do
             if is_macho "$f"; then
+              if codesign --remove-signature "$f" 2>/dev/null; then
+                STRIPPED=$((STRIPPED+1))
+              fi
+            fi
+          done < <(find "$APP" -type f -print0)
+          echo "Phase 0 stripped signatures from $STRIPPED Mach-O file(s)."
+          echo "::endgroup::"
+
+          # bundle main executable 判定: */Contents/MacOS/<basename(parent of MacOS) without .app>
+          # と */Versions/<v>/<basename(parent of Versions) without .framework>
+          # これらは bundle 署名の一部として再署名されるので Phase 1 から除外。
+          is_bundle_main () {
+            local f="$1"
+            case "$f" in
+              */Contents/MacOS/*)
+                local parent_mac parent_app app_name exe_name
+                parent_mac=$(dirname "$f")          # .../Contents/MacOS
+                parent_app=$(dirname "$(dirname "$parent_mac")")  # .../<X>.app
+                app_name=$(basename "$parent_app" .app)
+                exe_name=$(basename "$f")
+                [ "$exe_name" = "$app_name" ] && return 0
+                ;;
+              */.framework/Versions/*/*|*.framework/Versions/*/*)
+                # .framework/Versions/A/<framework_name> パターン
+                local parent_ver fw fw_name exe_name
+                parent_ver=$(dirname "$f")          # .../Versions/A
+                fw=$(dirname "$(dirname "$parent_ver")")  # .../<X>.framework
+                fw_name=$(basename "$fw" .framework)
+                exe_name=$(basename "$f")
+                # Versions/A/<fw_name> 直下のみ main lib (Helpers/ や Libraries/ は除く)
+                [ "$exe_name" = "$fw_name" ] && [ "$(basename "$parent_ver")" != "Helpers" ] \
+                  && [ "$(basename "$parent_ver")" != "Libraries" ] \
+                  && [ "$(basename "$parent_ver")" != "Resources" ] && return 0
+                ;;
+            esac
+            return 1
+          }
+
+          echo "::group::Phase 1: sign individual Mach-O files (skip bundle main executables)"
+          SIGNED_COUNT=0
+          SKIPPED_COUNT=0
+          while IFS= read -r -d '' f; do
+            if is_macho "$f"; then
+              if is_bundle_main "$f"; then
+                echo "  [skip-main] $f"
+                SKIPPED_COUNT=$((SKIPPED_COUNT+1))
+                continue
+              fi
               echo "  $f"
               codesign "${CSF[@]}" "$f"
               SIGNED_COUNT=$((SIGNED_COUNT+1))
             fi
           done < <(find "$APP" -depth -type f -print0)
-          echo "Phase 1 signed $SIGNED_COUNT Mach-O file(s)."
+          echo "Phase 1 signed $SIGNED_COUNT files (skipped $SKIPPED_COUNT bundle main executables)."
           echo "::endgroup::"
 
           echo "::group::Phase 2: sign frameworks (depth-first)"
@@ -223,13 +272,14 @@ jobs:
           done < <(find "$APP" -depth -mindepth 1 -name "*.app" -type d -print0)
           echo "::endgroup::"
 
-          echo "::group::Phase 4: re-sign main Electron binary with entitlements"
-          codesign "${CSF[@]}" --entitlements "$ENT_DIR/app-entitlements.plist" \
-            "$APP/Contents/MacOS/Electron"
+          echo "::group::Phase 4: sign main app bundle (signs Contents/MacOS/Electron too)"
+          codesign "${CSF[@]}" --entitlements "$ENT_DIR/app-entitlements.plist" "$APP"
           echo "::endgroup::"
 
-          echo "::group::Phase 5: sign main app bundle"
-          codesign "${CSF[@]}" --entitlements "$ENT_DIR/app-entitlements.plist" "$APP"
+          echo "::group::Diagnose Electron binary signature"
+          codesign -d -v --verbose=4 "$APP/Contents/MacOS/Electron" 2>&1 || true
+          echo "---"
+          codesign --display --entitlements - "$APP/Contents/MacOS/Electron" 2>&1 || true
           echo "::endgroup::"
 
           echo "::group::Verify"
