@@ -82,18 +82,40 @@ jobs:
           KEYCHAIN_PASSWORD="$(uuidgen)"
           CERT_PATH="$RUNNER_TEMP/cert.p12"
 
-          # base64 デコードして .p12 を復元
-          echo -n "$MACOS_CERTIFICATE_P12_BASE64" | base64 --decode > "$CERT_PATH"
+          # base64 デコード。Secret に改行や余計な空白が混じると base64 が壊れるので
+          # printf + tr で確実に削ぎ落としてからデコードする。
+          printf '%s' "$MACOS_CERTIFICATE_P12_BASE64" \
+            | tr -d ' \t\r\n' \
+            | base64 --decode > "$CERT_PATH"
+
+          # ファイル形式の健全性チェック（PKCS12 = ASN.1 SEQUENCE で 0x30 0x82 から始まる）
+          echo "::group::Decoded p12 inspection"
+          ls -la "$CERT_PATH"
+          file "$CERT_PATH" || true
+          # 先頭 4 バイトを 16 進ダンプして PKCS12 マジックを確認
+          xxd -l 4 "$CERT_PATH" || true
+          if [ ! -s "$CERT_PATH" ]; then
+            echo "ERROR: Decoded p12 is empty. MACOS_CERTIFICATE_P12_BASE64 が空 or 不正な可能性があります。"
+            exit 1
+          fi
+          MAGIC=$(xxd -p -l 2 "$CERT_PATH" || true)
+          if [ "$MAGIC" != "3082" ]; then
+            echo "ERROR: Decoded file does not look like a PKCS12 (.p12)."
+            echo "       Magic bytes were 0x$MAGIC (expected 0x3082)."
+            echo "       'security import' でエクスポートしたか、改行混入が無いか確認してください。"
+            exit 1
+          fi
+          echo "::endgroup::"
 
           # 一時 keychain を作成して unlock
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-          # 証明書を import
+          # 証明書を import (-f pkcs12 を明示せず auto-detect させる方が安定)
           security import "$CERT_PATH" \
             -P "$MACOS_CERTIFICATE_PASSWORD" \
-            -A -t cert -f pkcs12 \
+            -A \
             -k "$KEYCHAIN_PATH"
 
           # 検索パスに追加（既存 keychain も維持）
