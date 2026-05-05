@@ -38,7 +38,6 @@ src/vs/workbench/contrib/void/browser/react/src2/**
 .parcel-cache/
 .vite/
 coverage/
-package.json
 .env
 .env.*
 *.pem
@@ -52,3 +51,22 @@ package.json
 !.github/**
 !.gitignore
 !.gitattributes
+!.npmrc
+!.nvmrc
+!.vscode/
+!.vscode/**
+!.vscode-test
+!.eslintrc*
+!.editorconfig
+!.mailmap
+!.mocharc*
+!.prettierrc*
+!.stylelintrc*
+!.devcontainer/
+!.devcontainer/**
+!.git-blame-ignore-revs
+!.gitattributes
+!.husky/
+!.husky/**
+# .build と .vscode/extensions/**/out は別途明示的に無視する
+.vscode/extensions/**/out/
