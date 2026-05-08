@@ -1,0 +1,57 @@
+{
+  "name": "orchestra-flow-editor",
+  "displayName": "Orchestra Flow Editor",
+  "description": "Visual flow editor for Orchestra IDE with graph-based workflow design",
+  "version": "1.0.0",
+  "publisher": "orchestra",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "orchestra-flow-editor.open",
+        "title": "Orchestra: Open Flow Editor",
+        "category": "Orchestra"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "orchestra-flow-editor.open",
+          "when": "resourceExtname == .flow || resourceExtname == .orchestraflow",
+          "group": "navigation"
+        }
+      ]
+    },
+    "customEditors": [
+      {
+        "viewType": "orchestra-flow-editor",
+        "displayName": "Orchestra Flow Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.flow"
+          },
+          {
+            "filenamePattern": "*.orchestraflow"
+          }
+        ],
+        "priority": "default"
+      }
+    ]
+  },
+  "activationEvents": [
+    "onCommand:orchestra-flow-editor.open",
+    "onCustomEditor:orchestra-flow-editor"
+  ],
+  "scripts": {
+    "build": "tsc -p .",
+    "watch": "tsc -watch -p ."
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.0.0"
+  }
+}
