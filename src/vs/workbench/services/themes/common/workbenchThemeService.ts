@@ -39,8 +39,8 @@ export enum ThemeSettings {
 }
 
 export enum ThemeSettingDefaults {
-	COLOR_THEME_DARK = 'Default Dark+', // Void changed this from 'Default Dark Modern'
-	COLOR_THEME_LIGHT = 'Default Light Modern',
+	COLOR_THEME_DARK = 'Orchestra Dark', // Orchestra red theme (was 'Default Dark+')
+	COLOR_THEME_LIGHT = 'Orchestra Light', // Orchestra red theme (was 'Default Light Modern')
 	COLOR_THEME_HC_DARK = 'Default High Contrast',
 	COLOR_THEME_HC_LIGHT = 'Default High Contrast Light',
 
@@ -51,58 +51,58 @@ export enum ThemeSettingDefaults {
 	PRODUCT_ICON_THEME = 'Default',
 }
 
-export const COLOR_THEME_DARK_INITIAL_COLORS = { // Void changed this to match dark+
-	'activityBar.activeBorder': '#ffffff',
-	'activityBar.background': '#333333',
-	'activityBar.border': '#454545',
-	'activityBar.foreground': '#ffffff',
-	'activityBar.inactiveForeground': '#ffffff66',
-	'editorGroup.border': '#444444',
-	'editorGroupHeader.tabsBackground': '#252526',
-	'editorGroupHeader.tabsBorder': '#252526',
-	'statusBar.background': '#007ACC',
-	'statusBar.border': '#454545',
+export const COLOR_THEME_DARK_INITIAL_COLORS = { // Orchestra changed this to match Orchestra Dark
+	'activityBar.activeBorder': '#e02431',
+	'activityBar.background': '#1d0e11',
+	'activityBar.border': '#3b2228',
+	'activityBar.foreground': '#f6eeef',
+	'activityBar.inactiveForeground': '#997f85',
+	'editorGroup.border': '#3b2228',
+	'editorGroupHeader.tabsBackground': '#1d0e11',
+	'editorGroupHeader.tabsBorder': '#3b2228',
+	'statusBar.background': '#a31423',
+	'statusBar.border': '#a31423',
 	'statusBar.foreground': '#ffffff',
-	'statusBar.noFolderBackground': '#68217A',
-	'tab.activeBackground': '#2D2D2D',
-	'tab.activeBorder': '#ffffff',
-	'tab.activeBorderTop': '#007ACC',
+	'statusBar.noFolderBackground': '#731520',
+	'tab.activeBackground': '#16090b',
+	'tab.activeBorder': '#e02431',
+	'tab.activeBorderTop': '#e02431',
 	'tab.activeForeground': '#ffffff',
-	'tab.border': '#252526',
-	'textLink.foreground': '#3794ff',
-	'titleBar.activeBackground': '#3C3C3C',
-	'titleBar.activeForeground': '#CCCCCC',
-	'titleBar.border': '#454545',
-	'titleBar.inactiveBackground': '#2C2C2C',
-	'titleBar.inactiveForeground': '#999999',
-	'welcomePage.tileBackground': '#252526'
+	'tab.border': '#3b2228',
+	'textLink.foreground': '#ef5f6b',
+	'titleBar.activeBackground': '#1d0e11',
+	'titleBar.activeForeground': '#f6eeef',
+	'titleBar.border': '#3b2228',
+	'titleBar.inactiveBackground': '#16090b',
+	'titleBar.inactiveForeground': '#997f85',
+	'welcomePage.tileBackground': '#241317'
 };
 
-export const COLOR_THEME_LIGHT_INITIAL_COLORS = {
-	'activityBar.activeBorder': '#005FB8',
-	'activityBar.background': '#f8f8f8',
-	'activityBar.border': '#e5e5e5',
-	'activityBar.foreground': '#1f1f1f',
-	'activityBar.inactiveForeground': '#616161',
-	'editorGroup.border': '#e5e5e5',
-	'editorGroupHeader.tabsBackground': '#f8f8f8',
-	'editorGroupHeader.tabsBorder': '#e5e5e5',
-	'statusBar.background': '#f8f8f8',
-	'statusBar.border': '#e5e5e5',
-	'statusBar.foreground': '#3b3b3b',
-	'statusBar.noFolderBackground': '#f8f8f8',
+export const COLOR_THEME_LIGHT_INITIAL_COLORS = { // Orchestra changed this to match Orchestra Light
+	'activityBar.activeBorder': '#e02431',
+	'activityBar.background': '#faf8f8',
+	'activityBar.border': '#ece7e7',
+	'activityBar.foreground': '#1c1416',
+	'activityBar.inactiveForeground': '#6d6165',
+	'editorGroup.border': '#ece7e7',
+	'editorGroupHeader.tabsBackground': '#faf8f8',
+	'editorGroupHeader.tabsBorder': '#ece7e7',
+	'statusBar.background': '#e02431',
+	'statusBar.border': '#c4182a',
+	'statusBar.foreground': '#ffffff',
+	'statusBar.noFolderBackground': '#a31423',
 	'tab.activeBackground': '#ffffff',
-	'tab.activeBorder': '#f8f8f8',
-	'tab.activeBorderTop': '#005fb8',
-	'tab.activeForeground': '#3b3b3b',
-	'tab.border': '#e5e5e5',
-	'textLink.foreground': '#005fb8',
-	'titleBar.activeBackground': '#f8f8f8',
-	'titleBar.activeForeground': '#1e1e1e',
-	'titleBar.border': '#E5E5E5',
-	'titleBar.inactiveBackground': '#f8f8f8',
-	'titleBar.inactiveForeground': '#8b949e',
-	'welcomePage.tileBackground': '#f3f3f3'
+	'tab.activeBorder': '#faf8f8',
+	'tab.activeBorderTop': '#e02431',
+	'tab.activeForeground': '#1c1416',
+	'tab.border': '#ece7e7',
+	'textLink.foreground': '#c4182a',
+	'titleBar.activeBackground': '#faf8f8',
+	'titleBar.activeForeground': '#1c1416',
+	'titleBar.border': '#ece7e7',
+	'titleBar.inactiveBackground': '#faf8f8',
+	'titleBar.inactiveForeground': '#998d90',
+	'welcomePage.tileBackground': '#faf8f8'
 };
 
 export interface IWorkbenchTheme {
