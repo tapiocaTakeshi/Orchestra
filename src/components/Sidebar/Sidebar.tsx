@@ -1,9 +1,14 @@
-<<<SEARCH
-{/* AI Chat */}
-<AIChatPanel />
-<AIChatPanel title="AI Assistant" online />
-import { AiChat } from './index';
-===
-{/* AI Chat */}
-<AIChatPanel />
->>>REPLACE
+import React from 'react';
+import { View } from 'react-native';
+import AIChatPanel from './AIChatPanel';
+
+const Sidebar: React.FC = () => {
+  return (
+    <View>
+      {/* AI Chat */}
+      <AIChatPanel />
+    </View>
+  );
+};
+
+export default Sidebar;
