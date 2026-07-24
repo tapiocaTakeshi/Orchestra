@@ -11,6 +11,9 @@ interface FlowEditorMessage {
 export class FlowEditorProvider implements vscode.CustomEditorProvider<FlowEditorDocument> {
   private static readonly viewType = 'orchestra-flow-editor';
 
+  private readonly _onDidChangeCustomDocument = new vscode.EventEmitter<vscode.CustomDocumentContentChangeEvent<FlowEditorDocument>>();
+  readonly onDidChangeCustomDocument = this._onDidChangeCustomDocument.event;
+
   constructor(private context: vscode.ExtensionContext) {}
 
   async openCustomDocument(uri: vscode.Uri, openContext: vscode.CustomDocumentOpenContext, token: vscode.CancellationToken): Promise<FlowEditorDocument> {
@@ -50,8 +53,8 @@ export class FlowEditorProvider implements vscode.CustomEditorProvider<FlowEdito
     }
   }
 
-  async backupCustomDocument(document: FlowEditorDocument, backupId: string, cancellation: vscode.CancellationToken): Promise<vscode.CustomDocumentBackup> {
-    const backup = await this.saveBackup(document, backupId);
+  async backupCustomDocument(document: FlowEditorDocument, context: vscode.CustomDocumentBackupContext, cancellation: vscode.CancellationToken): Promise<vscode.CustomDocumentBackup> {
+    const backup = await this.saveBackup(document, context.destination);
     return backup;
   }
 
@@ -76,6 +79,7 @@ export class FlowEditorProvider implements vscode.CustomEditorProvider<FlowEdito
           if (message.data && typeof message.data === 'object') {
             document.flow = message.data as FlowDefinition;
             document.isDirty = true;
+            this._onDidChangeCustomDocument.fire({ document });
           }
           break;
 
@@ -177,17 +181,16 @@ export class FlowEditorProvider implements vscode.CustomEditorProvider<FlowEdito
     };
   }
 
-  private async saveBackup(document: FlowEditorDocument, backupId: string): Promise<vscode.CustomDocumentBackup> {
+  private async saveBackup(document: FlowEditorDocument, destination: vscode.Uri): Promise<vscode.CustomDocumentBackup> {
     const json = FlowParser.toJSON(document.flow);
     const data = new TextEncoder().encode(json);
-    const backupUri = vscode.Uri.file(path.join(path.dirname(document.uri.fsPath), `.${path.basename(document.uri.fsPath)}.backup`));
-    await vscode.workspace.fs.writeFile(backupUri, data);
+    await vscode.workspace.fs.writeFile(destination, data);
 
     return {
-      id: backupId,
+      id: destination.toString(),
       delete: async () => {
         try {
-          await vscode.workspace.fs.delete(backupUri);
+          await vscode.workspace.fs.delete(destination);
         } catch {}
       },
     };
