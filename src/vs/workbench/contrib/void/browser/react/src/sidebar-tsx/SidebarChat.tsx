@@ -81,9 +81,11 @@ if (typeof document !== 'undefined' && !document.getElementById('void-sidebar-ch
 .void-typing-dots > span:nth-child(2) { animation-delay: 0.16s; }
 .void-typing-dots > span:nth-child(3) { animation-delay: 0.32s; }
 .void-bubble-in { animation: voidBubbleIn 220ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.void-pulse-dot { animation: pulse 1.4s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
 	.void-typing-dots > span { animation: none; opacity: 0.7; }
 	.void-bubble-in { animation: none; }
+	.void-pulse-dot { animation: none; }
 }
 `
 	document.head.appendChild(style)
@@ -2358,8 +2360,8 @@ const FlowIndicator = ({ messages, isRunning, reasoningSoFar }: {
 	return (
 		<div className="flex items-center gap-1.5 text-[11px] text-void-fg-3 py-1">
 			<span
-				className="inline-block w-1.5 h-1.5 rounded-full bg-[var(--vscode-focusBorder)]"
-				style={{ boxShadow: '0 0 6px var(--vscode-focusBorder)', animation: 'pulse 1.4s ease-in-out infinite' }}
+				className="void-pulse-dot inline-block w-1.5 h-1.5 rounded-full bg-[var(--vscode-focusBorder)]"
+				style={{ boxShadow: '0 0 6px var(--vscode-focusBorder)' }}
 			/>
 			<span>{activePhase.label}</span>
 			<IconLoading className="text-void-fg-4" />

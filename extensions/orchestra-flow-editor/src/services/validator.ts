@@ -104,14 +104,14 @@ export class FlowValidator {
           });
         }
       } else if (node.type !== 'parallel' && node.type !== 'merge') {
-        if ((inEdges.get(node.id) || 0) === 0 && node.type !== 'start') {
+        if ((inEdges.get(node.id) || 0) === 0) {
           errors.push({
             type: 'warning',
             message: `Node "${node.label}" has no incoming edges`,
             nodeId: node.id,
           });
         }
-        if ((outEdges.get(node.id) || 0) === 0 && node.type !== 'end') {
+        if ((outEdges.get(node.id) || 0) === 0) {
           errors.push({
             type: 'warning',
             message: `Node "${node.label}" has no outgoing edges`,

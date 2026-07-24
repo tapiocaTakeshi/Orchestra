@@ -15,8 +15,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('orchestra-flow-editor.open', async (uri?: vscode.Uri) => {
       if (uri) {
-        const document = await vscode.workspace.openTextDocument(uri);
-        await vscode.window.showTextDocument(document, { viewColumn: vscode.ViewColumn.One });
+        await vscode.commands.executeCommand('vscode.openWith', uri, 'orchestra-flow-editor');
       }
     })
   );
