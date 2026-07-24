@@ -90,6 +90,22 @@ canvas.addEventListener('mousedown', e => {
 
   const clickedNode = getNodeAtPosition(x, y);
 
+  if (drawingEdge) {
+    if (clickedNode && clickedNode.id !== drawingEdge.from.id) {
+      const edge = {
+        id: `edge_${Date.now()}`,
+        source: drawingEdge.from.id,
+        target: clickedNode.id,
+      };
+      flow.edges.push(edge);
+      vscode.postMessage({ type: 'flowChanged', data: flow });
+    }
+    drawingEdge = null;
+    canvasContainer.style.cursor = '';
+    redrawCanvas();
+    return;
+  }
+
   if (clickedNode && e.button === 0) {
     isDragging = true;
     dragStartX = x;
@@ -225,7 +241,16 @@ function displayProperties(node) {
 
 function startEdgeDrawing(fromNode) {
   drawingEdge = { from: fromNode, to: null };
+  canvasContainer.style.cursor = 'crosshair';
 }
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && drawingEdge) {
+    drawingEdge = null;
+    canvasContainer.style.cursor = '';
+    redrawCanvas();
+  }
+});
 
 function displayValidation(validation) {
   if (validation.valid) {
