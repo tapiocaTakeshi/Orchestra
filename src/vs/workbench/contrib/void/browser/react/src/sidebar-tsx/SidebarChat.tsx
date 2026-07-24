@@ -4997,8 +4997,8 @@ const SidebarChatGlobalStyles = () => (
 // 内部的には VS Code 設定 `workbench.colorTheme` を更新するだけ。
 type OrchestraThemeMode = 'light' | 'dark' | 'sunRed'
 const ORCHESTRA_THEME_NAMES: Record<OrchestraThemeMode, string> = {
-	light: 'Default Light Modern',
-	dark: 'Default Dark Modern',
+	light: 'Orchestra Light',
+	dark: 'Orchestra Dark',
 	sunRed: 'Sun Red',
 }
 const ORCHESTRA_THEME_LABELS: Record<OrchestraThemeMode, string> = {
