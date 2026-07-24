@@ -3240,8 +3240,8 @@ const ReasoningWrapper = ({ isDoneReasoning, isStreaming, reasoningDuration, chi
 	const title = (
 		<span className='inline-flex items-center gap-1.5'>
 			<span
-				className={`inline-block w-1.5 h-1.5 rounded-full ${isWriting ? 'bg-[var(--vscode-focusBorder)]' : 'bg-void-fg-4 opacity-50'}`}
-				style={isWriting ? { boxShadow: '0 0 6px var(--vscode-focusBorder)', animation: 'pulse 1.4s ease-in-out infinite' } : {}}
+				className={`inline-block w-1.5 h-1.5 rounded-full ${isWriting ? 'void-pulse-dot bg-[var(--vscode-focusBorder)]' : 'bg-void-fg-4 opacity-50'}`}
+				style={isWriting ? { boxShadow: '0 0 6px var(--vscode-focusBorder)' } : {}}
 			/>
 			{titleText}
 		</span>
