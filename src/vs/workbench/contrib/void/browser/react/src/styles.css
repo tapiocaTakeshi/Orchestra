@@ -479,7 +479,7 @@
 .void-onboarding-bg::after {
 	content: '';
 	position: absolute;
-	inset: -30%;
+	inset: -15%;
 	z-index: 0;
 	pointer-events: none;
 	background-repeat: no-repeat;
@@ -488,15 +488,15 @@
 
 .void-onboarding-bg::before {
 	background-image:
-		radial-gradient(circle at 30% 34%, color-mix(in srgb, #e31c23 24%, transparent) 0%, transparent 42%),
-		radial-gradient(circle at 72% 66%, color-mix(in srgb, #e31c23 16%, transparent) 0%, transparent 46%);
+		radial-gradient(circle at 26% 30%, color-mix(in srgb, #e31c23 13%, transparent) 0%, transparent 30%),
+		radial-gradient(circle at 76% 70%, color-mix(in srgb, #e31c23 9%, transparent) 0%, transparent 32%);
 	animation: void-onboarding-drift-a 26s ease-in-out infinite;
 }
 
 .void-onboarding-bg::after {
 	background-image:
-		radial-gradient(circle at 64% 24%, color-mix(in srgb, #ff6b4a 13%, transparent) 0%, transparent 44%),
-		radial-gradient(circle at 32% 78%, color-mix(in srgb, #e31c23 11%, transparent) 0%, transparent 48%);
+		radial-gradient(circle at 68% 22%, color-mix(in srgb, #ff6b4a 7%, transparent) 0%, transparent 28%),
+		radial-gradient(circle at 30% 80%, color-mix(in srgb, #e31c23 6%, transparent) 0%, transparent 34%);
 	animation: void-onboarding-drift-b 34s ease-in-out infinite;
 }
 
