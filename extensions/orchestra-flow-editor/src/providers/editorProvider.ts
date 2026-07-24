@@ -4,7 +4,7 @@ import { FlowParser, FlowValidator } from '../services';
 import { FlowDefinition } from '../types/flow';
 
 interface FlowEditorMessage {
-  type: 'flowLoaded' | 'flowChanged' | 'validationRequested' | 'exportRequested' | 'ready';
+  type: 'flowLoaded' | 'flowChanged' | 'validationRequested' | 'exportRequested' | 'ready' | 'save';
   data?: unknown;
 }
 
@@ -97,6 +97,10 @@ export class FlowEditorProvider implements vscode.CustomEditorProvider<FlowEdito
             type: 'exportData',
             data: json,
           });
+          break;
+
+        case 'save':
+          this.saveCustomDocument(document, token);
           break;
       }
     };
