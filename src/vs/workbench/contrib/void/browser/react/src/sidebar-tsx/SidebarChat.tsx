@@ -57,6 +57,34 @@ if (typeof document !== 'undefined' && !document.getElementById('void-sidebar-ch
 	0%, 100% { opacity: 1; transform: scale(1); }
 	50% { opacity: 0.55; transform: scale(0.85); }
 }
+@keyframes voidDotBounce {
+	0%, 80%, 100% { transform: translateY(0); opacity: 0.35; }
+	40% { transform: translateY(-3px); opacity: 1; }
+}
+@keyframes voidBubbleIn {
+	from { opacity: 0; transform: translateY(6px) scale(0.985); }
+	to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.void-typing-dots {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+}
+.void-typing-dots > span {
+	display: inline-block;
+	width: 5px;
+	height: 5px;
+	border-radius: 9999px;
+	background: currentColor;
+	animation: voidDotBounce 1.2s ease-in-out infinite;
+}
+.void-typing-dots > span:nth-child(2) { animation-delay: 0.16s; }
+.void-typing-dots > span:nth-child(3) { animation-delay: 0.32s; }
+.void-bubble-in { animation: voidBubbleIn 220ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+	.void-typing-dots > span { animation: none; opacity: 0.7; }
+	.void-bubble-in { animation: none; }
+}
 `
 	document.head.appendChild(style)
 }
@@ -143,31 +171,21 @@ export const IconWarning = ({ size, className = '' }: { size: number, className?
 };
 
 
+// Smooth three-dot "typing" indicator. Replaces the old text-based `.`/`..`/`...`
+// loop, which shifted layout width on every tick. Pure CSS animation (see the
+// `voidDotBounce` keyframes injected above), so no timers / re-renders.
 export const IconLoading = ({ className = '' }: { className?: string }) => {
-
-	const [loadingText, setLoadingText] = useState('.');
-
-	useEffect(() => {
-		let intervalId: ReturnType<typeof setInterval> | undefined;
-
-		// Function to handle the animation
-		const toggleLoadingText = () => {
-			if (loadingText === '...') {
-				setLoadingText('.');
-			} else {
-				setLoadingText(loadingText + '.');
-			}
-		};
-
-		// Start the animation loop
-		intervalId = setInterval(toggleLoadingText, 300);
-
-		// Cleanup function to clear the interval when component unmounts
-		return () => clearInterval(intervalId);
-	}, [loadingText, setLoadingText]);
-
-	return <div className={`${className}`}>{loadingText}</div>;
-
+	return (
+		<span
+			className={`void-typing-dots ${className}`}
+			role='status'
+			aria-label='読み込み中'
+		>
+			<span />
+			<span />
+			<span />
+		</span>
+	);
 }
 
 
@@ -1845,7 +1863,7 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 	return <div
 		ref={stickyRef}
 		className={`
-        group relative w-full max-w-full rounded-lg overflow-hidden mb-1.5
+        void-bubble-in group relative w-full max-w-full rounded-lg overflow-hidden mb-1.5
         ${mode === 'edit' ? 'pl-0 pr-0 py-0' : 'pl-2.5 pr-7 py-1'}
 
         ${isCheckpointGhost && !isMsgAfterCheckpoint ? 'opacity-50 pointer-events-none' : ''}
@@ -2338,8 +2356,13 @@ const FlowIndicator = ({ messages, isRunning, reasoningSoFar }: {
 	if (!activePhase) return null;
 
 	return (
-		<div className="text-[11px] text-void-fg-4 py-1">
-			{activePhase.label}...
+		<div className="flex items-center gap-1.5 text-[11px] text-void-fg-3 py-1">
+			<span
+				className="inline-block w-1.5 h-1.5 rounded-full bg-[var(--vscode-focusBorder)]"
+				style={{ boxShadow: '0 0 6px var(--vscode-focusBorder)', animation: 'pulse 1.4s ease-in-out infinite' }}
+			/>
+			<span>{activePhase.label}</span>
+			<IconLoading className="text-void-fg-4" />
 		</div>
 	);
 };
@@ -2583,7 +2606,20 @@ const StaticCollapsibleCard = ({
 	}
 
 	return (
-		<div className='rounded-md border border-void-border-2 bg-void-bg-2/60 overflow-hidden'>
+		<div
+			className='void-bubble-in rounded-md border overflow-hidden transition-[border-color,box-shadow] duration-200'
+			style={{
+				borderColor: isStreaming
+					? 'color-mix(in srgb, var(--vscode-focusBorder) 45%, var(--void-border-2))'
+					: 'var(--void-border-2)',
+				borderLeftWidth: '3px',
+				borderLeftColor: isStreaming
+					? 'var(--vscode-focusBorder)'
+					: 'color-mix(in srgb, var(--vscode-focusBorder) 55%, transparent)',
+				background: 'color-mix(in srgb, var(--void-bg-2) 60%, transparent)',
+				boxShadow: isStreaming ? '0 1px 6px color-mix(in srgb, var(--vscode-focusBorder) 12%, transparent)' : undefined,
+			}}
+		>
 			<div
 				className='flex items-center gap-1.5 px-2 py-1 cursor-pointer select-none hover:bg-void-bg-3/60 transition-colors min-h-[24px]'
 				onClick={toggle}
@@ -2604,7 +2640,7 @@ const StaticCollapsibleCard = ({
 					{title}
 				</span>
 				{isStreaming && (
-					<Loader2 className='h-3 w-3 text-void-fg-3 animate-spin flex-shrink-0' />
+					<Loader2 className='h-3 w-3 text-[color:var(--vscode-focusBorder)] animate-spin flex-shrink-0' />
 				)}
 			</div>
 			<div
@@ -5530,10 +5566,23 @@ export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTa
 				displayContentSoFar={displayContentSoFar}
 			/>
 
-			{/* loading indicator */}
-			{isRunning === 'LLM' || isRunning === 'idle' && !toolIsGenerating ? <ProseWrapper>
-				{<IconLoading className='opacity-50 text-sm' />}
-			</ProseWrapper> : null}
+			{/* loading indicator — a compact "typing" pill so the wait reads as the
+			    assistant composing a reply rather than a bare row of dots. */}
+			{isRunning === 'LLM' || isRunning === 'idle' && !toolIsGenerating ?
+				<div className='void-bubble-in flex items-center'>
+					<span
+						className='inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full text-void-fg-3'
+						style={{
+							background: 'color-mix(in srgb, var(--void-bg-2) 88%, transparent)',
+							border: '1px solid color-mix(in srgb, var(--void-border-2) 70%, transparent)',
+							boxShadow: '0 1px 2px rgba(0,0,0,0.10)',
+						}}
+					>
+						<IconLoading className='text-[color:var(--vscode-focusBorder)]' />
+						<span className='text-[11px] leading-none text-void-fg-3'>生成中</span>
+					</span>
+				</div>
+				: null}
 		</StickyStackProvider>
 
 
