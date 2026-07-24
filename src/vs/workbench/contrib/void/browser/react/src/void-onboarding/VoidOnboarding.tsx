@@ -782,7 +782,10 @@ const VoidOnboardingContent = () => {
 		0: <OnboardingPageShell
 			content={
 				<div className='flex flex-col items-center gap-8'>
-					<div className="text-5xl font-light text-center">Welcome to Orchestra (Build 1.0.2 - DEBUG)</div>
+					<div className='flex flex-col items-center gap-2'>
+						<div className="text-5xl font-light text-center">Welcome to Orchestra</div>
+						<div className="text-sm text-void-fg-3 opacity-80 text-center">Build 1.0.2 - DEBUG</div>
+					</div>
 
 					{/* Slice of Void image */}
 					<div className='max-w-md w-full h-[30vh] mx-auto flex items-center justify-center'>
