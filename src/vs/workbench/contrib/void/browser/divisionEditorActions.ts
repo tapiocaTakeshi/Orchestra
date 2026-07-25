@@ -82,9 +82,9 @@ registerAction2(class extends Action2 {
 	}
 });
 
-// Preview the currently-open .html file (e.g. .division/DESIGNER.html) in the
-// user's default external browser. The editor title bar shows this button only
-// when the active resource has an `.html` extension.
+// Preview the currently-open .html file in the user's default external
+// browser. The editor title bar shows this button only when the active
+// resource has an `.html` extension.
 registerAction2(class extends Action2 {
 	constructor() {
 		super({

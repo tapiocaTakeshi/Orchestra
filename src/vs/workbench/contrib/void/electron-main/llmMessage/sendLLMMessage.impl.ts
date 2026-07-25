@@ -991,8 +991,8 @@ const FLOW_ROLE_TO_FILENAME: Record<string, string> = {
 	'leader': 'LEADER.md',
 	'coder': 'CODER.md',
 	'coding': 'CODER.md',
-	'design': 'DESIGNER.html',
-	'designer': 'DESIGNER.html',
+	'design': 'DESIGNER.md',
+	'designer': 'DESIGNER.md',
 	'search': 'SEARCH.md',
 	'searcher': 'SEARCH.md',
 	'file-search': 'FILE-SEARCH.md',
@@ -1564,7 +1564,7 @@ const callDivisionTaskExecute = async (
 // Local file search: scan the workspace and return matching files with their contents.
 // Used to enrich the file-search task output with actual file contents from the user's workspace.
 //
-// `.division` は Orchestra が Division API の中間成果物 (*.md / DESIGNER.html) を
+// `.division` は Orchestra が Division API の中間成果物 (*.md / DESIGNER.md) を
 // 書き出す作業フォルダなので、file-searcher が本体プロジェクトのファイルではなく
 // 自分が書いた中間 MD を読み込んでしまうのを防ぐため常に除外する。
 const IGNORED_DIRS = new Set([
@@ -2948,13 +2948,13 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			const isDesigner = role === 'design' || role === 'designer';
 			const taskInstruction = isDesigner
 				? [
-					`直前の assistant メッセージに先行タスクの出力が添付されています（ある場合）。それを踏まえ、ユーザー要求を視覚化した **1 枚の自己完結型 HTML** を生成してください。`,
+					`直前の assistant メッセージに先行タスクの出力が添付されています（ある場合）。それを踏まえ、ユーザー要求を視覚化した **Markdown 形式のデザインドキュメント** を作成してください。`,
 					``,
 					`### 出力要件`,
-					`- 必ず ` + '```html' + ` ... ` + '```' + ` のコードブロック 1 つだけで返してください。`,
-					`- ` + '`<!DOCTYPE html>`' + ` から始まる完全な HTML（head / body / style / script すべてインライン）。`,
-					`- 外部 CSS / JS / 画像 URL は使わないでください。`,
-					`- 実装ではなく**デザインモック**です。レイアウト・配色・タイポグラフィが確認できることが目的。`,
+					`- 出力は Markdown のみ（HTML コードブロックは使わないでください）。`,
+					`- 見出し・箇条書き・表を使い、画面構成 / レイアウト / 配色・タイポグラフィ / コンポーネント一覧を具体的に記述してください。`,
+					`- ワイヤーフレームが必要な場合は ASCII アートまたは Mermaid 記法で表現してください。`,
+					`- 実装コードではなく、後続の coder エージェントがそのまま実装に使える**デザイン仕様書**が目的です。`,
 				].join('\n')
 				: `直前の assistant メッセージに先行タスクの出力が添付されています（ある場合）。それを参考に、あなたの担当タスクを遂行してください。出力は Markdown 形式で、後続エージェントが直接利用できるよう具体的・網羅的にまとめてください。`;
 
