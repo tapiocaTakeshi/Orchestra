@@ -66,7 +66,7 @@ export const defaultProviderSettings = {
 		endpoint: '', // optionally allow overriding default
 	},
 	divisionAPI: { // Division API - AI orchestration
-		endpoint: 'https://api.division.he-ro.jp',
+		endpoint: 'https://division.higuchiyuya-riddle.workers.dev',
 	},
 	perplexity: { // Perplexity AI - search-augmented AI
 		apiKey: '',
