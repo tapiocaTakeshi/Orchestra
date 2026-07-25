@@ -2819,6 +2819,46 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				|| role === 'writer' || role === 'writing';
 		};
 
+		// Leader が dependsOn で示した依存関係を尊重して実行順を確定する
+		// （トポロジカルソート）。循環や不明な依存先は無視し、元の生成順で
+		// タイブレークすることで Leader の意図した並びを崩さないようにする。
+		const topoSortTasks = (list: DivisionTask[]): DivisionTask[] => {
+			const byId = new Map(list.map(t => [t.taskId, t]));
+			const originalIndex = new Map(list.map((t, i) => [t.taskId, i]));
+			const indegree = new Map<string, number>();
+			const adj = new Map<string, string[]>();
+			for (const t of list) {
+				indegree.set(t.taskId, 0);
+				adj.set(t.taskId, []);
+			}
+			for (const t of list) {
+				for (const dep of t.dependsOn || []) {
+					if (dep === t.taskId || !byId.has(dep)) continue;
+					adj.get(dep)!.push(t.taskId);
+					indegree.set(t.taskId, (indegree.get(t.taskId) || 0) + 1);
+				}
+			}
+			const queue: string[] = list.filter(t => (indegree.get(t.taskId) || 0) === 0).map(t => t.taskId);
+			const sortedIds: string[] = [];
+			const seen = new Set<string>();
+			while (queue.length > 0) {
+				queue.sort((a, b) => originalIndex.get(a)! - originalIndex.get(b)!);
+				const id = queue.shift()!;
+				if (seen.has(id)) continue;
+				seen.add(id);
+				sortedIds.push(id);
+				for (const next of adj.get(id) || []) {
+					indegree.set(next, (indegree.get(next) || 0) - 1);
+					if ((indegree.get(next) || 0) === 0) queue.push(next);
+				}
+			}
+			// 循環依存や未解決分はトポロジカルソートに乗らないので、元の順序で末尾に足す。
+			for (const t of list) {
+				if (!seen.has(t.taskId)) sortedIds.push(t.taskId);
+			}
+			return sortedIds.map(id => byId.get(id)!).filter(Boolean);
+		};
+
 		// =============================================
 		// Phase 1: Leader がタスクを分解
 		// =============================================
@@ -2864,11 +2904,23 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			return;
 		}
 
-		appendText(`Leader が ${tasks.length} 件のタスクを生成しました:\n\n`);
+		// Leader が示した dependsOn 順に並べ替えてから、以降のフェーズは
+		// 常にこの並び (= tasks の配列順) を「唯一の実行順」として扱う。
+		const sortedTasks = topoSortTasks(tasks);
+		tasks.length = 0;
+		tasks.push(...sortedTasks);
+
+		// Reviewer は Phase 3 でローカル実行される最終ステップなので、
+		// フロー表示上もステップ番号に含める。
+		const totalSteps = tasks.length + 1;
+
+		appendText(`## 📋 FLOW\n\nLeader が以下の ${totalSteps} ステップのフローを作成しました。以降、各ロールの AI はこの順番通りに実行されます。\n\n`);
 		for (let i = 0; i < tasks.length; i++) {
 			const t = tasks[i];
-			appendText(`${i + 1}. **${t.role}** — ${t.title || ''}\n`);
+			const depsPart = t.dependsOn && t.dependsOn.length > 0 ? ` _(依存: ${t.dependsOn.join(', ')})_` : '';
+			appendText(`${i + 1}. **${t.role}** — ${t.title || ''}${depsPart}\n`);
 		}
+		appendText(`${totalSteps}. **reviewer** — 最終レビュー\n`);
 		appendText(`\n`);
 
 		// =============================================
@@ -3055,7 +3107,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		// Phase 3: Reviewer 最終レビュー (1 回のみ、リトライなし)
 		// =============================================
 		drainInjections();
-		appendText(`\n---\n\n### ${tasks.length + 1}. reviewer — 最終レビュー\n\n`);
+		appendText(`\n---\n\n### ${totalSteps}. reviewer — 最終レビュー\n\n`);
 
 		const reviewContextHistory: { role: 'user' | 'assistant'; content: string }[] = [];
 		{
