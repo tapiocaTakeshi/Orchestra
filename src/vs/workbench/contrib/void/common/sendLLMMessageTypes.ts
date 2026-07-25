@@ -169,6 +169,8 @@ export type SendLLMMessageParams = {
 	divisionMaxReviewerIterations?: number;
 	// Legacy fallback for older callers.
 	divisionMaxReviewIterations?: number;
+	// true の場合、各ロールの .md 出力ごとに一時停止してユーザーの承認を待つ（divisionAPI のみ使用）
+	divisionFlowApprovalMode?: boolean;
 	workspaceFolderPath?: string;
 	// main 側（channel）が注入する関数。IPC を越えないので BlockedMainLLMMessageParams に含める。
 	takePendingInjection?: () => string | null;

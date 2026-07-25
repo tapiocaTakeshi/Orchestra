@@ -1203,6 +1203,19 @@ const DivisionSettings = () => {
 						aria-label="Max reviewer iterations"
 					/>
 				</div>
+				<div className="flex items-center justify-between gap-4 pt-1 border-t border-void-border-3">
+					<div className="flex flex-col">
+						<span className="text-xs text-void-fg-2 font-medium">各ステップで承認を得るモード</span>
+						<span className="text-[11px] text-void-fg-4">
+							有効にすると、各ロールが .md ファイルを生成するたびに一時停止し、内容を確認・編集してから承認するまで次のステップに進みません。
+						</span>
+					</div>
+					<VoidSwitch
+						size='xs'
+						value={!!settingsState.globalSettings.divisionFlowApprovalMode}
+						onChange={(newVal) => voidSettingsService.setGlobalSetting('divisionFlowApprovalMode', newVal)}
+					/>
+				</div>
 			</div>
 
 			{/* agents.json section header with Update All + Supabase Sync buttons */}

@@ -329,6 +329,11 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 				readS.globalSettings.maxReviewerIterations = typeof legacyMaxReviewIterations === 'number' ? legacyMaxReviewIterations : defaultGlobalSettings.maxReviewerIterations;
 			}
 
+			// add divisionFlowApprovalMode feature
+			if (readS.globalSettings.divisionFlowApprovalMode === undefined) {
+				readS.globalSettings.divisionFlowApprovalMode = defaultGlobalSettings.divisionFlowApprovalMode;
+			}
+
 			// Cleanup legacy auth state
 			if ((readS.globalSettings as any).auth0Token !== undefined) delete (readS.globalSettings as any).auth0Token;
 			if ((readS.globalSettings as any).auth0User !== undefined) delete (readS.globalSettings as any).auth0User;

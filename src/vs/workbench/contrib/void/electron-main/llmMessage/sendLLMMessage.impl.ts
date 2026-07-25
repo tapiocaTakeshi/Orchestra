@@ -64,6 +64,7 @@ type SendChatParams_Internal = InternalCommonMessageParams & {
 	divisionMaxBriefGateIterations?: number;
 	divisionMaxReviewerIterations?: number;
 	divisionMaxReviewIterations?: number;
+	divisionFlowApprovalMode?: boolean;
 	workspaceFolderPath?: string;
 }
 type SendFIMParams_Internal = InternalCommonMessageParams & { messages: LLMFIMMessage; separateSystemMessage: string | undefined; }
@@ -1042,12 +1043,76 @@ const saveFlowResultAsMd = (
 	}
 };
 
-// 旧フローでは `.division/.orchestration-state.json` にフロー承認用の中間状態を
-// 書いていた。 シンプル化版では承認ステップ自体が無いので、過去ファイルが残って
-// いた場合に掃除するだけのユーティリティを残す。
+// role に対応する .division/*.md の出力先情報。ファイルを生成しない role
+// (leader 自身など、FLOW_ROLE_TO_FILENAME に無い role) の場合は null。
+const buildMdFileInfo = (workspaceFolderPath: string, role: string): { mdFileName: string; mdFilePath: string } | null => {
+	const filename = FLOW_ROLE_TO_FILENAME[role.toLowerCase()];
+	if (!filename) return null;
+	return { mdFileName: filename, mdFilePath: path.join(workspaceFolderPath, '.division', filename) };
+};
+
+// 承認モード ("各 MD ファイルで承認を得るモード") 用の一時停止状態。
+// フローが一時停止するたびに `.division/.orchestration-state.json` に
+// 書き出し、ユーザーが承認 (approveOrchestration IPC) すると `approved: true`
+// になった状態で次回の sendDivisionAPIChat 呼び出しから読み直され、
+// 続き (nextIndex / reviewer) から再開する。
+type OrchestrationTaskLike = {
+	taskId: string;
+	role: string;
+	title: string;
+	input?: string;
+	output?: string;
+	provider?: string;
+	dependsOn?: string[];
+	description?: string;
+	reason?: string;
+	mode?: string;
+};
+type OrchestrationTaskOutput = {
+	role: string;
+	title: string;
+	output: string;
+	mdFileName?: string;
+	mdFilePath?: string;
+};
+type OrchestrationState = {
+	approved: boolean;
+	workspaceFolderPath: string;
+	sessionId: string;
+	currentInput: string;
+	tasks: OrchestrationTaskLike[];
+	taskOutputs: OrchestrationTaskOutput[];
+	nextIndex: number;
+	totalSteps: number;
+	reviewerDone: boolean;
+	editedOutputs?: Array<{ mdFileName: string; mdContent: string }>;
+};
+
+const orchestrationStatePath = (workspaceFolderPath: string): string =>
+	path.join(workspaceFolderPath, '.division', '.orchestration-state.json');
+
+const readOrchestrationState = (workspaceFolderPath: string): OrchestrationState | null => {
+	try {
+		const p = orchestrationStatePath(workspaceFolderPath);
+		if (!fs.existsSync(p)) return null;
+		return JSON.parse(fs.readFileSync(p, 'utf-8')) as OrchestrationState;
+	} catch (_e) {
+		return null;
+	}
+};
+
+const writeOrchestrationState = (workspaceFolderPath: string, state: OrchestrationState): void => {
+	try {
+		const dir = path.join(workspaceFolderPath, '.division');
+		fs.mkdirSync(dir, { recursive: true });
+		fs.writeFileSync(orchestrationStatePath(workspaceFolderPath), JSON.stringify(state, null, 2), 'utf-8');
+	} catch (_e) { /* ignore */ }
+};
+
+// フロー完了 (Reviewer 完了 or 却下) 時に一時停止状態を掃除する。
 const clearOrchestrationState = (workspaceFolderPath: string): void => {
 	try {
-		const p = path.join(workspaceFolderPath, '.division', '.orchestration-state.json');
+		const p = orchestrationStatePath(workspaceFolderPath);
 		if (fs.existsSync(p)) fs.unlinkSync(p);
 	} catch (_e) { /* ignore */ }
 };
@@ -2583,6 +2648,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		chatMode,
 		settingsOfProvider,
 		takePendingInjection,
+		divisionFlowApprovalMode,
 	} = params
 
 	// 旧フローには Brief Gate / Reviewer のリトライループ + 最大試行回数があったが、
@@ -2860,73 +2926,165 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		};
 
 		// =============================================
-		// Phase 1: Leader がタスクを分解
+		// Phase 1: Leader がタスクを分解する（承認モードで一時停止していた場合は
+		// その続きから再開する）
 		// =============================================
-		appendText(`**Leader AI** がタスクを分析中...\n\n`);
-		const leaderHistory = withStackContext(chatHistory);
-		const leaderResult = await callDivisionTaskCreate(
-			endpointBase, projectId, currentInput, controller.signal,
-			divisionApiKey, leaderHistory.length > 0 ? leaderHistory : undefined,
-			workspaceFolderPath,
-		);
+		const resumeState = workspaceFolderPath ? readOrchestrationState(workspaceFolderPath) : null;
+		// approved: true は「ユーザーが承認ボタンを押した直後」にのみ立つ
+		// (approveOrchestration IPC 経由)。それ以外 (未承認 / 却下後の残骸) は無視して
+		// 通常どおり Leader からやり直す。
+		const isResuming = !!(resumeState && resumeState.approved && resumeState.workspaceFolderPath === workspaceFolderPath);
 
-		if (leaderResult.error) {
-			appendText(`❌ **Task Create Error:** ${leaderResult.error}\n\n`);
-			onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null });
-			flushCommandRunsAfterFinalMessage();
-			return;
-		}
+		let sessionId: string;
+		let tasks: DivisionTask[];
+		let totalSteps: number;
+		let taskOutputs: OrchestrationTaskOutput[];
+		let resumeFromIndex = 0;
 
-		const sessionId = leaderResult.sessionId || '';
-		if (sessionId) activeServerSessionIds.add(sessionId);
+		if (isResuming && resumeState) {
+			sessionId = resumeState.sessionId;
+			if (sessionId) activeServerSessionIds.add(sessionId);
+			currentInput = resumeState.currentInput;
+			tasks = resumeState.tasks as DivisionTask[];
+			totalSteps = resumeState.totalSteps;
+			resumeFromIndex = resumeState.nextIndex;
 
-		// Reviewer はサーバ側ではなく最後にローカルで一括実行する。
-		const EXCLUDED_ROLES = new Set(['review', 'reviewer']);
-		const tasks: DivisionTask[] = (leaderResult.tasks as DivisionTask[])
-			.filter(t => !EXCLUDED_ROLES.has((t.role || '').toLowerCase()));
-
-		// Coder/Writer が file-search の出力を確実に参照できるよう、Leader が
-		// filesearch タスクを生成しなかった場合は先頭に自動挿入する。
-		if (workspaceFolderPath && !tasks.some(t => isFileSearchRole(t.role))) {
-			tasks.unshift({
-				taskId: 'auto-filesearch',
-				role: 'filesearch',
-				title: 'ワークスペース全体の事前読み込み',
-				description: 'すべてのフォルダ・ファイルを走査し、後続エージェントに共有する',
+			// 承認時にユーザーが内容を編集していれば、その内容を正として
+			// taskOutputs と .md ファイルの両方に反映する。
+			taskOutputs = resumeState.taskOutputs.map(o => {
+				const edited = resumeState.editedOutputs?.find(e => e.mdFileName === o.mdFileName);
+				if (!edited) return o;
+				if (workspaceFolderPath && o.mdFileName) {
+					try {
+						fs.writeFileSync(path.join(workspaceFolderPath, '.division', o.mdFileName), edited.mdContent, 'utf-8');
+					} catch (_e) { /* ignore */ }
+				}
+				return { ...o, output: edited.mdContent };
 			});
+
+			if (resumeState.reviewerDone) {
+				appendText(`## ✅ 承認完了\n\nレビュー結果が承認されました。フローを完了します。\n\n`);
+				// 次のユーザー送信時に chatThreadService がこの delimiter を検出して
+				// レビュー指摘を自動添付するため、承認確定メッセージにも再度埋め込む。
+				const reviewEntry = taskOutputs.find(o => o.role === 'review');
+				if (reviewEntry?.output) {
+					appendText(`\n<!-- DIVISION_REVIEWER_BEGIN -->\n${reviewEntry.output}\n<!-- DIVISION_REVIEWER_END -->\n`);
+				}
+			} else {
+				appendText(`## 📋 FLOW（承認により再開）\n\n前回承認されたステップの続きから実行します（${resumeFromIndex + 1}/${totalSteps} ステップ目）。\n\n`);
+			}
+		} else {
+			appendText(`**Leader AI** がタスクを分析中...\n\n`);
+			const leaderHistory = withStackContext(chatHistory);
+			const leaderResult = await callDivisionTaskCreate(
+				endpointBase, projectId, currentInput, controller.signal,
+				divisionApiKey, leaderHistory.length > 0 ? leaderHistory : undefined,
+				workspaceFolderPath,
+			);
+
+			if (leaderResult.error) {
+				appendText(`❌ **Task Create Error:** ${leaderResult.error}\n\n`);
+				onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null });
+				flushCommandRunsAfterFinalMessage();
+				return;
+			}
+
+			sessionId = leaderResult.sessionId || '';
+			if (sessionId) activeServerSessionIds.add(sessionId);
+
+			// Reviewer はサーバ側ではなく最後にローカルで一括実行する。
+			const EXCLUDED_ROLES = new Set(['review', 'reviewer']);
+			tasks = (leaderResult.tasks as DivisionTask[])
+				.filter(t => !EXCLUDED_ROLES.has((t.role || '').toLowerCase()));
+
+			// Coder/Writer が file-search の出力を確実に参照できるよう、Leader が
+			// filesearch タスクを生成しなかった場合は先頭に自動挿入する。
+			if (workspaceFolderPath && !tasks.some(t => isFileSearchRole(t.role))) {
+				tasks.unshift({
+					taskId: 'auto-filesearch',
+					role: 'filesearch',
+					title: 'ワークスペース全体の事前読み込み',
+					description: 'すべてのフォルダ・ファイルを走査し、後続エージェントに共有する',
+				});
+			}
+
+			if (tasks.length === 0) {
+				appendText(`Leader が実行可能なタスクを返しませんでした。終了します。\n`);
+				if (sessionId) activeServerSessionIds.delete(sessionId);
+				onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null });
+				flushCommandRunsAfterFinalMessage();
+				return;
+			}
+
+			// Leader が示した dependsOn 順に並べ替えてから、以降のフェーズは
+			// 常にこの並び (= tasks の配列順) を「唯一の実行順」として扱う。
+			const sortedTasks = topoSortTasks(tasks);
+			tasks.length = 0;
+			tasks.push(...sortedTasks);
+
+			// Reviewer は Phase 3 でローカル実行される最終ステップなので、
+			// フロー表示上もステップ番号に含める。
+			totalSteps = tasks.length + 1;
+			taskOutputs = [];
+
+			appendText(`## 📋 FLOW\n\nLeader が以下の ${totalSteps} ステップのフローを作成しました。以降、各ロールの AI はこの順番通りに実行されます。\n\n`);
+			for (let i = 0; i < tasks.length; i++) {
+				const t = tasks[i];
+				const depsPart = t.dependsOn && t.dependsOn.length > 0 ? ` _(依存: ${t.dependsOn.join(', ')})_` : '';
+				appendText(`${i + 1}. **${t.role}** — ${t.title || ''}${depsPart}\n`);
+			}
+			appendText(`${totalSteps}. **reviewer** — 最終レビュー\n`);
+			if (divisionFlowApprovalMode) {
+				appendText(`\n> 🔒 **承認モード有効** — 各ステップの MD ファイルが完成するたびに一時停止し、あなたの承認を待ちます。\n`);
+			}
 		}
-
-		if (tasks.length === 0) {
-			appendText(`Leader が実行可能なタスクを返しませんでした。終了します。\n`);
-			if (sessionId) activeServerSessionIds.delete(sessionId);
-			onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null });
-			flushCommandRunsAfterFinalMessage();
-			return;
-		}
-
-		// Leader が示した dependsOn 順に並べ替えてから、以降のフェーズは
-		// 常にこの並び (= tasks の配列順) を「唯一の実行順」として扱う。
-		const sortedTasks = topoSortTasks(tasks);
-		tasks.length = 0;
-		tasks.push(...sortedTasks);
-
-		// Reviewer は Phase 3 でローカル実行される最終ステップなので、
-		// フロー表示上もステップ番号に含める。
-		const totalSteps = tasks.length + 1;
-
-		appendText(`## 📋 FLOW\n\nLeader が以下の ${totalSteps} ステップのフローを作成しました。以降、各ロールの AI はこの順番通りに実行されます。\n\n`);
-		for (let i = 0; i < tasks.length; i++) {
-			const t = tasks[i];
-			const depsPart = t.dependsOn && t.dependsOn.length > 0 ? ` _(依存: ${t.dependsOn.join(', ')})_` : '';
-			appendText(`${i + 1}. **${t.role}** — ${t.title || ''}${depsPart}\n`);
-		}
-		appendText(`${totalSteps}. **reviewer** — 最終レビュー\n`);
 		appendText(`\n`);
 
 		// =============================================
 		// Phase 2: 各タスクを Leader の生成順に 1 回だけ実行
 		// =============================================
-		const taskOutputs: Array<{ role: string; title: string; output: string }> = [];
+
+		// 承認モード時、1 ステップの .md が完成するたびにここを通って一時停止する。
+		// 呼び出し側は true が返ったら即座に return し、ユーザーの承認を待つ。
+		const maybePauseForApproval = (
+			flowRole: string,
+			output: string,
+			mdInfo: { mdFileName: string; mdFilePath: string },
+			completedIndex: number,
+			reviewerDone: boolean,
+		): boolean => {
+			if (!divisionFlowApprovalMode || !workspaceFolderPath) return false;
+			writeOrchestrationState(workspaceFolderPath, {
+				approved: false,
+				workspaceFolderPath,
+				sessionId,
+				currentInput,
+				tasks,
+				taskOutputs,
+				nextIndex: completedIndex,
+				totalSteps,
+				reviewerDone,
+			});
+			onFinalMessage({
+				fullText,
+				fullReasoning: '',
+				anthropicReasoning: null,
+				flowReview: {
+					flowRole,
+					mdFileName: mdInfo.mdFileName,
+					mdFilePath: mdInfo.mdFilePath,
+					mdContent: output,
+					sessionId,
+					completedTaskIndex: completedIndex,
+					totalTasks: totalSteps,
+					allFlowOutputs: taskOutputs
+						.filter((o): o is OrchestrationTaskOutput & { mdFileName: string; mdFilePath: string } => !!o.mdFileName && !!o.mdFilePath)
+						.map(o => ({ role: o.role, mdFileName: o.mdFileName, mdFilePath: o.mdFilePath, mdContent: o.output })),
+				},
+			});
+			flushCommandRunsAfterFinalMessage();
+			return true;
+		};
 
 		const buildPriorContextHistory = (): { role: 'user' | 'assistant'; content: string }[] => {
 			const entries: { role: 'user' | 'assistant'; content: string }[] = [];
@@ -2950,7 +3108,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			return entries;
 		};
 
-		for (let i = 0; i < tasks.length; i++) {
+		for (let i = resumeFromIndex; i < tasks.length; i++) {
 			drainInjections();
 			const task = tasks[i];
 			const role = (task.role || '').toLowerCase();
@@ -2974,14 +3132,16 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 						onIterationProgress: (text) => appendText(text),
 					});
 					const capped = truncateForContext(rawOutput, MAX_CHARS_PER_CONTEXT);
-					taskOutputs.push({ role: 'filesearch', title: task.title || '', output: capped });
-					if (FLOW_ROLE_TO_FILENAME['file-search']) {
+					const mdInfo = buildMdFileInfo(workspaceFolderPath, 'file-search');
+					if (mdInfo) {
 						saveFlowResultAsMd(workspaceFolderPath, 'file-search', task.title || '', capped, sessionId || 'file-search');
 					}
+					taskOutputs.push({ role: 'filesearch', title: task.title || '', output: capped, mdFileName: mdInfo?.mdFileName, mdFilePath: mdInfo?.mdFilePath });
 					const sizeMsg = rawOutput.length > capped.length
 						? `（${rawOutput.length.toLocaleString()} → ${capped.length.toLocaleString()} 文字に要約）`
 						: `（${capped.length.toLocaleString()} 文字）`;
 					appendText(`📂 file-search 完了 ${sizeMsg}\n\n`);
+					if (mdInfo && maybePauseForApproval('filesearch', capped, mdInfo, i + 1, false)) return;
 				} catch (e: any) {
 					const errMsg = `(file-search failed: ${e?.message || String(e)})`;
 					appendText(`⚠️ file-search エラー: ${e?.message || String(e)}\n\n`);
@@ -3081,8 +3241,6 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			if (fences % 2 !== 0) appendText(`\n\`\`\`\n`);
 			appendText(`\n\n`);
 
-			taskOutputs.push({ role: task.role, title: task.title || '', output });
-
 			// Coder 系: コードブロックを実ファイルに書き出す
 			if (output && workspaceFolderPath && isCoderLikeRole(role)) {
 				const { savedFiles, fileOperations, commands } = saveCodeBlocksFromOutput(output, sessionId || 'task', workspaceFolderPath);
@@ -3098,14 +3256,28 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			}
 
 			// 既知のロールは .division/*.md にも保存
-			if (output && workspaceFolderPath && FLOW_ROLE_TO_FILENAME[role]) {
+			const mdInfo = (output && workspaceFolderPath) ? buildMdFileInfo(workspaceFolderPath, role) : null;
+			if (mdInfo && workspaceFolderPath) {
 				saveFlowResultAsMd(workspaceFolderPath, task.role, task.title || '', output, sessionId || 'task');
 			}
+			taskOutputs.push({ role: task.role, title: task.title || '', output, mdFileName: mdInfo?.mdFileName, mdFilePath: mdInfo?.mdFilePath });
+
+			if (mdInfo && maybePauseForApproval(task.role, output, mdInfo, i + 1, false)) return;
 		}
 
 		// =============================================
 		// Phase 3: Reviewer 最終レビュー (1 回のみ、リトライなし)
 		// =============================================
+
+		// 承認モードでレビュー結果も承認済みなら、レビューを再実行せずそのまま完了させる。
+		if (isResuming && resumeState?.reviewerDone) {
+			if (sessionId) activeServerSessionIds.delete(sessionId);
+			if (workspaceFolderPath) clearOrchestrationState(workspaceFolderPath);
+			onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null });
+			flushCommandRunsAfterFinalMessage();
+			return;
+		}
+
 		drainInjections();
 		appendText(`\n---\n\n### ${totalSteps}. reviewer — 最終レビュー\n\n`);
 
@@ -3163,10 +3335,23 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 
 		appendText(`\n${REVIEWER_END}\n`);
 
+		let reviewMdInfo: { mdFileName: string; mdFilePath: string } | null = null;
 		if (reviewResult.error) {
 			appendText(`\n⚠️ Reviewer エラー: ${reviewResult.error}\n`);
-		} else if (reviewResult.output && workspaceFolderPath && FLOW_ROLE_TO_FILENAME['review']) {
-			saveFlowResultAsMd(workspaceFolderPath, 'review', '', reviewResult.output, sessionId || 'review');
+		} else if (reviewResult.output && workspaceFolderPath) {
+			reviewMdInfo = buildMdFileInfo(workspaceFolderPath, 'review');
+			if (reviewMdInfo) {
+				saveFlowResultAsMd(workspaceFolderPath, 'review', '', reviewResult.output, sessionId || 'review');
+			}
+		}
+
+		if (reviewMdInfo && reviewResult.output) {
+			// 承認モードで再開後に確定メッセージを組み立て直せるよう、
+			// レビュー内容も taskOutputs に残しておく。
+			taskOutputs.push({ role: 'review', title: '', output: reviewResult.output, mdFileName: reviewMdInfo.mdFileName, mdFilePath: reviewMdInfo.mdFilePath });
+			if (maybePauseForApproval('review', reviewResult.output, reviewMdInfo, totalSteps, true)) {
+				return;
+			}
 		}
 
 		if (sessionId) activeServerSessionIds.delete(sessionId);
