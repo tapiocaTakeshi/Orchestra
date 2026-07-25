@@ -600,6 +600,10 @@ export type GlobalSettings = {
 	maxReviewerIterations: number;
 	// Legacy setting kept for persisted settings migration/fallback.
 	maxReviewIterations?: number;
+	// true の場合、Division API オーケストレーションは各ロールが .md ファイルを
+	// 生成するたびに一時停止し、ユーザーが承認 (または編集して承認 / 却下) するまで
+	// 次のステップに進まない。
+	divisionFlowApprovalMode: boolean;
 }
 
 // Default role assignments for Division API
@@ -651,6 +655,7 @@ export const defaultGlobalSettings: GlobalSettings = {
 	maxBriefGateIterations: 10,
 	maxReviewerIterations: 10,
 	maxReviewIterations: 10,
+	divisionFlowApprovalMode: false,
 }
 
 export type GlobalSettingName = keyof GlobalSettings

@@ -191,6 +191,9 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 		const divisionMaxReviewerIterations = modelSelection.providerName === 'divisionAPI'
 			? normalizeIterationCap(globalSettings.maxReviewerIterations, legacyMaxReviewIterations)
 			: undefined;
+		const divisionFlowApprovalMode = modelSelection.providerName === 'divisionAPI'
+			? !!globalSettings.divisionFlowApprovalMode
+			: undefined;
 		if (modelSelection.providerName === 'divisionAPI') {
 			console.log(`[LLMMessageService] Division API key present: ${!!divisionApiKey}, length: ${divisionApiKey?.length ?? 0}`);
 		}
@@ -211,6 +214,7 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 			divisionApiKey,
 			divisionMaxBriefGateIterations,
 			divisionMaxReviewerIterations,
+			divisionFlowApprovalMode,
 			workspaceFolderPath,
 		} satisfies MainSendLLMMessageParams);
 
