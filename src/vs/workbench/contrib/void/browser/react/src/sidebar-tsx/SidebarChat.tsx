@@ -684,8 +684,16 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 
 						<div className='flex items-center flex-wrap gap-x-2 gap-y-1 text-nowrap '>
 							{featureName === 'Chat' && <ChatModeDropdown className='text-xs text-void-fg-3 bg-void-bg-1 border border-void-border-2 rounded py-0.5 px-1' />}
-							{featureName === 'Chat' && <DivisionProjectDropdown className='text-xs text-void-fg-3 bg-void-bg-1 border border-void-border-2 rounded py-0.5 px-1' />}
-							<ModelDropdown featureName={featureName} className='text-xs text-void-fg-3 bg-void-bg-1 rounded' />
+							{featureName === 'Chat' && (
+								<div className='flex items-center gap-1'>
+									<span className='text-void-fg-4 text-[10px] pointer-events-none'>プロジェクト</span>
+									<DivisionProjectDropdown className='text-xs text-void-fg-3 bg-void-bg-1 border border-void-border-2 rounded py-0.5 px-1' />
+								</div>
+							)}
+							<div className='flex items-center gap-1'>
+								<span className='text-void-fg-4 text-[10px] pointer-events-none'>モデル</span>
+								<ModelDropdown featureName={featureName} className='text-xs text-void-fg-3 bg-void-bg-1 rounded' />
+							</div>
 						</div>
 					</div>
 				)}
