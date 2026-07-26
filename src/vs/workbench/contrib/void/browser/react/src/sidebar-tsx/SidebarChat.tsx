@@ -2977,10 +2977,12 @@ const AssistantQuestionReply = ({ threadId }: { threadId: string }) => {
 			<button
 				onClick={() => submitAnswer()}
 				disabled={!answer.trim() || isSending}
-				className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--vscode-button-background)] px-3 py-1.5 text-[12px] font-medium text-[var(--vscode-button-foreground)] hover:bg-[var(--vscode-button-hoverBackground)] disabled:cursor-not-allowed disabled:opacity-50"
+				className="inline-flex items-center justify-center rounded-lg bg-[var(--vscode-button-background)] p-1.5 text-[var(--vscode-button-foreground)] hover:bg-[var(--vscode-button-hoverBackground)] disabled:cursor-not-allowed disabled:opacity-50"
+				data-tooltip-id='void-tooltip'
+				data-tooltip-content='送信'
+				data-tooltip-place='top'
 			>
 				<SendHorizontal size={13} />
-				送信
 			</button>
 		</div>
 	</div>
