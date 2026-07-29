@@ -113,6 +113,9 @@ export class PartsSplash {
 			element.style.display = 'none';
 		}
 
+		// remove startup logo animation
+		mainWindow.document.getElementById('monaco-workbench-splash-logo')?.remove();
+
 		// remove initial colors
 		const defaultStyles = mainWindow.document.head.getElementsByClassName('initialShellColors');
 		defaultStyles[0]?.remove();
