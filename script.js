@@ -4,6 +4,22 @@
 (() => {
   const root = document.documentElement;
 
+  // ---- Boot splash ---------------------------------------
+  const bootSplash = document.getElementById('bootSplash');
+  if (bootSplash) {
+    const MIN_DISPLAY_MS = 1400;
+    const shownAt = performance.now();
+    const dismiss = () => {
+      const remaining = MIN_DISPLAY_MS - (performance.now() - shownAt);
+      setTimeout(() => {
+        bootSplash.classList.add('is-hidden');
+        bootSplash.addEventListener('transitionend', () => bootSplash.remove(), { once: true });
+      }, Math.max(0, remaining));
+    };
+    if (document.readyState === 'complete') dismiss();
+    else window.addEventListener('load', dismiss, { once: true });
+  }
+
   // ---- Theme toggle (persisted) -------------------------
   const THEME_KEY = 'ui-theme';
   const stored = localStorage.getItem(THEME_KEY);
