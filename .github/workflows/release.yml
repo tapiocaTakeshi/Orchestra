@@ -346,7 +346,12 @@ jobs:
   # ---------- Windows (x64) ----------
   build-windows:
     name: Build Windows (x64)
-    runs-on: windows-latest
+    # windows-latest は 2026-06 に Windows Server 2025 + Visual Studio 2026 (VS "18") へ
+    # 移行済み。本プロジェクトが使う @electron/node-gyp@10.2.0-electron.1 はまだ VS 2026 を
+    # 認識できず、node-gyp によるネイティブモジュールのビルド (@vscode/policy-watcher 等) が
+    # "Could not find any Visual Studio installation to use" で失敗する。
+    # node-gyp が VS 2026 に対応するまでは VS 2022 系イメージに固定する。
+    runs-on: windows-2022
     timeout-minutes: 120
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
