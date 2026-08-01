@@ -204,15 +204,27 @@ jobs:
             ls -la "$APP_DIR" || true
             exit 1
           fi
+
+          # hdiutil に署名済みのビルド出力ディレクトリを直接読ませると、
+          # electron-packager がヘルパー実行ファイルをハードリンクで共有している
+          # 場合などに、DMG/ZIP に取り込まれるコピーがコード署名と食い違う
+          # ("The signature of the binary is invalid" が notarization でのみ
+          # 再現する) ことがある。ditto (Apple 推奨のバンドルコピー手段) で
+          # 独立したステージングコピーを作成し、パッケージ化はそちらから行う。
+          STAGE_DIR="$RUNNER_TEMP/dmg-stage"
+          rm -rf "$STAGE_DIR"
+          mkdir -p "$STAGE_DIR"
+          ditto "$APP_DIR/Orchestra.app" "$STAGE_DIR/Orchestra.app"
+
           DMG_PATH="artifacts/Orchestra-${RELEASE_TAG}-darwin-arm64.dmg"
           ZIP_PATH="$GITHUB_WORKSPACE/artifacts/Orchestra-${RELEASE_TAG}-darwin-arm64.zip"
           hdiutil create \
             -volname "Orchestra" \
-            -srcfolder "$APP_DIR/Orchestra.app" \
+            -srcfolder "$STAGE_DIR/Orchestra.app" \
             -ov \
             -format UDZO \
             "$DMG_PATH"
-          (cd "$APP_DIR" && zip -ry "$ZIP_PATH" Orchestra.app)
+          (cd "$STAGE_DIR" && zip -ry "$ZIP_PATH" Orchestra.app)
           echo "DMG_PATH=$DMG_PATH" >> "$GITHUB_ENV"
           ls -la artifacts/
 
@@ -225,6 +237,39 @@ jobs:
             --keychain "$KEYCHAIN_PATH" \
             "$DMG_PATH"
           codesign --verify --verbose "$DMG_PATH"
+
+      - name: Verify signature inside the packaged DMG
+        if: env.MACOS_CODESIGN_IDENTITY != ''
+        run: |
+          set -euo pipefail
+          # ローカルの $APP に対する codesign --verify は毎回 valid になるが、
+          # notarization は DMG の中身 (= 実際にアップロードされるバイト列) を
+          # 検証する。ここで「まさに提出する DMG の中の .app」をマウントして
+          # 同じ検証を通しておけば、hdiutil/zip のパッケージングでコード署名が
+          # 壊れているケースを Apple に送る前に検知できる。
+          MOUNT_POINT="$RUNNER_TEMP/dmg-verify-mount"
+          mkdir -p "$MOUNT_POINT"
+          echo "::group::Mount DMG read-only"
+          hdiutil attach "$DMG_PATH" -mountpoint "$MOUNT_POINT" -readonly -noautoopen -nobrowse
+          echo "::endgroup::"
+
+          cleanup() {
+            hdiutil detach "$MOUNT_POINT" -quiet || true
+          }
+          trap cleanup EXIT
+
+          MOUNTED_APP="$MOUNT_POINT/Orchestra.app"
+          echo "::group::codesign -dvvv on the mounted Electron binary"
+          codesign -dvvv "$MOUNTED_APP/Contents/MacOS/Electron" 2>&1 || true
+          echo "::endgroup::"
+
+          echo "::group::codesign --verify --deep --strict on the mounted app"
+          codesign --verify --deep --strict --verbose=4 "$MOUNTED_APP"
+          echo "::endgroup::"
+
+          echo "::group::spctl assessment on the mounted app"
+          spctl -a -t exec -vvv "$MOUNTED_APP" || true
+          echo "::endgroup::"
 
       - name: Notarize and staple DMG
         if: env.MACOS_CODESIGN_IDENTITY != '' && env.MACOS_NOTARIZATION_APPLE_ID != ''
