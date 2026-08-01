@@ -1,5 +1,6 @@
 # Release artifacts
 .DS_Store
+._*
 .cache
 npm-debug.log
 Thumbs.db

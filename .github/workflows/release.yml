@@ -141,6 +141,18 @@ jobs:
           npm run bac
           npm run gulp vscode-darwin-arm64
 
+      - name: Strip AppleDouble sidecar files before signing
+        # ソース/依存パッケージに ._foo (AppleDouble リソースフォーク) が
+        # 混入していると codesign --deep がそれをシール対象に含めてしまう。
+        # しかし後段の DMG ステージングで使う ditto はコピー時に AppleDouble
+        # を正規化・除去するため、シール後の内容と DMG に入る実体がズレて
+        # 「a sealed resource is missing or invalid」で notarization 前の
+        # 検証が失敗する。署名前にビルド出力から確実に除去しておく。
+        run: |
+          set -euo pipefail
+          APP_DIR="$(cd .. && pwd)/VSCode-darwin-arm64"
+          find "$APP_DIR" -name '._*' -print -delete
+
       - name: Code sign with Developer ID
         if: env.MACOS_CODESIGN_IDENTITY != ''
         env:
