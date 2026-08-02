@@ -28,6 +28,7 @@ export type DivisionProfile = {
 	creditBalance: number;
 	creditUsed: number;
 	hasStripeCustomer: boolean;
+	divisionApiKey: string | null;
 };
 
 /**
@@ -47,7 +48,7 @@ export const fetchDivisionProfile = async (
 
 	const { data, error } = await sb
 		.from(DIVISION_PROFILES_TABLE)
-		.select('plan, subscription_status, current_period_end, credit_balance, credit_used, stripe_customer_id')
+		.select('plan, subscription_status, current_period_end, credit_balance, credit_used, stripe_customer_id, division_api_key')
 		.eq('id', userData.user.id)
 		.maybeSingle();
 
@@ -60,6 +61,7 @@ export const fetchDivisionProfile = async (
 		creditBalance: Number(data.credit_balance ?? 0),
 		creditUsed: Number(data.credit_used ?? 0),
 		hasStripeCustomer: !!data.stripe_customer_id,
+		divisionApiKey: (data.division_api_key as string) ?? null,
 	};
 };
 

@@ -50,24 +50,27 @@ const restoreSession = async (accessToken: string, refreshToken: string) => {
 };
 
 /**
- * ユーザーのプラン情報を取得する（有料プランかどうかを判定するため）
+ * ユーザーのプラン情報とAPIキーを取得する（有料プランかどうかを判定するため）
  */
-const fetchUserPlan = async (userId: string, accessToken: string): Promise<'free' | 'plus'> => {
+const fetchUserPlanAndApiKey = async (userId: string, accessToken: string): Promise<{ plan: 'free' | 'plus'; apiKey: string | null }> => {
 	try {
 		const sb = getDivisionSupabase();
 		const { data, error } = await sb
 			.from(DIVISION_PROFILES_TABLE)
-			.select('plan')
+			.select('plan, division_api_key')
 			.eq('id', userId)
 			.maybeSingle();
 
 		if (error || !data) {
-			return 'free';
+			return { plan: 'free', apiKey: null };
 		}
 
-		return (data.plan as 'free' | 'plus') ?? 'free';
+		return {
+			plan: (data.plan as 'free' | 'plus') ?? 'free',
+			apiKey: (data.division_api_key as string) ?? null,
+		};
 	} catch {
-		return 'free';
+		return { plan: 'free', apiKey: null };
 	}
 };
 
@@ -142,11 +145,12 @@ export const signInWithDivision = async (
 		throw new Error('Supabase セッションを取得できませんでした。');
 	}
 
-	const plan = await fetchUserPlan(user.id, session.access_token);
-	let apiKey = '';
+	const { plan, apiKey: embeddedApiKey } = await fetchUserPlanAndApiKey(user.id, session.access_token);
+	let apiKey = embeddedApiKey ?? '';
 
 	// 有料プラン（Plus）の場合のみ API キーを自動設定
-	if (plan === 'plus') {
+	// 埋め込みキーがなければ、API キーを作成または取得
+	if (plan === 'plus' && !apiKey) {
 		apiKey = await fetchOrCreateDivisionApiKey(user.id, session.access_token);
 	}
 
@@ -185,10 +189,10 @@ export const signUpWithDivision = async (
 
 	if (session && user) {
 		// 自動ログイン構成: プラン情報をチェックして、有料プランの場合のみ API キーを取得
-		const plan = await fetchUserPlan(user.id, session.access_token);
-		let apiKey = '';
+		const { plan, apiKey: embeddedApiKey } = await fetchUserPlanAndApiKey(user.id, session.access_token);
+		let apiKey = embeddedApiKey ?? '';
 
-		if (plan === 'plus') {
+		if (plan === 'plus' && !apiKey) {
 			apiKey = await fetchOrCreateDivisionApiKey(user.id, session.access_token);
 		}
 
@@ -231,11 +235,12 @@ export const restoreDivisionSession = async (
 		const newAccess = sessData.session?.access_token ?? accessToken;
 		const newRefresh = sessData.session?.refresh_token ?? refreshToken;
 
-		const plan = await fetchUserPlan(user.id, newAccess);
-		let apiKey = '';
+		const { plan, apiKey: embeddedApiKey } = await fetchUserPlanAndApiKey(user.id, newAccess);
+		let apiKey = embeddedApiKey ?? '';
 
 		// 有料プラン（Plus）の場合のみ API キーを自動設定
-		if (plan === 'plus') {
+		// 埋め込みキーがなければ、API キーを作成または取得
+		if (plan === 'plus' && !apiKey) {
 			apiKey = await fetchOrCreateDivisionApiKey(user.id, newAccess);
 		}
 
