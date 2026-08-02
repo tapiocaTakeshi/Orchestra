@@ -1051,6 +1051,72 @@ const buildMdFileInfo = (workspaceFolderPath: string, role: string): { mdFileNam
 	return { mdFileName: filename, mdFilePath: path.join(workspaceFolderPath, '.division', filename) };
 };
 
+// Division API の image ロールは生成画像を base64 (生の base64 または
+// `data:image/<type>;base64,...` data URI) で返す。チャット欄に巨大な
+// base64 文字列をそのまま流すとUIが著しく重くなるため、デコードして
+// `.division/images/` 配下に実ファイルとして書き出し、出力テキスト中の
+// base64 部分は相対パスの markdown 画像参照に置き換える。
+const IMAGE_EXT_BY_MIME: Record<string, string> = {
+	png: 'png', jpeg: 'jpeg', jpg: 'jpeg', gif: 'gif', webp: 'webp', 'svg+xml': 'svg',
+};
+
+const saveBase64ImageFile = (
+	workspaceFolderPath: string,
+	base64Data: string,
+	ext: string,
+	sessionId: string,
+	index: number,
+): string | null => {
+	try {
+		const imagesDir = path.join(workspaceFolderPath, '.division', 'images');
+		fs.mkdirSync(imagesDir, { recursive: true });
+		const filename = `image-${sessionId}-${index}.${ext}`;
+		const filePath = path.join(imagesDir, filename);
+		fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
+		return filePath;
+	} catch (_e) {
+		return null;
+	}
+};
+
+// output 内の base64 画像データを検出して実ファイル化し、markdown の画像
+// 参照に差し替えた文字列を返す。data URI が見つからない場合は、200 文字
+// 以上の base64 のみからなるブロック（生の base64 レスポンス）にフォール
+// バックする。画像が見つからなければ output をそのまま返す。
+const extractAndSaveBase64Images = (
+	output: string,
+	workspaceFolderPath: string,
+	sessionId: string,
+): { markdown: string; savedImagePaths: string[] } => {
+	const savedImagePaths: string[] = [];
+	let index = 0;
+
+	const dataUriRe = /data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);base64,([A-Za-z0-9+/=]+)/g;
+	let markdown = output.replace(dataUriRe, (full: string, imgExt: string, base64Data: string) => {
+		const ext = IMAGE_EXT_BY_MIME[imgExt.toLowerCase()] || 'png';
+		index++;
+		const filePath = saveBase64ImageFile(workspaceFolderPath, base64Data, ext, sessionId, index);
+		if (!filePath) return full;
+		savedImagePaths.push(filePath);
+		const relPath = path.relative(path.join(workspaceFolderPath, '.division'), filePath).split(path.sep).join('/');
+		return `![Generated image ${index}](${relPath})`;
+	});
+
+	if (savedImagePaths.length === 0) {
+		const bareBase64Re = /(^|\n)([A-Za-z0-9+/]{200,}={0,2})(?=\n|$)/g;
+		markdown = markdown.replace(bareBase64Re, (full: string, prefix: string, base64Data: string) => {
+			index++;
+			const filePath = saveBase64ImageFile(workspaceFolderPath, base64Data, 'png', sessionId, index);
+			if (!filePath) return full;
+			savedImagePaths.push(filePath);
+			const relPath = path.relative(path.join(workspaceFolderPath, '.division'), filePath).split(path.sep).join('/');
+			return `${prefix}![Generated image ${index}](${relPath})`;
+		});
+	}
+
+	return { markdown, savedImagePaths };
+};
+
 // 承認モード ("各 MD ファイルで承認を得るモード") 用の一時停止状態。
 // フローが一時停止するたびに `.division/.orchestration-state.json` に
 // 書き出し、ユーザーが承認 (approveOrchestration IPC) すると `approved: true`
@@ -3172,12 +3238,15 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				try {
 					appendText(`🖼️ 画像生成中...\n`);
 
-					// Try to call Division API for image generation
+					// Division API の image ロールは生成画像を base64 で返す。
+					// SSE チャンクをそのまま appendText すると巨大な base64 断片が
+					// チャットに流れてしまうため、ここではストリーム中継せずに
+					// 完了後の output をまとめて後処理する。
 					const execResult = await callDivisionTaskExecute(
 						endpointBase, projectId, task.role,
 						`ユーザーリクエスト: ${imagePrompt}\n\n画像またはビジュアルコンテンツを生成してください。`,
 						controller.signal,
-						(chunk) => appendText(chunk),
+						() => { /* base64 チャンクの生ストリーミングは行わない */ },
 						divisionApiKey, sessionId,
 						withStackContext([...chatHistory, ...buildPriorContextHistory()]),
 						workspaceFolderPath,
@@ -3188,15 +3257,21 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 						appendText(`⚠️ 画像生成エラー: ${execResult.error}\n\n`);
 						taskOutputs.push({ role: 'image', title: task.title || '', output: errMsg });
 					} else {
-						const output = execResult.output || '';
-						appendText(`\n\n`);
+						const rawOutput = execResult.output || '';
+						const { markdown, savedImagePaths } = extractAndSaveBase64Images(rawOutput, workspaceFolderPath, sessionId || 'image');
+						appendText(`${markdown}\n\n`);
+
 						const mdInfo = buildMdFileInfo(workspaceFolderPath, 'image');
 						if (mdInfo) {
-							saveFlowResultAsMd(workspaceFolderPath, 'image', task.title || '', output, sessionId || 'image');
+							saveFlowResultAsMd(workspaceFolderPath, 'image', task.title || '', markdown, sessionId || 'image');
 						}
-						taskOutputs.push({ role: 'image', title: task.title || '', output, mdFileName: mdInfo?.mdFileName, mdFilePath: mdInfo?.mdFilePath });
-						appendText(`🖼️ 画像生成完了\n\n`);
-						if (mdInfo && maybePauseForApproval('image', output, mdInfo, i + 1, false)) return;
+						taskOutputs.push({ role: 'image', title: task.title || '', output: markdown, mdFileName: mdInfo?.mdFileName, mdFilePath: mdInfo?.mdFilePath });
+
+						const doneMsg = savedImagePaths.length > 0
+							? `🖼️ 画像生成完了（${savedImagePaths.length}件保存）\n\n`
+							: `🖼️ 画像生成完了\n\n`;
+						appendText(doneMsg);
+						if (mdInfo && maybePauseForApproval('image', markdown, mdInfo, i + 1, false)) return;
 					}
 				} catch (e: any) {
 					const errMsg = `(image generation failed: ${e?.message || String(e)})`;
