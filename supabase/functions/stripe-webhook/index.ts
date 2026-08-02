@@ -10,10 +10,8 @@ const STRIPE_WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET") ?? "";
 // Stripe Price ID -> プラン ID の逆引き（create-checkout-session と対の設定）
 const PLAN_BY_PRICE: Record<string, string> = {};
 {
-	const pro = Deno.env.get("STRIPE_PRICE_ID_PRO") ?? "";
-	const team = Deno.env.get("STRIPE_PRICE_ID_TEAM") ?? "";
-	if (pro) PLAN_BY_PRICE[pro] = "pro";
-	if (team) PLAN_BY_PRICE[team] = "team";
+	const plus = Deno.env.get("STRIPE_PRICE_ID_PLUS") ?? "";
+	if (plus) PLAN_BY_PRICE[plus] = "plus";
 }
 
 const stripe = new Stripe(STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient() });

@@ -9,7 +9,7 @@ import {
 	DIVISION_PROFILES_TABLE,
 } from '../../../../common/divisionAuthConfig.js';
 
-export type DivisionPlanId = 'free' | 'pro' | 'team';
+export type DivisionPlanId = 'free' | 'plus';
 
 export const divisionPlans: {
 	id: DivisionPlanId;
@@ -18,8 +18,7 @@ export const divisionPlans: {
 	features: string[];
 }[] = [
 	{ id: 'free', name: 'Free', priceLabel: '¥0 / 月', features: ['基本機能', '個人利用向け'] },
-	{ id: 'pro', name: 'Pro', priceLabel: '¥1,980 / 月', features: ['利用上限アップ', '優先サポート'] },
-	{ id: 'team', name: 'Team', priceLabel: '¥4,980 / 月', features: ['チームでのプロジェクト共有', '利用上限さらにアップ'] },
+	{ id: 'plus', name: 'Plus', priceLabel: '¥1,980 / 月', features: ['利用上限アップ', '優先サポート'] },
 ];
 
 export type DivisionProfile = {
