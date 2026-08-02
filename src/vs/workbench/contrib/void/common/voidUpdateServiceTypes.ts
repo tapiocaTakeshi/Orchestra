@@ -12,6 +12,16 @@ export type VoidCheckUpdateRespose = {
 } | null
 
 
+// GitHub Release のアセット (ダウンロード対象候補)
+export type OrchestraReleaseAsset = {
+	// 例: "Orchestra-v1.4.10-darwin-arm64.zip"
+	name: string
+	// 直接ダウンロード可能な URL (リダイレクトを辿る)
+	url: string
+	// バイト数
+	size: number
+}
+
 // GitHub Release から取得した最新リリース情報
 export type OrchestraReleaseInfo = {
 	// 例: "1.4.10" (先頭の "v" は除去済み)
@@ -36,10 +46,27 @@ export type OrchestraReleaseInfo = {
 	checkedAt: number
 	// pre-release か?
 	isPrerelease: boolean
+	// リリースに添付された全アセット (自動アップデートのダウンロード候補選定に使う)
+	assets: OrchestraReleaseAsset[]
+	// 現在の OS/アーキテクチャ向けのビルドがこのリリースに存在するか
+	hasAssetForCurrentPlatform: boolean
 }
+
+// ダウンロードの進捗 (main プロセスから onDownloadProgress で push される)
+export type OrchestraDownloadProgress = {
+	receivedBytes: number
+	// Content-Length が取れない場合は 0 (不定進捗として扱う)
+	totalBytes: number
+}
+
+export type OrchestraDownloadResult = { ok: true } | { error: string }
+export type OrchestraInstallResult = { ok: true } | { error: string }
 
 export type OrchestraUpdateState =
 	| { kind: 'idle' }
 	| { kind: 'checking' }
 	| { kind: 'ok'; info: OrchestraReleaseInfo }
 	| { kind: 'error'; message: string; checkedAt: number }
+	| { kind: 'downloading'; info: OrchestraReleaseInfo; receivedBytes: number; totalBytes: number }
+	| { kind: 'downloaded'; info: OrchestraReleaseInfo }
+	| { kind: 'installing'; info: OrchestraReleaseInfo }

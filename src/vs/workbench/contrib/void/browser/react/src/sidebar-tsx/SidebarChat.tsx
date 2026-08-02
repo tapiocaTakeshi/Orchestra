@@ -5139,7 +5139,12 @@ const OrchestraUpdateBanner: React.FC = () => {
 	const storageService = accessor.get('IStorageService')
 	const updateState = useOrchestraUpdateState()
 
-	const info = updateState.kind === 'ok' ? updateState.info : null
+	const info = updateState.kind === 'ok' || updateState.kind === 'downloading' || updateState.kind === 'downloaded' || updateState.kind === 'installing'
+		? updateState.info
+		: null
+	const isDownloading = updateState.kind === 'downloading'
+	const isDownloaded = updateState.kind === 'downloaded'
+	const isInstalling = updateState.kind === 'installing'
 	const dismissedTag = (() => {
 		try { return storageService.get(ORCHESTRA_DISMISSED_UPDATE_KEY, StorageScope.APPLICATION) ?? null }
 		catch { return null }
@@ -5151,7 +5156,7 @@ const OrchestraUpdateBanner: React.FC = () => {
 		else setIsDismissed(false)
 	}, [info?.tagName, dismissedTag])
 
-	if (!info || !info.hasUpdate || isDismissed) return null
+	if (!info || !info.hasUpdate || (isDismissed && !isDownloading && !isDownloaded && !isInstalling)) return null
 
 	const onOpen = () => openerService.open(URI.parse(info.htmlUrl))
 	const onSettings = () => commandService.executeCommand(VOID_OPEN_SETTINGS_ACTION_ID)
@@ -5164,23 +5169,32 @@ const OrchestraUpdateBanner: React.FC = () => {
 	return (
 		<div className='shrink-0 px-3 py-2 border-b border-amber-500/30 bg-amber-500/10'>
 			<div className='flex items-center gap-2'>
-				<DownloadIcon className='w-3.5 h-3.5 text-amber-400 flex-shrink-0' />
+				{isDownloading || isInstalling ? (
+					<Loader2 className='w-3.5 h-3.5 text-amber-400 flex-shrink-0 animate-spin' />
+				) : (
+					<DownloadIcon className='w-3.5 h-3.5 text-amber-400 flex-shrink-0' />
+				)}
 				<div className='flex-1 min-w-0'>
 					<div className='text-[12px] text-void-fg-1 leading-tight'>
-						新バージョン <span className='font-semibold'>{info.tagName}</span> が利用可能
+						{isInstalling ? 'インストールを準備しています…'
+							: isDownloaded ? `${info.tagName} の準備ができました`
+								: isDownloading ? `${info.tagName} をダウンロード中…`
+									: <>新バージョン <span className='font-semibold'>{info.tagName}</span> が利用可能</>}
 					</div>
 					<div className='text-[10px] text-void-fg-3 truncate'>
 						現在: v{info.currentVersion}
 					</div>
 				</div>
-				<button
-					onClick={onOpen}
-					className='flex items-center gap-1 text-[11px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 transition-colors'
-					title='GitHub のリリースページを開く'
-				>
-					<ExternalLinkIcon className='w-3 h-3' />
-					開く
-				</button>
+				{!isDownloading && !isInstalling && (
+					<button
+						onClick={isDownloaded ? onSettings : onOpen}
+						className='flex items-center gap-1 text-[11px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 transition-colors'
+						title={isDownloaded ? 'Settings の Updates タブから再起動してインストールする' : 'GitHub のリリースページを開く'}
+					>
+						<ExternalLinkIcon className='w-3 h-3' />
+						{isDownloaded ? 'インストール' : '開く'}
+					</button>
+				)}
 				<button
 					onClick={onSettings}
 					className='text-[11px] px-2 py-0.5 rounded text-void-fg-3 hover:text-void-fg-1 hover:bg-void-bg-3 transition-colors'
@@ -5188,13 +5202,15 @@ const OrchestraUpdateBanner: React.FC = () => {
 				>
 					詳細
 				</button>
-				<button
-					onClick={onDismiss}
-					className='p-0.5 rounded text-void-fg-3 hover:text-void-fg-1 hover:bg-void-bg-3 transition-colors'
-					title='このバージョンの通知を非表示にする'
-				>
-					<X className='w-3 h-3' />
-				</button>
+				{!isDownloading && !isDownloaded && !isInstalling && (
+					<button
+						onClick={onDismiss}
+						className='p-0.5 rounded text-void-fg-3 hover:text-void-fg-1 hover:bg-void-bg-3 transition-colors'
+						title='このバージョンの通知を非表示にする'
+					>
+						<X className='w-3 h-3' />
+					</button>
+				)}
 			</div>
 		</div>
 	)
