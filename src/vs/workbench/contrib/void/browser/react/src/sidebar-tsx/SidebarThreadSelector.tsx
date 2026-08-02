@@ -9,6 +9,8 @@ import { useAccessor, useChatThreadsState, useChatThreadsStreamState, useFullCha
 import { IconX } from './SidebarChat.js';
 import { Check, Copy, Icon, LoaderCircle, MessageCircleQuestion, Trash2, UserCheck, X } from 'lucide-react';
 import { IsRunningType, ThreadType } from '../../../chatThreadService.js';
+import { getModelCapabilities } from '../../../../common/modelCapabilities.js';
+import { OverridesOfModel, ProviderName } from '../../../../common/voidSettingsTypes.js';
 
 
 const numInitialThreads = 3
@@ -114,6 +116,50 @@ const formatTime = (date: Date) => {
 	});
 };
 
+// 実際のトークン使用量は保存されていないため、文字数からの概算値
+const CHARS_PER_TOKEN_ESTIMATE = 4
+
+// スレッド内の各メッセージの文字数から、送信のたびに会話履歴全体が
+// 再送されるチャットの性質を踏まえて入出力トークン数を概算し、
+// 現在選択中のモデルの料金表（$/1Mトークン）を掛けて費用を見積もる
+const estimateThreadCostUSD = (
+	pastThread: ThreadType,
+	providerName: ProviderName,
+	modelName: string,
+	overridesOfModel: OverridesOfModel | undefined,
+): number | null => {
+	const { cost } = getModelCapabilities(providerName, modelName, overridesOfModel)
+	if (!cost || (!cost.input && !cost.output)) return null
+
+	let runningChars = 0
+	let estimatedInputTokens = 0
+	let estimatedOutputTokens = 0
+
+	for (const msg of pastThread.messages) {
+		if (msg.role === 'user') {
+			runningChars += msg.displayContent?.length ?? msg.content?.length ?? 0
+		} else if (msg.role === 'assistant') {
+			const outChars = (msg.displayContent?.length ?? 0) + (msg.reasoning?.length ?? 0)
+			// このターンの入力は、それまでの会話全体
+			estimatedInputTokens += runningChars / CHARS_PER_TOKEN_ESTIMATE
+			estimatedOutputTokens += outChars / CHARS_PER_TOKEN_ESTIMATE
+			runningChars += outChars
+		} else if (msg.role === 'tool' && typeof msg.content === 'string') {
+			runningChars += msg.content.length
+		}
+	}
+
+	if (estimatedInputTokens === 0 && estimatedOutputTokens === 0) return null
+
+	const costUSD = (estimatedInputTokens / 1_000_000) * cost.input + (estimatedOutputTokens / 1_000_000) * cost.output
+	return costUSD
+}
+
+const formatEstimatedCost = (costUSD: number): string => {
+	if (costUSD < 0.01) return '<$0.01'
+	return `~$${costUSD.toFixed(2)}`
+}
+
 
 const DuplicateButton = ({ threadId }: { threadId: string }) => {
 	const accessor = useAccessor()
@@ -182,7 +228,12 @@ const PastThreadElement = ({ pastThread, idx, hoveredIdx, setHoveredIdx, isRunni
 	const accessor = useAccessor()
 	const chatThreadsService = accessor.get('IChatThreadService')
 
-	// const settingsState = useSettingsState()
+	const settingsState = useSettingsState()
+	const modelSelection = settingsState.modelSelectionOfFeature['Chat']
+	const estimatedCostUSD = modelSelection
+		? estimateThreadCostUSD(pastThread, modelSelection.providerName, modelSelection.modelName, settingsState.overridesOfModel)
+		: null
+
 	// const convertService = accessor.get('IConvertToLLMMessageService')
 	// const chatMode = settingsState.globalSettings.chatMode
 	// const modelSelection = settingsState.modelSelectionOfFeature?.Chat ?? null
@@ -220,10 +271,14 @@ const PastThreadElement = ({ pastThread, idx, hoveredIdx, setHoveredIdx, isRunni
 	const numMessages = pastThread.messages.filter((msg) => msg.role === 'assistant' || msg.role === 'user').length;
 
 	const detailsHTML = <span
-	// data-tooltip-id='void-tooltip'
-	// data-tooltip-content={`Last modified ${formatTime(new Date(pastThread.lastModified))}`}
-	// data-tooltip-place='top'
+		data-tooltip-id='void-tooltip'
+		data-tooltip-content={estimatedCostUSD !== null ? `推定使用額（現在選択中のモデル基準の概算）: ${formatEstimatedCost(estimatedCostUSD)}` : undefined}
+		data-tooltip-place='top'
 	>
+		{estimatedCostUSD !== null && <>
+			<span className='opacity-60'>{formatEstimatedCost(estimatedCostUSD)}</span>
+			{` `}
+		</>}
 		<span className='opacity-60'>{numMessages}</span>
 		{` `}
 		{formatDate(new Date(pastThread.lastModified))}
