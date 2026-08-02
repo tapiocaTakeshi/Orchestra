@@ -25,6 +25,7 @@ import { OPT_OUT_KEY } from '../../../../common/storageKeys.js';
 import { StorageScope, StorageTarget } from '../../../../../../../platform/storage/common/storage.js';
 
 import { LoginScreen } from '../void-login-tsx/LoginScreen.js';
+import { BillingPanel } from '../void-login-tsx/BillingPanel.js';
 import { Lock } from 'lucide-react';
 import { OrchestraUpdatesPane } from './UpdatesPane.js';
 
@@ -1413,6 +1414,7 @@ export const Settings = () => {
 	const storageService = accessor.get('IStorageService')
 	const metricsService = accessor.get('IMetricsService')
 	const [showLoginScreen, setShowLoginScreen] = useState(false)
+	const [showBillingPanel, setShowBillingPanel] = useState(false)
 	const isOptedOut = useIsOptedOut()
 
 	const onDownload = (t: 'Chats' | 'Settings') => {
@@ -1482,6 +1484,7 @@ export const Settings = () => {
 	return (
 		<div className={`@@void-scope ${isDark ? 'dark' : ''}`} style={{ height: '100%', width: '100%', overflow: 'auto' }}>
 			{showLoginScreen && <LoginScreen onClose={() => setShowLoginScreen(false)} />}
+			{showBillingPanel && <BillingPanel onClose={() => setShowBillingPanel(false)} />}
 			<div className="flex flex-col md:flex-row w-full gap-6 max-w-[900px] mx-auto mb-32" style={{ minHeight: '80vh' }}>
 				{/* ──────────────  SIDEBAR  ────────────── */}
 
@@ -1802,6 +1805,12 @@ export const Settings = () => {
 													Sign Out
 												</button>
 											</div>
+											<button
+												onClick={() => setShowBillingPanel(true)}
+												className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-void-border-2 hover:bg-void-bg-2 text-void-fg-1 text-sm font-medium transition-colors w-fit"
+											>
+												プラン・支払い方法を管理
+											</button>
 										</div>
 									) : (
 										<div className="max-w-48 w-full">
