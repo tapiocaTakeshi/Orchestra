@@ -2884,6 +2884,10 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			return role === 'coder' || role === 'coding' || role === 'code'
 				|| role === 'writer' || role === 'writing';
 		};
+		const isImageRole = (r: string): boolean => {
+			const role = (r || '').toLowerCase();
+			return role === 'image' || role === 'imager' || role === 'image-generator' || role === 'imagegen';
+		};
 
 		// Leader が dependsOn で示した依存関係を尊重して実行順を確定する
 		// （トポロジカルソート）。循環や不明な依存先は無視し、元の生成順で
@@ -3146,6 +3150,58 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					const errMsg = `(file-search failed: ${e?.message || String(e)})`;
 					appendText(`⚠️ file-search エラー: ${e?.message || String(e)}\n\n`);
 					taskOutputs.push({ role: 'filesearch', title: task.title || '', output: errMsg });
+				}
+				continue;
+			}
+
+			// Image generation: 画像生成ロールの特別処理
+			if (isImageRole(role)) {
+				if (!workspaceFolderPath) {
+					const skipMsg = '(ワークスペース未指定のため image generation をスキップ)';
+					appendText(`${skipMsg}\n\n`);
+					taskOutputs.push({ role: 'image', title: task.title || '', output: skipMsg });
+					continue;
+				}
+
+				const imagePrompt = [
+					currentInput,
+					task.input || task.title || '',
+					task.description || '',
+				].filter(Boolean).join('\n');
+
+				try {
+					appendText(`🖼️ 画像生成中...\n`);
+
+					// Try to call Division API for image generation
+					const execResult = await callDivisionTaskExecute(
+						endpointBase, projectId, task.role,
+						`ユーザーリクエスト: ${imagePrompt}\n\n画像またはビジュアルコンテンツを生成してください。`,
+						controller.signal,
+						(chunk) => appendText(chunk),
+						divisionApiKey, sessionId,
+						withStackContext([...chatHistory, ...buildPriorContextHistory()]),
+						workspaceFolderPath,
+					);
+
+					if (execResult.error) {
+						const errMsg = `(image generation failed: ${execResult.error})`;
+						appendText(`⚠️ 画像生成エラー: ${execResult.error}\n\n`);
+						taskOutputs.push({ role: 'image', title: task.title || '', output: errMsg });
+					} else {
+						const output = execResult.output || '';
+						appendText(`\n\n`);
+						const mdInfo = buildMdFileInfo(workspaceFolderPath, 'image');
+						if (mdInfo) {
+							saveFlowResultAsMd(workspaceFolderPath, 'image', task.title || '', output, sessionId || 'image');
+						}
+						taskOutputs.push({ role: 'image', title: task.title || '', output, mdFileName: mdInfo?.mdFileName, mdFilePath: mdInfo?.mdFilePath });
+						appendText(`🖼️ 画像生成完了\n\n`);
+						if (mdInfo && maybePauseForApproval('image', output, mdInfo, i + 1, false)) return;
+					}
+				} catch (e: any) {
+					const errMsg = `(image generation failed: ${e?.message || String(e)})`;
+					appendText(`⚠️ 画像生成エラー: ${e?.message || String(e)}\n\n`);
+					taskOutputs.push({ role: 'image', title: task.title || '', output: errMsg });
 				}
 				continue;
 			}
