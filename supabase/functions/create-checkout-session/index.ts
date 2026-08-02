@@ -9,8 +9,7 @@ const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
 
 // プラン ID -> Stripe Price ID。Supabase の Edge Function Secrets で設定する。
 const PRICE_BY_PLAN: Record<string, string> = {
-	pro: Deno.env.get("STRIPE_PRICE_ID_PRO") ?? "",
-	team: Deno.env.get("STRIPE_PRICE_ID_TEAM") ?? "",
+	plus: Deno.env.get("STRIPE_PRICE_ID_PLUS") ?? "",
 };
 
 const CORS = {
