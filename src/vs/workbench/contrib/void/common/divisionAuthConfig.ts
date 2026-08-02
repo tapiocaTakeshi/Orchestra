@@ -20,3 +20,9 @@ export const DIVISION_API_BASE_URL = 'https://division.higuchiyuya-riddle.worker
 
 // Supabase 上の API キーテーブル名（Prisma 側のモデル名 = 物理テーブル名 = "ApiKey"）
 export const DIVISION_API_KEY_TABLE = 'ApiKey';
+
+// プラン・支払い方法（Stripe 連携）を扱う Supabase Edge Functions のベース URL
+export const DIVISION_FUNCTIONS_BASE_URL = `${DIVISION_SUPABASE_URL}/functions/v1`;
+
+// ユーザーのプラン・請求情報が入っている Supabase テーブル名
+export const DIVISION_PROFILES_TABLE = 'profiles';
