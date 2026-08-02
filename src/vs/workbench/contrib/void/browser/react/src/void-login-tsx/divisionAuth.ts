@@ -13,6 +13,7 @@ import {
 } from '../../../../common/divisionAuthConfig.js';
 
 let _client: SupabaseClient | null = null;
+let _profileUnsubscribe: (() => void) | null = null;
 
 /**
  * Division (Supabase) クライアントのシングルトン。
@@ -264,4 +265,64 @@ export const signOutDivision = async (): Promise<void> => {
 	} catch {
 		// best-effort
 	}
+};
+
+export type ProfileChangeCallback = (update: {
+	plan: 'free' | 'plus';
+	apiKey: string | null;
+}) => void;
+
+/**
+ * ユーザーのプロフィール変更をリアルタイムで監視し、
+ * プランまたは API キーが変更されたときにコールバックを実行する。
+ *
+ * 既にログイン中のユーザーがプランをアップグレードした場合、
+ * 再ログインなしに自動的に最新のプラン情報と API キーを取得できる。
+ *
+ * @param userId - 監視するユーザーID
+ * @param callback - プロフィール変更時に実行するコールバック
+ * @returns アンサブスクライブ関数
+ */
+export const subscribeToProfileChanges = (
+	userId: string,
+	callback: ProfileChangeCallback,
+): (() => void) => {
+	const sb = getDivisionSupabase();
+
+	// 既存のサブスクリプションがあればクリア
+	if (_profileUnsubscribe) {
+		_profileUnsubscribe();
+	}
+
+	// リアルタイムリスナーを設定
+	const channel = sb
+		.channel(`profile-${userId}`)
+		.on(
+			'postgres_changes',
+			{
+				event: 'UPDATE',
+				schema: 'public',
+				table: DIVISION_PROFILES_TABLE,
+				filter: `id=eq.${userId}`,
+			},
+			(payload) => {
+				const newRecord = payload.new as { plan?: string; division_api_key?: string | null } | undefined;
+				if (newRecord) {
+					callback({
+						plan: (newRecord.plan as 'free' | 'plus') ?? 'free',
+						apiKey: (newRecord.division_api_key as string) ?? null,
+					});
+				}
+			},
+		)
+		.subscribe();
+
+	// アンサブスクライブ関数を作成
+	const unsubscribe = () => {
+		channel.unsubscribe();
+		_profileUnsubscribe = null;
+	};
+
+	_profileUnsubscribe = unsubscribe;
+	return unsubscribe;
 };
