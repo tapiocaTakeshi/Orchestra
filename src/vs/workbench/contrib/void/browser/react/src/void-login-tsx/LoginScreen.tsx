@@ -46,12 +46,17 @@ export const LoginScreen = ({ onClose }: { onClose: () => void }) => {
 		accessToken: string;
 		refreshToken: string;
 		apiKey: string;
+		plan: 'free' | 'plus';
 	}) => {
 		voidSettingsService.setGlobalSetting('divisionUserId', result.userId);
 		voidSettingsService.setGlobalSetting('divisionUserEmail', result.email);
 		voidSettingsService.setGlobalSetting('divisionAccessToken', result.accessToken);
 		voidSettingsService.setGlobalSetting('divisionRefreshToken', result.refreshToken);
-		voidSettingsService.setGlobalSetting('divisionApiKey', result.apiKey);
+		voidSettingsService.setGlobalSetting('divisionPlan', result.plan);
+		// 有料プランの場合のみ API キーを設定
+		if (result.apiKey) {
+			voidSettingsService.setGlobalSetting('divisionApiKey', result.apiKey);
+		}
 		voidSettingsService.setGlobalSetting('isLoggedIn', true);
 	};
 
@@ -135,8 +140,8 @@ export const LoginScreen = ({ onClose }: { onClose: () => void }) => {
 						</h1>
 						<p className="text-sm text-void-fg-3">
 							{isLogin
-								? 'Division アカウントでログインすると、API キーが自動で同期されます。'
-								: '新しい Division アカウントを作成して、API キーを自動発行します。'}
+								? '有料プラン（Plus）でログインすると、API キーが自動で設定されます。'
+								: '有料プラン（Plus）でサインアップすると、API キーが自動で発行されます。'}
 						</p>
 					</div>
 
@@ -245,7 +250,7 @@ export const LoginScreen = ({ onClose }: { onClose: () => void }) => {
 
 						<div className="text-[10px] text-void-fg-3 text-center mt-1 inline-flex items-center justify-center gap-1">
 							<KeyRound size={10} />
-							API キーは Division Supabase から自動取得されます
+							Plus プランのみ API キーが自動設定されます
 						</div>
 					</form>
 				</div>

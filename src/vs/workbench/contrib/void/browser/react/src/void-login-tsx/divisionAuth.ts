@@ -9,6 +9,7 @@ import {
 	DIVISION_API_KEY_TABLE,
 	DIVISION_SUPABASE_ANON_KEY,
 	DIVISION_SUPABASE_URL,
+	DIVISION_PROFILES_TABLE,
 } from '../../../../common/divisionAuthConfig.js';
 
 let _client: SupabaseClient | null = null;
@@ -36,6 +37,7 @@ export type DivisionAuthResult = {
 	accessToken: string;
 	refreshToken: string;
 	apiKey: string;
+	plan: 'free' | 'plus';
 };
 
 /**
@@ -45,6 +47,28 @@ export type DivisionAuthResult = {
 const restoreSession = async (accessToken: string, refreshToken: string) => {
 	const sb = getDivisionSupabase();
 	await sb.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+};
+
+/**
+ * ユーザーのプラン情報を取得する（有料プランかどうかを判定するため）
+ */
+const fetchUserPlan = async (userId: string, accessToken: string): Promise<'free' | 'plus'> => {
+	try {
+		const sb = getDivisionSupabase();
+		const { data, error } = await sb
+			.from(DIVISION_PROFILES_TABLE)
+			.select('plan')
+			.eq('id', userId)
+			.maybeSingle();
+
+		if (error || !data) {
+			return 'free';
+		}
+
+		return (data.plan as 'free' | 'plus') ?? 'free';
+	} catch {
+		return 'free';
+	}
 };
 
 /**
@@ -101,6 +125,7 @@ const fetchOrCreateDivisionApiKey = async (
 
 /**
  * Email / Password で Supabase にサインインし、Division API キーまで取得する。
+ * 有料プラン（Plus）のユーザーのみ API キーを自動設定する。
  */
 export const signInWithDivision = async (
 	email: string,
@@ -117,7 +142,13 @@ export const signInWithDivision = async (
 		throw new Error('Supabase セッションを取得できませんでした。');
 	}
 
-	const apiKey = await fetchOrCreateDivisionApiKey(user.id, session.access_token);
+	const plan = await fetchUserPlan(user.id, session.access_token);
+	let apiKey = '';
+
+	// 有料プラン（Plus）の場合のみ API キーを自動設定
+	if (plan === 'plus') {
+		apiKey = await fetchOrCreateDivisionApiKey(user.id, session.access_token);
+	}
 
 	return {
 		userId: user.id,
@@ -125,6 +156,7 @@ export const signInWithDivision = async (
 		accessToken: session.access_token,
 		refreshToken: session.refresh_token ?? '',
 		apiKey,
+		plan,
 	};
 };
 
@@ -136,7 +168,7 @@ export type DivisionSignUpResult =
 
 /**
  * Email / Password で Supabase に新規アカウントを作成する。
- *  - 即時セッションが返れば signedIn (= signInWithDivision 同様 API キーまで取得)
+ *  - 即時セッションが返れば signedIn (有料プランの場合は API キーも取得)
  *  - メール確認が必要な構成では needsEmailConfirmation を返す
  */
 export const signUpWithDivision = async (
@@ -152,8 +184,14 @@ export const signUpWithDivision = async (
 	const user = data.user;
 
 	if (session && user) {
-		// 自動ログイン構成: そのまま API キーを取得して返す
-		const apiKey = await fetchOrCreateDivisionApiKey(user.id, session.access_token);
+		// 自動ログイン構成: プラン情報をチェックして、有料プランの場合のみ API キーを取得
+		const plan = await fetchUserPlan(user.id, session.access_token);
+		let apiKey = '';
+
+		if (plan === 'plus') {
+			apiKey = await fetchOrCreateDivisionApiKey(user.id, session.access_token);
+		}
+
 		return {
 			kind: 'signedIn',
 			auth: {
@@ -162,6 +200,7 @@ export const signUpWithDivision = async (
 				accessToken: session.access_token,
 				refreshToken: session.refresh_token ?? '',
 				apiKey,
+				plan,
 			},
 		};
 	}
@@ -173,6 +212,7 @@ export const signUpWithDivision = async (
 /**
  * 既存の refreshToken からセッションを復元し、Division API キーを再取得する。
  * 設定の永続化済みトークンから無人で再ログインする用途。
+ * 有料プラン（Plus）のユーザーのみ API キーを自動設定する。
  */
 export const restoreDivisionSession = async (
 	accessToken: string,
@@ -191,13 +231,21 @@ export const restoreDivisionSession = async (
 		const newAccess = sessData.session?.access_token ?? accessToken;
 		const newRefresh = sessData.session?.refresh_token ?? refreshToken;
 
-		const apiKey = await fetchOrCreateDivisionApiKey(user.id, newAccess);
+		const plan = await fetchUserPlan(user.id, newAccess);
+		let apiKey = '';
+
+		// 有料プラン（Plus）の場合のみ API キーを自動設定
+		if (plan === 'plus') {
+			apiKey = await fetchOrCreateDivisionApiKey(user.id, newAccess);
+		}
+
 		return {
 			userId: user.id,
 			email: user.email ?? '',
 			accessToken: newAccess,
 			refreshToken: newRefresh,
 			apiKey,
+			plan,
 		};
 	} catch {
 		return null;
