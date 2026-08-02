@@ -31,6 +31,17 @@ async function syncSubscription(subscription: Stripe.Subscription) {
 	// キャンセル・支払い失敗などアクティブでない状態では free 相当の扱いに落とす
 	const effectivePlan = ACTIVE_STATUSES.has(status) ? mappedPlan : "free";
 
+	// ユーザーIDを取得
+	const { data: profileData, error: profileError } = await admin
+		.from("profiles")
+		.select("id")
+		.eq("stripe_customer_id", customerId)
+		.maybeSingle();
+
+	if (profileError) {
+		console.error("profiles select failed:", profileError.message);
+	}
+
 	const { error } = await admin
 		.from("profiles")
 		.update({
@@ -43,6 +54,30 @@ async function syncSubscription(subscription: Stripe.Subscription) {
 
 	if (error) {
 		console.error("profiles update failed:", error.message);
+	}
+
+	// プランが "plus" に変更された場合、Division API キーをプロビジョニング
+	if (effectivePlan === "plus" && profileData?.id) {
+		const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+		try {
+			const res = await fetch(`${supabaseUrl}/functions/v1/provision-division-api-key`, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+				},
+				body: JSON.stringify({ userId: profileData.id }),
+			});
+
+			if (!res.ok) {
+				const text = await res.text();
+				console.error("Failed to provision API key:", text);
+			} else {
+				console.log("Division API key provisioned for user:", profileData.id);
+			}
+		} catch (err) {
+			console.error("Error calling provision-division-api-key:", err);
+		}
 	}
 }
 
