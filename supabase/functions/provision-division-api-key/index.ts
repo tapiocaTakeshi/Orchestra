@@ -73,6 +73,19 @@ Deno.serve(async (req: Request) => {
 			return new Response(JSON.stringify({ error: "Failed to create API key" }), { status: 500 });
 		}
 
+		// プロフィールにAPIキーを保存
+		const { error: updateError } = await admin
+			.from("profiles")
+			.update({ division_api_key: key })
+			.eq("id", userId);
+
+		if (updateError) {
+			console.error("Error updating profile with API key:", updateError.message);
+			// APIキーは作成されているので、エラーは返さない（部分的な成功）
+		} else {
+			console.log("Profile updated with API key for user:", userId);
+		}
+
 		return new Response(JSON.stringify({ success: true, key }), {
 			status: 200,
 			headers: { "Content-Type": "application/json" },

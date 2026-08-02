@@ -73,7 +73,10 @@ async function syncSubscription(subscription: Stripe.Subscription) {
 				const text = await res.text();
 				console.error("Failed to provision API key:", text);
 			} else {
-				console.log("Division API key provisioned for user:", profileData.id);
+				const json = (await res.json().catch(() => ({}))) as { key?: string };
+				if (json.key) {
+					console.log("Division API key provisioned for user:", profileData.id);
+				}
 			}
 		} catch (err) {
 			console.error("Error calling provision-division-api-key:", err);
