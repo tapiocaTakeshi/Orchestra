@@ -3,12 +3,23 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
+import * as crypto from 'crypto';
+import { spawn } from 'child_process';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { Readable } from 'stream';
+import { pipeline } from 'stream/promises';
+import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
+import { extract } from '../../../../base/node/zip.js';
 import { IEnvironmentMainService } from '../../../../platform/environment/electron-main/environmentMainService.js';
+import { ILifecycleMainService } from '../../../../platform/lifecycle/electron-main/lifecycleMainService.js';
+import { ILogService } from '../../../../platform/log/common/log.js';
 import { IProductService } from '../../../../platform/product/common/productService.js';
 import { IOrchestraUpdateUiService } from '../common/voidUpdateService.js';
-import { OrchestraReleaseInfo, OrchestraUpdateState, VoidCheckUpdateRespose } from '../common/voidUpdateServiceTypes.js';
+import { OrchestraDownloadProgress, OrchestraDownloadResult, OrchestraInstallResult, OrchestraReleaseAsset, OrchestraReleaseInfo, OrchestraUpdateState, VoidCheckUpdateRespose } from '../common/voidUpdateServiceTypes.js';
 
 // オートアップデート用の GitHub リポジトリ (owner/repo)。
 // product.json の `updateRepository` で上書き可能。
@@ -33,6 +44,114 @@ const compareVersions = (a: string, b: string): number => {
 	return 0
 }
 
+// 現在の OS/アーキテクチャに対応するリリースアセットの名前に含まれるタグ (例: "darwin-arm64")。
+// .github/workflows/release.yml のアーティファクト命名規則 (Orchestra-<tag>-<platform>-<arch>.<ext>) と対応させる。
+const currentPlatformAssetTag = (): string | undefined => {
+	const { platform, arch } = process
+	if (platform === 'darwin' && arch === 'arm64') return 'darwin-arm64'
+	if (platform === 'win32' && arch === 'x64') return 'win32-x64'
+	if (platform === 'linux' && arch === 'x64') return 'linux-x64'
+	return undefined
+}
+
+// 展開可能な形式 (.zip / .tar.gz) の中から現在のプラットフォーム向けアセットを選ぶ。
+// .dmg のようにマウントが必要な形式は自動アップデートでは使わない。
+const pickAssetForCurrentPlatform = (assets: OrchestraReleaseAsset[]): OrchestraReleaseAsset | undefined => {
+	const tag = currentPlatformAssetTag()
+	if (!tag) return undefined
+	const candidates = assets.filter(a => a.name.includes(`-${tag}.`))
+	const byExt = (ext: string) => candidates.find(a => a.name.toLowerCase().endsWith(ext))
+	return byExt('.zip') ?? byExt('.tar.gz') ?? byExt('.tgz')
+}
+
+// SHA256SUMS.txt (sha256sum 互換フォーマット: "<hex>  <filename>") から指定ファイルのハッシュを探す。
+const findChecksum = (sumsText: string, fileName: string): string | undefined => {
+	for (const rawLine of sumsText.split('\n')) {
+		const line = rawLine.trim()
+		if (!line || line.startsWith('#')) continue
+		const parts = line.split(/\s+/)
+		if (parts.length < 2) continue
+		const hash = parts[0]
+		const name = parts[parts.length - 1].replace(/^\*/, '')
+		if (name === fileName || name.endsWith('/' + fileName)) return hash
+	}
+	return undefined
+}
+
+// quitAndInstall() が spawn する、アプリ終了後に実ファイルを差し替えて再起動するだけの
+// 独立した Node スクリプト。ELECTRON_RUN_AS_NODE=1 を付けて electron バイナリ自身を
+// Node ランタイムとして起動し、このファイルを実行させる。
+const UPDATER_SCRIPT = `
+'use strict';
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { spawn } = require('child_process');
+
+const [, , pidArg, sourceDir, targetDir, exePath] = process.argv;
+const pid = parseInt(pidArg, 10);
+const MAX_WAIT_MS = 10 * 60 * 1000; // 10分待っても終了しない場合はファイルを触らずに諦める
+
+function isRunning(p) {
+	try { process.kill(p, 0); return true; } catch (e) { return false; }
+}
+
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+function logError(e) {
+	try {
+		fs.writeFileSync(path.join(os.tmpdir(), 'orchestra-update-error.log'), String((e && e.stack) || e));
+	} catch (_e) { /* noop */ }
+}
+
+async function waitForExit() {
+	const start = Date.now();
+	while (isRunning(pid)) {
+		if (Date.now() - start > MAX_WAIT_MS) return false;
+		await sleep(200);
+	}
+	return true;
+}
+
+async function copyWithRetry() {
+	let lastErr;
+	for (let attempt = 0; attempt < 15; attempt++) {
+		try {
+			fs.cpSync(sourceDir, targetDir, { recursive: true, force: true });
+			return;
+		} catch (e) {
+			lastErr = e;
+			await sleep(500);
+		}
+	}
+	throw lastErr;
+}
+
+async function clearMacQuarantine(dir) {
+	await new Promise((resolve) => {
+		const p = spawn('xattr', ['-cr', dir], { stdio: 'ignore' });
+		p.once('close', resolve);
+		p.once('error', resolve);
+	});
+}
+
+(async () => {
+	const exited = await waitForExit();
+	if (!exited) {
+		logError(new Error('Timed out waiting for the app to exit; aborting update to avoid touching a running install.'));
+		return;
+	}
+	await sleep(300);
+	await copyWithRetry();
+	if (process.platform === 'darwin') {
+		await clearMacQuarantine(targetDir);
+		spawn('open', [targetDir], { detached: true, stdio: 'ignore' }).unref();
+	} else {
+		spawn(exePath, [], { detached: true, stdio: 'ignore' }).unref();
+	}
+})().catch(logError);
+`;
+
 export class VoidMainUpdateService extends Disposable implements IOrchestraUpdateUiService {
 	_serviceBrand: undefined;
 
@@ -42,9 +161,20 @@ export class VoidMainUpdateService extends Disposable implements IOrchestraUpdat
 	private readonly _onDidChangeUpdateState = this._register(new Emitter<OrchestraUpdateState>())
 	readonly onDidChangeUpdateState: Event<OrchestraUpdateState> = this._onDidChangeUpdateState.event
 
+	private readonly _onDownloadProgress = this._register(new Emitter<OrchestraDownloadProgress>())
+	readonly onDownloadProgress: Event<OrchestraDownloadProgress> = this._onDownloadProgress.event
+
+	// 直近に fetchLatestRelease() で取得したリリース情報 (downloadUpdate() が参照する)
+	private _lastReleaseInfo: OrchestraReleaseInfo | undefined
+
+	// downloadUpdate() が展開したファイル一式への参照 (quitAndInstall() が使う)
+	private _pendingInstall: { contentRoot: string; tagName: string } | undefined
+
 	constructor(
 		@IProductService private readonly _productService: IProductService,
 		@IEnvironmentMainService private readonly _envMainService: IEnvironmentMainService,
+		@ILifecycleMainService private readonly _lifecycleMainService: ILifecycleMainService,
+		@ILogService private readonly _logService: ILogService,
 	) {
 		super()
 	}
@@ -84,6 +214,7 @@ export class VoidMainUpdateService extends Disposable implements IOrchestraUpdat
 				body?: string
 				published_at?: string
 				prerelease?: boolean
+				assets?: { name: string; browser_download_url: string; size: number }[]
 			}
 			const tagName = data.tag_name ?? ''
 			if (!tagName) {
@@ -92,6 +223,11 @@ export class VoidMainUpdateService extends Disposable implements IOrchestraUpdat
 			const latestVersion = tagName.replace(/^v/i, '')
 			const currentVersion = this._getCurrentVersion()
 			const hasUpdate = compareVersions(latestVersion, currentVersion) > 0
+			const assets: OrchestraReleaseAsset[] = (data.assets ?? []).map(a => ({
+				name: a.name,
+				url: a.browser_download_url,
+				size: a.size,
+			}))
 			const info: OrchestraReleaseInfo = {
 				latestVersion,
 				currentVersion,
@@ -104,7 +240,10 @@ export class VoidMainUpdateService extends Disposable implements IOrchestraUpdat
 				hasUpdate,
 				checkedAt: Date.now(),
 				isPrerelease: !!data.prerelease,
+				assets,
+				hasAssetForCurrentPlatform: !!pickAssetForCurrentPlatform(assets),
 			}
+			this._lastReleaseInfo = info
 			return info
 		} catch (e) {
 			return { error: e instanceof Error ? e.message : String(e) }
@@ -132,7 +271,7 @@ export class VoidMainUpdateService extends Disposable implements IOrchestraUpdat
 			const versionLabel = res.name && res.name.length > 0 ? res.name : `v${res.latestVersion}`
 			return {
 				message: `Orchestra の新しいバージョン ${versionLabel} が公開されました! (現在: v${res.currentVersion})`,
-				action: 'open_release',
+				action: res.hasAssetForCurrentPlatform ? 'download' : 'open_release',
 			}
 		}
 
@@ -141,5 +280,168 @@ export class VoidMainUpdateService extends Disposable implements IOrchestraUpdat
 			return { message: `Orchestra は最新です (v${res.currentVersion})`, action: 'open_release' }
 		}
 		return { message: null }
+	}
+
+	private async _downloadToFile(url: string, destPath: string, onProgress: (receivedBytes: number, totalBytes: number) => void): Promise<void> {
+		const response = await fetch(url, { headers: { 'User-Agent': 'Orchestra-Updater' } })
+		if (!response.ok || !response.body) {
+			throw new Error(`ダウンロードに失敗しました: HTTP ${response.status} ${response.statusText}`)
+		}
+		const totalBytes = Number(response.headers.get('content-length') ?? 0)
+		let receivedBytes = 0
+		await fs.promises.mkdir(path.dirname(destPath), { recursive: true })
+		const nodeStream = Readable.fromWeb(response.body as unknown as import('stream/web').ReadableStream<Uint8Array>)
+		nodeStream.on('data', (chunk: Buffer) => {
+			receivedBytes += chunk.length
+			onProgress(receivedBytes, totalBytes)
+		})
+		await pipeline(nodeStream, fs.createWriteStream(destPath))
+	}
+
+	private async _sha256File(filePath: string): Promise<string> {
+		const hash = crypto.createHash('sha256')
+		await pipeline(fs.createReadStream(filePath), hash)
+		return hash.digest('hex')
+	}
+
+	private _extractTarGz(archivePath: string, destDir: string): Promise<void> {
+		return new Promise((resolve, reject) => {
+			const child = spawn('tar', ['-xzf', archivePath, '-C', destDir]);
+			let stderr = ''
+			child.stderr?.on('data', (d: Buffer) => { stderr += d.toString() })
+			child.once('error', reject)
+			child.once('close', (code) => {
+				if (code === 0) resolve()
+				else reject(new Error(`tar の展開に失敗しました (code ${code}): ${stderr.trim()}`))
+			})
+		})
+	}
+
+	// 展開先ディレクトリ直下がラッパーフォルダ1つだけの場合 (linux tar.gz の "VSCode-linux-x64/" や
+	// macOS zip の "Orchestra.app/" など) は、そのフォルダ自体を「実体のルート」とみなす。
+	private async _resolveContentRoot(extractedDir: string): Promise<string> {
+		const entries = await fs.promises.readdir(extractedDir, { withFileTypes: true })
+		if (entries.length === 1 && entries[0].isDirectory()) {
+			return path.join(extractedDir, entries[0].name)
+		}
+		return extractedDir
+	}
+
+	private _resolveInstallRoot(): string {
+		const resourcesPath = process.resourcesPath
+		if (!resourcesPath) {
+			throw new Error('インストール先のパスを特定できませんでした (このビルドはソースから実行されている可能性があります)。')
+		}
+		if (process.platform === 'darwin') {
+			// <Install>/Orchestra.app/Contents/Resources -> <Install>/Orchestra.app
+			return path.dirname(path.dirname(resourcesPath))
+		}
+		// win32 / linux: <Install>/resources -> <Install>
+		return path.dirname(resourcesPath)
+	}
+
+	async downloadUpdate(): Promise<OrchestraDownloadResult> {
+		if (!this._envMainService.isBuilt) {
+			return { error: 'ソースから実行中のため、自動アップデートは無効です。' }
+		}
+		const info = this._lastReleaseInfo
+		if (!info) {
+			return { error: 'アップデート情報がありません。先にアップデートを確認してください。' }
+		}
+		const asset = pickAssetForCurrentPlatform(info.assets)
+		if (!asset) {
+			return { error: `お使いのプラットフォーム (${process.platform}-${process.arch}) 向けのビルドはこのリリースにありません。GitHub のリリースページを確認してください。` }
+		}
+
+		const workDir = path.join(os.tmpdir(), 'orchestra-updates', info.tagName.replace(/[^\w.-]/g, '_'))
+		try {
+			await fs.promises.rm(workDir, { recursive: true, force: true })
+			await fs.promises.mkdir(workDir, { recursive: true })
+			const assetPath = path.join(workDir, asset.name)
+
+			this._logService.info(`orchestra update: downloading ${asset.name} (${asset.size} bytes) from ${asset.url}`)
+			await this._downloadToFile(asset.url, assetPath, (receivedBytes, totalBytes) => {
+				this._onDownloadProgress.fire({ receivedBytes, totalBytes: totalBytes || asset.size })
+			})
+
+			// 整合性チェック (リリースに SHA256SUMS.txt が添付されている場合のみ検証する)
+			const checksumAsset = info.assets.find(a => a.name.toLowerCase() === 'sha256sums.txt')
+			if (checksumAsset) {
+				try {
+					const sumsRes = await fetch(checksumAsset.url, { headers: { 'User-Agent': 'Orchestra-Updater' } })
+					if (sumsRes.ok) {
+						const expected = findChecksum(await sumsRes.text(), asset.name)
+						if (expected) {
+							const actual = await this._sha256File(assetPath)
+							if (actual.toLowerCase() !== expected.toLowerCase()) {
+								await fs.promises.rm(workDir, { recursive: true, force: true }).catch(() => { })
+								return { error: 'ダウンロードしたファイルのチェックサムが一致しませんでした。ネットワークが不安定な可能性があります。もう一度お試しください。' }
+							}
+							this._logService.info('orchestra update: checksum verified OK')
+						}
+					}
+				} catch (e) {
+					// チェックサムの取得/検証自体に失敗しても、ダウンロード本体が壊れているとは限らないので致命的にはしない
+					this._logService.warn(`orchestra update: checksum verification skipped due to error: ${e instanceof Error ? e.message : String(e)}`)
+				}
+			}
+
+			const extractedDir = path.join(workDir, 'extracted')
+			await fs.promises.mkdir(extractedDir, { recursive: true })
+
+			const lowerName = asset.name.toLowerCase()
+			if (lowerName.endsWith('.zip')) {
+				await extract(assetPath, extractedDir, { overwrite: true }, CancellationToken.None)
+			} else if (lowerName.endsWith('.tar.gz') || lowerName.endsWith('.tgz')) {
+				await this._extractTarGz(assetPath, extractedDir)
+			} else {
+				return { error: `未対応のアーカイブ形式です: ${asset.name}` }
+			}
+
+			const contentRoot = await this._resolveContentRoot(extractedDir)
+			this._pendingInstall = { contentRoot, tagName: info.tagName }
+			this._logService.info(`orchestra update: extracted to ${contentRoot}, ready to install`)
+			return { ok: true }
+		} catch (e) {
+			return { error: e instanceof Error ? e.message : String(e) }
+		}
+	}
+
+	async quitAndInstall(): Promise<OrchestraInstallResult> {
+		const pending = this._pendingInstall
+		if (!pending) {
+			return { error: 'まだアップデートがダウンロードされていません。' }
+		}
+
+		let targetDir: string
+		try {
+			targetDir = this._resolveInstallRoot()
+		} catch (e) {
+			return { error: e instanceof Error ? e.message : String(e) }
+		}
+
+		// 先にライフサイクルへ終了確認を通す (未保存の変更などがあればここで veto=true が返る)。
+		// veto された場合は更新用プロセスを一切起動しない (実行中のインストールに触れないため)。
+		// ILifecycleMainService.quit() は内部で electron.app.quit() を呼ぶため、ここで改めて app.quit() は不要。
+		const vetoed = await this._lifecycleMainService.quit(true /* will restart */)
+		if (vetoed) {
+			return { error: '保存されていない変更などにより、再起動がキャンセルされました。' }
+		}
+
+		try {
+			const scriptPath = path.join(os.tmpdir(), `orchestra-apply-update-${Date.now()}.js`)
+			await fs.promises.writeFile(scriptPath, UPDATER_SCRIPT, 'utf8')
+
+			const child = spawn(process.execPath, [scriptPath, String(process.pid), pending.contentRoot, targetDir, process.execPath], {
+				detached: true,
+				stdio: 'ignore',
+				env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+			})
+			child.unref()
+		} catch (e) {
+			return { error: `更新用プロセスの起動に失敗しました: ${e instanceof Error ? e.message : String(e)}` }
+		}
+
+		return { ok: true }
 	}
 }

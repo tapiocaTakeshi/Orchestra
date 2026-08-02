@@ -4,12 +4,14 @@
  *--------------------------------------------------------------------------------------*/
 
 import React, { useCallback, useState } from 'react'
-import { CheckCircle2, Download, ExternalLink, Loader2, RefreshCw, AlertTriangle } from 'lucide-react'
+import { CheckCircle2, Download, ExternalLink, Loader2, RefreshCw, AlertTriangle, RotateCw } from 'lucide-react'
 import { useAccessor, useOrchestraUpdateState } from '../util/services.js'
 import { VoidButtonBgDarken } from '../util/inputs.js'
 import { ChatMarkdownRender } from '../markdown/ChatMarkdownRender.js'
 import { URI } from '../../../../../../../base/common/uri.js'
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
+
+const formatMB = (n: number) => `${(n / (1024 * 1024)).toFixed(1)} MB`
 
 const formatDate = (iso: string | null) => {
 	if (!iso) return null
@@ -52,10 +54,35 @@ export const OrchestraUpdatesPane: React.FC = () => {
 		await openerService.open(URI.parse(url))
 	}, [openerService])
 
-	const info = state.kind === 'ok' ? state.info : null
+	const onDownload = useCallback(async () => {
+		metricsService.capture('Click', { action: 'Download update from Settings' })
+		await voidUpdateService.downloadUpdate()
+	}, [voidUpdateService, metricsService])
+
+	const onInstall = useCallback(async () => {
+		metricsService.capture('Click', { action: 'Install update from Settings' })
+		const res = await voidUpdateService.quitAndInstall()
+		if (res && 'error' in res) {
+			// エラーの場合は state 側にも反映されるが、念のためログしておく
+			console.error('Orchestra update install failed:', res.error)
+		}
+	}, [voidUpdateService, metricsService])
+
+	const info = state.kind === 'ok' || state.kind === 'downloading' || state.kind === 'downloaded' || state.kind === 'installing'
+		? state.info
+		: null
 
 	const hasUpdate = !!info?.hasUpdate
 	const checkingNow = isChecking || state.kind === 'checking'
+	const isDownloading = state.kind === 'downloading'
+	const isDownloaded = state.kind === 'downloaded'
+	const isInstalling = state.kind === 'installing'
+	const downloadPct = state.kind === 'downloading' && state.totalBytes > 0
+		? Math.min(100, Math.floor((state.receivedBytes / state.totalBytes) * 100))
+		: null
+	const downloadBytesLabel = state.kind === 'downloading'
+		? (downloadPct !== null ? `${downloadPct}% (${formatMB(state.receivedBytes)} / ${formatMB(state.totalBytes)})` : formatMB(state.receivedBytes))
+		: ''
 
 	return (
 		<ErrorBoundary>
@@ -75,11 +102,11 @@ export const OrchestraUpdatesPane: React.FC = () => {
 				`}>
 					<div className='flex items-start gap-3'>
 						<div className='mt-0.5'>
-							{checkingNow ? (
+							{checkingNow || isDownloading || isInstalling ? (
 								<Loader2 className='w-5 h-5 text-void-fg-3 animate-spin' />
 							) : state.kind === 'error' ? (
 								<AlertTriangle className='w-5 h-5 text-amber-500' />
-							) : hasUpdate ? (
+							) : isDownloaded || hasUpdate ? (
 								<Download className='w-5 h-5 text-amber-500' />
 							) : (
 								<CheckCircle2 className='w-5 h-5 text-emerald-500' />
@@ -87,11 +114,14 @@ export const OrchestraUpdatesPane: React.FC = () => {
 						</div>
 						<div className='flex-1 min-w-0'>
 							<div className='text-base text-void-fg-1 font-medium'>
-								{checkingNow ? '最新バージョンを確認しています…'
-									: state.kind === 'error' ? 'アップデート確認に失敗しました'
-										: hasUpdate ? `新しいバージョン ${info?.tagName ?? ''} が利用可能です`
-											: state.kind === 'ok' ? 'Orchestra は最新です'
-												: 'まだ確認していません'}
+								{isInstalling ? 'インストールを準備しています… まもなく再起動します'
+									: isDownloaded ? `新しいバージョン ${info?.tagName ?? ''} の準備ができました`
+										: isDownloading ? `ダウンロード中… ${downloadBytesLabel}`
+											: checkingNow ? '最新バージョンを確認しています…'
+												: state.kind === 'error' ? 'アップデート確認に失敗しました'
+													: hasUpdate ? `新しいバージョン ${info?.tagName ?? ''} が利用可能です`
+														: state.kind === 'ok' ? 'Orchestra は最新です'
+															: 'まだ確認していません'}
 							</div>
 							<div className='mt-1 text-xs text-void-fg-3 flex flex-wrap gap-x-4 gap-y-1'>
 								{info && (
@@ -102,22 +132,53 @@ export const OrchestraUpdatesPane: React.FC = () => {
 										{info.publishedAt && <span>公開: {formatDate(info.publishedAt)}</span>}
 									</>
 								)}
+								{hasUpdate && info && !info.hasAssetForCurrentPlatform && (
+									<span className='text-amber-500'>お使いの環境向けのビルドはこのリリースにまだありません。リリースページから手動で確認してください。</span>
+								)}
 								{state.kind === 'error' && (
 									<span className='text-amber-500'>{state.message}</span>
 								)}
 							</div>
+							{isDownloading && (
+								<div className='mt-2 h-1.5 w-full max-w-[320px] rounded-full bg-void-bg-2 overflow-hidden'>
+									<div
+										className='h-full bg-amber-500 transition-all duration-200'
+										style={{ width: downloadPct !== null ? `${downloadPct}%` : '35%' }}
+									/>
+								</div>
+							)}
 						</div>
 					</div>
 
 					<div className='flex flex-wrap items-center gap-2 mt-1'>
 						<VoidButtonBgDarken
 							onClick={onCheck}
-							disabled={checkingNow}
+							disabled={checkingNow || isDownloading || isInstalling}
 							className='px-4 py-1.5 flex items-center gap-2'
 						>
 							{checkingNow ? <Loader2 className='w-3.5 h-3.5 animate-spin' /> : <RefreshCw className='w-3.5 h-3.5' />}
 							{checkingNow ? '確認中…' : 'アップデートを確認'}
 						</VoidButtonBgDarken>
+
+						{isDownloaded ? (
+							<VoidButtonBgDarken
+								onClick={onInstall}
+								disabled={isInstalling}
+								className='px-4 py-1.5 flex items-center gap-2'
+							>
+								{isInstalling ? <Loader2 className='w-3.5 h-3.5 animate-spin' /> : <RotateCw className='w-3.5 h-3.5' />}
+								{isInstalling ? 'インストール中…' : '再起動してインストール'}
+							</VoidButtonBgDarken>
+						) : hasUpdate && info?.hasAssetForCurrentPlatform ? (
+							<VoidButtonBgDarken
+								onClick={onDownload}
+								disabled={isDownloading}
+								className='px-4 py-1.5 flex items-center gap-2'
+							>
+								{isDownloading ? <Loader2 className='w-3.5 h-3.5 animate-spin' /> : <Download className='w-3.5 h-3.5' />}
+								{isDownloading ? 'ダウンロード中…' : 'ダウンロードしてインストール'}
+							</VoidButtonBgDarken>
+						) : null}
 
 						{info && (
 							<VoidButtonBgDarken

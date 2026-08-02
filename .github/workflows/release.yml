@@ -495,6 +495,15 @@ jobs:
           echo "---- file sizes ----"
           du -h artifacts/* || true
 
+      - name: Generate SHA256SUMS.txt
+        # Orchestra 本体の自動アップデート機能 (VoidMainUpdateService) がダウンロード後に
+        # この一覧を使って整合性検証を行う。sha256sum 互換フォーマット ("<hex>  <filename>")。
+        run: |
+          set -euo pipefail
+          cd artifacts
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
       - name: Create / update GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
