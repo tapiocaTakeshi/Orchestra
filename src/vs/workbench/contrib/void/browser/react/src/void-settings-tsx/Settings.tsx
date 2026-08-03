@@ -1761,6 +1761,32 @@ export const Settings = () => {
 
 											</div>
 										</ErrorBoundary>
+
+										{/* Error Fix */}
+										<ErrorBoundary>
+
+											<div className='w-full'>
+												<h4 className={`text-base`}>{displayInfoOfFeatureName('ErrorFix')}</h4>
+												<div className='text-sm text-void-fg-3 mt-1'>エディタのエラー/警告に表示される「✨ Fix with Agent」で使用するモデルです。</div>
+
+												<div className='my-2'>
+													{/* Sync to Chat Switch */}
+													<div className='flex items-center gap-x-2 my-2'>
+														<VoidSwitch
+															size='xs'
+															value={settingsState.globalSettings.syncErrorFixToChat}
+															onChange={(newVal) => voidSettingsService.setGlobalSetting('syncErrorFixToChat', newVal)}
+														/>
+														<span className='text-void-fg-3 text-xs pointer-events-none'>{settingsState.globalSettings.syncErrorFixToChat ? 'Same as Chat model' : 'Different model'}</span>
+													</div>
+
+													{/* Model Dropdown */}
+													<div className={`my-2 ${settingsState.globalSettings.syncErrorFixToChat ? 'hidden' : ''}`}>
+														<ModelDropdown featureName={'ErrorFix'} className='text-xs text-void-fg-3 bg-void-bg-1 border border-void-border-1 rounded p-0.5 px-1' />
+													</div>
+												</div>
+											</div>
+										</ErrorBoundary>
 									</div>
 								</ErrorBoundary>
 							</div>

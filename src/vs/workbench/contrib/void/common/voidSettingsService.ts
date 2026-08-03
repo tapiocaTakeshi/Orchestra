@@ -128,6 +128,7 @@ export const modelFilterOfFeatureName: {
 	'Ctrl+K': { filter: o => true, emptyMessage: null, },
 	'Apply': { filter: o => true, emptyMessage: null, },
 	'SCM': { filter: o => true, emptyMessage: null, },
+	'ErrorFix': { filter: o => true, emptyMessage: null, },
 }
 
 
@@ -242,9 +243,10 @@ const defaultState = () => {
 			'Autocomplete': null,
 			'Apply': { providerName: 'divisionAPI', modelName: 'division-orchestrator' },
 			'SCM': { providerName: 'divisionAPI', modelName: 'division-orchestrator' },
+			'ErrorFix': { providerName: 'divisionAPI', modelName: 'division-orchestrator' },
 		},
 		globalSettings: deepClone(defaultGlobalSettings),
-		optionsOfModelSelection: { 'Chat': {}, 'Ctrl+K': {}, 'Autocomplete': {}, 'Apply': {}, 'SCM': {} },
+		optionsOfModelSelection: { 'Chat': {}, 'Ctrl+K': {}, 'Autocomplete': {}, 'Apply': {}, 'SCM': {}, 'ErrorFix': {} },
 		overridesOfModel: deepClone(defaultOverridesOfModel),
 		_modelOptions: [], // computed later
 		mcpUserStateOfName: {},
@@ -292,6 +294,7 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 		this._onDidChangeState.fire()
 		this._onUpdate_syncApplyToChat()
 		this._onUpdate_syncSCMToChat()
+		this._onUpdate_syncErrorFixToChat()
 	}
 	async resetState() {
 		await this.dangerousSetState(defaultState())
@@ -314,6 +317,15 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 			if (readS.modelSelectionOfFeature && !readS.modelSelectionOfFeature['SCM']) {
 				readS.modelSelectionOfFeature['SCM'] = deepClone(readS.modelSelectionOfFeature['Chat'])
 				readS.optionsOfModelSelection['SCM'] = deepClone(readS.optionsOfModelSelection['Chat'])
+			}
+
+			// add error fix feature
+			if (readS.modelSelectionOfFeature && !readS.modelSelectionOfFeature['ErrorFix']) {
+				readS.modelSelectionOfFeature['ErrorFix'] = deepClone(readS.modelSelectionOfFeature['Chat'])
+				readS.optionsOfModelSelection['ErrorFix'] = deepClone(readS.optionsOfModelSelection['Chat'])
+			}
+			if (readS.globalSettings.syncErrorFixToChat === undefined) {
+				readS.globalSettings.syncErrorFixToChat = defaultGlobalSettings.syncErrorFixToChat
 			}
 			// add disableSystemMessage feature
 			if (readS.globalSettings.disableSystemMessage === undefined) readS.globalSettings.disableSystemMessage = false;
@@ -462,6 +474,10 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 		this.setModelSelectionOfFeature('SCM', deepClone(this.state.modelSelectionOfFeature['Chat']))
 	}
 
+	private _onUpdate_syncErrorFixToChat() {
+		this.setModelSelectionOfFeature('ErrorFix', deepClone(this.state.modelSelectionOfFeature['Chat']))
+	}
+
 	setGlobalSetting: SetGlobalSettingFn = async (settingName, newVal) => {
 		const newState: VoidSettingsState = {
 			...this.state,
@@ -477,6 +493,7 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 		// hooks
 		if (this.state.globalSettings.syncApplyToChat) this._onUpdate_syncApplyToChat()
 		if (this.state.globalSettings.syncSCMToChat) this._onUpdate_syncSCMToChat()
+		if (this.state.globalSettings.syncErrorFixToChat) this._onUpdate_syncErrorFixToChat()
 
 	}
 
@@ -500,6 +517,7 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 			// When Chat model changes, update synced features
 			this._onUpdate_syncApplyToChat()
 			this._onUpdate_syncSCMToChat()
+			this._onUpdate_syncErrorFixToChat()
 		}
 	}
 
