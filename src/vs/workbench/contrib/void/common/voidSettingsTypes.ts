@@ -383,7 +383,7 @@ export const modelSelectionsEqual = (m1: ModelSelection, m2: ModelSelection) => 
 }
 
 // this is a state
-export const featureNames = ['Chat', 'Ctrl+K', 'Autocomplete', 'Apply', 'SCM'] as const
+export const featureNames = ['Chat', 'Ctrl+K', 'Autocomplete', 'Apply', 'SCM', 'ErrorFix'] as const
 export type ModelSelectionOfFeature = Record<(typeof featureNames)[number], ModelSelection | null>
 export type FeatureName = keyof ModelSelectionOfFeature
 
@@ -393,6 +393,8 @@ export const displayInfoOfFeatureName = (featureName: FeatureName) => {
 		return 'Autocomplete'
 	else if (featureName === 'Ctrl+K')
 		return 'クイックエディット'
+	else if (featureName === 'ErrorFix')
+		return 'エラー修正'
 	// sidebar:
 	else if (featureName === 'Chat')
 		return 'チャット'
@@ -573,6 +575,7 @@ export type GlobalSettings = {
 	enableAutocomplete: boolean;
 	syncApplyToChat: boolean;
 	syncSCMToChat: boolean;
+	syncErrorFixToChat: boolean;
 	enableFastApply: boolean;
 	chatMode: ChatMode;
 	// AI 生成コミットメッセージの出力言語
@@ -635,6 +638,7 @@ export const defaultGlobalSettings: GlobalSettings = {
 	enableAutocomplete: false,
 	syncApplyToChat: true,
 	syncSCMToChat: true,
+	syncErrorFixToChat: true,
 	enableFastApply: true,
 	chatMode: 'agent',
 	commitMessageLanguage: 'auto',

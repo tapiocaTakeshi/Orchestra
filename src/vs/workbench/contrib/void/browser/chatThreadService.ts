@@ -351,7 +351,9 @@ export interface IChatThreadService {
 	editUserMessageAndStreamResponse({ userMessage, messageIdx, threadId }: { userMessage: string, messageIdx: number, threadId: string }): Promise<void>;
 
 	// call to add a message
-	addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId }: { userMessage: string, _chatSelections?: StagingSelectionItem[], threadId: string }): Promise<void>;
+	// featureNameOverride: use a different feature's model selection for this run (eg. 'ErrorFix' for Fix with Agent) instead of 'Chat'.
+	// Sticks for the duration of the agentic run (including tool-approval turns); omit to use (and reset to) the Chat model.
+	addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId, featureNameOverride }: { userMessage: string, _chatSelections?: StagingSelectionItem[], threadId: string, featureNameOverride?: FeatureName }): Promise<void>;
 
 	// approve/reject
 	approveLatestToolRequest(threadId: string): void;
@@ -381,6 +383,10 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 	readonly streamState: ThreadStreamState = {}
 	state: ThreadsState // allThreads is persisted, currentThread is not
+
+	// non-persisted: which FeatureName's model selection to use for a thread's currently-running agent loop
+	// (eg. 'ErrorFix' when the run was started from "Fix with Agent"). Cleared whenever a plain user message is sent.
+	private readonly _threadRunFeatureOverride: Record<string, FeatureName | undefined> = {}
 
 	// used in checkpointing
 	// private readonly _userModifiedFilesToCheckInCheckpoints = new LRUCache<string, null>(50)
@@ -666,9 +672,9 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 
 
-	private _currentModelSelectionProps = () => {
+	private _currentModelSelectionProps = (threadId: string) => {
 		// these settings should not change throughout the loop (eg anthropic breaks if you change its thinking mode and it's using tools)
-		const featureName: FeatureName = 'Chat'
+		const featureName: FeatureName = this._threadRunFeatureOverride[threadId] ?? 'Chat'
 		const modelSelection = this._settingsService.state.modelSelectionOfFeature[featureName]
 		const modelSelectionOptions = modelSelection ? this._settingsService.state.optionsOfModelSelection[featureName][modelSelection.providerName]?.[modelSelection.modelName] : undefined
 		return { modelSelection, modelSelectionOptions }
@@ -704,7 +710,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		const callThisToolFirst: ToolMessage<ToolName> = lastMsg
 
 		this._wrapRunAgentToNotify(
-			this._runChatAgent({ callThisToolFirst, threadId, ...this._currentModelSelectionProps() })
+			this._runChatAgent({ callThisToolFirst, threadId, ...this._currentModelSelectionProps(threadId) })
 			, threadId
 		)
 	}
@@ -742,7 +748,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		// Resume the stream directly without adding a visible user message
 		this._setThreadState(threadId, { currCheckpointIdx: null })
 		this._wrapRunAgentToNotify(
-			this._runChatAgent({ threadId, ...this._currentModelSelectionProps() }),
+			this._runChatAgent({ threadId, ...this._currentModelSelectionProps(threadId) }),
 			threadId,
 		)
 	}
@@ -1502,7 +1508,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 	}
 
 
-	private async _addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId }: { userMessage: string, _chatSelections?: StagingSelectionItem[], threadId: string }) {
+	private async _addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId, featureNameOverride }: { userMessage: string, _chatSelections?: StagingSelectionItem[], threadId: string, featureNameOverride?: FeatureName }) {
 		const thread = this.state.allThreads[threadId]
 		if (!thread) return // should never happen
 
@@ -1527,8 +1533,12 @@ We only need to do it for files that were edited since `from`, ie files between 
 
 		this._setThreadState(threadId, { currCheckpointIdx: null }) // no longer at a checkpoint because started streaming
 
+		// set (or clear) which feature's model to use for this run; a plain user message resets to Chat
+		if (featureNameOverride) this._threadRunFeatureOverride[threadId] = featureNameOverride
+		else delete this._threadRunFeatureOverride[threadId]
+
 		this._wrapRunAgentToNotify(
-			this._runChatAgent({ threadId, ...this._currentModelSelectionProps(), }),
+			this._runChatAgent({ threadId, ...this._currentModelSelectionProps(threadId), }),
 			threadId,
 		)
 
@@ -1539,7 +1549,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 	}
 
 
-	async addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId }: { userMessage: string, _chatSelections?: StagingSelectionItem[], threadId: string }) {
+	async addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId, featureNameOverride }: { userMessage: string, _chatSelections?: StagingSelectionItem[], threadId: string, featureNameOverride?: FeatureName }) {
 		const thread = this.state.allThreads[threadId];
 		if (!thread) return
 
@@ -1585,7 +1595,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 		}
 
 		// Now call the original method to add the user message and stream the response
-		await this._addUserMessageAndStreamResponse({ userMessage: augmentedUserMessage, _chatSelections, threadId });
+		await this._addUserMessageAndStreamResponse({ userMessage: augmentedUserMessage, _chatSelections, threadId, featureNameOverride });
 
 	}
 

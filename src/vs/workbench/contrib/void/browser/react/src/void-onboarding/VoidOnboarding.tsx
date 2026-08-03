@@ -129,6 +129,7 @@ const featureNameMap: { display: string, featureName: FeatureName }[] = [
 	{ display: 'Autocomplete', featureName: 'Autocomplete' },
 	{ display: 'Fast Apply', featureName: 'Apply' },
 	{ display: 'Source Control', featureName: 'SCM' },
+	{ display: 'Error Fix', featureName: 'ErrorFix' },
 ];
 
 const AddProvidersPage = ({ pageIndex, setPageIndex }: { pageIndex: number, setPageIndex: (index: number) => void }) => {

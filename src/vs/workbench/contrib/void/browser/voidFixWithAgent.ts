@@ -30,6 +30,8 @@ import { IViewsService } from '../../../services/views/common/viewsService.js';
 import { VOID_FIX_WITH_AGENT_ACTION_ID } from './actionIDs.js';
 import { IChatThreadService } from './chatThreadService.js';
 import { VOID_OPEN_SIDEBAR_ACTION_ID, VOID_VIEW_CONTAINER_ID } from './sidebarPane.js';
+import { IVoidSettingsService } from '../common/voidSettingsService.js';
+import { FeatureName } from '../common/voidSettingsTypes.js';
 
 
 // ----------------------------------------------------------------------------
@@ -156,6 +158,7 @@ registerAction2(class extends Action2 {
 		const viewsService = accessor.get(IViewsService);
 		const chatThreadService = accessor.get(IChatThreadService);
 		const modelService = accessor.get(IModelService);
+		const settingsService = accessor.get(IVoidSettingsService);
 
 		const uriStr = args?.uri ?? '';
 		const markers = args?.markers ?? [];
@@ -222,8 +225,11 @@ registerAction2(class extends Action2 {
 		const threadId = chatThreadService.state.currentThreadId;
 		if (!threadId) return;
 
+		// 設定で「Chat と同じモデルを使う」がオフの場合のみ、ErrorFix 専用のモデル選択を使う
+		const featureNameOverride: FeatureName | undefined = settingsService.state.globalSettings.syncErrorFixToChat ? undefined : 'ErrorFix';
+
 		try {
-			await chatThreadService.addUserMessageAndStreamResponse({ userMessage, threadId });
+			await chatThreadService.addUserMessageAndStreamResponse({ userMessage, threadId, featureNameOverride });
 		} catch (e) {
 			console.error('[VoidFixWithAgent] failed to start stream:', e);
 		}
