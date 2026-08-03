@@ -359,31 +359,50 @@ export class VoidMainUpdateService extends Disposable implements IOrchestraUpdat
 			await fs.promises.mkdir(workDir, { recursive: true })
 			const assetPath = path.join(workDir, asset.name)
 
-			this._logService.info(`orchestra update: downloading ${asset.name} (${asset.size} bytes) from ${asset.url}`)
-			await this._downloadToFile(asset.url, assetPath, (receivedBytes, totalBytes) => {
-				this._onDownloadProgress.fire({ receivedBytes, totalBytes: totalBytes || asset.size })
-			})
+			// 不安定なネットワーク環境ではダウンロードが途中で壊れてチェックサムが
+			// 一致しないことがある。ユーザーに手動での再試行を強いる前に、ここで
+			// 自動的に何度か再ダウンロードを試みる。
+			const MAX_DOWNLOAD_ATTEMPTS = 3
+			let checksumMismatch = false
+			for (let attempt = 1; attempt <= MAX_DOWNLOAD_ATTEMPTS; attempt++) {
+				this._logService.info(`orchestra update: downloading ${asset.name} (attempt ${attempt}/${MAX_DOWNLOAD_ATTEMPTS}, ${asset.size} bytes) from ${asset.url}`)
+				await this._downloadToFile(asset.url, assetPath, (receivedBytes, totalBytes) => {
+					this._onDownloadProgress.fire({ receivedBytes, totalBytes: totalBytes || asset.size })
+				})
 
-			// 整合性チェック (リリースに SHA256SUMS.txt が添付されている場合のみ検証する)
-			const checksumAsset = info.assets.find(a => a.name.toLowerCase() === 'sha256sums.txt')
-			if (checksumAsset) {
-				try {
-					const sumsRes = await fetch(checksumAsset.url, { headers: { 'User-Agent': 'Orchestra-Updater' } })
-					if (sumsRes.ok) {
-						const expected = findChecksum(await sumsRes.text(), asset.name)
-						if (expected) {
-							const actual = await this._sha256File(assetPath)
-							if (actual.toLowerCase() !== expected.toLowerCase()) {
-								await fs.promises.rm(workDir, { recursive: true, force: true }).catch(() => { })
-								return { error: 'ダウンロードしたファイルのチェックサムが一致しませんでした。ネットワークが不安定な可能性があります。もう一度お試しください。' }
+				// 整合性チェック (リリースに SHA256SUMS.txt が添付されている場合のみ検証する)
+				checksumMismatch = false
+				const checksumAsset = info.assets.find(a => a.name.toLowerCase() === 'sha256sums.txt')
+				if (checksumAsset) {
+					try {
+						const sumsRes = await fetch(checksumAsset.url, { headers: { 'User-Agent': 'Orchestra-Updater' } })
+						if (sumsRes.ok) {
+							const expected = findChecksum(await sumsRes.text(), asset.name)
+							if (expected) {
+								const actual = await this._sha256File(assetPath)
+								if (actual.toLowerCase() !== expected.toLowerCase()) {
+									checksumMismatch = true
+									this._logService.warn(`orchestra update: checksum mismatch on attempt ${attempt}/${MAX_DOWNLOAD_ATTEMPTS} (expected ${expected}, actual ${actual})`)
+								} else {
+									this._logService.info('orchestra update: checksum verified OK')
+								}
 							}
-							this._logService.info('orchestra update: checksum verified OK')
 						}
+					} catch (e) {
+						// チェックサムの取得/検証自体に失敗しても、ダウンロード本体が壊れているとは限らないので致命的にはしない
+						this._logService.warn(`orchestra update: checksum verification skipped due to error: ${e instanceof Error ? e.message : String(e)}`)
 					}
-				} catch (e) {
-					// チェックサムの取得/検証自体に失敗しても、ダウンロード本体が壊れているとは限らないので致命的にはしない
-					this._logService.warn(`orchestra update: checksum verification skipped due to error: ${e instanceof Error ? e.message : String(e)}`)
 				}
+
+				if (!checksumMismatch) break
+				if (attempt < MAX_DOWNLOAD_ATTEMPTS) {
+					await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
+				}
+			}
+
+			if (checksumMismatch) {
+				await fs.promises.rm(workDir, { recursive: true, force: true }).catch(() => { })
+				return { error: 'ダウンロードしたファイルのチェックサムが一致しませんでした。ネットワークが不安定な可能性があります。もう一度お試しください。' }
 			}
 
 			const extractedDir = path.join(workDir, 'extracted')
