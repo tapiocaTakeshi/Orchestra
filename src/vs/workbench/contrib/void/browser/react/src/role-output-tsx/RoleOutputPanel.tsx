@@ -23,6 +23,45 @@ type RoleOutput = {
 	source: 'flow_review' | 'orchestration';
 };
 
+// Orchestration ステップの区切り。sendDivisionAPIChat が各ロールの前に出す
+// `### N. role — title` 見出し（— は EM DASH U+2014）を検出する。
+// SidebarChat.tsx の splitMarkdownByTasks と同じ形式。
+const taskHeaderRe = /^###\s+(\d+)\.\s+([^—\n]+?)(?:\s+—\s*(.*))?\s*$/;
+
+function splitByTaskHeaders(content: string): { role: string; title: string; body: string }[] {
+	const lines = content.split('\n');
+	const results: { role: string; title: string; body: string }[] = [];
+	let current: { role: string; title: string; bodyLines: string[] } | null = null;
+	let inCodeFence = false;
+
+	const flush = () => {
+		if (!current) return;
+		const body = current.bodyLines.join('\n')
+			.replace(/^\s*-{3,}\s*$/gm, '')
+			.replace(/^\s+|\s+$/g, '');
+		results.push({ role: current.role, title: current.title, body });
+		current = null;
+	};
+
+	for (const line of lines) {
+		if (/^\s*```/.test(line)) inCodeFence = !inCodeFence;
+		const headingMatch = !inCodeFence ? line.match(taskHeaderRe) : null;
+		if (headingMatch) {
+			flush();
+			current = {
+				role: (headingMatch[2] || '').trim(),
+				title: (headingMatch[3] || '').trim(),
+				bodyLines: [],
+			};
+			continue;
+		}
+		if (current) current.bodyLines.push(line);
+	}
+	flush();
+
+	return results;
+}
+
 function extractRoleOutputs(messages: ChatMessage[]): RoleOutput[] {
 	const outputs: RoleOutput[] = [];
 
@@ -38,10 +77,29 @@ function extractRoleOutputs(messages: ChatMessage[]): RoleOutput[] {
 				messageIdx: idx,
 				source: 'flow_review',
 			});
+			continue;
 		}
 
 		if (msg.role === 'assistant' && msg.displayContent) {
 			const content = msg.displayContent.trim();
+
+			// 現行フォーマット: 各ロールのステップが `### N. role — title` 見出しで
+			// 区切られた 1 本の Markdown ストリーム（JSON ではない）。
+			const taskSections = splitByTaskHeaders(content);
+			if (taskSections.length > 0) {
+				for (const section of taskSections) {
+					if (!section.body.trim()) continue;
+					outputs.push({
+						role: section.role || 'unknown',
+						mdContent: section.body,
+						messageIdx: idx,
+						source: 'orchestration',
+					});
+				}
+				continue;
+			}
+
+			// レガシーフォーマット: `{ sessionId, tasks: [...] }` の JSON レスポンス
 			try {
 				let jsonStr = content;
 				const jsonMatch = content.match(/```json\s*([\s\S]*?)```/);
@@ -63,7 +121,7 @@ function extractRoleOutputs(messages: ChatMessage[]): RoleOutput[] {
 					}
 				}
 			} catch {
-				// not a Division JSON response
+				// not a Division JSON response either
 			}
 		}
 	}
