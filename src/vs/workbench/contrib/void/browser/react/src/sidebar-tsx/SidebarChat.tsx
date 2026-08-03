@@ -12,7 +12,6 @@ import './sidebar-chat-redesign.css';
 
 import { useAccessor, useChatThreadsState, useChatThreadsStreamState, useSettingsState, useActiveURI, useCommandBarState, useFullChatThreadsStreamState, useDivisionProjects, useDivisionProjectConfig, useIsDark, useOrchestraUpdateState } from '../util/services.js';
 import { FloatingPortal } from '@floating-ui/react';
-import { OrchestraLogoButton } from './OrchestraLogoButton.js';
 import { DivisionProjectConfig } from '../../../divisionProjectService.js';
 import { ScrollType } from '../../../../../../../editor/common/editorCommon.js';
 
@@ -5217,7 +5216,7 @@ const OrchestraUpdateBanner: React.FC = () => {
 }
 
 
-const SidebarHeader = ({ onLoginClick, activeTab, onTabChange }: { onLoginClick: () => void; activeTab: import('./OrchestraLogoButton.js').SidebarTab; onTabChange: (tab: import('./OrchestraLogoButton.js').SidebarTab) => void }) => {
+const SidebarHeader = ({ onLoginClick }: { onLoginClick: () => void }) => {
 	const accessor = useAccessor()
 	const commandService = accessor.get('ICommandService') as ICommandService
 	const settingsService = accessor.get('IVoidSettingsService')
@@ -5340,7 +5339,7 @@ const MessageQueueList = ({
 	)
 }
 
-export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTab: import('./OrchestraLogoButton.js').SidebarTab; onTabChange: (tab: import('./OrchestraLogoButton.js').SidebarTab) => void; viewOverride?: React.ReactNode }) => {
+export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }) => {
 	const textAreaRef = useRef<HTMLTextAreaElement | null>(null)
 	const textAreaFnsRef = useRef<TextAreaFns | null>(null)
 
@@ -5801,7 +5800,7 @@ export const SidebarChat = ({ activeTab, onTabChange, viewOverride }: { activeTa
 	return (
 		<div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', overflow: 'hidden' }}>
 			<SidebarChatGlobalStyles />
-			<SidebarHeader onLoginClick={() => setShowLoginScreen(true)} activeTab={activeTab} onTabChange={onTabChange} />
+			<SidebarHeader onLoginClick={() => setShowLoginScreen(true)} />
 			<OrchestraUpdateBanner />
 			{showLoginScreen && <LoginScreen onClose={() => setShowLoginScreen(false)} />}
 			<div style={{ flex: '1 1 0', minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>

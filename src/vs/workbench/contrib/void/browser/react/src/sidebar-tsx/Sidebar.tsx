@@ -28,7 +28,7 @@ export const Sidebar = ({ className }: { className: string }) => {
 			{/* Content - Chat only */}
 			<div style={{ flex: '1 1 0', minHeight: 0, overflow: 'hidden' }}>
 				<ErrorBoundary>
-					<SidebarChat activeTab={'chat'} onTabChange={() => {}} />
+					<SidebarChat />
 				</ErrorBoundary>
 			</div>
 		</div>
