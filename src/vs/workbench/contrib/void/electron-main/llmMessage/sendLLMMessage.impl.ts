@@ -2722,7 +2722,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 	// 互換のため params 側のキー (divisionMax*) は受け入れるが、ここでは無視する。
 
 	try {
-		const endpointBase = settingsOfProvider.divisionAPI.endpoint || 'https://division.higuchiyuya-riddle.workers.dev';
+		const endpointBase = settingsOfProvider.divisionAPI.endpoint || 'https://api.division.he-ro.jp';
 		const projectId = divisionProjectIdParam || '';
 		const prompt = buildPromptFromMessages(messages, separateSystemMessage);
 
@@ -2740,7 +2740,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			const apiKey = divisionApiKey || process.env.DIVISION_API_KEY || '';
 			if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
 			await Promise.all(ids.map(sessionId =>
-				fetch(`${settingsOfProvider.divisionAPI.endpoint || 'https://division.higuchiyuya-riddle.workers.dev'}/api/tasks/stop`, {
+				fetch(`${settingsOfProvider.divisionAPI.endpoint || 'https://api.division.he-ro.jp'}/api/tasks/stop`, {
 					method: 'POST',
 					headers,
 					body: JSON.stringify({ projectId: divisionProjectIdParam || '', sessionId }),
