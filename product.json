@@ -1,7 +1,7 @@
 {
 	"nameShort": "Orchestra",
 	"nameLong": "Orchestra",
-	"voidVersion": "1.4.9",
+	"voidVersion": "1.4.10",
 	"voidRelease": "0045",
 	"applicationName": "orchestra",
 	"dataFolderName": ".orchestra-editor",
