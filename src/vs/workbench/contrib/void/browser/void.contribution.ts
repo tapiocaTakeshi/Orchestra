@@ -31,6 +31,9 @@ import './voidSettingsPane.js'
 // role output pane (main panel for each agent role's markdown output)
 import './roleOutputPane.js'
 
+// built-in browser pane (localhost preview / docs, Ctrl+Alt+B)
+import './browserPane.js'
+
 // register css
 import './media/void.css'
 

@@ -1,0 +1,163 @@
+/*--------------------------------------------------------------------------------------
+ *  Orchestra Browser のツールバー / コンテンツ領域のスタイル。
+ *  webview 自体はワークベンチのオーバーレイとして別レイヤに描画されるため、
+ *  ここで指定するのはツールバーと webview を重ねる「土台」の見た目のみ。
+ *--------------------------------------------------------------------------------------*/
+
+.orchestra-browser {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	width: 100%;
+	overflow: hidden;
+	background-color: var(--vscode-editor-background);
+}
+
+/* ---------- ツールバー ---------- */
+
+.orchestra-browser .orchestra-browser-toolbar {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex: 0 0 auto;
+	height: 34px;
+	padding: 0 8px;
+	box-sizing: border-box;
+	background-color: var(--vscode-editorGroupHeader-tabsBackground, var(--vscode-editor-background));
+	border-bottom: 1px solid var(--vscode-editorGroup-border, transparent);
+}
+
+.orchestra-browser .orchestra-browser-button-group {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	flex: 0 0 auto;
+}
+
+.orchestra-browser .orchestra-browser-icon-button {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: none;
+	border-radius: 5px;
+	background: transparent;
+	color: var(--vscode-icon-foreground);
+	cursor: pointer;
+}
+
+.orchestra-browser .orchestra-browser-icon-button:hover:not(:disabled) {
+	background-color: var(--vscode-toolbar-hoverBackground);
+}
+
+.orchestra-browser .orchestra-browser-icon-button:active:not(:disabled) {
+	background-color: var(--vscode-toolbar-activeBackground, var(--vscode-toolbar-hoverBackground));
+}
+
+.orchestra-browser .orchestra-browser-icon-button:disabled {
+	opacity: 0.4;
+	cursor: default;
+}
+
+.orchestra-browser .orchestra-browser-icon-button:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: -1px;
+}
+
+.orchestra-browser .orchestra-browser-icon-button .codicon {
+	font-size: 16px;
+}
+
+/* ---------- アドレスバー ---------- */
+
+.orchestra-browser .orchestra-browser-urlbar {
+	display: flex;
+	align-items: center;
+	flex: 1 1 auto;
+	min-width: 0;
+	position: relative;
+}
+
+.orchestra-browser .orchestra-browser-url-input {
+	flex: 1 1 auto;
+	min-width: 0;
+	height: 24px;
+	padding: 0 8px;
+	box-sizing: border-box;
+	border: 1px solid var(--vscode-input-border, transparent);
+	border-radius: 12px;
+	background-color: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+	font-family: inherit;
+	font-size: 12px;
+	outline: none;
+}
+
+.orchestra-browser .orchestra-browser-url-input::placeholder {
+	color: var(--vscode-input-placeholderForeground);
+}
+
+.orchestra-browser .orchestra-browser-url-input:focus {
+	border-color: var(--vscode-focusBorder);
+}
+
+/* 読み込み中はアドレスバーの下に不定形のプログレスバーを走らせる */
+.orchestra-browser .orchestra-browser-urlbar::after {
+	content: '';
+	position: absolute;
+	left: 8px;
+	right: 8px;
+	bottom: -5px;
+	height: 2px;
+	border-radius: 1px;
+	background-color: var(--vscode-progressBar-background);
+	opacity: 0;
+	transform: scaleX(0);
+	transform-origin: left center;
+	pointer-events: none;
+}
+
+.orchestra-browser.is-loading .orchestra-browser-urlbar::after {
+	opacity: 1;
+	animation: orchestra-browser-progress 1.2s ease-in-out infinite;
+}
+
+@keyframes orchestra-browser-progress {
+	0% { transform: scaleX(0); transform-origin: left center; }
+	50% { transform: scaleX(1); transform-origin: left center; }
+	51% { transform: scaleX(1); transform-origin: right center; }
+	100% { transform: scaleX(0); transform-origin: right center; }
+}
+
+/* ---------- コンテンツ領域 ---------- */
+
+.orchestra-browser .orchestra-browser-content {
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: hidden;
+}
+
+/* webview はこの要素の上にオーバーレイとして配置される */
+.orchestra-browser .orchestra-browser-webview-placeholder {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+}
+
+/* ページ側にフォーカスが移っているあいだは枠線で知らせる (キー入力が IDE に届かないため) */
+.orchestra-browser.is-frame-focused .orchestra-browser-content::after {
+	content: '';
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	border: 1px solid var(--vscode-focusBorder);
+	pointer-events: none;
+	z-index: 1;
+}
