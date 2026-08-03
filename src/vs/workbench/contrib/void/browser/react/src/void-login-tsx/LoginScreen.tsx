@@ -5,8 +5,9 @@
 
 import React, { useState } from 'react';
 import { useAccessor, useIsDark, useSettingsState } from '../util/services.js';
-import { X, LogIn, UserPlus, KeyRound, Loader2, Mail } from 'lucide-react';
+import { X, LogIn, UserPlus, KeyRound, Loader2, Mail, Globe } from 'lucide-react';
 import { signInWithDivision, signUpWithDivision } from './divisionAuth.js';
+import { getInstallationInfo } from './installationFlow.js';
 
 type AuthMode = 'login' | 'signup';
 
@@ -143,6 +144,12 @@ export const LoginScreen = ({ onClose }: { onClose: () => void }) => {
 								? '有料プラン（Plus）でログインすると、API キーが自動で設定されます。'
 								: '有料プラン（Plus）でサインアップすると、API キーが自動で発行されます。'}
 						</p>
+						{getInstallationInfo()?.installationSource === 'division-website' && (
+							<div className="mt-2 flex items-center gap-1 text-xs text-blue-400">
+								<Globe size={12} />
+								<span>division.he-ro.jp からインストール</span>
+							</div>
+						)}
 					</div>
 
 					{/* Login / Sign Up タブ切替 */}
