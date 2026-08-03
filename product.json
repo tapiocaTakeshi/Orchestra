@@ -39,6 +39,8 @@
 	"builtInExtensions": [],
 	"linkProtectionTrustedDomains": [
 		"https://division.higuchiyuya-riddle.workers.dev",
+		"https://division.he-ro.jp",
+		"https://api.division.he-ro.jp",
 		"https://voideditor.com",
 		"https://github.com/voideditor/void",
 		"https://ollama.com"
