@@ -36,7 +36,8 @@ git push origin v1.4.10
 
 - 初回はランナーのキャッシュが効かないため特に時間がかかります
 - 一部 OS だけ自動化したい場合は不要な `build-*` ジョブを削除してください
-- Windows のコード署名 (Authenticode) は別途実装が必要です（現状は未署名）
+- Windows のコード署名 (Authenticode) は secrets 未登録なら未署名でビルドされます
+  (SmartScreen の警告が出ます)。署名する場合は下記セットアップを参照してください
 
 ## macOS Developer ID 署名 + Notarization のセットアップ
 
@@ -134,6 +135,57 @@ xcrun stapler validate Orchestra-v1.4.11-darwin-arm64.dmg
 # Gatekeeper による評価
 spctl -a -t open --context context:primary-signature -vvv \
   Orchestra-v1.4.11-darwin-arm64.dmg
+```
+
+## Windows Authenticode 署名のセットアップ
+
+Authenticode で署名すると、ダウンロードした `Orchestra.exe` の実行時に出る
+Microsoft Defender SmartScreen の「発行元不明」警告が出なくなります（新規署名
+証明書は SmartScreen の評価が溜まるまでしばらく警告が出ることがあります）。
+下記の secrets を登録すると `release.yml` が自動的に署名します。未登録なら
+未署名のままビルドされます。
+
+### 1. コード署名証明書の取得
+
+DigiCert / Sectigo / SSL.com などの CA から **Code Signing** 証明書
+(`.pfx`/`.p12` 形式でエクスポートできるもの) を購入します。EV 証明書の方が
+SmartScreen の初期評価が早く付きますが、通常の OV 証明書でも動作します。
+
+### 2. GitHub Secrets を登録
+
+リポジトリの **Settings → Secrets and variables → Actions → New repository
+secret** で以下を登録します。
+
+| Secret 名 | 値 |
+|---|---|
+| `WINDOWS_CODESIGN_PFX_BASE64` | `.pfx` ファイルを base64 化した文字列 |
+| `WINDOWS_CODESIGN_PASSWORD` | `.pfx` 作成時のパスワード |
+
+```powershell
+# .pfx を base64 化してクリップボードにコピー (Windows)
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("orchestra.pfx")) | Set-Clipboard
+```
+
+```bash
+# macOS/Linux から作業する場合
+base64 -i orchestra.pfx | pbcopy   # macOS
+base64 -w0 orchestra.pfx | xclip   # Linux
+```
+
+### 3. リリース実行
+
+タグを push すれば `build-windows` ジョブが自動的に `Orchestra.exe` を
+Authenticode 署名 (SHA-256, RFC3161 タイムスタンプ) します。
+
+```bash
+git tag v1.4.11
+git push origin v1.4.11
+```
+
+### 4. ローカル検証
+
+```powershell
+signtool verify /pa /v Orchestra.exe
 ```
 
 ### `release-manual.yml` — 手動アップロード用ドラフトリリース作成

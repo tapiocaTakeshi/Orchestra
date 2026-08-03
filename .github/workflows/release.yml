@@ -367,6 +367,9 @@ jobs:
     timeout-minutes: 120
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Authenticode 署名用 Secrets。未登録の場合は署名なし (unsigned) でビルドする。
+      WINDOWS_CODESIGN_PFX_BASE64: ${{ secrets.WINDOWS_CODESIGN_PFX_BASE64 }}
+      WINDOWS_CODESIGN_PASSWORD: ${{ secrets.WINDOWS_CODESIGN_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
@@ -386,6 +389,63 @@ jobs:
 
       - name: Build (release-windows)
         run: npm run release-windows
+
+      - name: Setup signing certificate
+        if: env.WINDOWS_CODESIGN_PFX_BASE64 != ''
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $certPath = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
+
+          # base64 デコード。Secret に改行や余計な空白が混じると壊れるので除去してからデコードする。
+          $b64 = $env:WINDOWS_CODESIGN_PFX_BASE64 -replace '\s', ''
+          [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($b64))
+
+          if ((Get-Item $certPath).Length -eq 0) {
+            Write-Error "Decoded pfx is empty. WINDOWS_CODESIGN_PFX_BASE64 が空 or 不正な可能性があります。"
+          }
+
+          # PFX (PKCS#12) は ASN.1 SEQUENCE (0x30 0x82) から始まる。マジックバイトで健全性を確認する。
+          $bytes = [IO.File]::ReadAllBytes($certPath)
+          if ($bytes.Length -lt 2 -or $bytes[0] -ne 0x30 -or $bytes[1] -ne 0x82) {
+            Write-Error "Decoded file does not look like a PKCS12 (.pfx). 'certutil -encode' 等でエクスポートし直してください。"
+          }
+
+          echo "CODESIGN_PFX_PATH=$certPath" >> $env:GITHUB_ENV
+
+      - name: Code sign executable with Authenticode
+        if: env.WINDOWS_CODESIGN_PFX_BASE64 != ''
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $signtool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $signtool) {
+            Write-Error "signtool.exe not found under Windows Kits."
+          }
+
+          $exePath = Resolve-Path "..\VSCode-win32-x64\Orchestra.exe"
+
+          & $signtool sign `
+            /f "$env:CODESIGN_PFX_PATH" `
+            /p "$env:WINDOWS_CODESIGN_PASSWORD" `
+            /fd sha256 `
+            /tr http://timestamp.digicert.com `
+            /td sha256 `
+            "$exePath"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "signtool sign failed (exit code $LASTEXITCODE)"
+          }
+
+          & $signtool verify /pa /v "$exePath"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "signtool verify failed (exit code $LASTEXITCODE)"
+          }
+
+      - name: Cleanup signing certificate
+        if: always() && env.CODESIGN_PFX_PATH != ''
+        shell: pwsh
+        run: Remove-Item -Force -ErrorAction SilentlyContinue "$env:CODESIGN_PFX_PATH"
 
       - name: Package zip
         shell: pwsh
