@@ -652,7 +652,7 @@ export const defaultGlobalSettings: GlobalSettings = {
 	enableFastApply: true,
 	chatMode: 'agent',
 	commitMessageLanguage: 'auto',
-	autoApprove: {},
+	autoApprove: { terminal: true },
 	showInlineSuggestions: true,
 	includeToolLintErrors: true,
 	isOnboardingComplete: false,
