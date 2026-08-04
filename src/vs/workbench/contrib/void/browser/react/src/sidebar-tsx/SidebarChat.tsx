@@ -11,6 +11,7 @@ import './sidebar-chat-redesign.css';
 
 
 import { useAccessor, useChatThreadsState, useChatThreadsStreamState, useSettingsState, useActiveURI, useCommandBarState, useFullChatThreadsStreamState, useDivisionProjects, useDivisionProjectConfig, useIsDark, useOrchestraUpdateState } from '../util/services.js';
+import { useTranslation } from '../util/i18n.js';
 import { FloatingPortal } from '@floating-ui/react';
 import { DivisionProjectConfig } from '../../../divisionProjectService.js';
 import { ScrollType } from '../../../../../../../editor/common/editorCommon.js';
@@ -5348,6 +5349,7 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 	const chatThreadsService = accessor.get('IChatThreadService')
 
 	const settingsState = useSettingsState()
+	const { t: tUI } = useTranslation()
 	// ----- HIGHER STATE -----
 
 	// threads state
@@ -5606,7 +5608,7 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 						}}
 					>
 						<IconLoading className='text-[color:var(--vscode-focusBorder)]' />
-						<span className='text-[11px] leading-none text-void-fg-3'>生成中</span>
+						<span className='text-[11px] leading-none text-void-fg-3'>{tUI('chat.generating')}</span>
 					</span>
 				</div>
 				: null}
@@ -5669,8 +5671,8 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 			enableAtToMention
 			className={`min-h-[81px] px-0.5 py-0.5`}
 			placeholder={isRunning
-				? `生成中: Enter でキューに追加, ${keybindingString ? `${keybindingString} で選択を追加, ` : ''}Esc で停止`
-				: `@ to mention, ${keybindingString ? `${keybindingString} to add a selection. ` : ''}Enter instructions...`}
+				? `${tUI('chat.inputPlaceholder.streamingPrefix')}${keybindingString ? `${tUI('chat.inputPlaceholder.streamingAddSelection').replace('{kb}', keybindingString)}` : ''}${tUI('chat.inputPlaceholder.streamingStop')}`
+				: `${tUI('chat.inputPlaceholder.mention')}${keybindingString ? `${tUI('chat.inputPlaceholder.addSelection').replace('{kb}', keybindingString)}` : ''}${tUI('chat.inputPlaceholder.enterInstructions')}`}
 			onChangeText={onChangeText}
 			onKeyDown={onKeyDown}
 			onFocus={() => { chatThreadsService.setCurrentlyFocusedMessageIdx(undefined) }}
@@ -5686,9 +5688,9 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 
 
 	const suggestedPrompts: { text: string; icon: React.ReactNode; hint: string }[] = [
-		{ text: 'Summarize my codebase', icon: <Folder size={14} />, hint: 'プロジェクト全体を把握' },
-		{ text: 'How do types work in Rust?', icon: <Info size={14} />, hint: '技術的な疑問を解決' },
-		{ text: 'Create a .voidrules file for me', icon: <CirclePlus size={14} />, hint: 'ファイルを生成' },
+		{ text: tUI('chat.suggested.summarize'), icon: <Folder size={14} />, hint: tUI('chat.suggested.summarize.hint') },
+		{ text: tUI('chat.suggested.types'), icon: <Info size={14} />, hint: tUI('chat.suggested.types.hint') },
+		{ text: tUI('chat.suggested.voidrules'), icon: <CirclePlus size={14} />, hint: tUI('chat.suggested.voidrules.hint') },
 	]
 
 	const initiallySuggestedPromptsHTML = <div className='flex flex-col gap-2 w-full select-none'>
