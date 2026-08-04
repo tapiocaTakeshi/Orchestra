@@ -14,6 +14,7 @@ import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js';
 import { isLinux } from '../../../../../../../base/common/platform.js';
 import { LoginScreen } from '../void-login-tsx/LoginScreen.js';
 import { OrchestraThemeSwitcher } from '../sidebar-tsx/SidebarChat.js';
+import { useTranslation } from '../util/i18n.js';
 
 const OVERRIDE_VALUE = false
 
@@ -501,6 +502,7 @@ const NextButton = ({ onClick, ...props }: { onClick: () => void } & React.Butto
 
 	// Create a new props object without the disabled attribute
 	const { disabled, ...buttonProps } = props;
+	const { t } = useTranslation()
 
 	return (
 		<button
@@ -518,19 +520,20 @@ const NextButton = ({ onClick, ...props }: { onClick: () => void } & React.Butto
 			}}
 			{...buttonProps}
 		>
-			Next
+			{t('onboarding.next')}
 		</button>
 	)
 }
 
 const PreviousButton = ({ onClick, ...props }: { onClick: () => void } & React.ButtonHTMLAttributes<HTMLButtonElement>) => {
+	const { t } = useTranslation()
 	return (
 		<button
 			onClick={onClick}
 			className="px-6 py-2 rounded text-void-fg-3 opacity-80 hover:brightness-115 duration-600 transition-all"
 			{...props}
 		>
-			Back
+			{t('onboarding.back')}
 		</button>
 	)
 }
@@ -662,6 +665,7 @@ const VoidOnboardingContent = () => {
 	const openExternalLogin = () => setShowLoginScreen(true);
 
 	const voidSettingsState = useSettingsState()
+	const { t } = useTranslation()
 
 	const [pageIndex, setPageIndex] = useState(0)
 
@@ -784,7 +788,7 @@ const VoidOnboardingContent = () => {
 			content={
 				<div className='flex flex-col items-center gap-8'>
 					<div className='flex flex-col items-center gap-2'>
-						<div className="text-5xl font-light text-center">Welcome to Orchestra</div>
+						<div className="text-5xl font-light text-center">{t('onboarding.welcome')}</div>
 						<div className="text-sm text-void-fg-3 opacity-80 text-center">Build 1.0.2 - DEBUG</div>
 					</div>
 
@@ -801,14 +805,14 @@ const VoidOnboardingContent = () => {
 						<PrimaryActionButton
 							onClick={() => { setPageIndex(1) }}
 						>
-							Get Started
+							{t('onboarding.getStarted')}
 						</PrimaryActionButton>
 
 						{voidSettingsState.globalSettings.isLoggedIn ? (
 							<div className="mt-4 flex flex-col items-center gap-2">
 								<div className="text-emerald-500 font-medium flex items-center gap-2 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20">
 									<Check className="w-4 h-4" />
-									ログイン済み
+									{t('onboarding.loggedIn')}
 								</div>
 							</div>
 						) : (

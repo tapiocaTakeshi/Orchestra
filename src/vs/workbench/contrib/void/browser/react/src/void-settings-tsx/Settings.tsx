@@ -26,8 +26,10 @@ import { StorageScope, StorageTarget } from '../../../../../../../platform/stora
 
 import { LoginScreen } from '../void-login-tsx/LoginScreen.js';
 import { BillingPanel } from '../void-login-tsx/BillingPanel.js';
-import { Lock } from 'lucide-react';
+import { Lock, Languages } from 'lucide-react';
 import { OrchestraUpdatesPane } from './UpdatesPane.js';
+import { useTranslation } from '../util/i18n.js';
+import { uiLanguages, displayInfoOfUILanguage } from '../../../../common/voidSettingsTypes.js';
 
 type Tab =
 	| 'models'
@@ -843,6 +845,28 @@ export const OllamaSetupInstructions = ({ sayWeAutoDetect }: { sayWeAutoDetect?:
 }
 
 
+export const UILanguageSwitcher = () => {
+	const { language, setLanguage } = useTranslation()
+
+	return <div className='flex items-center gap-2'>
+		{uiLanguages.map(lang => (
+			<button
+				key={lang}
+				onClick={() => setLanguage(lang)}
+				className={`flex items-center gap-1.5 px-3 py-1 rounded-sm text-sm border transition-colors
+					${lang === language
+						? 'bg-[#0e70c0] text-white border-[#0e70c0]'
+						: 'text-void-fg-3 border-void-border-2 hover:bg-void-bg-2'}
+				`}
+			>
+				{lang === language && <Languages className='size-3' />}
+				{displayInfoOfUILanguage(lang)}
+			</button>
+		))}
+	</div>
+}
+
+
 const RedoOnboardingButton = ({ className }: { className?: string }) => {
 	const accessor = useAccessor()
 	const voidSettingsService = accessor.get('IVoidSettingsService')
@@ -1386,20 +1410,21 @@ const DivisionSettings = () => {
 
 export const Settings = () => {
 	const isDark = useIsDark()
+	const { t } = useTranslation()
 	// ─── sidebar nav ──────────────────────────
 	const [selectedSection, setSelectedSection] =
 		useState<Tab>('models');
 
 	const navItems: { tab: Tab; label: string }[] = [
-		{ tab: 'models', label: 'Models' },
-		{ tab: 'localProviders', label: 'Local Providers' },
-		{ tab: 'providers', label: 'Main Providers' },
-		{ tab: 'featureOptions', label: 'Feature Options' },
-		{ tab: 'division', label: 'Division' },
-		{ tab: 'general', label: 'General' },
-		{ tab: 'mcp', label: 'MCP' },
-		{ tab: 'updates', label: 'Updates' },
-		{ tab: 'all', label: 'All Settings' },
+		{ tab: 'models', label: t('tab.models') },
+		{ tab: 'localProviders', label: t('tab.localProviders') },
+		{ tab: 'providers', label: t('tab.providers') },
+		{ tab: 'featureOptions', label: t('tab.featureOptions') },
+		{ tab: 'division', label: t('tab.division') },
+		{ tab: 'general', label: t('tab.general') },
+		{ tab: 'mcp', label: t('tab.mcp') },
+		{ tab: 'updates', label: t('tab.updates') },
+		{ tab: 'all', label: t('tab.all') },
 	];
 	const shouldShowTab = (tab: Tab) => selectedSection === 'all' || selectedSection === tab;
 	const accessor = useAccessor()
@@ -1793,11 +1818,20 @@ export const Settings = () => {
 
 							{/* General section */}
 							<div className={`${shouldShowTab('general') ? `` : 'hidden'} flex flex-col gap-12`}>
+								{/* Language section */}
+								<div>
+									<ErrorBoundary>
+										<h2 className='text-3xl mb-2'>{t('general.language.title')}</h2>
+										<h4 className='text-void-fg-3 mb-4'>{t('general.language.subtitle')}</h4>
+										<UILanguageSwitcher />
+									</ErrorBoundary>
+								</div>
+
 								{/* Account section */}
 								<div>
 									<ErrorBoundary>
-										<h2 className='text-3xl mb-2'>Account</h2>
-										<h4 className='text-void-fg-3 mb-4'>{`Manage your Orchestra account.`}</h4>
+										<h2 className='text-3xl mb-2'>{t('general.account.title')}</h2>
+										<h4 className='text-void-fg-3 mb-4'>{t('general.account.subtitle')}</h4>
 
 									{settingsState.globalSettings.isLoggedIn ? (
 										<div className="flex flex-col gap-4 max-w-md">
@@ -1828,14 +1862,14 @@ export const Settings = () => {
 													}}
 													className="text-xs text-void-fg-3 hover:text-void-fg-1 transition-colors"
 												>
-													Sign Out
+													{t('general.account.signOut')}
 												</button>
 											</div>
 											<button
 												onClick={() => setShowBillingPanel(true)}
 												className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-void-border-2 hover:bg-void-bg-2 text-void-fg-1 text-sm font-medium transition-colors w-fit"
 											>
-												プラン・支払い方法を管理
+												{t('general.account.manageBilling')}
 											</button>
 										</div>
 									) : (
@@ -1845,7 +1879,7 @@ export const Settings = () => {
 												className="px-4 py-2 bg-[#0e70c0] text-white w-full flex items-center justify-center gap-2"
 											>
 												<Lock className="w-4 h-4" />
-												Log In
+												{t('general.account.logIn')}
 											</VoidButtonBgDarken>
 										</div>
 									)}
@@ -1855,8 +1889,8 @@ export const Settings = () => {
 								{/* One-Click Switch section */}
 								<div>
 									<ErrorBoundary>
-										<h2 className='text-3xl mb-2'>One-Click Switch</h2>
-										<h4 className='text-void-fg-3 mb-4'>{`Transfer your editor settings into Orchestra.`}</h4>
+										<h2 className='text-3xl mb-2'>{t('general.oneClickSwitch.title')}</h2>
+										<h4 className='text-void-fg-3 mb-4'>{t('general.oneClickSwitch.subtitle')}</h4>
 
 										<div className='flex flex-col gap-2'>
 											<OneClickSwitchButton className='w-48' fromEditor="VS Code" />
@@ -1868,20 +1902,20 @@ export const Settings = () => {
 
 								{/* Import/Export section */}
 								<div>
-									<h2 className='text-3xl mb-2'>Import/Export</h2>
-									<h4 className={`text-void-fg-3 mb-4`}>{`Transfer Orchestra's settings and chats in and out of Orchestra.`}</h4>
+									<h2 className='text-3xl mb-2'>{t('general.importExport.title')}</h2>
+									<h4 className={`text-void-fg-3 mb-4`}>{t('general.importExport.subtitle')}</h4>
 									<div className='flex flex-col gap-8'>
 										{/* Settings Subcategory */}
 										<div className='flex flex-col gap-2 max-w-48 w-full'>
 											<input key={2 * s} ref={fileInputSettingsRef} type='file' accept='.json' className='hidden' onChange={handleUpload('Settings')} />
 											<VoidButtonBgDarken className='px-4 py-1 w-full' onClick={() => { fileInputSettingsRef.current?.click() }}>
-												Import Settings
+												{t('general.importExport.importSettings')}
 											</VoidButtonBgDarken>
 											<VoidButtonBgDarken className='px-4 py-1 w-full' onClick={() => onDownload('Settings')}>
-												Export Settings
+												{t('general.importExport.exportSettings')}
 											</VoidButtonBgDarken>
 											<ConfirmButton className='px-4 py-1 w-full' onConfirm={() => { voidSettingsService.resetState(); }}>
-												Reset Settings
+												{t('general.importExport.resetSettings')}
 											</ConfirmButton>
 										</div>
 
@@ -1889,13 +1923,13 @@ export const Settings = () => {
 										<div className='flex flex-col gap-2 max-w-48 w-full'>
 											<input key={2 * s + 1} ref={fileInputChatsRef} type='file' accept='.json' className='hidden' onChange={handleUpload('Chats')} />
 											<VoidButtonBgDarken className='px-4 py-1 w-full' onClick={() => { fileInputChatsRef.current?.click() }}>
-												Import Chats
+												{t('general.importExport.importChats')}
 											</VoidButtonBgDarken>
 											<VoidButtonBgDarken className='px-4 py-1 w-full' onClick={() => onDownload('Chats')}>
-												Export Chats
+												{t('general.importExport.exportChats')}
 											</VoidButtonBgDarken>
 											<ConfirmButton className='px-4 py-1 w-full' onConfirm={() => { chatThreadsService.resetState(); }}>
-												Reset Chats
+												{t('general.importExport.resetChats')}
 											</ConfirmButton>
 										</div>
 									</div>
@@ -1906,33 +1940,33 @@ export const Settings = () => {
 								{/* Theme section */}
 								<div>
 									<ErrorBoundary>
-										<h2 className='text-3xl mb-2'>Theme</h2>
-										<h4 className='text-void-fg-3 mb-4'>{`エディタ全体の配色を切り替えます。Sun Red は暖色寄りのサンセット系カラー。`}</h4>
+										<h2 className='text-3xl mb-2'>{t('general.theme.title')}</h2>
+										<h4 className='text-void-fg-3 mb-4'>{t('general.theme.subtitle')}</h4>
 										<OrchestraThemeSwitcher />
 									</ErrorBoundary>
 								</div>
 
 								{/* Built-in Settings section */}
 								<div>
-									<h2 className={`text-3xl mb-2`}>Built-in Settings</h2>
-									<h4 className={`text-void-fg-3 mb-4`}>{`IDE settings, keyboard settings, extensions, and theme customization.`}</h4>
+									<h2 className={`text-3xl mb-2`}>{t('general.builtIn.title')}</h2>
+									<h4 className={`text-void-fg-3 mb-4`}>{t('general.builtIn.subtitle')}</h4>
 
 									<ErrorBoundary>
 										<div className='flex flex-col gap-2 justify-center max-w-48 w-full'>
 											<VoidButtonBgDarken className='px-4 py-1' onClick={() => { commandService.executeCommand('workbench.action.openSettings') }}>
-												General Settings
+												{t('general.builtIn.generalSettings')}
 											</VoidButtonBgDarken>
 											<VoidButtonBgDarken className='px-4 py-1' onClick={() => { commandService.executeCommand('workbench.action.openGlobalKeybindings') }}>
-												Keyboard Settings
+												{t('general.builtIn.keyboardSettings')}
 											</VoidButtonBgDarken>
 											<VoidButtonBgDarken className='px-4 py-1' onClick={() => { commandService.executeCommand('workbench.action.selectTheme') }}>
-												Theme Settings
+												{t('general.builtIn.themeSettings')}
 											</VoidButtonBgDarken>
 											<VoidButtonBgDarken className='px-4 py-1' onClick={() => { commandService.executeCommand('workbench.extensions.action.showExtensions') }}>
-												Extensions
+												{t('general.builtIn.extensions')}
 											</VoidButtonBgDarken>
 											<VoidButtonBgDarken className='px-4 py-1' onClick={() => { nativeHostService.showItemInFolder(environmentService.logsHome.fsPath) }}>
-												Open Logs
+												{t('general.builtIn.openLogs')}
 											</VoidButtonBgDarken>
 										</div>
 									</ErrorBoundary>
@@ -1941,8 +1975,8 @@ export const Settings = () => {
 
 								{/* Metrics section */}
 								<div className='max-w-[600px]'>
-									<h2 className={`text-3xl mb-2`}>Metrics</h2>
-									<h4 className={`text-void-fg-3 mb-4`}>Very basic anonymous usage tracking helps us keep Orchestra running smoothly. You may opt out below. Regardless of this setting, Orchestra never sees your code, messages, or API keys.</h4>
+									<h2 className={`text-3xl mb-2`}>{t('general.metrics.title')}</h2>
+									<h4 className={`text-void-fg-3 mb-4`}>{t('general.metrics.subtitle')}</h4>
 
 									<div className='my-2'>
 										{/* Disable All Metrics Switch */}
@@ -1956,7 +1990,7 @@ export const Settings = () => {
 														metricsService.capture(`Set metrics opt-out to ${newVal}`, {}) // this only fires if it's enabled, so it's fine to have here
 													}}
 												/>
-												<span className='text-void-fg-3 text-xs pointer-events-none'>{'Opt-out (requires restart)'}</span>
+												<span className='text-void-fg-3 text-xs pointer-events-none'>{t('general.metrics.optOut')}</span>
 											</div>
 										</ErrorBoundary>
 									</div>
@@ -1964,12 +1998,9 @@ export const Settings = () => {
 
 								{/* AI Instructions section */}
 								<div className='max-w-[600px]'>
-									<h2 className={`text-3xl mb-2`}>AI Instructions</h2>
+									<h2 className={`text-3xl mb-2`}>{t('general.aiInstructions.title')}</h2>
 									<h4 className={`text-void-fg-3 mb-4`}>
-										<ChatMarkdownRender inPTag={true} string={`
-System instructions to include with all AI requests.
-Alternatively, place a \`.voidrules\` file in the root of your workspace.
-								`} chatMessageLocation={undefined} />
+										<ChatMarkdownRender inPTag={true} string={t('general.aiInstructions.subtitle')} chatMessageLocation={undefined} />
 									</h4>
 									<ErrorBoundary>
 										<AIInstructionsBox />
@@ -1986,12 +2017,12 @@ Alternatively, place a \`.voidrules\` file in the root of your workspace.
 													}}
 												/>
 												<span className='text-void-fg-3 text-xs pointer-events-none'>
-													{'Disable system message'}
+													{t('general.aiInstructions.disableSystemMessage')}
 												</span>
 											</div>
 										</ErrorBoundary>
 										<div className='text-void-fg-3 text-xs mt-1'>
-											{`When disabled, Orchestra will not include anything in the system message except for content you specified above.`}
+											{t('general.aiInstructions.disableSystemMessageDetail')}
 										</div>
 									</div>
 								</div>
@@ -2003,8 +2034,8 @@ Alternatively, place a \`.voidrules\` file in the root of your workspace.
 							{/* Division section */}
 							<div className={shouldShowTab('division') ? `` : 'hidden'}>
 								<ErrorBoundary>
-									<h2 className="text-3xl mb-2">Division</h2>
-									<h4 className="text-void-fg-3 mb-4">Manage your Division projects and role assignments.</h4>
+									<h2 className="text-3xl mb-2">{t('division.title')}</h2>
+									<h4 className="text-void-fg-3 mb-4">{t('division.subtitle')}</h4>
 									<DivisionSettings />
 								</ErrorBoundary>
 							</div>
@@ -2012,7 +2043,7 @@ Alternatively, place a \`.voidrules\` file in the root of your workspace.
 							{/* MCP section */}
 							<div className={shouldShowTab('mcp') ? `` : 'hidden'}>
 								<ErrorBoundary>
-									<h2 className='text-3xl mb-2'>MCP</h2>
+									<h2 className='text-3xl mb-2'>{t('mcp.title')}</h2>
 									<h4 className={`text-void-fg-3 mb-4`}>
 										<ChatMarkdownRender inPTag={true} string={`
 Use Model Context Protocol to provide Agent mode with more tools.
@@ -2020,7 +2051,7 @@ Use Model Context Protocol to provide Agent mode with more tools.
 									</h4>
 									<div className='my-2'>
 										<VoidButtonBgDarken className='px-4 py-1 w-full max-w-48' onClick={async () => { await mcpService.revealMCPConfigFile() }}>
-											Add MCP Server
+											{t('mcp.addServer')}
 										</VoidButtonBgDarken>
 									</div>
 

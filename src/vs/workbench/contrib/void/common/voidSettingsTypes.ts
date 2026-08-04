@@ -569,6 +569,14 @@ export const displayInfoOfCommitMessageLanguage = (lang: CommitMessageLanguage):
 	return '自動 (LLM に任せる)';
 }
 
+// Orchestra 独自 UI (設定パネル・サイドバーチャットなど) の表示言語設定。
+export type UILanguage = 'en' | 'ja';
+export const uiLanguages: UILanguage[] = ['en', 'ja'];
+export const displayInfoOfUILanguage = (lang: UILanguage): string => {
+	if (lang === 'ja') return '日本語';
+	return 'English';
+}
+
 export type GlobalSettings = {
 	autoRefreshModels: boolean;
 	aiInstructions: string;
@@ -607,6 +615,8 @@ export type GlobalSettings = {
 	// 生成するたびに一時停止し、ユーザーが承認 (または編集して承認 / 却下) するまで
 	// 次のステップに進まない。
 	divisionFlowApprovalMode: boolean;
+	// Orchestra 独自 UI (設定パネル・サイドバーチャットなど) の表示言語。
+	uiLanguage: UILanguage;
 }
 
 // Default role assignments for Division API
@@ -660,6 +670,7 @@ export const defaultGlobalSettings: GlobalSettings = {
 	maxReviewerIterations: 10,
 	maxReviewIterations: 10,
 	divisionFlowApprovalMode: false,
+	uiLanguage: 'en',
 }
 
 export type GlobalSettingName = keyof GlobalSettings

@@ -346,6 +346,11 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 				readS.globalSettings.divisionFlowApprovalMode = defaultGlobalSettings.divisionFlowApprovalMode;
 			}
 
+			// add uiLanguage setting (English/Japanese toggle for Orchestra's own UI)
+			if (readS.globalSettings.uiLanguage === undefined) {
+				readS.globalSettings.uiLanguage = defaultGlobalSettings.uiLanguage;
+			}
+
 			// Cleanup legacy auth state
 			if ((readS.globalSettings as any).auth0Token !== undefined) delete (readS.globalSettings as any).auth0Token;
 			if ((readS.globalSettings as any).auth0User !== undefined) delete (readS.globalSettings as any).auth0User;
