@@ -87,6 +87,9 @@ import '../common/sendLLMMessageService.js'
 // voidSettings
 import '../common/voidSettingsService.js'
 
+// skills
+import '../common/skillService.js'
+
 // refreshModel
 import '../common/refreshModelService.js'
 

@@ -39,6 +39,7 @@ import { IDirectoryStrService } from '../common/directoryStrService.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { IMCPService } from '../common/mcpService.js';
 import { RawMCPToolCall } from '../common/mcpServiceTypes.js';
+import { ISkillService } from '../common/skillService.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 
 
@@ -408,6 +409,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		@IDirectoryStrService private readonly _directoryStringService: IDirectoryStrService,
 		@IFileService private readonly _fileService: IFileService,
 		@IMCPService private readonly _mcpService: IMCPService,
+		@ISkillService private readonly _skillService: ISkillService,
 		@IEditorService private readonly _editorService: IEditorService,
 	) {
 		super()
@@ -770,6 +772,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 	private _computeMCPServerOfToolName = (toolName: string) => {
 		return this._mcpService.getMCPTools()?.find(t => t.name === toolName)?.mcpServerName
+			?? this._skillService.getSkillTools()?.find(t => t.name === toolName)?.mcpServerName
 	}
 
 	async abortRunning(threadId: string) {
@@ -845,6 +848,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 		// Check if it's a built-in tool
 		const isBuiltInTool = isABuiltinToolName(toolName)
+		// Skills are local, read-only, and don't need approval (they only load instructions into context)
+		const isSkillTool = !isBuiltInTool && !!this._skillService.getSkillTools()?.some(t => t.name === toolName)
 
 
 		if (!opts.preapproved) { // skip this if pre-approved
@@ -869,7 +874,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 			// 2. if tool requires approval, break from the loop, awaiting approval
 
-			const approvalType = isBuiltInTool ? approvalTypeOfBuiltinToolName[toolName] : 'MCP tools'
+			const approvalType = isBuiltInTool ? approvalTypeOfBuiltinToolName[toolName] : isSkillTool ? undefined : 'MCP tools'
 			if (approvalType) {
 				const autoApprove = this._settingsService.state.globalSettings.autoApprove[approvalType]
 				// add a tool_request because we use it for UI if a tool is loading (this should be improved in the future)
@@ -908,6 +913,10 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				resolveInterruptor(interruptor)
 
 				toolResult = await result
+			}
+			else if (isSkillTool) {
+				resolveInterruptor(() => { })
+				toolResult = this._skillService.callSkillTool(toolName)
 			}
 			else {
 				const mcpTools = this._mcpService.getMCPTools()
@@ -1162,8 +1171,9 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				if (toolCall) {
 					const mcpTools = this._mcpService.getMCPTools()
 					const mcpTool = mcpTools?.find(t => t.name === toolCall.name)
+					const skillTool = this._skillService.getSkillTools()?.find(t => t.name === toolCall.name)
 
-					const { awaitingUserApproval, interrupted } = await this._runToolCall(threadId, toolCall.name, toolCall.id, mcpTool?.mcpServerName, { preapproved: false, unvalidatedToolParams: toolCall.rawParams })
+					const { awaitingUserApproval, interrupted } = await this._runToolCall(threadId, toolCall.name, toolCall.id, mcpTool?.mcpServerName ?? skillTool?.mcpServerName, { preapproved: false, unvalidatedToolParams: toolCall.rawParams })
 					if (interrupted) {
 						this._setStreamState(threadId, undefined)
 						return

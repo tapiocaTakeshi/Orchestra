@@ -20,7 +20,8 @@ import Severity from '../../../../../../../base/common/severity.js'
 import { defaultModelsOfProvider, getModelCapabilities, modelOverrideKeys, ModelOverrides } from '../../../../common/modelCapabilities.js';
 import { TransferEditorType, TransferFilesInfo } from '../../../extensionTransferTypes.js';
 import { MCPServer } from '../../../../common/mcpServiceTypes.js';
-import { useMCPServiceState } from '../util/services.js';
+import { useMCPServiceState, useSkillServiceState } from '../util/services.js';
+import { Skill } from '../../../../common/skillServiceTypes.js';
 import { OPT_OUT_KEY } from '../../../../common/storageKeys.js';
 import { StorageScope, StorageTarget } from '../../../../../../../platform/storage/common/storage.js';
 
@@ -37,6 +38,7 @@ type Tab =
 	| 'providers'
 	| 'featureOptions'
 	| 'mcp'
+	| 'skills'
 	| 'division'
 	| 'general'
 	| 'updates'
@@ -1060,6 +1062,78 @@ const MCPServersList = () => {
 	return <div className="my-2">{content}</div>
 };
 
+// Skill component
+const SkillComponent = ({ skill }: { skill: Skill }) => {
+	const accessor = useAccessor();
+	const skillService = accessor.get('ISkillService');
+
+	const voidSettings = useSettingsState()
+	const isOn = voidSettings.skillUserStateOfName[skill.slug]?.isOn
+
+	return (
+		<div className="border border-void-border-2 bg-void-bg-1 py-3 px-4 rounded-sm my-2">
+			<div className="flex items-center justify-between">
+				{/* Left side - status and name */}
+				<div className="flex items-center gap-2">
+					{/* Status indicator */}
+					<div className={`w-2 h-2 rounded-full ${skill.status === 'success' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+
+					{/* Skill name */}
+					<div className="text-sm font-medium text-void-fg-1">{skill.title}</div>
+				</div>
+
+				{/* Right side - power toggle switch */}
+				<VoidSwitch
+					value={isOn ?? false}
+					size='xs'
+					disabled={skill.status === 'error'}
+					onChange={() => skillService.toggleSkillIsOn(skill.slug, !isOn)}
+				/>
+			</div>
+
+			{/* Description */}
+			{skill.status === 'success' && (
+				<div className="mt-2 text-xs text-void-fg-3">{skill.description}</div>
+			)}
+
+			{/* Error message if present */}
+			{skill.error && (
+				<div className="mt-3">
+					<WarningBox text={skill.error} />
+				</div>
+			)}
+		</div>
+	);
+};
+
+// Main component that renders the list of skills
+const SkillsList = () => {
+	const skillServiceState = useSkillServiceState()
+	const { t } = useTranslation()
+
+	let content: React.ReactNode
+	if (skillServiceState.error) {
+		content = <div className="text-void-fg-3 text-sm mt-2">
+			{skillServiceState.error}
+		</div>
+	}
+	else {
+		const skills = Object.values(skillServiceState.skillOfName)
+		if (skills.length === 0) {
+			content = <div className="text-void-fg-3 text-sm mt-2">
+				{t('skills.noneFound')}
+			</div>
+		}
+		else {
+			content = skills.map(skill => (
+				<SkillComponent key={skill.slug} skill={skill} />
+			))
+		}
+	}
+
+	return <div className="my-2">{content}</div>
+};
+
 const DivisionSettings = () => {
 	const accessor = useAccessor();
 	const divisionProjectService = accessor.get('IDivisionProjectService');
@@ -1423,6 +1497,7 @@ export const Settings = () => {
 		{ tab: 'division', label: t('tab.division') },
 		{ tab: 'general', label: t('tab.general') },
 		{ tab: 'mcp', label: t('tab.mcp') },
+		{ tab: 'skills', label: t('tab.skills') },
 		{ tab: 'updates', label: t('tab.updates') },
 		{ tab: 'all', label: t('tab.all') },
 	];
@@ -1436,6 +1511,7 @@ export const Settings = () => {
 	const chatThreadsService = accessor.get('IChatThreadService')
 	const notificationService = accessor.get('INotificationService')
 	const mcpService = accessor.get('IMCPService')
+	const skillService = accessor.get('ISkillService')
 	const storageService = accessor.get('IStorageService')
 	const metricsService = accessor.get('IMetricsService')
 	const [showLoginScreen, setShowLoginScreen] = useState(false)
@@ -2068,6 +2144,25 @@ Use Model Context Protocol to provide Agent mode with more tools.
 
 									<ErrorBoundary>
 										<MCPServersList />
+									</ErrorBoundary>
+								</ErrorBoundary>
+							</div>
+
+							{/* Skills section */}
+							<div className={shouldShowTab('skills') ? `` : 'hidden'}>
+								<ErrorBoundary>
+									<h2 className='text-3xl mb-2'>{t('skills.title')}</h2>
+									<h4 className={`text-void-fg-3 mb-4`}>
+										{t('skills.subtitle')}
+									</h4>
+									<div className='my-2'>
+										<VoidButtonBgDarken className='px-4 py-1 w-full max-w-48' onClick={async () => { await skillService.revealSkillsFolder() }}>
+											{t('skills.openFolder')}
+										</VoidButtonBgDarken>
+									</div>
+
+									<ErrorBoundary>
+										<SkillsList />
 									</ErrorBoundary>
 								</ErrorBoundary>
 							</div>

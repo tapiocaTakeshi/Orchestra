@@ -725,3 +725,11 @@ export interface MCPUserStateOfName {
 export interface MCPUserState {
 	isOn: boolean;
 }
+
+export interface SkillUserStateOfName {
+	[skillName: string]: SkillUserState | undefined;
+}
+
+export interface SkillUserState {
+	isOn: boolean;
+}

@@ -21,6 +21,7 @@ export const translations = {
 	'tab.division': { en: 'Division', ja: 'Division' },
 	'tab.general': { en: 'General', ja: '一般' },
 	'tab.mcp': { en: 'MCP', ja: 'MCP' },
+	'tab.skills': { en: 'Skills', ja: 'スキル' },
 	'tab.updates': { en: 'Updates', ja: 'アップデート' },
 	'tab.all': { en: 'All Settings', ja: 'すべての設定' },
 
@@ -81,6 +82,10 @@ export const translations = {
 	'division.subtitle': { en: 'Manage your Division projects and role assignments.', ja: 'Division プロジェクトとロール割り当てを管理します。' },
 	'mcp.title': { en: 'MCP', ja: 'MCP' },
 	'mcp.addServer': { en: 'Add MCP Server', ja: 'MCP サーバーを追加' },
+	'skills.title': { en: 'Skills', ja: 'スキル' },
+	'skills.subtitle': { en: 'Give Agent mode reusable, on-demand instructions. Each Skill is a SKILL.md file the agent loads into context only when it decides it applies.', ja: 'エージェントモードに再利用可能な指示を与えます。各スキルは SKILL.md ファイルで、エージェントが必要と判断したときのみコンテキストに読み込まれます。' },
+	'skills.openFolder': { en: 'Open Skills Folder', ja: 'スキルフォルダを開く' },
+	'skills.noneFound': { en: 'No skills found', ja: 'スキルが見つかりません' },
 
 	// Sidebar chat
 	'chat.generating': { en: 'Generating…', ja: '生成中' },
