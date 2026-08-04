@@ -53,6 +53,7 @@ import { ITerminalService } from '../../../../../terminal/browser/terminal.js'
 import { ISearchService } from '../../../../../../services/search/common/search.js'
 import { IExtensionManagementService } from '../../../../../../../platform/extensionManagement/common/extensionManagement.js'
 import { IMCPService } from '../../../../common/mcpService.js';
+import { ISkillService } from '../../../../common/skillService.js';
 import { IStorageService, StorageScope } from '../../../../../../../platform/storage/common/storage.js'
 import { OPT_OUT_KEY } from '../../../../common/storageKeys.js'
 import { DivisionProjectConfig, IDivisionProjectService } from '../../../divisionProjectService.js'
@@ -87,6 +88,7 @@ const commandBarURIStateListeners: Set<(uri: URI) => void> = new Set();
 const activeURIListeners: Set<(uri: URI | null) => void> = new Set();
 
 const mcpListeners: Set<() => void> = new Set()
+const skillListeners: Set<() => void> = new Set()
 
 let divisionProjectConfig: DivisionProjectConfig | null = null
 let divisionProjects: DivisionProjectConfig[] = []
@@ -115,11 +117,12 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 		editCodeService: accessor.get(IEditCodeService),
 		voidCommandBarService: accessor.get(IVoidCommandBarService),
 		mcpService: accessor.get(IMCPService),
+		skillService: accessor.get(ISkillService),
 		divisionProjectService: accessor.get(IDivisionProjectService),
 		voidUpdateService: accessor.get(IVoidUpdateService),
 	}
 
-	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, voidCommandBarService, mcpService, divisionProjectService, voidUpdateService } = stateServices
+	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, voidCommandBarService, mcpService, skillService, divisionProjectService, voidUpdateService } = stateServices
 
 
 
@@ -189,6 +192,12 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 	disposables.push(
 		mcpService.onDidChangeState(() => {
 			mcpListeners.forEach(l => l())
+		})
+	)
+
+	disposables.push(
+		skillService.onDidChangeState(() => {
+			skillListeners.forEach(l => l())
 		})
 	)
 
@@ -262,6 +271,7 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IExtensionManagementService: accessor.get(IExtensionManagementService),
 		IExtensionTransferService: accessor.get(IExtensionTransferService),
 		IMCPService: accessor.get(IMCPService),
+		ISkillService: accessor.get(ISkillService),
 
 		IStorageService: accessor.get(IStorageService),
 		IDivisionProjectService: accessor.get(IDivisionProjectService),
@@ -438,6 +448,18 @@ export const useMCPServiceState = () => {
 		const listener = () => { ss(mcpService.state) }
 		mcpListeners.add(listener);
 		return () => { mcpListeners.delete(listener) };
+	}, []);
+	return s
+}
+
+export const useSkillServiceState = () => {
+	const accessor = useAccessor()
+	const skillService = accessor.get('ISkillService')
+	const [s, ss] = useState(skillService.state)
+	useEffect(() => {
+		const listener = () => { ss(skillService.state) }
+		skillListeners.add(listener);
+		return () => { skillListeners.delete(listener) };
 	}, []);
 	return s
 }

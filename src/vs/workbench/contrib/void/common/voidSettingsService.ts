@@ -13,7 +13,7 @@ import { IStorageService, StorageScope, StorageTarget } from '../../../../platfo
 import { IMetricsService } from './metricsService.js';
 import { defaultProviderSettings, getModelCapabilities, ModelOverrides } from './modelCapabilities.js';
 import { VOID_SETTINGS_STORAGE_KEY } from './storageKeys.js';
-import { defaultSettingsOfProvider, FeatureName, ProviderName, ModelSelectionOfFeature, SettingsOfProvider, SettingName, providerNames, ModelSelection, modelSelectionsEqual, featureNames, VoidStatefulModelInfo, GlobalSettings, GlobalSettingName, defaultGlobalSettings, ModelSelectionOptions, OptionsOfModelSelection, ChatMode, OverridesOfModel, defaultOverridesOfModel, MCPUserStateOfName as MCPUserStateOfName, MCPUserState } from './voidSettingsTypes.js';
+import { defaultSettingsOfProvider, FeatureName, ProviderName, ModelSelectionOfFeature, SettingsOfProvider, SettingName, providerNames, ModelSelection, modelSelectionsEqual, featureNames, VoidStatefulModelInfo, GlobalSettings, GlobalSettingName, defaultGlobalSettings, ModelSelectionOptions, OptionsOfModelSelection, ChatMode, OverridesOfModel, defaultOverridesOfModel, MCPUserStateOfName as MCPUserStateOfName, MCPUserState, SkillUserStateOfName, SkillUserState } from './voidSettingsTypes.js';
 
 
 // name is the name in the dropdown
@@ -44,6 +44,7 @@ export type VoidSettingsState = {
 	readonly overridesOfModel: OverridesOfModel;
 	readonly globalSettings: GlobalSettings;
 	readonly mcpUserStateOfName: MCPUserStateOfName; // user-controlled state of MCP servers
+	readonly skillUserStateOfName: SkillUserStateOfName; // user-controlled state of Skills
 
 	readonly _modelOptions: ModelOption[] // computed based on the two above items
 }
@@ -79,6 +80,10 @@ export interface IVoidSettingsService {
 	addMCPUserStateOfNames(userStateOfName: MCPUserStateOfName): Promise<void>;
 	removeMCPUserStateOfNames(serverNames: string[]): Promise<void>;
 	setMCPServerState(serverName: string, state: MCPUserState): Promise<void>;
+
+	addSkillUserStateOfNames(userStateOfName: SkillUserStateOfName): Promise<void>;
+	removeSkillUserStateOfNames(skillNames: string[]): Promise<void>;
+	setSkillState(skillName: string, state: SkillUserState): Promise<void>;
 }
 
 
@@ -250,6 +255,7 @@ const defaultState = () => {
 		overridesOfModel: deepClone(defaultOverridesOfModel),
 		_modelOptions: [], // computed later
 		mcpUserStateOfName: {},
+		skillUserStateOfName: {},
 	}
 	return d
 }
@@ -452,6 +458,7 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 		const newGlobalSettings = this.state.globalSettings
 		const newOverridesOfModel = this.state.overridesOfModel
 		const newMCPUserStateOfName = this.state.mcpUserStateOfName
+		const newSkillUserStateOfName = this.state.skillUserStateOfName
 
 		const newState = {
 			modelSelectionOfFeature: newModelSelectionOfFeature,
@@ -460,6 +467,7 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 			globalSettings: newGlobalSettings,
 			overridesOfModel: newOverridesOfModel,
 			mcpUserStateOfName: newMCPUserStateOfName,
+			skillUserStateOfName: newSkillUserStateOfName,
 		}
 
 		this.state = _validatedModelState(newState)
@@ -683,6 +691,55 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 		}
 		await this._setMCPUserStateOfName(newMCPServerStates)
 		this._metricsService.capture('Update MCP Server State', { serverName, state });
+	}
+
+	// Skill State
+	private _setSkillUserStateOfName = async (newStates: SkillUserStateOfName) => {
+		const newState: VoidSettingsState = {
+			...this.state,
+			skillUserStateOfName: {
+				...this.state.skillUserStateOfName,
+				...newStates
+			}
+		};
+		this.state = _validatedModelState(newState);
+		await this._storeState();
+		this._onDidChangeState.fire();
+		this._metricsService.capture('Set Skill States', { newStates });
+	}
+
+	addSkillUserStateOfNames = async (newSkillStates: SkillUserStateOfName) => {
+		const { skillUserStateOfName } = this.state
+		const newSkillUserStateOfName = {
+			...skillUserStateOfName,
+			...newSkillStates,
+		}
+		await this._setSkillUserStateOfName(newSkillUserStateOfName)
+		this._metricsService.capture('Add Skills', { skills: Object.keys(newSkillStates).join(', ') });
+	}
+
+	removeSkillUserStateOfNames = async (skillNames: string[]) => {
+		const { skillUserStateOfName } = this.state
+		const newSkillUserStateOfName = {
+			...skillUserStateOfName,
+		}
+		skillNames.forEach(skillName => {
+			if (skillName in newSkillUserStateOfName) {
+				delete newSkillUserStateOfName[skillName]
+			}
+		})
+		await this._setSkillUserStateOfName(newSkillUserStateOfName)
+		this._metricsService.capture('Remove Skills', { skills: skillNames.join(', ') });
+	}
+
+	setSkillState = async (skillName: string, state: SkillUserState) => {
+		const { skillUserStateOfName } = this.state
+		const newSkillUserStateOfName = {
+			...skillUserStateOfName,
+			[skillName]: state,
+		}
+		await this._setSkillUserStateOfName(newSkillUserStateOfName)
+		this._metricsService.capture('Update Skill State', { skillName, state });
 	}
 
 }
