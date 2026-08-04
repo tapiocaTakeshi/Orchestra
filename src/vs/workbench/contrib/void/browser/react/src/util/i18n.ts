@@ -34,6 +34,9 @@ export const translations = {
 	// Settings - General - Language
 	'general.language.title': { en: 'Language', ja: '言語' },
 	'general.language.subtitle': { en: `Switch the display language of Orchestra's UI (Settings, sidebar chat, onboarding).`, ja: 'Orchestra の UI（設定パネル・サイドバーチャット・オンボーディング）の表示言語を切り替えます。' },
+	'general.language.vscodeTitle': { en: 'Editor Display Language (VS Code UI)', ja: 'エディタ全体の表示言語 (VS Code UI)' },
+	'general.language.vscodeSubtitle': { en: 'Switches menus, the command palette, notifications, and other built-in VS Code UI. Requires installing a language pack and a restart.', ja: 'メニュー・コマンドパレット・通知など VS Code 本体の UI を切り替えます。言語パックのインストールと再起動が必要です。' },
+	'general.language.vscodeButton': { en: 'Configure Display Language…', ja: '表示言語を設定…' },
 
 	// Settings - General - One-Click Switch
 	'general.oneClickSwitch.title': { en: 'One-Click Switch', ja: 'ワンクリック移行' },

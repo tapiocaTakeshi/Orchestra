@@ -1824,6 +1824,17 @@ export const Settings = () => {
 										<h2 className='text-3xl mb-2'>{t('general.language.title')}</h2>
 										<h4 className='text-void-fg-3 mb-4'>{t('general.language.subtitle')}</h4>
 										<UILanguageSwitcher />
+
+										<div className='mt-6'>
+											<h4 className='text-void-fg-1 text-sm font-medium mb-1'>{t('general.language.vscodeTitle')}</h4>
+											<div className='text-void-fg-3 text-xs mb-2'>{t('general.language.vscodeSubtitle')}</div>
+											<VoidButtonBgDarken
+												className='px-4 py-1 w-fit'
+												onClick={() => { commandService.executeCommand('workbench.action.configureLocale') }}
+											>
+												{t('general.language.vscodeButton')}
+											</VoidButtonBgDarken>
+										</div>
 									</ErrorBoundary>
 								</div>
 
