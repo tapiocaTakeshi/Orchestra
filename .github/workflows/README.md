@@ -38,6 +38,28 @@ git push origin v1.4.10
 - 一部 OS だけ自動化したい場合は不要な `build-*` ジョブを削除してください
 - Windows のコード署名 (Authenticode) は secrets 未登録なら未署名でビルドされます
   (SmartScreen の警告が出ます)。署名する場合は下記セットアップを参照してください
+- Windows ビルドはジョブの最初に Windows の Long Path support
+  (`LongPathsEnabled` レジストリ) を有効化しています。`node_modules` や
+  組み込み拡張機能のパスは深くネストしがちで、これを有効化しないと
+  `npm ci` や Inno Setup Compiler (ISCC.exe) が「パス名が長すぎる」エラーで
+  失敗することがあります
+
+### Windows でローカルビルドする場合の注意 (パス名が長すぎるエラー)
+
+`npm run gulp vscode-win32-x64-user-setup` などをローカルの Windows PC で
+実行して `ISCC.exe` や `npm ci` が path-too-long / ENAMETOOLONG 系のエラーで
+落ちる場合は、以下を **管理者権限の PowerShell** で一度だけ実行してから
+ビルドし直してください（再起動は不要です）。
+
+```powershell
+Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1
+git config --system core.longpaths true
+```
+
+また、リポジトリのチェックアウト先はできるだけ短いパス
+(例: `C:\src\Orchestra`) にしてください。`C:\Users\<長いユーザー名>\Documents\...`
+のようなパスの奥にチェックアウトすると、上記を設定しても合計パス長が
+足りずエラーになることがあります。
 
 ## macOS Developer ID 署名 + Notarization のセットアップ
 

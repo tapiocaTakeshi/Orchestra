@@ -388,6 +388,18 @@ jobs:
       WINDOWS_CODESIGN_PFX_BASE64: ${{ secrets.WINDOWS_CODESIGN_PFX_BASE64 }}
       WINDOWS_CODESIGN_PASSWORD: ${{ secrets.WINDOWS_CODESIGN_PASSWORD }}
     steps:
+      - name: Enable Windows long path support
+        # node_modules や extensions 配下は深いネストになりやすく、絶対パスが
+        # MAX_PATH (260文字) を超えることがある。これを超えると npm ci や
+        # Inno Setup Compiler (ISCC.exe) が "path too long" 系のエラーで失敗する。
+        # LongPathsEnabled を有効化しておくと、以降に起動するプロセス
+        # (git / npm / ISCC など) はロングパスを扱えるようになる (再起動不要)。
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1
+          git config --system core.longpaths true
+
       - uses: actions/checkout@v4
 
       - name: Setup Node
