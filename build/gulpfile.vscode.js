@@ -469,6 +469,23 @@ function patchWin32DependenciesTask(destinationFolderName) {
 	};
 }
 
+function patchWin32IconTask(destinationFolderName) {
+	const cwd = path.join(path.dirname(root), destinationFolderName);
+
+	return async () => {
+		const productJson = JSON.parse(await fs.promises.readFile(path.join(cwd, 'resources', 'app', 'product.json'), 'utf8'));
+		const exePath = path.join(cwd, `${productJson.nameShort}.exe`);
+		const icon = path.join(root, 'resources', 'win32', 'code.ico');
+
+		// @vscode/gulp-electron only patches the executable's icon when the
+		// build itself runs on a win32 host (it no-ops on Linux/macOS cross
+		// builds), which left the raw Electron icon on the installed app when
+		// packaging was done from a non-Windows machine. Re-apply it here
+		// explicitly so the icon is always correct regardless of build host.
+		await rcedit(exePath, { icon });
+	};
+}
+
 const buildRoot = path.dirname(root);
 
 const BUILD_TARGETS = [
@@ -498,6 +515,7 @@ BUILD_TARGETS.forEach(buildTarget => {
 
 		if (platform === 'win32') {
 			tasks.push(patchWin32DependenciesTask(destinationFolderName));
+			tasks.push(patchWin32IconTask(destinationFolderName));
 		}
 
 		const vscodeTaskCI = task.define(`vscode${dashed(platform)}${dashed(arch)}${dashed(minified)}-ci`, task.series(...tasks));
