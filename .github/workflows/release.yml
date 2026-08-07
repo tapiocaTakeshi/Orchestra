@@ -477,23 +477,59 @@ jobs:
             Write-Error "signtool verify failed (exit code $LASTEXITCODE)"
           }
 
+      - name: Build Windows installer (Inno Setup)
+        # ポータブル zip ではなく、正式なインストーラー (setup.exe) を生成する。
+        # user-setup は管理者権限不要 (userpf にインストール) で、
+        # VoidMainUpdateService のサイレント更新 (/verysilent) とも相性が良い。
+        # --sign は付けない (Microsoft 社内の ESRP 署名専用のため、ここでは使えない)。
+        # 生成された setup.exe は次のステップで signtool により Authenticode 署名する。
+        run: |
+          npm run gulp vscode-win32-x64-inno-updater
+          npm run gulp vscode-win32-x64-user-setup
+
+      - name: Code sign installer with Authenticode
+        if: env.WINDOWS_CODESIGN_PFX_BASE64 != ''
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $signtool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $signtool) {
+            Write-Error "signtool.exe not found under Windows Kits."
+          }
+
+          $setupExe = Resolve-Path ".build\win32-x64\user-setup\VSCodeSetup.exe"
+
+          & $signtool sign `
+            /f "$env:CODESIGN_PFX_PATH" `
+            /p "$env:WINDOWS_CODESIGN_PASSWORD" `
+            /fd sha256 `
+            /tr http://timestamp.digicert.com `
+            /td sha256 `
+            "$setupExe"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "signtool sign failed (exit code $LASTEXITCODE)"
+          }
+
+          & $signtool verify /pa /v "$setupExe"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "signtool verify failed (exit code $LASTEXITCODE)"
+          }
+
       - name: Cleanup signing certificate
         if: always() && env.CODESIGN_PFX_PATH != ''
         shell: pwsh
         run: Remove-Item -Force -ErrorAction SilentlyContinue "$env:CODESIGN_PFX_PATH"
 
-      - name: Package zip
+      - name: Package installer
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
-          $appDir = Resolve-Path "..\VSCode-win32-x64"
-          if (-not (Test-Path "$appDir")) {
-            Write-Error "Build output not found at $appDir"
-          }
+          $setupExe = Resolve-Path ".build\win32-x64\user-setup\VSCodeSetup.exe"
           $tag = "$env:RELEASE_TAG"
-          $zipName = "Orchestra-$tag-win32-x64.zip"
-          Compress-Archive -Path "$appDir\*" -DestinationPath "artifacts\$zipName" -Force
+          $destName = "Orchestra-$tag-win32-x64.exe"
+          Copy-Item -Path "$setupExe" -Destination "artifacts\$destName" -Force
           Get-ChildItem artifacts
 
       - name: Upload Windows artifacts

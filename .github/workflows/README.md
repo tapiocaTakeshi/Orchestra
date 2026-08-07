@@ -13,7 +13,7 @@ Orchestra のリリース自動化ワークフローを提供します。
 - **生成物**:
   - `Orchestra-vX.Y.Z-darwin-arm64.dmg`
   - `Orchestra-vX.Y.Z-darwin-arm64.zip`
-  - `Orchestra-vX.Y.Z-win32-x64.zip`
+  - `Orchestra-vX.Y.Z-win32-x64.exe` (Inno Setup installer, user install)
   - `Orchestra-vX.Y.Z-linux-x64.tar.gz`
 - **所要時間**: 30 〜 90 分 / OS（並列実行）
 - **ランナー**: `macos-14` (Apple Silicon), `windows-latest`, `ubuntu-latest`
@@ -139,10 +139,11 @@ spctl -a -t open --context context:primary-signature -vvv \
 
 ## Windows Authenticode 署名のセットアップ
 
-Authenticode で署名すると、ダウンロードした `Orchestra.exe` の実行時に出る
-Microsoft Defender SmartScreen の「発行元不明」警告が出なくなります（新規署名
-証明書は SmartScreen の評価が溜まるまでしばらく警告が出ることがあります）。
-下記の secrets を登録すると `release.yml` が自動的に署名します。未登録なら
+Authenticode で署名すると、ダウンロードしたインストーラー (`Orchestra-vX.Y.Z-win32-x64.exe`)
+および中に含まれる `Orchestra.exe` の実行時に出る Microsoft Defender SmartScreen の
+「発行元不明」警告が出なくなります（新規署名証明書は SmartScreen の評価が溜まるまで
+しばらく警告が出ることがあります）。下記の secrets を登録すると `release.yml` が
+`Orchestra.exe` 本体と setup.exe インストーラーの両方を自動的に署名します。未登録なら
 未署名のままビルドされます。
 
 ### 1. コード署名証明書の取得
@@ -174,8 +175,9 @@ base64 -w0 orchestra.pfx | xclip   # Linux
 
 ### 3. リリース実行
 
-タグを push すれば `build-windows` ジョブが自動的に `Orchestra.exe` を
-Authenticode 署名 (SHA-256, RFC3161 タイムスタンプ) します。
+タグを push すれば `build-windows` ジョブが自動的に `Orchestra.exe` と
+setup.exe インストーラーの両方を Authenticode 署名 (SHA-256, RFC3161
+タイムスタンプ) します。
 
 ```bash
 git tag v1.4.11
@@ -186,7 +188,18 @@ git push origin v1.4.11
 
 ```powershell
 signtool verify /pa /v Orchestra.exe
+signtool verify /pa /v Orchestra-v1.4.11-win32-x64.exe
 ```
+
+### Windows インストーラーについて
+
+`build-windows` ジョブは `npm run release-windows` でビルドしたあと、
+`gulp vscode-win32-x64-inno-updater` → `gulp vscode-win32-x64-user-setup`
+(VS Code 本体に既に組み込まれている Inno Setup の仕組み) で `setup.exe`
+を生成します。管理者権限不要の **user install** (`{userpf}` 配下) で、
+Orchestra 独自のオートアップデート (`voidUpdateMainService.ts`) が
+ダウンロード後にサイレント実行 (`/verysilent`) してバックグラウンド更新できます。
+ポータブル zip は廃止したため、Windows 版の配布物はこの setup.exe のみです。
 
 ### `release-manual.yml` — 手動アップロード用ドラフトリリース作成
 
