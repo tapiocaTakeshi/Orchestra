@@ -54,14 +54,15 @@ const currentPlatformAssetTag = (): string | undefined => {
 	return undefined
 }
 
-// 展開可能な形式 (.zip / .tar.gz) の中から現在のプラットフォーム向けアセットを選ぶ。
-// .dmg のようにマウントが必要な形式は自動アップデートでは使わない。
+// 自動アップデートで扱える形式 (.exe インストーラー / .zip / .tar.gz) の中から
+// 現在のプラットフォーム向けアセットを選ぶ。.dmg のようにマウントが必要な形式は使わない。
+// Windows は Orchestra-<tag>-win32-x64.exe (Inno Setup installer) のみを配布するため .exe を最優先する。
 const pickAssetForCurrentPlatform = (assets: OrchestraReleaseAsset[]): OrchestraReleaseAsset | undefined => {
 	const tag = currentPlatformAssetTag()
 	if (!tag) return undefined
 	const candidates = assets.filter(a => a.name.includes(`-${tag}.`))
 	const byExt = (ext: string) => candidates.find(a => a.name.toLowerCase().endsWith(ext))
-	return byExt('.zip') ?? byExt('.tar.gz') ?? byExt('.tgz')
+	return byExt('.exe') ?? byExt('.zip') ?? byExt('.tar.gz') ?? byExt('.tgz')
 }
 
 // SHA256SUMS.txt (sha256sum 互換フォーマット: "<hex>  <filename>") から指定ファイルのハッシュを探す。
@@ -167,8 +168,13 @@ export class VoidMainUpdateService extends Disposable implements IOrchestraUpdat
 	// 直近に fetchLatestRelease() で取得したリリース情報 (downloadUpdate() が参照する)
 	private _lastReleaseInfo: OrchestraReleaseInfo | undefined
 
-	// downloadUpdate() が展開したファイル一式への参照 (quitAndInstall() が使う)
-	private _pendingInstall: { contentRoot: string; tagName: string } | undefined
+	// downloadUpdate() が用意した適用待ちアップデートへの参照 (quitAndInstall() が使う)。
+	// 'archive': zip/tar.gz を展開した中身をコピーして差し替える (mac/linux)。
+	// 'installer': ダウンロードした setup.exe をサイレント実行する (windows)。
+	private _pendingInstall:
+		| { kind: 'archive'; contentRoot: string; tagName: string }
+		| { kind: 'installer'; installerPath: string; tagName: string }
+		| undefined
 
 	constructor(
 		@IProductService private readonly _productService: IProductService,
@@ -405,10 +411,19 @@ export class VoidMainUpdateService extends Disposable implements IOrchestraUpdat
 				return { error: 'ダウンロードしたファイルのチェックサムが一致しませんでした。ネットワークが不安定な可能性があります。もう一度お試しください。' }
 			}
 
+			const lowerName = asset.name.toLowerCase()
+
+			// Windows は Inno Setup インストーラー (.exe) を配布している。展開はせず、
+			// ダウンロードした setup.exe をそのまま quitAndInstall() でサイレント実行する。
+			if (lowerName.endsWith('.exe')) {
+				this._pendingInstall = { kind: 'installer', installerPath: assetPath, tagName: info.tagName }
+				this._logService.info(`orchestra update: downloaded installer to ${assetPath}, ready to install`)
+				return { ok: true }
+			}
+
 			const extractedDir = path.join(workDir, 'extracted')
 			await fs.promises.mkdir(extractedDir, { recursive: true })
 
-			const lowerName = asset.name.toLowerCase()
 			if (lowerName.endsWith('.zip')) {
 				await extract(assetPath, extractedDir, { overwrite: true }, CancellationToken.None)
 			} else if (lowerName.endsWith('.tar.gz') || lowerName.endsWith('.tgz')) {
@@ -418,7 +433,7 @@ export class VoidMainUpdateService extends Disposable implements IOrchestraUpdat
 			}
 
 			const contentRoot = await this._resolveContentRoot(extractedDir)
-			this._pendingInstall = { contentRoot, tagName: info.tagName }
+			this._pendingInstall = { kind: 'archive', contentRoot, tagName: info.tagName }
 			this._logService.info(`orchestra update: extracted to ${contentRoot}, ready to install`)
 			return { ok: true }
 		} catch (e) {
@@ -432,19 +447,42 @@ export class VoidMainUpdateService extends Disposable implements IOrchestraUpdat
 			return { error: 'まだアップデートがダウンロードされていません。' }
 		}
 
-		let targetDir: string
-		try {
-			targetDir = this._resolveInstallRoot()
-		} catch (e) {
-			return { error: e instanceof Error ? e.message : String(e) }
-		}
-
 		// 先にライフサイクルへ終了確認を通す (未保存の変更などがあればここで veto=true が返る)。
 		// veto された場合は更新用プロセスを一切起動しない (実行中のインストールに触れないため)。
 		// ILifecycleMainService.quit() は内部で electron.app.quit() を呼ぶため、ここで改めて app.quit() は不要。
 		const vetoed = await this._lifecycleMainService.quit(true /* will restart */)
 		if (vetoed) {
 			return { error: '保存されていない変更などにより、再起動がキャンセルされました。' }
+		}
+
+		if (pending.kind === 'installer') {
+			// Inno Setup インストーラーをサイレント実行する。CloseApplications=force が設定されているため
+			// アプリのプロセス終了はインストーラー自身が待ち受ける。runcode タスクはサイレント実行時に
+			// 自動的に有効になるため、インストール完了後は自動的に再起動する。
+			try {
+				const child = spawn(pending.installerPath, [
+					'/verysilent',
+					'/suppressmsgboxes',
+					'/norestart',
+					'/mergetasks=runcode,!desktopicon,!quicklaunchicon',
+				], {
+					detached: true,
+					stdio: 'ignore',
+					windowsVerbatimArguments: true,
+				})
+				child.unref()
+			} catch (e) {
+				return { error: `インストーラーの起動に失敗しました: ${e instanceof Error ? e.message : String(e)}` }
+			}
+
+			return { ok: true }
+		}
+
+		let targetDir: string
+		try {
+			targetDir = this._resolveInstallRoot()
+		} catch (e) {
+			return { error: e instanceof Error ? e.message : String(e) }
 		}
 
 		try {
