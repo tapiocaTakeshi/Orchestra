@@ -54,6 +54,7 @@ import { ISearchService } from '../../../../../../services/search/common/search.
 import { IExtensionManagementService } from '../../../../../../../platform/extensionManagement/common/extensionManagement.js'
 import { IMCPService } from '../../../../common/mcpService.js';
 import { ISkillService } from '../../../../common/skillService.js';
+import { ITrelloService } from '../../../trelloService.js';
 import { IStorageService, StorageScope } from '../../../../../../../platform/storage/common/storage.js'
 import { OPT_OUT_KEY } from '../../../../common/storageKeys.js'
 import { DivisionProjectConfig, IDivisionProjectService } from '../../../divisionProjectService.js'
@@ -89,6 +90,7 @@ const activeURIListeners: Set<(uri: URI | null) => void> = new Set();
 
 const mcpListeners: Set<() => void> = new Set()
 const skillListeners: Set<() => void> = new Set()
+const trelloListeners: Set<() => void> = new Set()
 
 let divisionProjectConfig: DivisionProjectConfig | null = null
 let divisionProjects: DivisionProjectConfig[] = []
@@ -118,11 +120,12 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 		voidCommandBarService: accessor.get(IVoidCommandBarService),
 		mcpService: accessor.get(IMCPService),
 		skillService: accessor.get(ISkillService),
+		trelloService: accessor.get(ITrelloService),
 		divisionProjectService: accessor.get(IDivisionProjectService),
 		voidUpdateService: accessor.get(IVoidUpdateService),
 	}
 
-	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, voidCommandBarService, mcpService, skillService, divisionProjectService, voidUpdateService } = stateServices
+	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, voidCommandBarService, mcpService, skillService, trelloService, divisionProjectService, voidUpdateService } = stateServices
 
 
 
@@ -201,6 +204,12 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 		})
 	)
 
+	disposables.push(
+		trelloService.onDidChangeState(() => {
+			trelloListeners.forEach(l => l())
+		})
+	)
+
 	divisionProjectConfig = divisionProjectService.projectConfig
 	divisionProjects = divisionProjectService.projects
 	disposables.push(
@@ -272,6 +281,7 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IExtensionTransferService: accessor.get(IExtensionTransferService),
 		IMCPService: accessor.get(IMCPService),
 		ISkillService: accessor.get(ISkillService),
+		ITrelloService: accessor.get(ITrelloService),
 
 		IStorageService: accessor.get(IStorageService),
 		IDivisionProjectService: accessor.get(IDivisionProjectService),
@@ -460,6 +470,18 @@ export const useSkillServiceState = () => {
 		const listener = () => { ss(skillService.state) }
 		skillListeners.add(listener);
 		return () => { skillListeners.delete(listener) };
+	}, []);
+	return s
+}
+
+export const useTrelloServiceState = () => {
+	const accessor = useAccessor()
+	const trelloService = accessor.get('ITrelloService')
+	const [s, ss] = useState(trelloService.state)
+	useEffect(() => {
+		const listener = () => { ss(trelloService.state) }
+		trelloListeners.add(listener);
+		return () => { trelloListeners.delete(listener) };
 	}, []);
 	return s
 }

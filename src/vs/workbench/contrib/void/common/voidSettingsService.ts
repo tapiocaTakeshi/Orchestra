@@ -357,6 +357,14 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 				readS.globalSettings.uiLanguage = defaultGlobalSettings.uiLanguage;
 			}
 
+			// add Trello integration settings. Fields are merged individually so that settings
+			// saved by an older build (which only knew about some of them) still get defaults
+			// for the rest instead of coming back as undefined.
+			readS.globalSettings.trello = {
+				...deepClone(defaultGlobalSettings.trello),
+				...(readS.globalSettings.trello ?? {}),
+			};
+
 			// Cleanup legacy auth state
 			if ((readS.globalSettings as any).auth0Token !== undefined) delete (readS.globalSettings as any).auth0Token;
 			if ((readS.globalSettings as any).auth0User !== undefined) delete (readS.globalSettings as any).auth0User;

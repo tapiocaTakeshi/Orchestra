@@ -28,3 +28,8 @@ export const VOID_REJECT_ALL_DIFFS_ACTION_ID = 'void.rejectAllDiffs'
 // Editor の赤波線(エラー/警告)上で表示する Quick Fix「Fix with Agent」のコマンドID。
 // 押すと該当エラーの内容と周辺コードをチャットへ転送して即ストリーミングを開始する。
 export const VOID_FIX_WITH_AGENT_ACTION_ID = 'void.fixWithAgent'
+
+// Trello 連携 (Trello の TODO カードをプロンプトとして自動実行する)
+export const VOID_TRELLO_RUN_NOW_ACTION_ID = 'void.trello.runNow'
+export const VOID_TRELLO_TOGGLE_AUTO_RUN_ACTION_ID = 'void.trello.toggleAutoRun'
+export const VOID_TRELLO_CANCEL_ACTION_ID = 'void.trello.cancelCurrent'
