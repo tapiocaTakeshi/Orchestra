@@ -6,6 +6,7 @@
 
 import { defaultModelsOfProvider, defaultProviderSettings, ModelOverrides } from './modelCapabilities.js';
 import { ToolApprovalType } from './toolsServiceTypes.js';
+import { defaultTrelloSettings, TrelloSettings } from './trelloServiceTypes.js';
 import { VoidSettingsState } from './voidSettingsService.js'
 
 
@@ -617,6 +618,8 @@ export type GlobalSettings = {
 	divisionFlowApprovalMode: boolean;
 	// Orchestra 独自 UI (設定パネル・サイドバーチャットなど) の表示言語。
 	uiLanguage: UILanguage;
+	// Trello 連携 (TODO リストのカードを自動でプロンプト実行する) の設定。
+	trello: TrelloSettings;
 }
 
 // Default role assignments for Division API
@@ -671,6 +674,7 @@ export const defaultGlobalSettings: GlobalSettings = {
 	maxReviewIterations: 10,
 	divisionFlowApprovalMode: false,
 	uiLanguage: 'en',
+	trello: defaultTrelloSettings,
 }
 
 export type GlobalSettingName = keyof GlobalSettings
