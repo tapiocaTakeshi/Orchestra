@@ -19,6 +19,7 @@ import { EndOfLinePreference } from '../../../../editor/common/model.js';
 import { ToolName } from '../common/toolsServiceTypes.js';
 import { IMCPService } from '../common/mcpService.js';
 import { ISkillService } from '../common/skillService.js';
+import { IObsidianService } from '../common/obsidianService.js';
 
 export const EMPTY_MESSAGE = '(empty message)'
 
@@ -543,6 +544,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		@IVoidModelService private readonly voidModelService: IVoidModelService,
 		@IMCPService private readonly mcpService: IMCPService,
 		@ISkillService private readonly skillService: ISkillService,
+		@IObsidianService private readonly obsidianService: IObsidianService,
 	) {
 		super()
 	}
@@ -592,7 +594,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 
 		const includeXMLToolDefinitions = !specialToolFormat
 
-		const combinedTools = [...(this.mcpService.getMCPTools() ?? []), ...(this.skillService.getSkillTools() ?? [])]
+		const combinedTools = [...(this.mcpService.getMCPTools() ?? []), ...(this.skillService.getSkillTools() ?? []), ...(this.obsidianService.getObsidianTools() ?? [])]
 		const mcpTools = combinedTools.length > 0 ? combinedTools : undefined
 
 		const persistentTerminalIDs = this.terminalToolService.listPersistentTerminalIds()

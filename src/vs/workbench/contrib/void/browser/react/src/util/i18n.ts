@@ -23,6 +23,7 @@ export const translations = {
 	'tab.mcp': { en: 'MCP', ja: 'MCP' },
 	'tab.skills': { en: 'Skills', ja: 'スキル' },
 	'tab.trello': { en: 'Trello', ja: 'Trello' },
+	'tab.obsidian': { en: 'Obsidian', ja: 'Obsidian' },
 	'tab.updates': { en: 'Updates', ja: 'アップデート' },
 	'tab.all': { en: 'All Settings', ja: 'すべての設定' },
 
@@ -87,6 +88,75 @@ export const translations = {
 	'skills.subtitle': { en: 'Give Agent mode reusable, on-demand instructions. Each Skill is a SKILL.md file the agent loads into context only when it decides it applies.', ja: 'エージェントモードに再利用可能な指示を与えます。各スキルは SKILL.md ファイルで、エージェントが必要と判断したときのみコンテキストに読み込まれます。' },
 	'skills.openFolder': { en: 'Open Skills Folder', ja: 'スキルフォルダを開く' },
 	'skills.noneFound': { en: 'No skills found', ja: 'スキルが見つかりません' },
+
+	// Settings - Obsidian
+	'obsidian.title': { en: 'Obsidian', ja: 'Obsidian' },
+	'obsidian.subtitle': {
+		en: 'Connect your Obsidian vault. Syncing imports its folder names, and each one becomes a function Agent mode can call by name to read the Markdown notes inside it.',
+		ja: 'Obsidian の Vault と連携します。同期すると Vault のフォルダ名を取り込み、それぞれが MCP のファンクションのようにエージェントから呼べるようになり、フォルダ名を渡すとその中の Markdown を読み取ります。',
+	},
+
+	'obsidian.vault.title': { en: 'Vault', ja: 'Vault' },
+	'obsidian.vault.subtitle': {
+		en: 'The folder Obsidian opens as a vault. It just needs to be a folder of Markdown files - Obsidian itself does not need to be running.',
+		ja: 'Obsidian が Vault として開いているフォルダです。Markdown ファイルが入ったフォルダであればよく、Obsidian が起動している必要はありません。',
+	},
+	'obsidian.vault.pathLabel': { en: 'Vault folder', ja: 'Vault フォルダ' },
+	'obsidian.vault.pathPlaceholder': { en: '/Users/you/Documents/MyVault', ja: '/Users/you/Documents/MyVault' },
+	'obsidian.vault.browse': { en: 'Browse…', ja: 'フォルダを選択…' },
+	'obsidian.vault.sync': { en: 'Sync', ja: '同期' },
+	'obsidian.vault.syncing': { en: 'Syncing…', ja: '同期中…' },
+	'obsidian.vault.disconnect': { en: 'Disconnect', ja: '連携を解除' },
+	'obsidian.vault.notConnected': { en: 'No vault connected yet.', ja: 'Vault が未設定です。' },
+	'obsidian.vault.syncedSummary': {
+		en: 'Synced {folders} folders, {files} Markdown files.',
+		ja: 'フォルダ {folders} 件・Markdown {files} 件を取り込みました。',
+	},
+	'obsidian.vault.lastSynced': { en: 'Last synced {time}', ja: '最終同期 {time}' },
+
+	'obsidian.options.title': { en: 'Reading options', ja: '読み取りの設定' },
+	'obsidian.options.subtitle': {
+		en: 'Notes are read straight off disk each time a tool runs, so edits in Obsidian show up without re-syncing. These limits keep a big vault from filling the context window.',
+		ja: 'メモはツールを呼ぶたびにディスクから読み直すので、Obsidian 側の編集は再同期なしで反映されます。以下の上限は、大きな Vault がコンテキストを埋め尽くさないためのものです。',
+	},
+	'obsidian.options.includeSubfolders': { en: 'Include subfolders', ja: 'サブフォルダも含める' },
+	'obsidian.options.includeSubfoldersDetail': {
+		en: 'When reading one folder, also read the notes in the folders nested inside it.',
+		ja: 'フォルダを読むとき、その下のフォルダにあるメモも読みます。',
+	},
+	'obsidian.options.exposeFolderTools': { en: 'One function per folder', ja: 'フォルダごとにファンクションを作る' },
+	'obsidian.options.exposeFolderTools.detail': {
+		en: 'Expose each imported folder as its own obsidian_<folder> function. Turn this off to keep the tool list short - obsidian_read_folder still reaches every folder by name.',
+		ja: '取り込んだフォルダを obsidian_<フォルダ名> という個別のファンクションとして公開します。off にするとツール一覧が短くなりますが、obsidian_read_folder から名前で全フォルダを読めます。',
+	},
+	'obsidian.options.maxFiles': { en: 'Max notes per read', ja: '1 回に読む最大ファイル数' },
+	'obsidian.options.maxCharsPerFile': { en: 'Max characters per note', ja: '1 ファイルあたりの最大文字数' },
+	'obsidian.options.maxTotalChars': { en: 'Max characters per read', ja: '1 回の読み取りの最大文字数' },
+
+	'obsidian.folders.title': { en: 'Imported folders', ja: '取り込んだフォルダ' },
+	'obsidian.folders.subtitle': {
+		en: 'Folder names the agent can pass to obsidian_read_folder. Turning one off hides it from the agent.',
+		ja: 'エージェントが obsidian_read_folder に渡せるフォルダ名です。off にするとエージェントから見えなくなります。',
+	},
+	'obsidian.folders.noneFound': {
+		en: 'No folders imported yet. Set a vault folder above and press Sync.',
+		ja: 'まだフォルダを取り込んでいません。上で Vault フォルダを指定して「同期」を押してください。',
+	},
+	'obsidian.folders.enableAll': { en: 'Enable all', ja: 'すべて ON' },
+	'obsidian.folders.disableAll': { en: 'Disable all', ja: 'すべて OFF' },
+	'obsidian.folders.vaultRoot': { en: 'notes directly in the vault root', ja: 'Vault 直下のメモ' },
+	'obsidian.folders.fileCount': { en: '{count} notes', ja: 'メモ {count} 件' },
+	'obsidian.folders.fileCountWithNested': { en: '{count} notes ({total} with subfolders)', ja: 'メモ {count} 件（サブフォルダ込み {total} 件）' },
+	'obsidian.folders.tooManyForTools': {
+		en: 'This vault has more than {max} enabled folders, so per-folder functions are not exposed. The agent can still read any of them with obsidian_read_folder.',
+		ja: '有効なフォルダが {max} 件を超えているため、フォルダごとの個別ファンクションは公開していません。obsidian_read_folder からはどのフォルダも読めます。',
+	},
+
+	'obsidian.allMd.title': { en: 'The all-md context', ja: 'all-md コンテキスト' },
+	'obsidian.allMd.detail': {
+		en: 'Always available while a vault is connected. Calling obsidian_all_md - or passing "all-md" as the folder name - reads every Markdown file in the vault.',
+		ja: 'Vault が連携されている間つねに使えます。obsidian_all_md を呼ぶか、フォルダ名として "all-md" を渡すと、Vault 内のすべての Markdown を読み取ります。',
+	},
 
 	// Settings - Trello
 	'trello.title': { en: 'Trello', ja: 'Trello' },

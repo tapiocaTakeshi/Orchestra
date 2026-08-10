@@ -55,6 +55,7 @@ import { IExtensionManagementService } from '../../../../../../../platform/exten
 import { IMCPService } from '../../../../common/mcpService.js';
 import { ISkillService } from '../../../../common/skillService.js';
 import { ITrelloService } from '../../../trelloService.js';
+import { IObsidianService } from '../../../../common/obsidianService.js';
 import { IStorageService, StorageScope } from '../../../../../../../platform/storage/common/storage.js'
 import { OPT_OUT_KEY } from '../../../../common/storageKeys.js'
 import { DivisionProjectConfig, IDivisionProjectService } from '../../../divisionProjectService.js'
@@ -91,6 +92,7 @@ const activeURIListeners: Set<(uri: URI | null) => void> = new Set();
 const mcpListeners: Set<() => void> = new Set()
 const skillListeners: Set<() => void> = new Set()
 const trelloListeners: Set<() => void> = new Set()
+const obsidianListeners: Set<() => void> = new Set()
 
 let divisionProjectConfig: DivisionProjectConfig | null = null
 let divisionProjects: DivisionProjectConfig[] = []
@@ -121,11 +123,12 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 		mcpService: accessor.get(IMCPService),
 		skillService: accessor.get(ISkillService),
 		trelloService: accessor.get(ITrelloService),
+		obsidianService: accessor.get(IObsidianService),
 		divisionProjectService: accessor.get(IDivisionProjectService),
 		voidUpdateService: accessor.get(IVoidUpdateService),
 	}
 
-	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, voidCommandBarService, mcpService, skillService, trelloService, divisionProjectService, voidUpdateService } = stateServices
+	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, voidCommandBarService, mcpService, skillService, trelloService, obsidianService, divisionProjectService, voidUpdateService } = stateServices
 
 
 
@@ -210,6 +213,12 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 		})
 	)
 
+	disposables.push(
+		obsidianService.onDidChangeState(() => {
+			obsidianListeners.forEach(l => l())
+		})
+	)
+
 	divisionProjectConfig = divisionProjectService.projectConfig
 	divisionProjects = divisionProjectService.projects
 	disposables.push(
@@ -282,6 +291,7 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IMCPService: accessor.get(IMCPService),
 		ISkillService: accessor.get(ISkillService),
 		ITrelloService: accessor.get(ITrelloService),
+		IObsidianService: accessor.get(IObsidianService),
 
 		IStorageService: accessor.get(IStorageService),
 		IDivisionProjectService: accessor.get(IDivisionProjectService),
@@ -482,6 +492,18 @@ export const useTrelloServiceState = () => {
 		const listener = () => { ss(trelloService.state) }
 		trelloListeners.add(listener);
 		return () => { trelloListeners.delete(listener) };
+	}, []);
+	return s
+}
+
+export const useObsidianServiceState = () => {
+	const accessor = useAccessor()
+	const obsidianService = accessor.get('IObsidianService')
+	const [s, ss] = useState(obsidianService.state)
+	useEffect(() => {
+		const listener = () => { ss(obsidianService.state) }
+		obsidianListeners.add(listener);
+		return () => { obsidianListeners.delete(listener) };
 	}, []);
 	return s
 }

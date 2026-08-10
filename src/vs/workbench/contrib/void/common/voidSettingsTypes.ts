@@ -7,6 +7,7 @@
 import { defaultModelsOfProvider, defaultProviderSettings, ModelOverrides } from './modelCapabilities.js';
 import { ToolApprovalType } from './toolsServiceTypes.js';
 import { defaultTrelloSettings, TrelloSettings } from './trelloServiceTypes.js';
+import { defaultObsidianSettings, ObsidianSettings } from './obsidianServiceTypes.js';
 import { VoidSettingsState } from './voidSettingsService.js'
 
 
@@ -620,6 +621,8 @@ export type GlobalSettings = {
 	uiLanguage: UILanguage;
 	// Trello 連携 (TODO リストのカードを自動でプロンプト実行する) の設定。
 	trello: TrelloSettings;
+	// Obsidian 連携 (Vault のフォルダ名を取り込み、Markdown をツールとして読む) の設定。
+	obsidian: ObsidianSettings;
 }
 
 // Default role assignments for Division API
@@ -675,6 +678,7 @@ export const defaultGlobalSettings: GlobalSettings = {
 	divisionFlowApprovalMode: false,
 	uiLanguage: 'en',
 	trello: defaultTrelloSettings,
+	obsidian: defaultObsidianSettings,
 }
 
 export type GlobalSettingName = keyof GlobalSettings
