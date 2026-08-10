@@ -31,6 +31,7 @@ import { Lock, Languages } from 'lucide-react';
 import { OrchestraUpdatesPane } from './UpdatesPane.js';
 import { useTranslation } from '../util/i18n.js';
 import { TrelloSettings } from './TrelloSettings.js';
+import { ObsidianSettings } from './ObsidianSettings.js';
 import { uiLanguages, displayInfoOfUILanguage } from '../../../../common/voidSettingsTypes.js';
 
 type Tab =
@@ -41,6 +42,7 @@ type Tab =
 	| 'mcp'
 	| 'skills'
 	| 'trello'
+	| 'obsidian'
 	| 'division'
 	| 'general'
 	| 'updates'
@@ -1501,6 +1503,7 @@ export const Settings = () => {
 		{ tab: 'mcp', label: t('tab.mcp') },
 		{ tab: 'skills', label: t('tab.skills') },
 		{ tab: 'trello', label: t('tab.trello') },
+		{ tab: 'obsidian', label: t('tab.obsidian') },
 		{ tab: 'updates', label: t('tab.updates') },
 		{ tab: 'all', label: t('tab.all') },
 	];
@@ -2178,6 +2181,17 @@ Use Model Context Protocol to provide Agent mode with more tools.
 										{t('trello.subtitle')}
 									</h4>
 									<TrelloSettings />
+								</ErrorBoundary>
+							</div>
+
+							{/* Obsidian section */}
+							<div className={shouldShowTab('obsidian') ? `` : 'hidden'}>
+								<ErrorBoundary>
+									<h2 className='text-3xl mb-2'>{t('obsidian.title')}</h2>
+									<h4 className={`text-void-fg-3 mb-4`}>
+										{t('obsidian.subtitle')}
+									</h4>
+									<ObsidianSettings />
 								</ErrorBoundary>
 							</div>
 

@@ -15,6 +15,7 @@ import { Disposable } from '../../../../base/common/lifecycle.js';
 import { IVoidSettingsService } from './voidSettingsService.js';
 import { IMCPService } from './mcpService.js';
 import { ISkillService } from './skillService.js';
+import { IObsidianService } from './obsidianService.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 
 
@@ -83,6 +84,7 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 		// @INotificationService private readonly notificationService: INotificationService,
 		@IMCPService private readonly mcpService: IMCPService,
 		@ISkillService private readonly skillService: ISkillService,
+		@IObsidianService private readonly obsidianService: IObsidianService,
 		@IWorkspaceContextService private readonly workspaceContextService: IWorkspaceContextService,
 	) {
 		super()
@@ -163,7 +165,7 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 			return null
 		}
 
-		const combinedTools = [...(this.mcpService.getMCPTools() ?? []), ...(this.skillService.getSkillTools() ?? [])]
+		const combinedTools = [...(this.mcpService.getMCPTools() ?? []), ...(this.skillService.getSkillTools() ?? []), ...(this.obsidianService.getObsidianTools() ?? [])]
 		const mcpTools = combinedTools.length > 0 ? combinedTools : undefined
 
 		// add state for request id

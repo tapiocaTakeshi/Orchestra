@@ -365,6 +365,14 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 				...(readS.globalSettings.trello ?? {}),
 			};
 
+			// add Obsidian integration settings. Same per-field merge as Trello above, so a
+			// settings file written by an older build keeps its vault path and folder toggles.
+			readS.globalSettings.obsidian = {
+				...deepClone(defaultGlobalSettings.obsidian),
+				...(readS.globalSettings.obsidian ?? {}),
+				folderStateOfName: { ...(readS.globalSettings.obsidian?.folderStateOfName ?? {}) },
+			};
+
 			// Cleanup legacy auth state
 			if ((readS.globalSettings as any).auth0Token !== undefined) delete (readS.globalSettings as any).auth0Token;
 			if ((readS.globalSettings as any).auth0User !== undefined) delete (readS.globalSettings as any).auth0User;

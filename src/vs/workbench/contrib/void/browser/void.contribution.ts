@@ -94,6 +94,9 @@ import '../common/voidSettingsService.js'
 // skills
 import '../common/skillService.js'
 
+// obsidian
+import '../common/obsidianService.js'
+
 // refreshModel
 import '../common/refreshModelService.js'
 
