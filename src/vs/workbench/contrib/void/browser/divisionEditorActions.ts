@@ -1,6 +1,6 @@
 /*--------------------------------------------------------------------------------------
  *  Division Editor Actions
- *  Adds "Sync from Supabase" button to the editor title bar when .division/agents.json is open,
+ *  Adds "Sync from Supabase" button to the editor title bar when .division/projects.json is open,
  *  similar to Flutter's "pub get" button on pubspec.yaml.
  *--------------------------------------------------------------------------------------*/
 
@@ -30,7 +30,7 @@ registerAction2(class extends Action2 {
 			menu: [
 				{
 					id: MenuId.EditorTitle,
-					when: ContextKeyExpr.equals(ResourceContextKey.Filename.key, 'agents.json'),
+					when: ContextKeyExpr.equals(ResourceContextKey.Filename.key, 'projects.json'),
 					group: 'navigation',
 					order: 1,
 				},
@@ -61,7 +61,7 @@ registerAction2(class extends Action2 {
 			menu: [
 				{
 					id: MenuId.EditorTitle,
-					when: ContextKeyExpr.equals(ResourceContextKey.Filename.key, 'agents.json'),
+					when: ContextKeyExpr.equals(ResourceContextKey.Filename.key, 'projects.json'),
 					group: 'navigation',
 					order: 2,
 				},
