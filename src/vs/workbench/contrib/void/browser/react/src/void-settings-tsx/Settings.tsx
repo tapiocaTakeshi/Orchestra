@@ -1321,7 +1321,7 @@ const DivisionSettings = () => {
 				</div>
 			</div>
 
-			{/* agents.json section header with Update All + Supabase Sync buttons */}
+			{/* projects.json section header with Update All + Supabase Sync buttons */}
 			<div className="flex items-center justify-between">
 				<span className="text-xs text-void-fg-3 uppercase font-semibold tracking-wide">Configured Projects</span>
 				<div className="flex items-center gap-3">

@@ -1,6 +1,6 @@
 /*--------------------------------------------------------------------------------------
  *  Division Project Service
- *  Manages .division/agents.json per workspace for project-local agent role assignments.
+ *  Manages .division/projects.json per workspace for project-local agent role assignments.
  *  Supports multiple division projects with an active project selection.
  *  Auto-syncs project data to Supabase when projects change.
  *--------------------------------------------------------------------------------------*/
@@ -18,7 +18,7 @@ import { IVoidSettingsService } from '../common/voidSettingsService.js';
 
 
 // --- Canonical ID normalizers ---
-// agents.json と Supabase から流入する値は表示名や別名で汚れていることがあるため、
+// projects.json と Supabase から流入する値は表示名や別名で汚れていることがあるため、
 // 内部 ProviderName / AgentRole に正規化する。
 
 const ALL_AGENT_ROLES: AgentRole[] = [
@@ -132,7 +132,7 @@ export type DivisionProjectConfig = {
 	agents: RoleAssignment[];
 };
 
-/** On-disk format for .division/agents.json */
+/** On-disk format for .division/projects.json */
 export type DivisionProjectsFile = {
 	activeProjectIds: string[];
 	projects: DivisionProjectConfig[];
@@ -175,7 +175,7 @@ export interface IDivisionProjectService {
 
 	readonly projectConfigUri: URI | null;
 
-	/** Whether a .division/agents.json exists in the workspace */
+	/** Whether a .division/projects.json exists in the workspace */
 	readonly hasProject: boolean;
 
 	/** Re-read the config from disk */
@@ -199,10 +199,10 @@ export interface IDivisionProjectService {
 	/** Remove a division project by ID */
 	removeProject(id: string): Promise<void>;
 
-	/** Fetch project data from Supabase and update agents.json */
+	/** Fetch project data from Supabase and update projects.json */
 	fetchFromSupabase(projectId?: string): Promise<{ success: boolean; message: string }>;
 
-	/** Push local agents.json data to Supabase */
+	/** Push local projects.json data to Supabase */
 	pushToSupabase(): Promise<{ success: boolean; message: string }>;
 }
 
@@ -274,7 +274,7 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 
 		const rootUri = folders[0].uri;
 		const divisionDir = URI.joinPath(rootUri, '.division');
-		const agentsJsonUri = URI.joinPath(divisionDir, 'agents.json');
+		const agentsJsonUri = URI.joinPath(divisionDir, 'projects.json');
 		this._projectConfigUri = agentsJsonUri;
 
 		try {

@@ -70,10 +70,10 @@ import './miscWokrbenchContrib.js'
 // register file service (for explorer context menu)
 import './fileService.js'
 
-// register division project service (.division/agents.json)
+// register division project service (.division/projects.json)
 import './divisionProjectService.js'
 
-// register division editor actions (Supabase sync button on agents.json)
+// register division editor actions (Supabase sync button on projects.json)
 import './divisionEditorActions.js'
 
 // register source control management
