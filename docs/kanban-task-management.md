@@ -12,13 +12,16 @@ JSON ファイルなので、タスクはリポジトリと一緒に git に乗�
 
 | 操作 | やり方 |
 | --- | --- |
-| ボードを開閉する | `Ctrl+Alt+K` / コマンドパレット `Kanban: Toggle Board` |
+| ボードを開閉する | タイトルバー右側の ☑ ボタン / `Ctrl+Alt+K` / コマンドパレット `Kanban: Toggle Board` |
 | ボードを開く | `Kanban: Open Board` |
 | ボードを別ウィンドウで開く | `Kanban: Open Board in New Window` / ボード右上の ⧉ ボタン |
 | ボードを開かずにタスクを積む | `Kanban: Add Task` |
 | 実行待ちのタスクを今すぐ流す | `Kanban: Run Pending Tasks Now` |
 | 自動実行を切り替える | `Kanban: Toggle Automatic Task Execution` |
 | 実行中のタスクを止める | `Kanban: Cancel Running Task` |
+
+ウィンドウ上部のバーの右側 (レイアウト操作やアカウントのアイコンが並んでいるところ) に
+チェックリストのアイコンが出ている。これが開閉ボタンで、押すと `Ctrl+Alt+K` と同じ動きをする。
 
 実行に関する設定は Settings の **Kanban** タブにある。
 
