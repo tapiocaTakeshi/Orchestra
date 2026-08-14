@@ -17,6 +17,7 @@ import {
 	MoreHorizontal,
 	Play,
 	Plus,
+	PictureInPicture2,
 	RefreshCw,
 	Search,
 	Settings,
@@ -205,6 +206,7 @@ const ColumnSettingsPopover = ({ column, columnCount, onClose }: {
 }) => {
 	const accessor = useAccessor();
 	const kanbanService = accessor.get('IKanbanService');
+	const dialogService = accessor.get('IDialogService');
 	const { t, language } = useTranslation();
 
 	return (
@@ -247,9 +249,16 @@ const ColumnSettingsPopover = ({ column, columnCount, onClose }: {
 			{columnCount > 1 && (
 				<button
 					type='button'
-					onClick={() => {
+					onClick={async () => {
+						// window.confirm はメインウィンドウに出てしまうので使わない。
+						// IDialogService なら、ボードが別ウィンドウにあってもそのウィンドウに出る。
 						const count = tasksInColumn(kanbanService.state.board, column.id).length;
-						if (count > 0 && !window.confirm(t('kanban.column.deleteWithTasks').replace('{count}', String(count)))) return;
+						if (count > 0) {
+							const { confirmed } = await dialogService.confirm({
+								message: t('kanban.column.deleteWithTasks').replace('{count}', String(count)),
+							});
+							if (!confirmed) return;
+						}
 						kanbanService.deleteColumn(column.id);
 						onClose();
 					}}
@@ -614,6 +623,12 @@ const KanbanBoardInner = () => {
 					{t('kanban.board.addColumn')}
 				</button>
 
+				<IconButton
+					title={t('kanban.board.openInNewWindow')}
+					onClick={() => { void commandService.executeCommand('void.kanban.openBoardInNewWindow'); }}
+				>
+					<PictureInPicture2 size={13} />
+				</IconButton>
 				<IconButton title={t('kanban.board.reload')} onClick={() => { void kanbanService.reload(); }}>
 					<RefreshCw size={13} />
 				</IconButton>

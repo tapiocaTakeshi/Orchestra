@@ -119,6 +119,10 @@ export const KanbanSettings = () => {
 								: t('kanban.board.storedInApp')}
 						</span>
 					</div>
+
+					<Field label={t('kanban.settings.openInNewWindow')} detail={t('kanban.settings.openInNewWindowDetail')}>
+						<VoidSwitch size='xs' value={settings.openInNewWindow} onChange={v => set('openInNewWindow', v)} />
+					</Field>
 				</Section>
 
 				<Section title={t('kanban.settings.execution')} subtitle={t('kanban.settings.executionSubtitle')}>

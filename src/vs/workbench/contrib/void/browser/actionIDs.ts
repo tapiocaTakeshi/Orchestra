@@ -32,6 +32,7 @@ export const VOID_FIX_WITH_AGENT_ACTION_ID = 'void.fixWithAgent'
 // 内蔵カンバン (.orchestra/kanban.json のタスクをボードで管理し、エージェントに流す)
 export const VOID_TOGGLE_KANBAN_ACTION_ID = 'void.kanban.toggleBoard'
 export const VOID_OPEN_KANBAN_ACTION_ID = 'void.kanban.openBoard'
+export const VOID_OPEN_KANBAN_IN_NEW_WINDOW_ACTION_ID = 'void.kanban.openBoardInNewWindow'
 export const VOID_KANBAN_ADD_TASK_ACTION_ID = 'void.kanban.addTask'
 export const VOID_KANBAN_RUN_NEXT_ACTION_ID = 'void.kanban.runNext'
 export const VOID_KANBAN_TOGGLE_AUTO_RUN_ACTION_ID = 'void.kanban.toggleAutoRun'
