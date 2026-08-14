@@ -380,6 +380,12 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 				...(readS.globalSettings.kanban ?? {}),
 			};
 
+			// リモートコントロール (スマホアプリ) の設定。トークンは生成済みのものを保つ。
+			readS.globalSettings.remoteControl = {
+				...deepClone(defaultGlobalSettings.remoteControl),
+				...(readS.globalSettings.remoteControl ?? {}),
+			};
+
 			// Cleanup legacy auth state
 			if ((readS.globalSettings as any).auth0Token !== undefined) delete (readS.globalSettings as any).auth0Token;
 			if ((readS.globalSettings as any).auth0User !== undefined) delete (readS.globalSettings as any).auth0User;

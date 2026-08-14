@@ -31,6 +31,7 @@ import { Lock, Languages } from 'lucide-react';
 import { OrchestraUpdatesPane } from './UpdatesPane.js';
 import { useTranslation } from '../util/i18n.js';
 import { KanbanSettings } from './KanbanSettings.js';
+import { RemoteControlSettings } from './RemoteControlSettings.js';
 import { TrelloSettings } from './TrelloSettings.js';
 import { ObsidianSettings } from './ObsidianSettings.js';
 import { uiLanguages, displayInfoOfUILanguage } from '../../../../common/voidSettingsTypes.js';
@@ -43,6 +44,7 @@ type Tab =
 	| 'mcp'
 	| 'skills'
 	| 'kanban'
+	| 'remoteControl'
 	| 'trello'
 	| 'obsidian'
 	| 'division'
@@ -1505,6 +1507,7 @@ export const Settings = () => {
 		{ tab: 'mcp', label: t('tab.mcp') },
 		{ tab: 'skills', label: t('tab.skills') },
 		{ tab: 'kanban', label: t('tab.kanban') },
+		{ tab: 'remoteControl', label: t('tab.remoteControl') },
 		{ tab: 'trello', label: t('tab.trello') },
 		{ tab: 'obsidian', label: t('tab.obsidian') },
 		{ tab: 'updates', label: t('tab.updates') },
@@ -2184,6 +2187,17 @@ Use Model Context Protocol to provide Agent mode with more tools.
 										{t('kanban.subtitle')}
 									</h4>
 									<KanbanSettings />
+								</ErrorBoundary>
+							</div>
+
+							{/* Remote Control section */}
+							<div className={shouldShowTab('remoteControl') ? `` : 'hidden'}>
+								<ErrorBoundary>
+									<h2 className='text-3xl mb-2'>{t('remote.title')}</h2>
+									<h4 className={`text-void-fg-3 mb-4`}>
+										{t('remote.subtitle')}
+									</h4>
+									<RemoteControlSettings />
 								</ErrorBoundary>
 							</div>
 

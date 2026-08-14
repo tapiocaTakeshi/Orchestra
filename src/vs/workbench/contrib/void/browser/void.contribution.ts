@@ -79,6 +79,10 @@ import './divisionEditorActions.js'
 // register source control management
 import './voidSCMService.js'
 
+// register mobile remote control (local HTTP server driven by Orchestra-Mobile)
+import './remoteControlService.js'
+import './remoteControlActions.js'
+
 // register built-in Kanban board (.orchestra/kanban.json, Ctrl+Alt+K)
 import './kanbanService.js'
 import './kanbanPane.js'

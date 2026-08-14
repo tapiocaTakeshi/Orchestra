@@ -42,3 +42,8 @@ export const VOID_KANBAN_CANCEL_ACTION_ID = 'void.kanban.cancelCurrent'
 export const VOID_TRELLO_RUN_NOW_ACTION_ID = 'void.trello.runNow'
 export const VOID_TRELLO_TOGGLE_AUTO_RUN_ACTION_ID = 'void.trello.toggleAutoRun'
 export const VOID_TRELLO_CANCEL_ACTION_ID = 'void.trello.cancelCurrent'
+
+// リモートコントロール (スマホアプリ Orchestra-Mobile から IDE を操作する)
+export const VOID_REMOTE_CONTROL_TOGGLE_ACTION_ID = 'void.remoteControl.toggle'
+export const VOID_REMOTE_CONTROL_SHOW_INFO_ACTION_ID = 'void.remoteControl.showConnectionInfo'
+export const VOID_REMOTE_CONTROL_REGENERATE_TOKEN_ACTION_ID = 'void.remoteControl.regenerateToken'

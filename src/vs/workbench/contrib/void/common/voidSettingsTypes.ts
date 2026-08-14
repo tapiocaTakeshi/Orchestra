@@ -9,6 +9,7 @@ import { ToolApprovalType } from './toolsServiceTypes.js';
 import { defaultTrelloSettings, TrelloSettings } from './trelloServiceTypes.js';
 import { defaultObsidianSettings, ObsidianSettings } from './obsidianServiceTypes.js';
 import { defaultKanbanSettings, KanbanSettings } from './kanbanServiceTypes.js';
+import { defaultRemoteControlSettings, RemoteControlSettings } from './remoteControlTypes.js';
 import { VoidSettingsState } from './voidSettingsService.js'
 
 
@@ -627,6 +628,8 @@ export type GlobalSettings = {
 	// 内蔵カンバン (.orchestra/kanban.json のタスクをエージェントに流す) の実行設定。
 	// ボードそのものはワークスペースのファイル側にあり、ここには入らない。
 	kanban: KanbanSettings;
+	// スマホアプリ (Orchestra-Mobile) から IDE を操作するためのローカル HTTP サーバの設定。
+	remoteControl: RemoteControlSettings;
 }
 
 // Default role assignments for Division API
@@ -684,6 +687,7 @@ export const defaultGlobalSettings: GlobalSettings = {
 	trello: defaultTrelloSettings,
 	obsidian: defaultObsidianSettings,
 	kanban: defaultKanbanSettings,
+	remoteControl: defaultRemoteControlSettings,
 }
 
 export type GlobalSettingName = keyof GlobalSettings

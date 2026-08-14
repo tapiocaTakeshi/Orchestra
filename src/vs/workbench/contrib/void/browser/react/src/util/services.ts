@@ -56,6 +56,7 @@ import { IMCPService } from '../../../../common/mcpService.js';
 import { ISkillService } from '../../../../common/skillService.js';
 import { ITrelloService } from '../../../trelloService.js';
 import { IKanbanService } from '../../../kanbanService.js';
+import { IRemoteControlService } from '../../../remoteControlService.js';
 import { IObsidianService } from '../../../../common/obsidianService.js';
 import { IStorageService, StorageScope } from '../../../../../../../platform/storage/common/storage.js'
 import { OPT_OUT_KEY } from '../../../../common/storageKeys.js'
@@ -302,6 +303,7 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		ISkillService: accessor.get(ISkillService),
 		ITrelloService: accessor.get(ITrelloService),
 		IKanbanService: accessor.get(IKanbanService),
+		IRemoteControlService: accessor.get(IRemoteControlService),
 		IObsidianService: accessor.get(IObsidianService),
 
 		IStorageService: accessor.get(IStorageService),

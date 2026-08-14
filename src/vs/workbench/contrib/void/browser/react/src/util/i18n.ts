@@ -23,6 +23,7 @@ export const translations = {
 	'tab.mcp': { en: 'MCP', ja: 'MCP' },
 	'tab.skills': { en: 'Skills', ja: 'スキル' },
 	'tab.kanban': { en: 'Kanban', ja: 'カンバン' },
+	'tab.remoteControl': { en: 'Remote Control', ja: 'リモートコントロール' },
 	'tab.trello': { en: 'Trello', ja: 'Trello' },
 	'tab.obsidian': { en: 'Obsidian', ja: 'Obsidian' },
 	'tab.updates': { en: 'Updates', ja: 'アップデート' },
@@ -249,6 +250,76 @@ export const translations = {
 	'kanban.detail.authorAgent': { en: 'Agent', ja: 'エージェント' },
 
 	// Settings - Kanban
+	// Settings - Remote Control (Orchestra-Mobile)
+	'remote.title': { en: 'Remote Control', ja: 'リモートコントロール' },
+	'remote.subtitle': {
+		en: 'Drive this IDE from the Orchestra-Mobile app: send prompts to the agent, manage Division projects, and edit the Kanban board from your phone.',
+		ja: 'スマホアプリ Orchestra-Mobile から、この IDE を操作します。エージェントへの指示、Division プロジェクトの管理、カンバンの編集を手元の端末から行えます。',
+	},
+	'remote.server.title': { en: 'Local Server', ja: 'ローカルサーバー' },
+	'remote.server.subtitle': {
+		en: 'Orchestra listens on this machine only. Nothing is sent to an external server.',
+		ja: 'この PC 上でだけ待ち受けます。外部サーバーには何も送信しません。',
+	},
+	'remote.server.enabled': { en: 'Enable remote control', ja: 'リモートコントロールを有効にする' },
+	'remote.server.enabledDetail': {
+		en: 'Starts an HTTP server the mobile app connects to.',
+		ja: 'モバイルアプリが接続する HTTP サーバーを起動します。',
+	},
+	'remote.server.port': { en: 'Port', ja: 'ポート' },
+	'remote.server.allowLan': { en: 'Allow LAN connections', ja: 'LAN からの接続を許可' },
+	'remote.server.allowLanDetail': {
+		en: 'Off = localhost only (use adb/ssh port forwarding). On = reachable from phones on the same Wi-Fi.',
+		ja: 'オフだと localhost のみ (adb / ssh のポート転送が必要)。オンにすると同じ Wi-Fi のスマホから直接繋がります。',
+	},
+	'remote.server.running': { en: 'Running', ja: '起動中' },
+	'remote.server.stopped': { en: 'Stopped', ja: '停止中' },
+	'remote.pairing.title': { en: 'Pairing', ja: 'ペアリング' },
+	'remote.pairing.subtitle': {
+		en: 'Enter these in the mobile app, or paste the pairing link.',
+		ja: 'この内容をモバイルアプリに入力するか、ペアリングリンクを貼り付けます。',
+	},
+	'remote.pairing.addresses': { en: 'Address', ja: '接続先' },
+	'remote.pairing.token': { en: 'Token', ja: 'トークン' },
+	'remote.pairing.tokenDetail': {
+		en: 'Anyone with this token can control the IDE. Keep it private.',
+		ja: 'このトークンを知っている人は IDE を操作できます。共有しないでください。',
+	},
+	'remote.pairing.uri': { en: 'Pairing link', ja: 'ペアリングリンク' },
+	'remote.pairing.uriDetail': {
+		en: 'Copy it to the phone (AirDrop, chat, QR generator, …).',
+		ja: 'スマホに渡してください (AirDrop・チャット・QR 生成など)。',
+	},
+	'remote.pairing.copy': { en: 'Copy pairing link', ja: 'ペアリングリンクをコピー' },
+	'remote.pairing.regenerate': { en: 'Regenerate token', ja: 'トークンを再生成' },
+	'remote.permissions.title': { en: 'What the phone may do', ja: 'スマホに許可する操作' },
+	'remote.permissions.subtitle': {
+		en: 'Turn anything off you would rather keep on the desktop.',
+		ja: '手元の PC だけで行いたい操作はオフにしてください。',
+	},
+	'remote.permissions.agent': { en: 'Send prompts to the agent', ja: 'エージェントへ指示を送る' },
+	'remote.permissions.kanban': { en: 'Edit the Kanban board', ja: 'カンバンを編集する' },
+	'remote.permissions.projects': { en: 'Edit Division projects', ja: 'Division プロジェクトを編集する' },
+	'remote.permissions.commands': { en: 'Run editor commands', ja: 'エディタのコマンドを実行する' },
+	'remote.permissions.commandsDetail': {
+		en: 'Off still allows a small set of harmless commands (save, reload window, …).',
+		ja: 'オフでも保存・ウィンドウ再読み込みなど無害なコマンドは実行できます。',
+	},
+	'remote.manual.title': { en: 'How to connect', ja: '接続手順' },
+	'remote.manual.subtitle': { en: 'Three steps from the phone.', ja: 'スマホ側の操作は 3 ステップです。' },
+	'remote.manual.step1': {
+		en: 'Put the phone and this machine on the same Wi-Fi.',
+		ja: 'スマホとこの PC を同じ Wi-Fi に繋ぐ。',
+	},
+	'remote.manual.step2': {
+		en: 'Open Orchestra-Mobile and paste the pairing link (or type address + token).',
+		ja: 'Orchestra-Mobile を開き、ペアリングリンクを貼る (または接続先とトークンを入力する)。',
+	},
+	'remote.manual.step3': {
+		en: 'Tap Connect. The board and projects show up right away.',
+		ja: '「接続」をタップする。カンバンとプロジェクトがすぐに表示されます。',
+	},
+
 	'kanban.title': { en: 'Kanban', ja: 'カンバン' },
 	'kanban.subtitle': {
 		en: 'Orchestra has its own Kanban board. Tasks live in .orchestra/kanban.json inside the workspace, so they travel with the repository, and the agent can run them straight off the board.',
