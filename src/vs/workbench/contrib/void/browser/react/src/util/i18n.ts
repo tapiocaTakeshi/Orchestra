@@ -22,6 +22,7 @@ export const translations = {
 	'tab.general': { en: 'General', ja: '一般' },
 	'tab.mcp': { en: 'MCP', ja: 'MCP' },
 	'tab.skills': { en: 'Skills', ja: 'スキル' },
+	'tab.kanban': { en: 'Kanban', ja: 'カンバン' },
 	'tab.trello': { en: 'Trello', ja: 'Trello' },
 	'tab.obsidian': { en: 'Obsidian', ja: 'Obsidian' },
 	'tab.updates': { en: 'Updates', ja: 'アップデート' },
@@ -156,6 +157,138 @@ export const translations = {
 	'obsidian.allMd.detail': {
 		en: 'Always available while a vault is connected. Calling obsidian_all_md - or passing "all-md" as the folder name - reads every Markdown file in the vault.',
 		ja: 'Vault が連携されている間つねに使えます。obsidian_all_md を呼ぶか、フォルダ名として "all-md" を渡すと、Vault 内のすべての Markdown を読み取ります。',
+	},
+
+	// Kanban - board UI
+	'kanban.board.newTask': { en: 'New task', ja: 'タスクを追加' },
+	'kanban.board.newTaskPlaceholder': { en: 'What needs to be done?', ja: '何をしますか？' },
+	'kanban.board.search': { en: 'Search tasks…', ja: 'タスクを検索…' },
+	'kanban.board.allLabels': { en: 'All labels', ja: 'すべてのラベル' },
+	'kanban.board.autoRun': { en: 'Auto-run', ja: '自動実行' },
+	'kanban.board.autoRunDetail': {
+		en: 'Poll the To Do column and run each task as an agent prompt.',
+		ja: '実行待ちカラムを定期的に確認し、タスクをエージェントのプロンプトとして実行します。',
+	},
+	'kanban.board.runNow': { en: 'Run now', ja: '今すぐ実行' },
+	'kanban.board.cancelRun': { en: 'Cancel run', ja: '実行を中断' },
+	'kanban.board.running': { en: 'Running {title}', ja: '「{title}」を実行中' },
+	'kanban.board.awaitingApproval': {
+		en: 'The agent is waiting for tool approval — nothing will progress until you approve it in chat.',
+		ja: 'エージェントがツールの承認待ちです。チャットで承認するまで先に進みません。',
+	},
+	'kanban.board.addColumn': { en: 'Add column', ja: 'カラムを追加' },
+	'kanban.board.newColumnName': { en: 'New column', ja: '新しいカラム' },
+	'kanban.board.reload': { en: 'Reload from disk', ja: 'ディスクから再読み込み' },
+	'kanban.board.openSettings': { en: 'Kanban settings', ja: 'カンバンの設定' },
+	'kanban.board.storedInFile': { en: 'Saved to {path}', ja: '保存先: {path}' },
+	'kanban.board.storedInApp': {
+		en: 'No folder is open, so this board is kept in app storage. Open a folder to save it as .orchestra/kanban.json.',
+		ja: 'フォルダが開かれていないため、このボードはアプリ内に保存されます。フォルダを開くと .orchestra/kanban.json に保存されます。',
+	},
+	'kanban.board.loading': { en: 'Loading board…', ja: 'ボードを読み込み中…' },
+	'kanban.board.emptyColumn': { en: 'Nothing here', ja: 'タスクなし' },
+	'kanban.board.noMatches': { en: 'No task matches the filter', ja: '条件に一致するタスクがありません' },
+	'kanban.board.wipExceeded': { en: 'Over the WIP limit', ja: 'WIP 上限を超えています' },
+	'kanban.board.dryRunOn': { en: 'Dry run is on — prompts are built but never sent.', ja: 'ドライラン中です。プロンプトを組み立てるだけで送信しません。' },
+
+	// Kanban - column
+	'kanban.column.settings': { en: 'Column settings', ja: 'カラムの設定' },
+	'kanban.column.role': { en: 'Role in the run pipeline', ja: '実行パイプラインでの役割' },
+	'kanban.column.roleDetail': {
+		en: 'Auto-run pulls from the To Do column, moves the task to In Progress, then to Done or Failed.',
+		ja: '自動実行は「実行待ち」から拾い、「実行中」へ移し、結果に応じて「完了」か「失敗」へ移します。',
+	},
+	'kanban.column.wipLimit': { en: 'WIP limit (0 = none)', ja: 'WIP 上限（0 で無制限）' },
+	'kanban.column.color': { en: 'Color', ja: '色' },
+	'kanban.column.moveLeft': { en: 'Move left', ja: '左へ移動' },
+	'kanban.column.moveRight': { en: 'Move right', ja: '右へ移動' },
+	'kanban.column.delete': { en: 'Delete column', ja: 'カラムを削除' },
+	'kanban.column.deleteWithTasks': {
+		en: 'Deleting this column also deletes its {count} tasks. Continue?',
+		ja: 'このカラムを削除すると、中の {count} 件のタスクも削除されます。続けますか？',
+	},
+	'kanban.column.addTask': { en: 'Add a task to this column', ja: 'このカラムにタスクを追加' },
+
+	// Kanban - card
+	'kanban.card.run': { en: 'Run with agent', ja: 'エージェントで実行' },
+	'kanban.card.agentOff': { en: 'Excluded from auto-run', ja: '自動実行の対象外' },
+	'kanban.card.overdue': { en: 'Overdue', ja: '期限超過' },
+
+	// Kanban - task detail
+	'kanban.detail.titleLabel': { en: 'Title', ja: 'タイトル' },
+	'kanban.detail.description': { en: 'Description', ja: '説明' },
+	'kanban.detail.descriptionPlaceholder': {
+		en: 'What should the agent do? This goes straight into the prompt.',
+		ja: 'エージェントに何をしてほしいか。ここがそのままプロンプトに入ります。',
+	},
+	'kanban.detail.priority': { en: 'Priority', ja: '優先度' },
+	'kanban.detail.dueDate': { en: 'Due date', ja: '期限' },
+	'kanban.detail.assignee': { en: 'Assignee', ja: '担当' },
+	'kanban.detail.column': { en: 'Column', ja: 'カラム' },
+	'kanban.detail.labels': { en: 'Labels', ja: 'ラベル' },
+	'kanban.detail.addLabel': { en: 'Add label…', ja: 'ラベルを追加…' },
+	'kanban.detail.checklist': { en: 'Checklist', ja: 'チェックリスト' },
+	'kanban.detail.addChecklistItem': { en: 'Add an item…', ja: '項目を追加…' },
+	'kanban.detail.comments': { en: 'Comments', ja: 'コメント' },
+	'kanban.detail.addComment': { en: 'Write a comment…', ja: 'コメントを書く…' },
+	'kanban.detail.post': { en: 'Post', ja: '投稿' },
+	'kanban.detail.runHistory': { en: 'Run history', ja: '実行履歴' },
+	'kanban.detail.noRuns': { en: 'This task has not been run yet.', ja: 'まだ実行されていません。' },
+	'kanban.detail.openThread': { en: 'Open the chat thread', ja: 'チャットスレッドを開く' },
+	'kanban.detail.agentEnabled': { en: 'Include in auto-run', ja: '自動実行の対象にする' },
+	'kanban.detail.agentEnabledDetail': {
+		en: 'Turn this off to keep a task on the board without the agent picking it up. You can still run it by hand.',
+		ja: 'off にすると自動実行では拾われなくなります。手動での実行は引き続きできます。',
+	},
+	'kanban.detail.delete': { en: 'Delete task', ja: 'タスクを削除' },
+	'kanban.detail.deleteConfirm': { en: 'Delete "{title}"?', ja: '「{title}」を削除しますか？' },
+	'kanban.detail.close': { en: 'Close', ja: '閉じる' },
+	'kanban.detail.createdAt': { en: 'Created {time}', ja: '作成 {time}' },
+	'kanban.detail.authorUser': { en: 'You', ja: 'あなた' },
+	'kanban.detail.authorAgent': { en: 'Agent', ja: 'エージェント' },
+
+	// Settings - Kanban
+	'kanban.title': { en: 'Kanban', ja: 'カンバン' },
+	'kanban.subtitle': {
+		en: 'Orchestra has its own Kanban board. Tasks live in .orchestra/kanban.json inside the workspace, so they travel with the repository, and the agent can run them straight off the board.',
+		ja: 'Orchestra 内蔵のカンバンです。タスクはワークスペースの .orchestra/kanban.json に保存されるためリポジトリと一緒に持ち運べ、ボードから直接エージェントに実行させられます。',
+	},
+	'kanban.settings.openBoard': { en: 'Open Board', ja: 'ボードを開く' },
+	'kanban.settings.execution': { en: 'Execution', ja: '実行設定' },
+	'kanban.settings.executionSubtitle': {
+		en: 'How tasks in the To Do column get handed to the agent.',
+		ja: '実行待ちカラムのタスクをエージェントに渡すときの動作です。',
+	},
+	'kanban.settings.autoRun': { en: 'Run tasks automatically', ja: 'タスクを自動で実行する' },
+	'kanban.settings.autoRunDetail': {
+		en: 'Polls the To Do column on an interval and runs each task as an agent prompt.',
+		ja: '一定間隔で実行待ちカラムを確認し、タスクをエージェントのプロンプトとして実行します。',
+	},
+	'kanban.settings.pollInterval': { en: 'Poll interval (seconds)', ja: 'ポーリング間隔（秒）' },
+	'kanban.settings.maxTasks': { en: 'Max tasks per poll', ja: '1 回に処理する最大タスク数' },
+	'kanban.settings.timeout': { en: 'Timeout per task (minutes)', ja: '1 タスクのタイムアウト（分）' },
+	'kanban.settings.newThread': { en: 'New chat thread per task', ja: 'タスクごとに新しいスレッドを開く' },
+	'kanban.settings.newThreadDetail': {
+		en: 'Keeps each task in its own conversation instead of piling them into one thread.',
+		ja: 'タスクごとに会話を分け、1 つのスレッドに積み上がらないようにします。',
+	},
+	'kanban.settings.postComment': { en: 'Write the result back as a comment', ja: '実行結果をコメントとして書き戻す' },
+	'kanban.settings.requiredLabel': { en: 'Only run tasks with this label', ja: 'このラベルが付いたタスクだけ実行' },
+	'kanban.settings.requiredLabelPlaceholder': { en: 'Any label', ja: 'すべてのタスク' },
+	'kanban.settings.dryRun': { en: 'Dry run', ja: 'ドライラン' },
+	'kanban.settings.dryRunDetail': {
+		en: 'Builds the prompt and records it on the task, but never sends it to the agent.',
+		ja: 'プロンプトを組み立ててタスクに記録するだけで、エージェントには送りません。',
+	},
+	'kanban.settings.prompt': { en: 'Prompt template', ja: 'プロンプトのテンプレート' },
+	'kanban.settings.promptSubtitle': {
+		en: 'Placeholders: {{title}} {{description}} {{checklist}} {{labels}} {{priority}} {{due}} {{assignee}} {{comments}} {{columnName}} {{boardTitle}} {{taskId}}',
+		ja: '使えるプレースホルダ: {{title}} {{description}} {{checklist}} {{labels}} {{priority}} {{due}} {{assignee}} {{comments}} {{columnName}} {{boardTitle}} {{taskId}}',
+	},
+	'kanban.settings.promptReset': { en: 'Reset to default', ja: '既定に戻す' },
+	'kanban.settings.approvalWarning': {
+		en: 'Auto-approve is off for some tool categories. An unattended run will stall the first time the agent asks for approval.',
+		ja: '一部のツールで自動承認が off です。無人実行だと、エージェントが承認を求めた時点で止まります。',
 	},
 
 	// Settings - Trello

@@ -373,6 +373,13 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 				folderStateOfName: { ...(readS.globalSettings.obsidian?.folderStateOfName ?? {}) },
 			};
 
+			// add built-in Kanban settings. Same per-field merge as above so a settings file
+			// written before a knob existed still gets that knob's default.
+			readS.globalSettings.kanban = {
+				...deepClone(defaultGlobalSettings.kanban),
+				...(readS.globalSettings.kanban ?? {}),
+			};
+
 			// Cleanup legacy auth state
 			if ((readS.globalSettings as any).auth0Token !== undefined) delete (readS.globalSettings as any).auth0Token;
 			if ((readS.globalSettings as any).auth0User !== undefined) delete (readS.globalSettings as any).auth0User;

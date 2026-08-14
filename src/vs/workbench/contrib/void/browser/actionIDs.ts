@@ -29,6 +29,14 @@ export const VOID_REJECT_ALL_DIFFS_ACTION_ID = 'void.rejectAllDiffs'
 // 押すと該当エラーの内容と周辺コードをチャットへ転送して即ストリーミングを開始する。
 export const VOID_FIX_WITH_AGENT_ACTION_ID = 'void.fixWithAgent'
 
+// 内蔵カンバン (.orchestra/kanban.json のタスクをボードで管理し、エージェントに流す)
+export const VOID_TOGGLE_KANBAN_ACTION_ID = 'void.kanban.toggleBoard'
+export const VOID_OPEN_KANBAN_ACTION_ID = 'void.kanban.openBoard'
+export const VOID_KANBAN_ADD_TASK_ACTION_ID = 'void.kanban.addTask'
+export const VOID_KANBAN_RUN_NEXT_ACTION_ID = 'void.kanban.runNext'
+export const VOID_KANBAN_TOGGLE_AUTO_RUN_ACTION_ID = 'void.kanban.toggleAutoRun'
+export const VOID_KANBAN_CANCEL_ACTION_ID = 'void.kanban.cancelCurrent'
+
 // Trello 連携 (Trello の TODO カードをプロンプトとして自動実行する)
 export const VOID_TRELLO_RUN_NOW_ACTION_ID = 'void.trello.runNow'
 export const VOID_TRELLO_TOGGLE_AUTO_RUN_ACTION_ID = 'void.trello.toggleAutoRun'
