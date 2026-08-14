@@ -606,6 +606,11 @@ export type GlobalSettings = {
 	divisionAccessToken: string;
 	divisionRefreshToken: string;
 	isLoggedIn: boolean;
+	// リモートコントロール (orchestra-mobile) 用のローカル HTTP サーバー設定。
+	remoteControlEnabled: boolean;
+	remoteControlToken: string;
+	// この端末/インストールを Supabase 上で識別する安定 ID (RemoteSession.id)。
+	remoteControlDeviceId: string;
 	// Brief Gate Not OK → File Search → Leader 進捗確認 → Coder/Writer ループの最大試行回数。
 	// 1 以上の整数。0 / 負数は 1 に丸められる。
 	maxBriefGateIterations: number;
@@ -676,6 +681,9 @@ export const defaultGlobalSettings: GlobalSettings = {
 	divisionAccessToken: '',
 	divisionRefreshToken: '',
 	isLoggedIn: false,
+	remoteControlEnabled: false,
+	remoteControlToken: '',
+	remoteControlDeviceId: '',
 	maxBriefGateIterations: 10,
 	maxReviewerIterations: 10,
 	maxReviewIterations: 10,

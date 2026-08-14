@@ -127,8 +127,10 @@ import ErrorTelemetry from '../../platform/telemetry/electron-main/errorTelemetr
 // ignore the eslint errors below
 import { IMetricsService } from '../../workbench/contrib/void/common/metricsService.js';
 import { IVoidUpdateService } from '../../workbench/contrib/void/common/voidUpdateService.js';
+import { IRemoteControlService } from '../../workbench/contrib/void/common/remoteControlService.js';
 import { MetricsMainService } from '../../workbench/contrib/void/electron-main/metricsMainService.js';
 import { VoidMainUpdateService } from '../../workbench/contrib/void/electron-main/voidUpdateMainService.js';
+import { RemoteControlMainService } from '../../workbench/contrib/void/electron-main/remoteControlMainService.js';
 import { LLMMessageChannel } from '../../workbench/contrib/void/electron-main/sendLLMMessageChannel.js';
 import { VoidSCMService } from '../../workbench/contrib/void/electron-main/voidSCMMainService.js';
 import { IVoidSCMService } from '../../workbench/contrib/void/common/voidSCMTypes.js';
@@ -1105,6 +1107,7 @@ export class CodeApplication extends Disposable {
 		services.set(IMetricsService, new SyncDescriptor(MetricsMainService, undefined, false));
 		services.set(IVoidUpdateService, new SyncDescriptor(VoidMainUpdateService, undefined, false));
 		services.set(IVoidSCMService, new SyncDescriptor(VoidSCMService, undefined, false));
+		services.set(IRemoteControlService, new SyncDescriptor(RemoteControlMainService, undefined, false));
 
 		// Default Extensions Profile Init
 		services.set(IExtensionsProfileScannerService, new SyncDescriptor(ExtensionsProfileScannerService, undefined, true));
@@ -1242,6 +1245,9 @@ export class CodeApplication extends Disposable {
 
 		const voidUpdatesChannel = ProxyChannel.fromService(accessor.get(IVoidUpdateService), disposables);
 		mainProcessElectronServer.registerChannel('void-channel-update', voidUpdatesChannel);
+
+		const remoteControlChannel = ProxyChannel.fromService(accessor.get(IRemoteControlService), disposables);
+		mainProcessElectronServer.registerChannel('void-channel-remoteControl', remoteControlChannel);
 
 		const sendLLMMessageChannel = new LLMMessageChannel(accessor.get(IMetricsService));
 		mainProcessElectronServer.registerChannel('void-channel-llmMessage', sendLLMMessageChannel);

@@ -24,6 +24,7 @@ export const translations = {
 	'tab.skills': { en: 'Skills', ja: 'スキル' },
 	'tab.kanban': { en: 'Kanban', ja: 'カンバン' },
 	'tab.trello': { en: 'Trello', ja: 'Trello' },
+	'tab.remoteControl': { en: 'Remote Control', ja: 'リモートコントロール' },
 	'tab.obsidian': { en: 'Obsidian', ja: 'Obsidian' },
 	'tab.updates': { en: 'Updates', ja: 'アップデート' },
 	'tab.all': { en: 'All Settings', ja: 'すべての設定' },
@@ -295,6 +296,45 @@ export const translations = {
 	'kanban.settings.approvalWarning': {
 		en: 'Auto-approve is off for some tool categories. An unattended run will stall the first time the agent asks for approval.',
 		ja: '一部のツールで自動承認が off です。無人実行だと、エージェントが承認を求めた時点で止まります。',
+	},
+
+	// Settings - Remote Control
+	'remoteControl.title': { en: 'Remote Control', ja: 'リモートコントロール' },
+	'remoteControl.subtitle': {
+		en: 'Sign in to Orchestra-Mobile with your Division account and control this IDE from your phone.',
+		ja: 'Division アカウントで Orchestra-Mobile にログインし、スマホからこの IDE を操作できるようにします。',
+	},
+	'remoteControl.status.title': { en: 'Status', ja: '状態' },
+	'remoteControl.status.subtitle': {
+		en: 'Starts a local server on your LAN. Devices signed in to the same Division account can find it automatically.',
+		ja: 'この PC の LAN 上にローカルサーバーを立てます。同じ Division アカウントでログインした端末は自動的に見つけて接続できます。',
+	},
+	'remoteControl.status.enable': { en: 'Enable Remote Control', ja: 'リモートコントロールを有効にする' },
+	'remoteControl.status.enableDetail': {
+		en: 'Anyone with the token (or your Division account) can control this IDE while enabled.',
+		ja: '有効な間、トークン (または同じ Division アカウント) を持つ人はこの IDE を操作できます。',
+	},
+	'remoteControl.status.starting': { en: 'Starting…', ja: '起動中…' },
+	'remoteControl.status.running': { en: 'Running', ja: '起動中' },
+	'remoteControl.status.stopped': { en: 'Stopped', ja: '停止中' },
+	'remoteControl.status.loginWarning': {
+		en: 'Sign in to Division above to make this IDE discoverable automatically from Orchestra-Mobile. You can still pair manually with the connection info below.',
+		ja: '上で Division にログインすると、Orchestra-Mobile から自動的に見つけられるようになります。ログインしなくても、下の接続情報で手動ペアリングできます。',
+	},
+	'remoteControl.connection.title': { en: 'Connection Info', ja: '接続情報' },
+	'remoteControl.connection.subtitle': {
+		en: 'Scan or paste this into Orchestra-Mobile if automatic sign-in discovery does not work.',
+		ja: '自動検出がうまくいかない場合、この情報を Orchestra-Mobile に読み込ませてください。',
+	},
+	'remoteControl.connection.address': { en: 'Address', ja: 'アドレス' },
+	'remoteControl.connection.token': { en: 'Token', ja: 'トークン' },
+	'remoteControl.connection.show': { en: 'show', ja: '表示' },
+	'remoteControl.connection.hide': { en: 'hide', ja: '隠す' },
+	'remoteControl.connection.copyPairingLink': { en: 'Copy Pairing Link', ja: 'ペアリングリンクをコピー' },
+	'remoteControl.connection.regenerateToken': { en: 'Regenerate Token', ja: 'トークンを再発行' },
+	'remoteControl.connection.phase1Note': {
+		en: 'Phase 1: only status/ping are implemented. Kanban, chat, Division and file actions from the phone are not available yet.',
+		ja: 'Phase 1: 現時点では状態取得 (ping/state) のみ実装されています。カンバン・チャット・Division・ファイル操作はスマホからはまだ利用できません。',
 	},
 
 	// Settings - Trello

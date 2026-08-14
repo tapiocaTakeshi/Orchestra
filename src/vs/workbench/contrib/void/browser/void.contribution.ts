@@ -88,6 +88,10 @@ import './kanbanActions.js'
 import './trelloService.js'
 import './trelloActions.js'
 
+// register remote control (orchestra-mobile 用のローカル HTTP サーバー + Division セッション登録)
+import './remoteControlWorkbenchContribution.js'
+import './remoteControlActions.js'
+
 // ---------- common (unclear if these actually need to be imported, because they're already imported wherever they're used) ----------
 
 // llmMessage
@@ -110,6 +114,9 @@ import '../common/metricsService.js'
 
 // updates
 import '../common/voidUpdateService.js'
+
+// remote control (renderer 側プロキシ)
+import '../common/remoteControlService.js'
 
 // model service
 import '../common/voidModelService.js'

@@ -33,6 +33,7 @@ import { useTranslation } from '../util/i18n.js';
 import { KanbanSettings } from './KanbanSettings.js';
 import { TrelloSettings } from './TrelloSettings.js';
 import { ObsidianSettings } from './ObsidianSettings.js';
+import { RemoteControlSettings } from './RemoteControlSettings.js';
 import { uiLanguages, displayInfoOfUILanguage } from '../../../../common/voidSettingsTypes.js';
 
 type Tab =
@@ -44,6 +45,7 @@ type Tab =
 	| 'skills'
 	| 'kanban'
 	| 'trello'
+	| 'remoteControl'
 	| 'obsidian'
 	| 'division'
 	| 'general'
@@ -1506,6 +1508,7 @@ export const Settings = () => {
 		{ tab: 'skills', label: t('tab.skills') },
 		{ tab: 'kanban', label: t('tab.kanban') },
 		{ tab: 'trello', label: t('tab.trello') },
+		{ tab: 'remoteControl', label: t('tab.remoteControl') },
 		{ tab: 'obsidian', label: t('tab.obsidian') },
 		{ tab: 'updates', label: t('tab.updates') },
 		{ tab: 'all', label: t('tab.all') },
@@ -2195,6 +2198,17 @@ Use Model Context Protocol to provide Agent mode with more tools.
 										{t('trello.subtitle')}
 									</h4>
 									<TrelloSettings />
+								</ErrorBoundary>
+							</div>
+
+							{/* Remote Control section */}
+							<div className={shouldShowTab('remoteControl') ? `` : 'hidden'}>
+								<ErrorBoundary>
+									<h2 className='text-3xl mb-2'>{t('remoteControl.title')}</h2>
+									<h4 className={`text-void-fg-3 mb-4`}>
+										{t('remoteControl.subtitle')}
+									</h4>
+									<RemoteControlSettings />
 								</ErrorBoundary>
 							</div>
 

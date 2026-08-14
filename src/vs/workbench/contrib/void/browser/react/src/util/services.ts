@@ -64,6 +64,7 @@ import { IVoidUpdateService } from '../../../../../../../workbench/contrib/void/
 import { OrchestraUpdateState } from '../../../../../../../workbench/contrib/void/common/voidUpdateServiceTypes.js'
 import { IOpenerService } from '../../../../../../../platform/opener/common/opener.js'
 import { IDialogService } from '../../../../../../../platform/dialogs/common/dialogs.js'
+import { IRemoteControlService } from '../../../../common/remoteControlService.js'
 
 
 // normally to do this you'd use a useEffect that calls .onDidChangeState(), but useEffect mounts too late and misses initial state changes
@@ -310,6 +311,7 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IVoidUpdateService: accessor.get(IVoidUpdateService),
 		IOpenerService: accessor.get(IOpenerService),
 		IDialogService: accessor.get(IDialogService),
+		IRemoteControlService: accessor.get(IRemoteControlService),
 
 	} as const
 	return reactAccessor
