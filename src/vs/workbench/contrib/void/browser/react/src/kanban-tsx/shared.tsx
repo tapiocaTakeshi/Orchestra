@@ -232,19 +232,24 @@ export const Popover = ({ onClose, children, style }: {
 	const ref = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
+		// ボードは別ウィンドウ (auxiliary window) にも出せる。そこではグローバルの window は
+		// メインウィンドウを指すので、購読先は必ず自分が実際に載っているウィンドウから取る。
+		const win = ref.current?.ownerDocument.defaultView;
+		if (!win) return;
+
 		const onPointerDown = (e: MouseEvent) => {
 			if (ref.current && !ref.current.contains(e.target as Node)) onClose();
 		};
 		const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
 		// capture 相当のタイミングにしないと、開いた瞬間のクリックで閉じてしまう
-		const timer = setTimeout(() => {
-			window.addEventListener('mousedown', onPointerDown);
-			window.addEventListener('keydown', onKeyDown);
+		const timer = win.setTimeout(() => {
+			win.addEventListener('mousedown', onPointerDown);
+			win.addEventListener('keydown', onKeyDown);
 		}, 0);
 		return () => {
-			clearTimeout(timer);
-			window.removeEventListener('mousedown', onPointerDown);
-			window.removeEventListener('keydown', onKeyDown);
+			win.clearTimeout(timer);
+			win.removeEventListener('mousedown', onPointerDown);
+			win.removeEventListener('keydown', onKeyDown);
 		};
 	}, [onClose]);
 

@@ -97,6 +97,7 @@ export const TaskDetail = ({ task, board, onClose }: {
 	const kanbanService = accessor.get('IKanbanService');
 	const chatThreadService = accessor.get('IChatThreadService');
 	const commandService = accessor.get('ICommandService');
+	const dialogService = accessor.get('IDialogService');
 	const { t, language } = useTranslation();
 
 	// テキスト入力は打っている間だけローカルに持ち、blur で確定する。
@@ -149,8 +150,12 @@ export const TaskDetail = ({ task, board, onClose }: {
 				<IconButton
 					title={t('kanban.detail.delete')}
 					danger
-					onClick={() => {
-						if (!window.confirm(t('kanban.detail.deleteConfirm').replace('{title}', task.title))) return;
+					onClick={async () => {
+						// 別ウィンドウのボードからでも、そのウィンドウ上に確認ダイアログを出す
+						const { confirmed } = await dialogService.confirm({
+							message: t('kanban.detail.deleteConfirm').replace('{title}', task.title),
+						});
+						if (!confirmed) return;
 						kanbanService.deleteTask(task.id);
 						onClose();
 					}}

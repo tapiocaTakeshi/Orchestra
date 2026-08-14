@@ -63,6 +63,7 @@ import { DivisionProjectConfig, IDivisionProjectService } from '../../../divisio
 import { IVoidUpdateService } from '../../../../../../../workbench/contrib/void/common/voidUpdateService.js'
 import { OrchestraUpdateState } from '../../../../../../../workbench/contrib/void/common/voidUpdateServiceTypes.js'
 import { IOpenerService } from '../../../../../../../platform/opener/common/opener.js'
+import { IDialogService } from '../../../../../../../platform/dialogs/common/dialogs.js'
 
 
 // normally to do this you'd use a useEffect that calls .onDidChangeState(), but useEffect mounts too late and misses initial state changes
@@ -308,6 +309,7 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 
 		IVoidUpdateService: accessor.get(IVoidUpdateService),
 		IOpenerService: accessor.get(IOpenerService),
+		IDialogService: accessor.get(IDialogService),
 
 	} as const
 	return reactAccessor

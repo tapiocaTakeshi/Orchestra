@@ -26,8 +26,14 @@ import { toDisposable } from '../../../../base/common/lifecycle.js';
 import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 import { KeybindingWeight } from '../../../../platform/keybinding/common/keybindingsRegistry.js';
 
+import { IVoidSettingsService } from '../common/voidSettingsService.js';
+
 import { mountKanbanBoard } from './react/out/kanban-tsx/index.js';
-import { VOID_OPEN_KANBAN_ACTION_ID, VOID_TOGGLE_KANBAN_ACTION_ID } from './actionIDs.js';
+import {
+	VOID_OPEN_KANBAN_ACTION_ID,
+	VOID_OPEN_KANBAN_IN_NEW_WINDOW_ACTION_ID,
+	VOID_TOGGLE_KANBAN_ACTION_ID,
+} from './actionIDs.js';
 
 
 class KanbanInput extends EditorInput {
@@ -71,7 +77,9 @@ class KanbanPane extends EditorPane {
 		parent.style.height = '100%';
 		parent.style.width = '100%';
 
-		const container = document.createElement('div');
+		// 別ウィンドウ (auxiliary window) では document が別物になる。グローバルの document で
+		// 作った要素を挿し込むと所有ドキュメントがずれるので、必ず親の document から作る。
+		const container = parent.ownerDocument.createElement('div');
 		container.style.height = '100%';
 		container.style.width = '100%';
 		parent.appendChild(container);
@@ -95,6 +103,68 @@ Registry.as<IEditorPaneRegistry>(EditorExtensions.EditorPane).registerEditorPane
 );
 
 
+// ---------------------------------------------------------------------------
+// ボードを開く
+//
+// 開き先は「メインのエディタ領域」と「別ウィンドウ (auxiliary window)」の 2 つ。
+// ボードはサブディスプレイに出しっぱなしにしたい類の画面なので、設定 openInNewWindow が
+// true なら通常のコマンドも別ウィンドウを使う。
+// ---------------------------------------------------------------------------
+
+/** 既に開いているボードのエディタ (どのウィンドウのグループにあっても拾う) */
+const findOpenBoard = (accessor: ServicesAccessor) =>
+	accessor.get(IEditorService).findEditors(KanbanInput.RESOURCE);
+
+/**
+ * 別ウィンドウにボードを出す。既にどこかで開いていればそれを移してくる。
+ * 2 枚のボードが並ぶと紛らわしいだけなので、コピーではなく移動にしている。
+ */
+const openBoardInNewWindow = async (accessor: ServicesAccessor): Promise<void> => {
+	const editorGroupService = accessor.get(IEditorGroupsService);
+	const instantiationService = accessor.get(IInstantiationService);
+
+	const openEditors = findOpenBoard(accessor);
+	const auxiliaryPart = await editorGroupService.createAuxiliaryEditorPart();
+
+	if (openEditors.length !== 0) {
+		const { editor, groupId } = openEditors[0];
+		const sourceGroup = editorGroupService.getGroup(groupId);
+		// 既に別ウィンドウに居るなら移す必要はなく、そのまま前面に出せばよい
+		if (sourceGroup && sourceGroup !== auxiliaryPart.activeGroup) {
+			sourceGroup.moveEditor(editor, auxiliaryPart.activeGroup);
+		} else {
+			await auxiliaryPart.activeGroup.openEditor(editor);
+		}
+	} else {
+		await auxiliaryPart.activeGroup.openEditor(instantiationService.createInstance(KanbanInput));
+	}
+
+	auxiliaryPart.activeGroup.focus();
+};
+
+/** メインのエディタ領域にボードを出す */
+const openBoardInEditorArea = async (accessor: ServicesAccessor): Promise<void> => {
+	const editorGroupService = accessor.get(IEditorGroupsService);
+	const instantiationService = accessor.get(IInstantiationService);
+
+	const openEditors = findOpenBoard(accessor);
+	if (openEditors.length !== 0) {
+		const { editor, groupId } = openEditors[0];
+		await (editorGroupService.getGroup(groupId) ?? editorGroupService.activeGroup).openEditor(editor);
+		return;
+	}
+
+	await editorGroupService.activeGroup.openEditor(instantiationService.createInstance(KanbanInput));
+};
+
+/** 設定に従って開き先を決める */
+const openBoard = async (accessor: ServicesAccessor): Promise<void> => {
+	const preferNewWindow = accessor.get(IVoidSettingsService).state.globalSettings.kanban?.openInNewWindow;
+	if (preferNewWindow) await openBoardInNewWindow(accessor);
+	else await openBoardInEditorArea(accessor);
+};
+
+
 // Action: Toggle the board (Ctrl+Alt+K, matching the browser pane's Ctrl+Alt+B)
 registerAction2(class extends Action2 {
 	constructor() {
@@ -112,23 +182,19 @@ registerAction2(class extends Action2 {
 
 	async run(accessor: ServicesAccessor): Promise<void> {
 		const editorService = accessor.get(IEditorService);
-		const editorGroupService = accessor.get(IEditorGroupsService);
-		const instantiationService = accessor.get(IInstantiationService);
 
-		const openEditors = editorService.findEditors(KanbanInput.RESOURCE);
+		const openEditors = findOpenBoard(accessor);
 		if (openEditors.length !== 0) {
+			// 既に見えているなら閉じる。見えていない (裏のタブ / 別ウィンドウ) なら前面に出す。
 			const openEditor = openEditors[0].editor;
-			const isCurrentlyOpen = editorService.activeEditor?.resource?.toString() === openEditor.resource?.toString();
-			if (isCurrentlyOpen) {
+			const isActive = editorService.activeEditor?.resource?.toString() === openEditor.resource?.toString();
+			if (isActive) {
 				await editorService.closeEditors(openEditors);
-			} else {
-				await editorGroupService.activeGroup.openEditor(openEditor);
+				return;
 			}
-			return;
 		}
 
-		const input = instantiationService.createInstance(KanbanInput);
-		await editorGroupService.activeGroup.openEditor(input);
+		await openBoard(accessor);
 	}
 });
 
@@ -145,17 +211,23 @@ registerAction2(class extends Action2 {
 	}
 
 	async run(accessor: ServicesAccessor): Promise<void> {
-		const editorService = accessor.get(IEditorService);
-		const editorGroupService = accessor.get(IEditorGroupsService);
-		const instantiationService = accessor.get(IInstantiationService);
+		await openBoard(accessor);
+	}
+});
 
-		const openEditors = editorService.findEditors(KanbanInput.RESOURCE);
-		if (openEditors.length !== 0) {
-			await editorGroupService.activeGroup.openEditor(openEditors[0].editor);
-			return;
-		}
 
-		const input = instantiationService.createInstance(KanbanInput);
-		await editorService.openEditor(input);
+// Action: Open the board in a separate window, regardless of the setting
+registerAction2(class extends Action2 {
+	constructor() {
+		super({
+			id: VOID_OPEN_KANBAN_IN_NEW_WINDOW_ACTION_ID,
+			title: nls.localize2('voidKanbanOpenInNewWindow', "Kanban: Open Board in New Window"),
+			f1: true,
+			icon: Codicon.emptyWindow,
+		});
+	}
+
+	async run(accessor: ServicesAccessor): Promise<void> {
+		await openBoardInNewWindow(accessor);
 	}
 });

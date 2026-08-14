@@ -178,6 +178,7 @@ export const translations = {
 	},
 	'kanban.board.addColumn': { en: 'Add column', ja: 'カラムを追加' },
 	'kanban.board.newColumnName': { en: 'New column', ja: '新しいカラム' },
+	'kanban.board.openInNewWindow': { en: 'Open the board in a separate window', ja: 'ボードを別ウィンドウで開く' },
 	'kanban.board.reload': { en: 'Reload from disk', ja: 'ディスクから再読み込み' },
 	'kanban.board.openSettings': { en: 'Kanban settings', ja: 'カンバンの設定' },
 	'kanban.board.storedInFile': { en: 'Saved to {path}', ja: '保存先: {path}' },
@@ -254,6 +255,11 @@ export const translations = {
 		ja: 'Orchestra 内蔵のカンバンです。タスクはワークスペースの .orchestra/kanban.json に保存されるためリポジトリと一緒に持ち運べ、ボードから直接エージェントに実行させられます。',
 	},
 	'kanban.settings.openBoard': { en: 'Open Board', ja: 'ボードを開く' },
+	'kanban.settings.openInNewWindow': { en: 'Always open in a separate window', ja: '常に別ウィンドウで開く' },
+	'kanban.settings.openInNewWindowDetail': {
+		en: 'Opening the board puts it in its own window instead of an editor tab — useful for parking it on a second display while you write code in the main window.',
+		ja: 'ボードをエディタのタブではなく専用のウィンドウで開きます。サブディスプレイにボードを出しっぱなしにして、メインウィンドウではコードを書く使い方向けです。',
+	},
 	'kanban.settings.execution': { en: 'Execution', ja: '実行設定' },
 	'kanban.settings.executionSubtitle': {
 		en: 'How tasks in the To Do column get handed to the agent.',

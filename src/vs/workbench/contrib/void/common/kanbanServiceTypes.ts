@@ -131,6 +131,11 @@ export type KanbanSettings = {
 	/** true なら「プロンプトを組み立てるがエージェントには投げない」動作確認モード */
 	dryRun: boolean;
 	/**
+	 * true の間、ボードを開くコマンドが常に別ウィンドウ (auxiliary window) を使う。
+	 * サブディスプレイにボードを出しっぱなしにして、メインウィンドウではコードを書く使い方向け。
+	 */
+	openInNewWindow: boolean;
+	/**
 	 * プロンプトのテンプレート。以下のプレースホルダが展開される:
 	 *   {{title}} {{description}} {{checklist}} {{labels}} {{priority}}
 	 *   {{due}} {{assignee}} {{comments}} {{columnName}} {{boardTitle}} {{taskId}}
@@ -148,6 +153,7 @@ export const defaultKanbanSettings: KanbanSettings = {
 	postResultComment: true,
 	requiredLabel: '',
 	dryRun: false,
+	openInNewWindow: false,
 	promptTemplate: '',
 };
 
