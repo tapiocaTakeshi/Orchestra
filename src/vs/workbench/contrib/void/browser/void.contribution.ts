@@ -79,6 +79,11 @@ import './divisionEditorActions.js'
 // register source control management
 import './voidSCMService.js'
 
+// register built-in Kanban board (.orchestra/kanban.json, Ctrl+Alt+K)
+import './kanbanService.js'
+import './kanbanPane.js'
+import './kanbanActions.js'
+
 // register Trello integration (auto-executes Trello cards as agent prompts)
 import './trelloService.js'
 import './trelloActions.js'

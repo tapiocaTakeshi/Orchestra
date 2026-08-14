@@ -8,6 +8,7 @@ import { defaultModelsOfProvider, defaultProviderSettings, ModelOverrides } from
 import { ToolApprovalType } from './toolsServiceTypes.js';
 import { defaultTrelloSettings, TrelloSettings } from './trelloServiceTypes.js';
 import { defaultObsidianSettings, ObsidianSettings } from './obsidianServiceTypes.js';
+import { defaultKanbanSettings, KanbanSettings } from './kanbanServiceTypes.js';
 import { VoidSettingsState } from './voidSettingsService.js'
 
 
@@ -623,6 +624,9 @@ export type GlobalSettings = {
 	trello: TrelloSettings;
 	// Obsidian 連携 (Vault のフォルダ名を取り込み、Markdown をツールとして読む) の設定。
 	obsidian: ObsidianSettings;
+	// 内蔵カンバン (.orchestra/kanban.json のタスクをエージェントに流す) の実行設定。
+	// ボードそのものはワークスペースのファイル側にあり、ここには入らない。
+	kanban: KanbanSettings;
 }
 
 // Default role assignments for Division API
@@ -679,6 +683,7 @@ export const defaultGlobalSettings: GlobalSettings = {
 	uiLanguage: 'en',
 	trello: defaultTrelloSettings,
 	obsidian: defaultObsidianSettings,
+	kanban: defaultKanbanSettings,
 }
 
 export type GlobalSettingName = keyof GlobalSettings

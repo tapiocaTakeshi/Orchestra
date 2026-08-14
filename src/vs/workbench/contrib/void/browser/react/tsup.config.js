@@ -15,6 +15,7 @@ export default defineConfig({
 		'./src2/quick-edit-tsx/index.tsx',
 		'./src2/diff/index.tsx',
 		'./src2/role-output-tsx/index.tsx',
+		'./src2/kanban-tsx/index.tsx',
 	],
 	outDir: './out',
 	format: ['esm'],

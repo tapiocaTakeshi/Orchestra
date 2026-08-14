@@ -30,6 +30,7 @@ import { BillingPanel } from '../void-login-tsx/BillingPanel.js';
 import { Lock, Languages } from 'lucide-react';
 import { OrchestraUpdatesPane } from './UpdatesPane.js';
 import { useTranslation } from '../util/i18n.js';
+import { KanbanSettings } from './KanbanSettings.js';
 import { TrelloSettings } from './TrelloSettings.js';
 import { ObsidianSettings } from './ObsidianSettings.js';
 import { uiLanguages, displayInfoOfUILanguage } from '../../../../common/voidSettingsTypes.js';
@@ -41,6 +42,7 @@ type Tab =
 	| 'featureOptions'
 	| 'mcp'
 	| 'skills'
+	| 'kanban'
 	| 'trello'
 	| 'obsidian'
 	| 'division'
@@ -1502,6 +1504,7 @@ export const Settings = () => {
 		{ tab: 'general', label: t('tab.general') },
 		{ tab: 'mcp', label: t('tab.mcp') },
 		{ tab: 'skills', label: t('tab.skills') },
+		{ tab: 'kanban', label: t('tab.kanban') },
 		{ tab: 'trello', label: t('tab.trello') },
 		{ tab: 'obsidian', label: t('tab.obsidian') },
 		{ tab: 'updates', label: t('tab.updates') },
@@ -2170,6 +2173,17 @@ Use Model Context Protocol to provide Agent mode with more tools.
 									<ErrorBoundary>
 										<SkillsList />
 									</ErrorBoundary>
+								</ErrorBoundary>
+							</div>
+
+							{/* Kanban section */}
+							<div className={shouldShowTab('kanban') ? `` : 'hidden'}>
+								<ErrorBoundary>
+									<h2 className='text-3xl mb-2'>{t('kanban.title')}</h2>
+									<h4 className={`text-void-fg-3 mb-4`}>
+										{t('kanban.subtitle')}
+									</h4>
+									<KanbanSettings />
 								</ErrorBoundary>
 							</div>
 
