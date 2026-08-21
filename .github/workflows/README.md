@@ -21,16 +21,19 @@ Orchestra のリリース自動化ワークフローを提供します。
 #### 使い方
 
 ```bash
-# 1. product.json の voidVersion を更新
-# 2. コミットして push
-git add product.json
-git commit -m "chore: bump to 1.4.10"
-git push
-
-# 3. タグを切って push (これで自動で workflow が走る)
+# タグを切って push するだけ (これで自動で workflow が走る)
 git tag v1.4.10
 git push origin v1.4.10
 ```
+
+`product.json` の `voidVersion` は各ビルドジョブが
+`node build/stamp-release-version.js "$RELEASE_TAG"` でタグから焼き込むため、
+リリースのたびに手で更新する必要はありません (リポジトリにコミットされている値は
+ローカルビルド用の目安です)。
+
+`voidVersion` は自動アップデートが「今動いているバージョン」として読む値です。
+ここがタグより古いままリリースされると、配布された全ビルドが同じ古いバージョンを
+名乗り続け、更新しても「新しいバージョンがあります」が出続けます。
 
 #### 注意点
 
