@@ -153,6 +153,13 @@ async function clearMacQuarantine(dir) {
 })().catch(logError);
 `;
 
+// downloadUpdate() が用意した、適用待ちのアップデート。
+// 'archive': zip/tar.gz を展開した中身をコピーして差し替える (mac/linux)。
+// 'installer': ダウンロードした setup.exe をサイレント実行する (windows)。
+type PendingInstall =
+	| { kind: 'archive'; contentRoot: string; tagName: string }
+	| { kind: 'installer'; installerPath: string; tagName: string }
+
 export class VoidMainUpdateService extends Disposable implements IOrchestraUpdateUiService {
 	_serviceBrand: undefined;
 
@@ -169,12 +176,7 @@ export class VoidMainUpdateService extends Disposable implements IOrchestraUpdat
 	private _lastReleaseInfo: OrchestraReleaseInfo | undefined
 
 	// downloadUpdate() が用意した適用待ちアップデートへの参照 (quitAndInstall() が使う)。
-	// 'archive': zip/tar.gz を展開した中身をコピーして差し替える (mac/linux)。
-	// 'installer': ダウンロードした setup.exe をサイレント実行する (windows)。
-	private _pendingInstall:
-		| { kind: 'archive'; contentRoot: string; tagName: string }
-		| { kind: 'installer'; installerPath: string; tagName: string }
-		| undefined
+	private _pendingInstall: PendingInstall | undefined
 
 	constructor(
 		@IProductService private readonly _productService: IProductService,
@@ -441,13 +443,103 @@ export class VoidMainUpdateService extends Disposable implements IOrchestraUpdat
 		}
 	}
 
+	/** 更新プロセスを起動する関数を組み立てる。準備段階の失敗はここで返す (quit する前に返せる)。 */
+	private async _prepareLauncher(pending: PendingInstall): Promise<{ launch: () => void } | { error: string }> {
+		// 今アプリが動いている場所。archive はここへ上書きコピーし、installer はここを
+		// インストール先として渡す。特定できない場合は例外を投げる (呼び出し側で拾う)。
+		const targetDir = this._resolveInstallRoot()
+
+		if (pending.kind === 'installer') {
+			// spawn() の ENOENT は同期例外ではなく 'error' イベントで飛んでくるので、
+			// try/catch では拾えない。存在確認はここで済ませておく。
+			try {
+				await fs.promises.access(pending.installerPath, fs.constants.R_OK)
+			} catch {
+				return { error: `ダウンロードしたインストーラーが見つかりません: ${pending.installerPath}` }
+			}
+
+			// サイレントインストールは失敗しても画面に何も出ないので、ログだけは必ず残す。
+			const logPath = path.join(os.tmpdir(), 'orchestra-update-install.log')
+
+			// /DIR を明示するのが重要。省略すると Inno Setup は既定のインストール先
+			// (%LOCALAPPDATA%\Programs\Orchestra) か、レジストリに残った以前の記録を使う。
+			// zip 配布版から移行した環境などではそれが今動いているアプリの場所と一致せず、
+			// 「更新したのに古いままアプリが起動する」= 更新できない、という状態になる。
+			const args = [
+				'/verysilent',
+				'/norestart',
+				`/LOG=${logPath}`,
+				`/DIR=${targetDir}`,
+				'/mergetasks=runcode,!desktopicon,!quicklaunchicon',
+			]
+
+			this._logService.info(`orchestra update: will run installer ${pending.installerPath} ${args.join(' ')}`)
+
+			return {
+				launch: () => {
+					// Inno Setup インストーラーをサイレント実行する。CloseApplications=force が
+					// 設定されているためアプリのプロセス終了はインストーラー自身が待ち受ける。
+					// runcode タスクはサイレント実行時に有効になるので、完了後は自動的に再起動する。
+					//
+					// windowsVerbatimArguments は付けない。付けると実行ファイルのパスまで
+					// 引用符なしでコマンドラインに並べられるので、%TEMP% がユーザー名などの都合で
+					// 空白を含むパスだと、インストーラーが自分の引数を正しく読めなくなる。
+					const child = spawn(pending.installerPath, args, {
+						// 明示的に存在するディレクトリを渡す。quit(willRestart) は Windows で
+						// 起動時のカレントディレクトリに chdir し直すので、そのディレクトリが
+						// もう無いと子プロセスの作成自体が「パスが見つかりません」で失敗する。
+						cwd: os.tmpdir(),
+						detached: true,
+						stdio: 'ignore',
+					})
+					child.once('error', e => this._logService.error(`orchestra update: failed to launch installer: ${e}`))
+					child.unref()
+				}
+			}
+		}
+
+		const scriptPath = path.join(os.tmpdir(), `orchestra-apply-update-${Date.now()}.js`)
+		try {
+			await fs.promises.writeFile(scriptPath, UPDATER_SCRIPT, 'utf8')
+		} catch (e) {
+			return { error: `更新用スクリプトを書き出せませんでした: ${e instanceof Error ? e.message : String(e)}` }
+		}
+
+		const contentRoot = pending.contentRoot
+
+		return {
+			launch: () => {
+				const child = spawn(process.execPath, [scriptPath, String(process.pid), contentRoot, targetDir, process.execPath], {
+					cwd: os.tmpdir(),
+					detached: true,
+					stdio: 'ignore',
+					env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+				})
+				child.once('error', e => this._logService.error(`orchestra update: failed to launch updater: ${e}`))
+				child.unref()
+			}
+		}
+	}
+
 	async quitAndInstall(): Promise<OrchestraInstallResult> {
 		const pending = this._pendingInstall
 		if (!pending) {
 			return { error: 'まだアップデートがダウンロードされていません。' }
 		}
 
-		// 先にライフサイクルへ終了確認を通す (未保存の変更などがあればここで veto=true が返る)。
+		// 準備は終了前に済ませる。quit() が解決した時点でアプリはもう終了処理に入っていて、
+		// そこから返したエラーはどこにも表示されないため。
+		let prepared: { launch: () => void } | { error: string }
+		try {
+			prepared = await this._prepareLauncher(pending)
+		} catch (e) {
+			return { error: e instanceof Error ? e.message : String(e) }
+		}
+		if ('error' in prepared) {
+			return prepared
+		}
+
+		// ライフサイクルへ終了確認を通す (未保存の変更などがあればここで veto=true が返る)。
 		// veto された場合は更新用プロセスを一切起動しない (実行中のインストールに触れないため)。
 		// ILifecycleMainService.quit() は内部で electron.app.quit() を呼ぶため、ここで改めて app.quit() は不要。
 		const vetoed = await this._lifecycleMainService.quit(true /* will restart */)
@@ -455,49 +547,7 @@ export class VoidMainUpdateService extends Disposable implements IOrchestraUpdat
 			return { error: '保存されていない変更などにより、再起動がキャンセルされました。' }
 		}
 
-		if (pending.kind === 'installer') {
-			// Inno Setup インストーラーをサイレント実行する。CloseApplications=force が設定されているため
-			// アプリのプロセス終了はインストーラー自身が待ち受ける。runcode タスクはサイレント実行時に
-			// 自動的に有効になるため、インストール完了後は自動的に再起動する。
-			try {
-				const child = spawn(pending.installerPath, [
-					'/verysilent',
-					'/suppressmsgboxes',
-					'/norestart',
-					'/mergetasks=runcode,!desktopicon,!quicklaunchicon',
-				], {
-					detached: true,
-					stdio: 'ignore',
-					windowsVerbatimArguments: true,
-				})
-				child.unref()
-			} catch (e) {
-				return { error: `インストーラーの起動に失敗しました: ${e instanceof Error ? e.message : String(e)}` }
-			}
-
-			return { ok: true }
-		}
-
-		let targetDir: string
-		try {
-			targetDir = this._resolveInstallRoot()
-		} catch (e) {
-			return { error: e instanceof Error ? e.message : String(e) }
-		}
-
-		try {
-			const scriptPath = path.join(os.tmpdir(), `orchestra-apply-update-${Date.now()}.js`)
-			await fs.promises.writeFile(scriptPath, UPDATER_SCRIPT, 'utf8')
-
-			const child = spawn(process.execPath, [scriptPath, String(process.pid), pending.contentRoot, targetDir, process.execPath], {
-				detached: true,
-				stdio: 'ignore',
-				env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
-			})
-			child.unref()
-		} catch (e) {
-			return { error: `更新用プロセスの起動に失敗しました: ${e instanceof Error ? e.message : String(e)}` }
-		}
+		prepared.launch()
 
 		return { ok: true }
 	}
