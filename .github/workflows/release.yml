@@ -151,6 +151,12 @@ jobs:
           echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
           echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> "$GITHUB_ENV"
 
+      - name: Stamp release version into product.json
+        # 自動アップデートの「現在のバージョン」は product.json の voidVersion から読む。
+        # ここでタグを焼き込んでおかないと、配布されたビルドが全部同じ古いバージョンを
+        # 名乗り続け、更新しても「新しいバージョンがあります」が出続けることになる。
+        run: node build/stamp-release-version.js "${RELEASE_TAG}"
+
       - name: Build (compile + electron package)
         # release-macos は ad-hoc 署名を含むため、CI では分割実行する
         run: |
@@ -434,6 +440,13 @@ jobs:
             Start-Sleep -Seconds $wait
           }
 
+      - name: Stamp release version into product.json
+        # 自動アップデートの「現在のバージョン」は product.json の voidVersion から読む。
+        # ここでタグを焼き込んでおかないと、配布されたビルドが全部同じ古いバージョンを
+        # 名乗り続け、更新しても「新しいバージョンがあります」が出続けることになる。
+        shell: pwsh
+        run: node build/stamp-release-version.js "$env:RELEASE_TAG"
+
       - name: Build (release-windows)
         run: npm run release-windows
 
@@ -608,6 +621,12 @@ jobs:
             echo "npm ci failed (attempt $attempt/$max_attempts); retrying in ${wait}s..."
             sleep "$wait"
           done
+
+      - name: Stamp release version into product.json
+        # 自動アップデートの「現在のバージョン」は product.json の voidVersion から読む。
+        # ここでタグを焼き込んでおかないと、配布されたビルドが全部同じ古いバージョンを
+        # 名乗り続け、更新しても「新しいバージョンがあります」が出続けることになる。
+        run: node build/stamp-release-version.js "${RELEASE_TAG}"
 
       - name: Build (release-linux)
         run: npm run release-linux
