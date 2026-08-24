@@ -43,7 +43,12 @@
   /* ---------- persistent chrome ---------- */
   .chrome{position:absolute;display:flex;align-items:center;gap:16px;z-index:9}
   .chrome.tl{left:74px;top:60px}
-  .chrome.br{right:74px;bottom:58px}
+  .chrome.bl{left:74px;bottom:58px}
+  .chrome.br{right:74px;bottom:54px;gap:14px}
+  .np-label{font-size:15px;font-weight:700;letter-spacing:.24em;color:var(--muted)}
+  .np-title{font-size:23px;font-weight:700;letter-spacing:.02em;color:#E7EBF2;margin-top:3px}
+  .eq{display:flex;align-items:flex-end;gap:4px;height:26px}
+  .eq i{display:block;width:4px;border-radius:2px;background:var(--red-2);height:6px}
   .chrome img{width:46px;height:46px}
   .wordmark{font-size:27px;font-weight:900;letter-spacing:.05em}
   .chip-sm{font-size:19px;color:var(--muted);letter-spacing:.14em;font-weight:700}
@@ -271,7 +276,14 @@
     <div class="bar"></div>
     <div class="chip-sm">AI IDE</div>
   </div>
-  <div class="chrome br"><div class="chip-sm">api.division.he-ro.jp</div></div>
+  <div class="chrome bl"><div class="chip-sm">api.division.he-ro.jp</div></div>
+  <div class="chrome br">
+    <div class="eq" id="eq"><i></i><i></i><i></i><i></i><i></i></div>
+    <div style="text-align:right">
+      <div class="np-label">BGM</div>
+      <div class="np-title">Pale Blue Light</div>
+    </div>
+  </div>
   <div class="scan"></div>
   <div class="vignette"></div>
 </div>
@@ -309,6 +321,7 @@ const typed = $('#typed'), caret = $('#caret'), sendkey = $('#sendkey');
 const flow = $('#flow'), rail = $('#rail'), result = $('#result');
 const stepEls = $$('#steps .step');
 const PROMPT = Array.from('クイズを投稿するアプリ「リドル」を作って');
+const EQ = $$('#eq i');
 
 const SCENES = [
   { el: s1, start: 28.4, dur: 6.6, fn: s1fn },
@@ -413,6 +426,13 @@ function background(t) {
   // the logo mark completes exactly one turn per loop
   const l = document.querySelector('.chrome.tl img');
   l.style.transform = 'rotate(' + (p * 360).toFixed(2) + 'deg)';
+  // equaliser bars: integer cycle counts per loop, so they land where they started
+  const CYC = [97, 149, 113, 173, 127], PH = [0, 1.9, 3.4, .8, 2.6];
+  EQ.forEach((bar, i) => {
+    const v = .5 + .5 * Math.sin(p * TAU * CYC[i] + PH[i]);
+    bar.style.height = (6 + 19 * v * v).toFixed(1) + 'px';
+    bar.style.opacity = (.55 + .45 * v).toFixed(3);
+  });
 }
 
 /* ---------------- frame ---------------- */

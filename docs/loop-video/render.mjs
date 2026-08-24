@@ -5,6 +5,9 @@
  * frame is captured deterministically — frame 0 and frame N are identical and
  * the result loops without a seam.
  *
+ * The BGM is turned into a 30s loop the same way: the tail is crossfaded over
+ * the head, so the audio meets itself cleanly at the loop point too.
+ *
  * Usage:
  *   node docs/loop-video/render.mjs                 # full render -> orchestra-loop.mp4
  *   node docs/loop-video/render.mjs --preview 0,5,12 # single PNG frames, for checking
@@ -20,6 +23,8 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const W = 1920, H = 1080, FPS = 30, DURATION = 30;   // must match D in scene.html
 const TOTAL = FPS * DURATION;
+const BGM = path.join(HERE, 'bgm', 'pale_blue_light.mp3');
+const XFADE = 0.6;                                   // audio loop crossfade, seconds
 
 const FONTS = [
 	['NotoSansJP-Regular.ttf', 'https://fonts.gstatic.com/s/notosansjp/v56/-F6jfjtqLzI2JPCgQBnw7HFyzSD-AsregP8VFBEj75s.ttf'],
@@ -54,6 +59,49 @@ function ffmpegPath() {
 	return 'ffmpeg';
 }
 
+/** Duration in seconds of a media file, read off ffmpeg's own report. */
+async function probeDuration(file) {
+	const ff = spawn(ffmpegPath(), ['-hide_banner', '-i', file], { stdio: ['ignore', 'ignore', 'pipe'] });
+	let err = '';
+	ff.stderr.on('data', d => { err += d; });
+	await once(ff, 'close');
+	const m = err.match(/Duration:\s*(\d+):(\d\d):(\d\d(?:\.\d+)?)/);
+	if (!m) { throw new Error('could not read duration of ' + file); }
+	return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+}
+
+/**
+ * ffmpeg args that turn the BGM into a DURATION-long loop, appended after the
+ * video input (so the audio inputs are 1..3).
+ *
+ * With enough material past DURATION the tail is crossfaded over the head, so the
+ * track meets itself at the loop point; otherwise it just gets trimmed and faded.
+ * Each segment is a separately seeked input rather than an atrim branch off one
+ * input — splitting a single input three ways starves the branch that has to read
+ * to the end of the file, and the crossfade comes out empty.
+ */
+function audioArgs(src, srcDur) {
+	if (srcDur >= DURATION + XFADE) {
+		return [
+			'-ss', String(DURATION), '-t', String(XFADE), '-i', src,          // tail
+			'-ss', '0', '-t', String(XFADE), '-i', src,                       // head
+			'-ss', String(XFADE), '-t', String(DURATION - XFADE), '-i', src,  // body
+			'-filter_complex',
+			`[1:a][2:a]acrossfade=d=${XFADE}:c1=qsin:c2=qsin[x];` +
+			`[x][3:a]concat=n=2:v=0:a=1[a]`,
+			'-map', '0:v', '-map', '[a]',
+		];
+	}
+	const fadeOut = Math.max(0, Math.min(srcDur, DURATION) - .6);
+	return [
+		'-i', src,
+		'-filter_complex',
+		`[1:a]atrim=0:${DURATION},asetpts=N/SR/TB,` +
+		`afade=t=in:st=0:d=0.35,afade=t=out:st=${fadeOut}:d=0.6,apad[a]`,
+		'-map', '0:v', '-map', '[a]',
+	];
+}
+
 async function openScene() {
 	const browser = await chromium.launch({
 		args: ['--allow-file-access-from-files', '--force-color-profile=srgb', '--font-render-hinting=none'],
@@ -81,13 +129,23 @@ async function render() {
 	const out = path.join(HERE, 'orchestra-loop.mp4');
 	const { browser, page } = await openScene();
 
+	let audio = [];
+	if (fs.existsSync(BGM)) {
+		const d = await probeDuration(BGM);
+		console.log(`bgm: ${path.basename(BGM)} (${d.toFixed(2)}s)`);
+		audio = audioArgs(BGM, d).concat(['-c:a', 'aac', '-b:a', '192k', '-ar', '44100']);
+	} else {
+		console.log('bgm: none (' + BGM + ' not found) — rendering silent');
+	}
+
 	const ff = spawn(ffmpegPath(), [
 		'-y', '-hide_banner', '-loglevel', 'error',
 		'-f', 'image2pipe', '-framerate', String(FPS), '-i', 'pipe:0',
+		...audio,
 		'-c:v', 'libx264', '-preset', 'slow', '-crf', '19',
 		'-pix_fmt', 'yuv420p', '-profile:v', 'high', '-level', '4.1',
 		'-g', String(FPS * 2), '-movflags', '+faststart',
-		'-r', String(FPS), out,
+		'-r', String(FPS), '-t', String(DURATION), out,
 	], { stdio: ['pipe', 'inherit', 'inherit'] });
 
 	const t0 = Date.now();
