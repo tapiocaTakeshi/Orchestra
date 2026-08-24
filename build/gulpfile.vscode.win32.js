@@ -24,6 +24,72 @@ const issPath = path.join(__dirname, 'win32', 'code.iss');
 const innoSetupPath = path.join(path.dirname(path.dirname(require.resolve('innosetup'))), 'bin', 'ISCC.exe');
 const signWin32Path = path.join(repoPath, 'build', 'azure-pipelines', 'common', 'sign-win32');
 
+// Windows の従来 API は MAX_PATH (260, 終端 NUL 含む) までしか扱えないため、
+// インストール先の絶対パスが 259 文字を超えるファイルはインストーラーが展開できない。
+// Inno Setup は「一時ファイル名で展開 → 最終的なファイル名へ rename」という手順を踏むので、
+// 展開自体は成功したのに rename だけが ERROR_PATH_NOT_FOUND (3) で落ち、
+// エンドユーザーには「コピー先フォルダーのファイル名を変更中にエラーが発生しました:
+// MoveFile エラー: コード 3」というダイアログだけが見えることになる。
+// CI ランナーは LongPathsEnabled を有効にしてあるためビルドは通ってしまい、
+// 問題はユーザーのマシンで初めて表面化する。そこでパッケージング時点で検出して落とす。
+const MAX_PATH = 259;
+
+// 想定インストール先の長さ。user セットアップの既定は
+// C:\Users\<user>\AppData\Local\Programs\<DirName>\ で、user 部分はユーザー名依存なので
+// 余裕をみて 20 文字と仮定する (system セットアップの C:\Program Files\<DirName>\ より長い)。
+const ASSUMED_USERNAME_LENGTH = 20;
+const assumedInstallDirLength =
+	'C:\\Users\\'.length +
+	ASSUMED_USERNAME_LENGTH +
+	'\\AppData\\Local\\Programs\\'.length +
+	product.win32DirName.length +
+	'\\'.length;
+
+/**
+ * ビルド出力の中に、Windows の既定インストール先へ展開すると MAX_PATH を
+ * 超えてしまうファイルが無いか検証する。
+ *
+ * @param {string} sourcePath パッケージ済みビルドのルート (例: ../VSCode-win32-x64)
+ */
+function assertNoLongInstallPaths(sourcePath) {
+	const budget = MAX_PATH - assumedInstallDirLength;
+	const offenders = [];
+
+	const walk = (/** @type {string} */ dir, /** @type {string} */ relative) => {
+		for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+			const entryRelative = relative ? `${relative}\\${entry.name}` : entry.name;
+
+			if (entry.isDirectory()) {
+				walk(path.join(dir, entry.name), entryRelative);
+			} else if (entryRelative.length > budget) {
+				offenders.push(entryRelative);
+			}
+		}
+	};
+
+	walk(sourcePath, '');
+
+	if (offenders.length === 0) {
+		return;
+	}
+
+	offenders.sort((a, b) => b.length - a.length);
+
+	const lines = [
+		`${offenders.length} file(s) exceed the Windows MAX_PATH budget of ${budget} characters`,
+		`(assumed install dir: C:\\Users\\<${ASSUMED_USERNAME_LENGTH} chars>\\AppData\\Local\\Programs\\${product.win32DirName}\\).`,
+		'These would fail to install with "MoveFile error: code 3" on the user machine.',
+		'Exclude them from the package (see build/.moduleignore) or shorten the paths:',
+		...offenders.slice(0, 20).map(o => `  ${o.length}\t${o}`)
+	];
+
+	if (offenders.length > 20) {
+		lines.push(`  ... and ${offenders.length - 20} more`);
+	}
+
+	throw new Error(lines.join('\n'));
+}
+
 function packageInnoSetup(iss, options, cb) {
 	options = options || {};
 
@@ -75,6 +141,8 @@ function buildWin32Setup(arch, target) {
 		const sourcePath = buildPath(arch);
 		const outputPath = setupDir(arch, target);
 		fs.mkdirSync(outputPath, { recursive: true });
+
+		assertNoLongInstallPaths(sourcePath);
 
 		const originalProductJsonPath = path.join(sourcePath, 'resources/app/product.json');
 		const productJsonPath = path.join(outputPath, 'product.json');

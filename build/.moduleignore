@@ -186,3 +186,27 @@ zone.js/dist/**
 @xterm/xterm-addon-*/fixtures/**
 @xterm/xterm-addon-*/out/**
 @xterm/xterm-addon-*/out-test/**
+
+# react-native は npm パッケージの中にネイティブ実装 (C++ / Objective-C / Java) の
+# ソースツリーを丸ごと同梱している。Electron 上ではこれらは一切ロードされない上に、
+# ReactCommon 配下は相対パスだけで 170 文字を超えるファイルがあり、Windows の
+# 既定インストール先 (C:\Users\<user>\AppData\Local\Programs\Orchestra\resources\app\)
+# と合わせると MAX_PATH (260) を超えてしまう。その結果 Inno Setup のインストーラーが
+# 「コピー先フォルダーのファイル名を変更中にエラーが発生しました: MoveFile エラー: コード 3」
+# で止まるため、JS から参照されないネイティブ資産はパッケージから除外する。
+react-native/ReactCommon/**
+react-native/ReactAndroid/**
+react-native/ReactApple/**
+react-native/React/**
+react-native/sdks/**
+react-native/gradle/**
+react-native/third-party-podspecs/**
+react-native/*.podspec
+react-native/*.gradle
+react-native/*.gradle.kts
+react-native/gradle.properties
+
+react-native-safe-area-context/android/**
+react-native-safe-area-context/ios/**
+react-native-safe-area-context/common/**
+react-native-safe-area-context/*.podspec
