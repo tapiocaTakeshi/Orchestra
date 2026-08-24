@@ -44,7 +44,7 @@ import {
 	TrelloServiceState,
 	TrelloSettings,
 } from '../common/trelloServiceTypes.js';
-import { IChatThreadService } from './chatThreadService.js';
+import { IChatThreadService } from './chatThreadServiceInterface.js';
 
 const TRELLO_API_BASE = 'https://api.trello.com/1';
 

@@ -50,7 +50,7 @@ import {
 	MIN_KANBAN_TASK_TIMEOUT_MIN,
 	normalizeKanbanBoard,
 } from '../common/kanbanServiceTypes.js';
-import { IChatThreadService } from './chatThreadService.js';
+import { IChatThreadService } from './chatThreadServiceInterface.js';
 
 /** ワークスペースが無いときの退避先 */
 const KANBAN_STORAGE_KEY = 'void.kanban.board';

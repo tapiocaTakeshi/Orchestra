@@ -14,6 +14,7 @@ const rename = require('gulp-rename');
 const replace = require('gulp-replace');
 const filter = require('gulp-filter');
 const util = require('./lib/util');
+const checkDecoratorInitOrder = require('./checkDecoratorInitOrder');
 const { getVersion } = require('./lib/getVersion');
 const { readISODate } = require('./lib/date');
 const task = require('./lib/task');
@@ -259,8 +260,18 @@ function packageTask(platform, arch, sourceFolderName, destinationFolderName, op
 
 		const extensions = gulp.src(['.build/extensions/**', ...platformSpecificBuiltInExtensionsExclusions], { base: '.build', dot: true });
 
+		// バンドル後の JS に「初期化前の service decorator を使っているクラス」が
+		// 無いか検査する。循環 import で decorator が undefined になると、ビルドは
+		// 成功するのに起動時に "TypeError: decorator is not a function" で
+		// workbench が立ち上がらなくなるため、ここで CI を落とす。
 		const sources = es.merge(src, extensions)
-			.pipe(filter(['**', '!**/*.js.map'], { dot: true }));
+			.pipe(filter(['**', '!**/*.js.map'], { dot: true }))
+			.pipe(es.through(function (file) {
+				if (/\.js$/.test(file.path) && Buffer.isBuffer(file.contents) && file.contents.includes('__param(')) {
+					checkDecoratorInitOrder.assertDecoratorInitOrder(file.relative, file.contents.toString('utf8'));
+				}
+				this.emit('data', file);
+			}));
 
 		let version = packageJson.version;
 		const quality = product.quality;
