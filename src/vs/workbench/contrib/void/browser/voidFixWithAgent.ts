@@ -28,7 +28,7 @@ import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase 
 import { IViewsService } from '../../../services/views/common/viewsService.js';
 
 import { VOID_FIX_WITH_AGENT_ACTION_ID } from './actionIDs.js';
-import { IChatThreadService } from './chatThreadService.js';
+import { IChatThreadService } from './chatThreadServiceInterface.js';
 import { VOID_OPEN_SIDEBAR_ACTION_ID, VOID_VIEW_CONTAINER_ID } from './sidebarPane.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
 import { FeatureName } from '../common/voidSettingsTypes.js';

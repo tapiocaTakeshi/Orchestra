@@ -20,7 +20,7 @@ import { ICommandService } from '../../../../platform/commands/common/commands.j
 import { VOID_TOGGLE_SETTINGS_ACTION_ID } from './voidSettingsPane.js';
 import { VOID_CTRL_L_ACTION_ID } from './actionIDs.js';
 import { localize2 } from '../../../../nls.js';
-import { IChatThreadService } from './chatThreadService.js';
+import { IChatThreadService } from './chatThreadServiceInterface.js';
 import { IViewsService } from '../../../services/views/common/viewsService.js';
 
 // ---------- Register commands and keybindings ----------
