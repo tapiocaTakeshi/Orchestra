@@ -4,12 +4,12 @@
  *--------------------------------------------------------------------------------------*/
 
 import { Disposable, IDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
-import { createDecorator, IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
+import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { URI } from '../../../../base/common/uri.js';
 import * as dom from '../../../../base/browser/dom.js';
 import { Widget } from '../../../../base/browser/ui/widget.js';
 import { IOverlayWidget, ICodeEditor, OverlayWidgetPositionPreference } from '../../../../editor/browser/editorBrowser.js';
-import { Emitter, Event } from '../../../../base/common/event.js';
+import { Emitter } from '../../../../base/common/event.js';
 import { ICodeEditorService } from '../../../../editor/browser/services/codeEditorService.js';
 import { mountVoidCommandBar } from './react/out/void-editor-widgets-tsx/index.js'
 import { deepClone } from '../../../../base/common/objects.js';
@@ -28,42 +28,14 @@ import { KeyMod } from '../../../../editor/common/services/editorBaseApi.js';
 import { KeyCode } from '../../../../base/common/keyCodes.js';
 import { ScrollType } from '../../../../editor/common/editorCommon.js';
 import { IVoidModelService } from '../common/voidModelService.js';
+import { CommandBarStateType, IVoidCommandBarService, VoidCommandBarProps } from './voidCommandBarServiceInterface.js';
 
 
-
-export interface IVoidCommandBarService {
-	readonly _serviceBrand: undefined;
-	stateOfURI: { [uri: string]: CommandBarStateType };
-	sortedURIs: URI[];
-	activeURI: URI | null;
-
-	onDidChangeState: Event<{ uri: URI }>;
-	onDidChangeActiveURI: Event<{ uri: URI | null }>;
-
-	getStreamState: (uri: URI) => 'streaming' | 'idle-has-changes' | 'idle-no-changes';
-	setDiffIdx(uri: URI, newIdx: number | null): void;
-
-	getNextDiffIdx(step: 1 | -1): number | null;
-	getNextUriIdx(step: 1 | -1): number | null;
-	goToDiffIdx(idx: number | null): void;
-	goToURIIdx(idx: number | null): Promise<void>;
-
-	acceptOrRejectAllFiles(opts: { behavior: 'reject' | 'accept' }): void;
-	anyFileIsStreaming(): boolean;
-
-}
-
-
-export const IVoidCommandBarService = createDecorator<IVoidCommandBarService>('VoidCommandBarService');
-
-
-export type CommandBarStateType = undefined | {
-	sortedDiffZoneIds: string[]; // sorted by line number
-	sortedDiffIds: string[]; // sorted by line number (computed)
-	isStreaming: boolean; // is any diffZone streaming in this URI
-
-	diffIdx: number | null; // must refresh whenever sortedDiffIds does so it's valid
-}
+// interface / decorator / 型定義は循環 import を避けるため
+// voidCommandBarServiceInterface.ts に置いてある。**decorator を値として使う側は
+// 必ずそちらから import すること** (ここからの再 export は既存 import 元の互換用)。
+export { IVoidCommandBarService } from './voidCommandBarServiceInterface.js';
+export type { CommandBarStateType, VoidCommandBarProps } from './voidCommandBarServiceInterface.js';
 
 
 
@@ -491,10 +463,6 @@ export class VoidCommandBarService extends Disposable implements IVoidCommandBar
 registerSingleton(IVoidCommandBarService, VoidCommandBarService, InstantiationType.Delayed); // delayed is needed here :(
 
 
-export type VoidCommandBarProps = {
-	uri: URI | null;
-	editor: ICodeEditor;
-}
 
 
 
