@@ -7,6 +7,11 @@
 // register inline diffs
 import './editCodeService.js'
 
+// register command bar (accept/reject の overlay widget と singleton)。
+// decorator は voidCommandBarServiceInterface.js に切り出してあり、実装を import
+// するのはここだけなので、この副作用 import が無いと registerSingleton が走らない。
+import './voidCommandBarService.js'
+
 // register Sidebar pane, state, actions (keybinds, menus) (Ctrl+L)
 import './sidebarActions.js'
 import './sidebarPane.js'
