@@ -123,6 +123,11 @@ function toSupabaseProviderId(providerName: string | undefined | null): string |
 const SUPABASE_URL = 'https://wmhrbhcnxglvqwvnbxlt.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndtaHJiaGNueGdsdnF3dm5ieGx0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3OTg1MDAsImV4cCI6MjA5MTM3NDUwMH0.4qjCIOjFwm4XnmtqZN_N0zcZlhjGc2GQ4-x7ygMa3hM';
 
+const SUPABASE_READ_HEADERS: Record<string, string> = {
+	'apikey': SUPABASE_ANON_KEY,
+	'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+};
+
 
 // --- Division Project types ---
 
@@ -199,7 +204,13 @@ export interface IDivisionProjectService {
 	/** Remove a division project by ID */
 	removeProject(id: string): Promise<void>;
 
-	/** Fetch project data from Supabase and update projects.json */
+	/**
+	 * Fetch project data from Supabase and update projects.json.
+	 * With `projectId`, only that project is refreshed.
+	 * Without it, every division project owned by the signed-in account is pulled
+	 * and merged into projects.json (falling back to refreshing the locally
+	 * configured Project IDs when no account is signed in).
+	 */
 	fetchFromSupabase(projectId?: string): Promise<{ success: boolean; message: string }>;
 
 	/** Push local projects.json data to Supabase */
@@ -506,8 +517,14 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 		try {
 			const now = new Date().toISOString();
 
-			// Fetch ownerId from Supabase profiles
-			const ownerId = await this._supabaseRpc<string>('get_default_owner_id');
+			// ログイン中はそのアカウントを owner にする。"Pull from Remote" は
+			// Project.ownerId / Project.userId でログインアカウントのプロジェクトを引くため、
+			// ここで別ユーザーを owner にすると push したプロジェクトを pull し直せなくなる。
+			// （フォールバックの get_default_owner_id RPC は profiles の先頭行を返すだけで、
+			//   ログインユーザーとは限らない。）
+			const globals = this.voidSettingsService.state.globalSettings;
+			const signedInUserId = globals.isLoggedIn ? globals.divisionUserId : '';
+			const ownerId = signedInUserId || await this._supabaseRpc<string>('get_default_owner_id');
 
 			// 1) Upsert Projects (with ownerId if available)
 			await this._supabaseUpsert('Project', projects.map(p => ({
@@ -681,61 +698,200 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 		}
 	}
 
-	async fetchFromSupabase(projectId?: string): Promise<{ success: boolean; message: string }> {
-		try {
-			const targetProjects = projectId
-				? this._projects.filter(p => p.projectId === projectId)
-				: this._projects.filter(p => p.projectId);
+	/**
+	 * Role / Provider テーブルから ID → canonical slug/name へのマップを構築する。
+	 * displayName は表示用なので使わない。常に slug / name（内部識別子）を優先する。
+	 */
+	private async _buildRoleProviderMaps(): Promise<{ roleIdToSlug: Map<string, string>; providerIdToName: Map<string, string> }> {
+		const roleIdToSlug = new Map<string, string>();
+		const providerIdToName = new Map<string, string>();
 
+		try {
+			const [rolesRes, providersRes] = await Promise.all([
+				fetch(`${SUPABASE_URL}/rest/v1/Role?select=id,slug,name`, { headers: SUPABASE_READ_HEADERS }),
+				fetch(`${SUPABASE_URL}/rest/v1/Provider?select=id,name,displayName`, { headers: SUPABASE_READ_HEADERS }),
+			]);
+
+			if (rolesRes.ok) {
+				const roles: Array<{ id: string; slug?: string; name?: string }> = await rolesRes.json();
+				for (const r of roles) {
+					roleIdToSlug.set(r.id, r.slug || r.id);
+				}
+				console.log(`[DivisionProjectService] Fetched ${roles.length} roles from Supabase`);
+			} else {
+				console.warn(`[DivisionProjectService] Role table fetch failed: ${rolesRes.status}`);
+			}
+
+			if (providersRes.ok) {
+				const providers: Array<{ id: string; name?: string; displayName?: string }> = await providersRes.json();
+				for (const p of providers) {
+					providerIdToName.set(p.id, p.name || p.id);
+				}
+				console.log(`[DivisionProjectService] Fetched ${providers.length} providers from Supabase`);
+			} else {
+				console.warn(`[DivisionProjectService] Provider table fetch failed: ${providersRes.status}`);
+			}
+		} catch (e) {
+			console.warn('[DivisionProjectService] Role/Provider lookup failed, will use raw IDs:', e);
+		}
+
+		return { roleIdToSlug, providerIdToName };
+	}
+
+	/**
+	 * 1 プロジェクト分の RoleAssignment を取得して RoleAssignment[] に変換する。
+	 * 取得自体に失敗した場合は null（呼び出し側でローカル値を維持するため、空配列と区別する）。
+	 */
+	private async _fetchAgentsFromSupabase(
+		projectId: string,
+		maps: { roleIdToSlug: Map<string, string>; providerIdToName: Map<string, string> },
+	): Promise<RoleAssignment[] | null> {
+		// Fetch RoleAssignment with embedded Role and Provider relations
+		const assignRes = await fetch(
+			`${SUPABASE_URL}/rest/v1/RoleAssignment?projectId=eq.${encodeURIComponent(projectId)}&select=roleId,providerId,priority,config,Role(id,slug,name),Provider(id,name,displayName)&order=priority.asc`,
+			{ headers: SUPABASE_READ_HEADERS }
+		);
+		if (!assignRes.ok) {
+			console.warn(`[DivisionProjectService] RoleAssignment fetch failed for ${projectId}: ${assignRes.status}`);
+			return null;
+		}
+		const assignments: Array<{
+			roleId: string;
+			providerId: string;
+			config: string;
+			Role?: { id: string; slug?: string; name?: string } | null;
+			Provider?: { id: string; name?: string; displayName?: string } | null;
+		}> = await assignRes.json();
+
+		console.log(`[DivisionProjectService] Fetched ${assignments.length} assignments for project ${projectId}:`, JSON.stringify(assignments).substring(0, 500));
+
+		return assignments.map(a => {
+			let model = '';
+			try {
+				const cfg = JSON.parse(a.config || '{}');
+				model = cfg.model || '';
+			} catch { /* ignore */ }
+
+			// Resolve role: 埋め込みリレーションの slug → ルックアップマップ → raw roleId の順で探索する。
+			// displayName 用の `name` は使わない（内部識別子と乖離するため）。
+			let roleRaw = a.roleId;
+			if (a.Role && a.Role.slug) {
+				roleRaw = a.Role.slug;
+			} else if (maps.roleIdToSlug.has(a.roleId)) {
+				roleRaw = maps.roleIdToSlug.get(a.roleId)!;
+			}
+
+			// Resolve provider: 埋め込みリレーションの name（内部識別子） → ルックアップマップ → raw providerId。
+			// displayName は人間向けの表示文字列なので絶対に採用しない。
+			let providerRaw = a.providerId;
+			if (a.Provider && a.Provider.name) {
+				providerRaw = a.Provider.name;
+			} else if (maps.providerIdToName.has(a.providerId)) {
+				providerRaw = maps.providerIdToName.get(a.providerId)!;
+			}
+
+			// 別名・表示名で汚れていた場合に備えて最後に正規化する。
+			const role = (normalizeAgentRole(roleRaw) ?? roleRaw) as AgentRole;
+			const provider = (normalizeProviderName(providerRaw) ?? providerRaw) as ProviderName;
+
+			return { role, provider, model };
+		});
+	}
+
+	/**
+	 * "Pull from Remote" の既定動作。
+	 * ログイン中アカウントが所有する Division プロジェクトを Supabase から取得し、
+	 * projects.json にマージする（ローカルにしか無いプロジェクトは残す）。
+	 */
+	private async _pullAccountProjectsFromSupabase(userId: string): Promise<{ success: boolean; message: string }> {
+		try {
+			// Project.ownerId / Project.userId のどちらにユーザー ID が入っているかは
+			// 作成経路（IDE 同期 / Web）で異なるため、両方を OR で引く。
+			const uid = encodeURIComponent(userId);
+			const projectsRes = await fetch(
+				`${SUPABASE_URL}/rest/v1/Project?or=(ownerId.eq.${uid},userId.eq.${uid})&select=id,name,updatedAt&order=updatedAt.desc`,
+				{ headers: SUPABASE_READ_HEADERS }
+			);
+			if (!projectsRes.ok) {
+				const body = await projectsRes.text().catch(() => '');
+				return { success: false, message: `Project fetch failed (${projectsRes.status}): ${body}` };
+			}
+
+			const rows: Array<{ id?: string; name?: string }> = await projectsRes.json();
+			const remoteProjects = rows.filter((r): r is { id: string; name?: string } => typeof r.id === 'string' && !!r.id);
+			if (remoteProjects.length === 0) {
+				return { success: false, message: 'No division projects found for the signed-in account' };
+			}
+
+			// 未設定のまま自動生成された既定プロジェクト 1 件だけの状態なら、pull 結果で置き換える。
+			const hadOnlyPlaceholder = this._projects.length === 1 && !this._projects[0].projectId;
+
+			const maps = await this._buildRoleProviderMaps();
+
+			let added = 0;
+			let updated = 0;
+
+			for (const row of remoteProjects) {
+				const idx = this._projects.findIndex(p => p.projectId === row.id);
+				const existing = idx >= 0 ? this._projects[idx] : null;
+				const agents = await this._fetchAgentsFromSupabase(row.id, maps);
+
+				const merged: DivisionProjectConfig = {
+					projectId: row.id,
+					name: row.name || existing?.name || 'Division Project',
+					// リモートに RoleAssignment が 1 件も無い / 取得失敗の場合はローカル設定を維持する
+					agents: agents && agents.length > 0
+						? agents
+						: (existing?.agents ?? [...defaultRoleAssignments]),
+				};
+
+				if (idx >= 0) {
+					this._projects[idx] = merged;
+					updated++;
+				} else {
+					this._projects.push(merged);
+					added++;
+				}
+			}
+
+			if (hadOnlyPlaceholder) {
+				this._projects = this._projects.filter(p => p.projectId);
+			}
+
+			const validIds = new Set(this._projects.map(p => p.projectId));
+			this._activeProjectIds = this._activeProjectIds.filter(id => validIds.has(id));
+			if (this._activeProjectIds.length === 0) {
+				this._activeProjectIds = [remoteProjects[0].id];
+			}
+
+			await this._persistToDisk();
+			this._onDidChangeProject.fire();
+
+			return {
+				success: true,
+				message: `Pulled ${remoteProjects.length} division project(s) from your account (${added} added, ${updated} updated)`,
+			};
+		} catch (e) {
+			return { success: false, message: `Supabase fetch error: ${e}` };
+		}
+	}
+
+	/** projects.json に既に書かれている Project ID を Supabase の内容で更新する。 */
+	private async _refreshLocalProjectsFromSupabase(projectIds: string[]): Promise<{ success: boolean; message: string }> {
+		try {
+			const targetProjects = this._projects.filter(p => p.projectId && projectIds.includes(p.projectId));
 			if (targetProjects.length === 0) {
 				return { success: false, message: 'No projects with Project ID configured' };
 			}
 
-			const supaHeaders = {
-				'apikey': SUPABASE_ANON_KEY,
-				'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-			};
-
-			// Role / Provider テーブルから ID → canonical slug/name へのマップを構築する。
-			// displayName は表示用なので使わない。常に slug / name（内部識別子）を優先する。
-			const roleIdToSlug = new Map<string, string>();
-			const providerIdToName = new Map<string, string>();
-
-			try {
-				const [rolesRes, providersRes] = await Promise.all([
-					fetch(`${SUPABASE_URL}/rest/v1/Role?select=id,slug,name`, { headers: supaHeaders }),
-					fetch(`${SUPABASE_URL}/rest/v1/Provider?select=id,name,displayName`, { headers: supaHeaders }),
-				]);
-
-				if (rolesRes.ok) {
-					const roles: Array<{ id: string; slug?: string; name?: string }> = await rolesRes.json();
-					for (const r of roles) {
-						roleIdToSlug.set(r.id, r.slug || r.id);
-					}
-					console.log(`[DivisionProjectService] Fetched ${roles.length} roles from Supabase`);
-				} else {
-					console.warn(`[DivisionProjectService] Role table fetch failed: ${rolesRes.status}`);
-				}
-
-				if (providersRes.ok) {
-					const providers: Array<{ id: string; name?: string; displayName?: string }> = await providersRes.json();
-					for (const p of providers) {
-						providerIdToName.set(p.id, p.name || p.id);
-					}
-					console.log(`[DivisionProjectService] Fetched ${providers.length} providers from Supabase`);
-				} else {
-					console.warn(`[DivisionProjectService] Provider table fetch failed: ${providersRes.status}`);
-				}
-			} catch (e) {
-				console.warn('[DivisionProjectService] Role/Provider lookup failed, will use raw IDs:', e);
-			}
+			const maps = await this._buildRoleProviderMaps();
 
 			let totalUpdated = 0;
 
 			for (const project of targetProjects) {
 				const projectRes = await fetch(
 					`${SUPABASE_URL}/rest/v1/Project?id=eq.${encodeURIComponent(project.projectId)}&select=*`,
-					{ headers: supaHeaders }
+					{ headers: SUPABASE_READ_HEADERS }
 				);
 				if (!projectRes.ok) {
 					console.warn(`[DivisionProjectService] Project fetch failed for ${project.projectId}: ${projectRes.status}`);
@@ -744,56 +900,8 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 				const projectRows = await projectRes.json();
 				const projectData = projectRows[0];
 
-				// Fetch RoleAssignment with embedded Role and Provider relations
-				const assignRes = await fetch(
-					`${SUPABASE_URL}/rest/v1/RoleAssignment?projectId=eq.${encodeURIComponent(project.projectId)}&select=roleId,providerId,priority,config,Role(id,slug,name),Provider(id,name,displayName)&order=priority.asc`,
-					{ headers: supaHeaders }
-				);
-				if (!assignRes.ok) {
-					console.warn(`[DivisionProjectService] RoleAssignment fetch failed for ${project.projectId}: ${assignRes.status}`);
-					continue;
-				}
-				const assignments: Array<{
-					roleId: string;
-					providerId: string;
-					config: string;
-					Role?: { id: string; slug?: string; name?: string } | null;
-					Provider?: { id: string; name?: string; displayName?: string } | null;
-				}> = await assignRes.json();
-
-				console.log(`[DivisionProjectService] Fetched ${assignments.length} assignments for project ${project.projectId}:`, JSON.stringify(assignments).substring(0, 500));
-
-				const agents: RoleAssignment[] = assignments.map(a => {
-					let model = '';
-					try {
-						const cfg = JSON.parse(a.config || '{}');
-						model = cfg.model || '';
-					} catch { /* ignore */ }
-
-					// Resolve role: 埋め込みリレーションの slug → ルックアップマップ → raw roleId の順で探索する。
-					// displayName 用の `name` は使わない（内部識別子と乖離するため）。
-					let roleRaw = a.roleId;
-					if (a.Role && a.Role.slug) {
-						roleRaw = a.Role.slug;
-					} else if (roleIdToSlug.has(a.roleId)) {
-						roleRaw = roleIdToSlug.get(a.roleId)!;
-					}
-
-					// Resolve provider: 埋め込みリレーションの name（内部識別子） → ルックアップマップ → raw providerId。
-					// displayName は人間向けの表示文字列なので絶対に採用しない。
-					let providerRaw = a.providerId;
-					if (a.Provider && a.Provider.name) {
-						providerRaw = a.Provider.name;
-					} else if (providerIdToName.has(a.providerId)) {
-						providerRaw = providerIdToName.get(a.providerId)!;
-					}
-
-					// 別名・表示名で汚れていた場合に備えて最後に正規化する。
-					const role = (normalizeAgentRole(roleRaw) ?? roleRaw) as AgentRole;
-					const provider = (normalizeProviderName(providerRaw) ?? providerRaw) as ProviderName;
-
-					return { role, provider, model };
-				});
+				const agents = await this._fetchAgentsFromSupabase(project.projectId, maps);
+				if (agents === null) continue;
 
 				const updatedProject: DivisionProjectConfig = {
 					...project,
@@ -812,6 +920,28 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 		} catch (e) {
 			return { success: false, message: `Supabase fetch error: ${e}` };
 		}
+	}
+
+	async fetchFromSupabase(projectId?: string): Promise<{ success: boolean; message: string }> {
+		// 特定プロジェクト指定時は、そのプロジェクトだけを更新する（従来動作）。
+		if (projectId) {
+			return this._refreshLocalProjectsFromSupabase([projectId]);
+		}
+
+		await this.voidSettingsService.waitForInitState;
+		const { isLoggedIn, divisionUserId } = this.voidSettingsService.state.globalSettings;
+
+		// ログイン済みなら、そのアカウントが所有する Division プロジェクトを取得する。
+		if (isLoggedIn && divisionUserId) {
+			return this._pullAccountProjectsFromSupabase(divisionUserId);
+		}
+
+		// 未ログイン時は projects.json に書かれている Project ID の更新にフォールバックする。
+		const localIds = this._projects.filter(p => p.projectId).map(p => p.projectId);
+		if (localIds.length === 0) {
+			return { success: false, message: 'Sign in to Division to pull the projects of your account' };
+		}
+		return this._refreshLocalProjectsFromSupabase(localIds);
 	}
 
 	async fetchAndUpdateFromAPI(localProjectId: string): Promise<{ success: boolean; message: string }> {
