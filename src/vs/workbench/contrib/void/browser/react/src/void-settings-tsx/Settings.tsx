@@ -1150,6 +1150,7 @@ const DivisionSettings = () => {
 	const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
 	const [allUpdateStatus, setAllUpdateStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
 	const [remotePullStatus, setRemotePullStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+	const [remotePullMessage, setRemotePullMessage] = useState<{ text: string; isError: boolean } | null>(null);
 	const [remotePushStatus, setRemotePushStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
 	const [projectUpdateStatus, setProjectUpdateStatus] = useState<Record<string, 'idle' | 'loading' | 'success' | 'error'>>({});
 
@@ -1162,8 +1163,11 @@ const DivisionSettings = () => {
 
 	const handleRemotePull = async () => {
 		setRemotePullStatus('loading');
+		setRemotePullMessage(null);
+		// ログイン中のアカウントが持つ Division プロジェクトを projects.json に取り込む
 		const result = await divisionProjectService.fetchFromSupabase();
 		setRemotePullStatus(result.success ? 'success' : 'error');
+		setRemotePullMessage({ text: result.message, isError: !result.success });
 		setTimeout(() => setRemotePullStatus('idle'), 2000);
 	};
 
@@ -1343,7 +1347,7 @@ const DivisionSettings = () => {
 						onClick={handleRemotePull}
 						disabled={remotePullStatus === 'loading'}
 						className="flex items-center gap-1 text-xs text-void-fg-3 hover:text-void-fg-1 transition-colors disabled:opacity-50"
-						title="Pull from Remote"
+						title={remotePullMessage?.text ?? 'Pull the division projects of the signed-in account'}
 					>
 						{remotePullStatus === 'success' ? <Check className='stroke-green-500 size-3' />
 							: remotePullStatus === 'error' ? <X className='stroke-red-500 size-3' />
@@ -1365,6 +1369,12 @@ const DivisionSettings = () => {
 					</button>
 				</div>
 			</div>
+
+			{remotePullMessage && (
+				<div className={`text-[11px] -mt-2 ${remotePullMessage.isError ? 'text-red-500' : 'text-void-fg-4'}`}>
+					{remotePullMessage.text}
+				</div>
+			)}
 
 			{projects.map((project) => {
 				const isActive = divisionProjectService.isProjectActive(project.projectId);
