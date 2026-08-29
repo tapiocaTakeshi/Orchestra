@@ -124,21 +124,31 @@ const openBoardInNewWindow = async (accessor: ServicesAccessor): Promise<void> =
 	const instantiationService = accessor.get(IInstantiationService);
 
 	const openEditors = findOpenBoard(accessor);
-	const auxiliaryPart = await editorGroupService.createAuxiliaryEditorPart();
 
 	if (openEditors.length !== 0) {
 		const { editor, groupId } = openEditors[0];
 		const sourceGroup = editorGroupService.getGroup(groupId);
-		// 既に別ウィンドウに居るなら移す必要はなく、そのまま前面に出せばよい
-		if (sourceGroup && sourceGroup !== auxiliaryPart.activeGroup) {
+
+		// 既に (メイン以外の) 別ウィンドウに居るなら、もう一枚ウィンドウを作らずそれを前面に出すだけでよい。
+		// この判定は auxiliaryPart を作る "前" にやる必要がある。作ってしまうと毎回別物の新しい
+		// ウィンドウができてしまい、「そのまま前面に出す」が成立しなくなる。
+		if (sourceGroup && sourceGroup.windowId !== editorGroupService.mainPart.windowId) {
+			sourceGroup.focus();
+			return;
+		}
+
+		const auxiliaryPart = await editorGroupService.createAuxiliaryEditorPart();
+		if (sourceGroup) {
 			sourceGroup.moveEditor(editor, auxiliaryPart.activeGroup);
 		} else {
 			await auxiliaryPart.activeGroup.openEditor(editor);
 		}
-	} else {
-		await auxiliaryPart.activeGroup.openEditor(instantiationService.createInstance(KanbanInput));
+		auxiliaryPart.activeGroup.focus();
+		return;
 	}
 
+	const auxiliaryPart = await editorGroupService.createAuxiliaryEditorPart();
+	await auxiliaryPart.activeGroup.openEditor(instantiationService.createInstance(KanbanInput));
 	auxiliaryPart.activeGroup.focus();
 };
 
