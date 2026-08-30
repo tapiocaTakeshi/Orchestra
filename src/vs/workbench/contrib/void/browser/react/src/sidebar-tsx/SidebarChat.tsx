@@ -12,6 +12,7 @@ import './sidebar-chat-redesign.css';
 
 import { useAccessor, useChatThreadsState, useChatThreadsStreamState, useSettingsState, useActiveURI, useCommandBarState, useFullChatThreadsStreamState, useDivisionProjects, useDivisionProjectConfig, useIsDark, useOrchestraUpdateState } from '../util/services.js';
 import { useTranslation } from '../util/i18n.js';
+import { OrchestraMark } from '../util/OrchestraMark.js';
 import { FloatingPortal } from '@floating-ui/react';
 import { DivisionProjectConfig } from '../../../divisionProjectService.js';
 import { ScrollType } from '../../../../../../../editor/common/editorCommon.js';
@@ -57,33 +58,13 @@ if (typeof document !== 'undefined' && !document.getElementById('void-sidebar-ch
 	0%, 100% { opacity: 1; transform: scale(1); }
 	50% { opacity: 0.55; transform: scale(0.85); }
 }
-@keyframes voidDotBounce {
-	0%, 80%, 100% { transform: translateY(0); opacity: 0.35; }
-	40% { transform: translateY(-3px); opacity: 1; }
-}
 @keyframes voidBubbleIn {
 	from { opacity: 0; transform: translateY(6px) scale(0.985); }
 	to { opacity: 1; transform: translateY(0) scale(1); }
 }
-.void-typing-dots {
-	display: inline-flex;
-	align-items: center;
-	gap: 3px;
-}
-.void-typing-dots > span {
-	display: inline-block;
-	width: 5px;
-	height: 5px;
-	border-radius: 9999px;
-	background: currentColor;
-	animation: voidDotBounce 1.2s ease-in-out infinite;
-}
-.void-typing-dots > span:nth-child(2) { animation-delay: 0.16s; }
-.void-typing-dots > span:nth-child(3) { animation-delay: 0.32s; }
 .void-bubble-in { animation: voidBubbleIn 220ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 .void-pulse-dot { animation: pulse 1.4s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
-	.void-typing-dots > span { animation: none; opacity: 0.7; }
 	.void-bubble-in { animation: none; }
 	.void-pulse-dot { animation: none; }
 }
@@ -173,19 +154,18 @@ export const IconWarning = ({ size, className = '' }: { size: number, className?
 };
 
 
-// Smooth three-dot "typing" indicator. Replaces the old text-based `.`/`..`/`...`
-// loop, which shifted layout width on every tick. Pure CSS animation (see the
-// `voidDotBounce` keyframes injected above), so no timers / re-renders.
+// Every "working on it" state in chat goes through here, so this is where the
+// brand mark earns its keep: the same weaving strands the boot splash opens with,
+// drawn compactly enough to sit inline (see `OrchestraMark`). Pure CSS animation,
+// so no timers / re-renders.
 export const IconLoading = ({ className = '' }: { className?: string }) => {
 	return (
 		<span
-			className={`void-typing-dots ${className}`}
+			className={`inline-flex items-center ${className}`}
 			role='status'
 			aria-label='読み込み中'
 		>
-			<span />
-			<span />
-			<span />
+			<OrchestraMark />
 		</span>
 	);
 }
@@ -2372,7 +2352,7 @@ const FlowIndicator = ({ messages, isRunning, reasoningSoFar }: {
 				style={{ boxShadow: '0 0 6px var(--vscode-focusBorder)' }}
 			/>
 			<span>{activePhase.label}</span>
-			<IconLoading className="text-void-fg-4" />
+			<IconLoading />
 		</div>
 	);
 };
@@ -3277,7 +3257,7 @@ const ReasoningWrapper = ({ isDoneReasoning, isStreaming, reasoningDuration, chi
 const loadingTitleWrapper = (item: React.ReactNode): React.ReactNode => {
 	return <span className='flex items-center flex-nowrap'>
 		{item}
-		<IconLoading className='w-3 text-sm' />
+		<IconLoading />
 	</span>
 }
 
@@ -5607,7 +5587,7 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 							boxShadow: '0 1px 2px rgba(0,0,0,0.10)',
 						}}
 					>
-						<IconLoading className='text-[color:var(--vscode-focusBorder)]' />
+						<IconLoading />
 						<span className='text-[11px] leading-none text-void-fg-3'>{tUI('chat.generating')}</span>
 					</span>
 				</div>
