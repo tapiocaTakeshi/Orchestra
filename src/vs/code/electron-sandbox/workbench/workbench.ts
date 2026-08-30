@@ -283,7 +283,8 @@
 		style.textContent = `
 			body { background-color: ${shellBackground}; color: ${shellForeground}; margin: 0; padding: 0; }
 			#monaco-workbench-splash-logo { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; pointer-events: none; overflow: visible; }
-			#monaco-workbench-splash-logo .boot-strand, #monaco-workbench-splash-logo .boot-arrowhead { fill: none; stroke: #e02431; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+			#monaco-workbench-splash-logo .boot-strand { fill: none; stroke: url(#boot-splash-fade); stroke-width: 9; stroke-linecap: round; }
+			#monaco-workbench-splash-logo .boot-arrowhead { fill: #e02431; stroke: none; }
 			#monaco-workbench-splash-logo .boot-wave-group { animation: monaco-workbench-splash-bob 3.2s ease-in-out infinite; transform-origin: center; }
 			#monaco-workbench-splash-logo .boot-strand-a { animation: monaco-workbench-splash-wave-a 3.2s ease-in-out infinite; }
 			#monaco-workbench-splash-logo .boot-strand-b { animation: monaco-workbench-splash-wave-b 3.2s ease-in-out infinite; }
@@ -311,12 +312,19 @@
 		const splashLogo = document.createElement('div');
 		splashLogo.id = 'monaco-workbench-splash-logo';
 		splashLogo.innerHTML = `
-			<svg viewBox="0 0 300 120" width="300" height="120">
+			<svg viewBox="0 0 320 120" width="320" height="120">
+				<defs>
+					<linearGradient id="boot-splash-fade" x1="10" y1="0" x2="240" y2="0" gradientUnits="userSpaceOnUse">
+						<stop offset="0" stop-color="#e02431" stop-opacity="0" />
+						<stop offset="0.4" stop-color="#e02431" stop-opacity="1" />
+						<stop offset="1" stop-color="#e02431" stop-opacity="1" />
+					</linearGradient>
+				</defs>
 				<g class="boot-wave-group">
 					<path class="boot-strand boot-strand-a" d="M10,30 C60,15 90,35 130,60 C170,85 200,105 240,90" />
 					<path class="boot-strand boot-strand-b" d="M10,90 C60,105 90,85 130,60 C170,35 200,15 240,30" />
-					<path class="boot-arrowhead" d="M233,78 L258,90 L231,102" />
-					<path class="boot-arrowhead" d="M233,18 L258,30 L231,42" />
+					<polygon class="boot-arrowhead" points="234,72 270,90 234,108" />
+					<polygon class="boot-arrowhead" points="234,12 270,30 234,48" />
 				</g>
 			</svg>
 		`;
