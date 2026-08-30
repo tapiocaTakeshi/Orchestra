@@ -167,24 +167,13 @@ input, textarea, select { font: inherit; color: inherit; }
   align-items: center;
   justify-content: center;
   gap: var(--space-5);
-  background:
-    radial-gradient(circle at 50% 42%, var(--brand-50), transparent 60%),
-    var(--bg);
+  background: var(--brand-500);
   opacity: 1;
   visibility: visible;
   transition: opacity .6s var(--ease-out), visibility .6s;
 }
 :root[data-theme='dark'] .boot-splash {
-  background:
-    radial-gradient(circle at 50% 42%, rgba(224,36,49,.18), transparent 60%),
-    var(--bg);
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .boot-splash {
-    background:
-      radial-gradient(circle at 50% 42%, rgba(224,36,49,.18), transparent 60%),
-      var(--bg);
-  }
+  background: var(--brand-500);
 }
 .boot-splash.is-hidden {
   opacity: 0;
@@ -194,30 +183,29 @@ input, textarea, select { font: inherit; color: inherit; }
 
 .boot-splash-logo-wrap {
   position: relative;
-  width: 132px;
-  height: 132px;
+  width: 280px;
+  height: 140px;
   display: grid;
   place-items: center;
 }
 
-.boot-splash-ring {
-  position: absolute;
-  inset: -16px;
-  border-radius: 50%;
-  background: conic-gradient(from 0deg, transparent 0deg, var(--brand-500) 100deg, transparent 210deg);
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
-  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
-  animation: boot-ring-spin 1.3s linear infinite;
+.boot-wave {
+  overflow: visible;
 }
 
-.boot-splash-logo {
-  width: 92px;
-  height: 92px;
-  object-fit: contain;
-  filter: drop-shadow(0 12px 32px rgba(224,36,49,.35));
-  animation:
-    boot-logo-in .8s var(--ease-spring) both,
-    boot-logo-pulse 2.2s ease-in-out .8s infinite;
+.boot-arrow {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  animation: boot-wave-bob 1.6s ease-in-out infinite;
+  animation-delay: calc(var(--i) * .08s);
+}
+
+.boot-wave-row--b .boot-arrow {
+  opacity: .75;
+  animation-delay: calc(var(--i) * .08s + .8s);
 }
 
 .boot-splash-brand {
@@ -225,21 +213,16 @@ input, textarea, select { font: inherit; color: inherit; }
   font-weight: 700;
   letter-spacing: .02em;
   font-size: var(--fs-4);
-  color: var(--text);
+  color: #fff;
   opacity: 0;
   animation: boot-fade-up .6s var(--ease-out) .5s both;
 }
 
-@keyframes boot-ring-spin {
-  to { transform: rotate(360deg); }
-}
-@keyframes boot-logo-in {
-  0%   { opacity: 0; transform: scale(.5) rotate(-40deg); }
-  100% { opacity: 1; transform: scale(1) rotate(0deg); }
-}
-@keyframes boot-logo-pulse {
-  0%, 100% { transform: scale(1); }
-  50%      { transform: scale(1.06); }
+@keyframes boot-wave-bob {
+  0%, 100% { transform: translateY(0); }
+  25%      { transform: translateY(-16px); }
+  50%      { transform: translateY(0); }
+  75%      { transform: translateY(16px); }
 }
 @keyframes boot-fade-up {
   from { opacity: 0; transform: translateY(8px); }
