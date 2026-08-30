@@ -24,7 +24,7 @@ import { ErrorDisplay } from './ErrorDisplay.js';
 import { BlockCode, TextAreaFns, VoidCustomDropdownBox, VoidInputBox2, VoidSlider, VoidSwitch, VoidDiffEditor } from '../util/inputs.js';
 import { ModelDropdown, } from '../void-settings-tsx/ModelDropdown.js';
 import { PastThreadsList } from './SidebarThreadSelector.js';
-import { VOID_CTRL_L_ACTION_ID } from '../../../actionIDs.js';
+import { VOID_CTRL_L_ACTION_ID, VOID_TOGGLE_KANBAN_ACTION_ID } from '../../../actionIDs.js';
 import { VOID_OPEN_SETTINGS_ACTION_ID } from '../../../voidSettingsPane.js';
 // import { VOID_OPEN_ROLE_OUTPUT_ACTION_ID } from '../../../roleOutputPane.js';
 import { AgentRole, ChatMode, displayInfoOfProviderName, contextTags, contextTagGroups, FeatureName, isFeatureNameDisabled, RoleAssignment } from '../../../../../../../workbench/contrib/void/common/voidSettingsTypes.js';
@@ -5207,6 +5207,14 @@ const SidebarHeader = ({ onLoginClick }: { onLoginClick: () => void }) => {
 	return (
 		<div className="shrink-0 px-4 pt-2 pb-1.5 border-b border-void-border-3/60 bg-gradient-to-b from-void-bg-1 to-transparent">
 			<div className="flex items-center justify-end gap-2">
+
+				<button
+					onClick={() => commandService.executeCommand(VOID_TOGGLE_KANBAN_ACTION_ID)}
+					className="text-void-fg-3 hover:text-void-fg-1 transition-colors p-1 rounded-md hover:bg-void-bg-3"
+					title="Kanban Board"
+				>
+					<ClipboardCheck size={14} />
+				</button>
 
 				<OrchestraThemeSwitcher compact />
 
