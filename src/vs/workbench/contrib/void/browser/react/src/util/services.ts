@@ -55,7 +55,6 @@ import { ISearchService } from '../../../../../../services/search/common/search.
 import { IExtensionManagementService } from '../../../../../../../platform/extensionManagement/common/extensionManagement.js'
 import { IMCPService } from '../../../../common/mcpService.js';
 import { ISkillService } from '../../../../common/skillService.js';
-import { ITrelloService } from '../../../trelloService.js';
 import { IKanbanService } from '../../../kanbanService.js';
 import { IObsidianService } from '../../../../common/obsidianService.js';
 import { IStorageService, StorageScope } from '../../../../../../../platform/storage/common/storage.js'
@@ -94,7 +93,6 @@ const activeURIListeners: Set<(uri: URI | null) => void> = new Set();
 
 const mcpListeners: Set<() => void> = new Set()
 const skillListeners: Set<() => void> = new Set()
-const trelloListeners: Set<() => void> = new Set()
 const kanbanListeners: Set<() => void> = new Set()
 const obsidianListeners: Set<() => void> = new Set()
 
@@ -126,14 +124,13 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 		voidCommandBarService: accessor.get(IVoidCommandBarService),
 		mcpService: accessor.get(IMCPService),
 		skillService: accessor.get(ISkillService),
-		trelloService: accessor.get(ITrelloService),
 		kanbanService: accessor.get(IKanbanService),
 		obsidianService: accessor.get(IObsidianService),
 		divisionProjectService: accessor.get(IDivisionProjectService),
 		voidUpdateService: accessor.get(IVoidUpdateService),
 	}
 
-	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, voidCommandBarService, mcpService, skillService, trelloService, kanbanService, obsidianService, divisionProjectService, voidUpdateService } = stateServices
+	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, voidCommandBarService, mcpService, skillService, kanbanService, obsidianService, divisionProjectService, voidUpdateService } = stateServices
 
 
 
@@ -209,12 +206,6 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 	disposables.push(
 		skillService.onDidChangeState(() => {
 			skillListeners.forEach(l => l())
-		})
-	)
-
-	disposables.push(
-		trelloService.onDidChangeState(() => {
-			trelloListeners.forEach(l => l())
 		})
 	)
 
@@ -301,7 +292,6 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IExtensionTransferService: accessor.get(IExtensionTransferService),
 		IMCPService: accessor.get(IMCPService),
 		ISkillService: accessor.get(ISkillService),
-		ITrelloService: accessor.get(ITrelloService),
 		IKanbanService: accessor.get(IKanbanService),
 		IObsidianService: accessor.get(IObsidianService),
 
@@ -493,18 +483,6 @@ export const useSkillServiceState = () => {
 		const listener = () => { ss(skillService.state) }
 		skillListeners.add(listener);
 		return () => { skillListeners.delete(listener) };
-	}, []);
-	return s
-}
-
-export const useTrelloServiceState = () => {
-	const accessor = useAccessor()
-	const trelloService = accessor.get('ITrelloService')
-	const [s, ss] = useState(trelloService.state)
-	useEffect(() => {
-		const listener = () => { ss(trelloService.state) }
-		trelloListeners.add(listener);
-		return () => { trelloListeners.delete(listener) };
 	}, []);
 	return s
 }

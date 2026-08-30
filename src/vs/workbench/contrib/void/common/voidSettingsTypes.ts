@@ -6,7 +6,6 @@
 
 import { defaultModelsOfProvider, defaultProviderSettings, ModelOverrides } from './modelCapabilities.js';
 import { ToolApprovalType } from './toolsServiceTypes.js';
-import { defaultTrelloSettings, TrelloSettings } from './trelloServiceTypes.js';
 import { defaultObsidianSettings, ObsidianSettings } from './obsidianServiceTypes.js';
 import { defaultKanbanSettings, KanbanSettings } from './kanbanServiceTypes.js';
 import { VoidSettingsState } from './voidSettingsService.js'
@@ -620,8 +619,6 @@ export type GlobalSettings = {
 	divisionFlowApprovalMode: boolean;
 	// Orchestra 独自 UI (設定パネル・サイドバーチャットなど) の表示言語。
 	uiLanguage: UILanguage;
-	// Trello 連携 (TODO リストのカードを自動でプロンプト実行する) の設定。
-	trello: TrelloSettings;
 	// Obsidian 連携 (Vault のフォルダ名を取り込み、Markdown をツールとして読む) の設定。
 	obsidian: ObsidianSettings;
 	// 内蔵カンバン (.orchestra/kanban.json のタスクをエージェントに流す) の実行設定。
@@ -681,7 +678,6 @@ export const defaultGlobalSettings: GlobalSettings = {
 	maxReviewIterations: 10,
 	divisionFlowApprovalMode: false,
 	uiLanguage: 'en',
-	trello: defaultTrelloSettings,
 	obsidian: defaultObsidianSettings,
 	kanban: defaultKanbanSettings,
 }

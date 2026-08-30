@@ -8,9 +8,9 @@
 // 分離する」パターン。
 //
 // 理由: chatThreadService.ts は toolsService → voidCommandBarService → react/out の
-// バンドル → (services.ts の外部 import) → trelloService / kanbanService という経路で
+// バンドル → (services.ts の外部 import) → kanbanService という経路で
 // 自分自身へ戻ってくる循環 import の輪に入っている。バンドラ (esbuild) は循環を
-// 検出すると片方のモジュールを先に評価するため、trelloService / kanbanService が
+// 検出すると片方のモジュールを先に評価するため、kanbanService が
 // 評価される時点で chatThreadService.ts の `const IChatThreadService` がまだ未初期化
 // (バンドル後は巻き上げられた `var` なので undefined) になり、
 //   TypeError: decorator is not a function
