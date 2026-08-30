@@ -49,19 +49,32 @@ Orchestraの開発環境を構築・起動する手順は以下の通りです�
    npm install
    ```
 
-2. **コンパイルとビルド**
+2. **React部分のビルド**
+   Void UI（サイドバーや設定画面など）のReactコンポーネントをビルドします。このステップを飛ばすと、次のコンパイルが `Cannot find module './react/out/...'` のようなエラーで失敗します。
+
+   ```bash
+   npm run buildreact
+   ```
+
+3. **コンパイルとビルド**
    コアモジュールやTypeScriptファイルのビルドを行います。（初回は数分かかります）
 
    ```bash
    npm run compile
    ```
 
-3. **Orchestra の起動**
+4. **Orchestra の起動**
    コンパイル完了後、VS Codeの「実行とデバッグ (Run and Debug)」パネルから `VS Code (Debug Observables)` ターゲットを選択して実行するか、以下のスクリプトを使用して起動します。
    ```bash
    ./scripts/code.sh
    # Windows: .\scripts\code.bat
    ```
+
+### トラブルシューティング (Troubleshooting)
+
+- **`Unable to fetch dynamically imported module: .../out/vs/workbench/workbench.desktop.main.js`** が表示されて起動できない場合、`out/` ディレクトリがまだ生成されていない（＝コンパイルが未完了か失敗している）ことが原因です。`npm run buildreact` を実行してから `npm run compile` を実行し、両方がエラーなく完了することを確認してください。
+- `Cannot find module './react/out/...'` というコンパイルエラーが出る場合は、`npm run buildreact` の実行を忘れています（先に実行してください）。
+- 上記をまとめて行いたい場合は `npm run bac`（`buildreact` → `compile` を順番に実行）を使うと便利です。
 
 ## 📜 ライセンス (License)
 

@@ -71,3 +71,9 @@ coverage/
 !.husky/**
 # .build と .vscode/extensions/**/out は別途明示的に無視する
 .vscode/extensions/**/out/
+
+# ローカルビルドのログ・作業用メモ (誤ってコミットされやすいので明示的に無視)
+build_output*.txt
+build-errors.log
+compile_errors.txt
+COMMIT_MSG*.txt
