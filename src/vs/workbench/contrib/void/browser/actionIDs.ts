@@ -37,8 +37,3 @@ export const VOID_KANBAN_ADD_TASK_ACTION_ID = 'void.kanban.addTask'
 export const VOID_KANBAN_RUN_NEXT_ACTION_ID = 'void.kanban.runNext'
 export const VOID_KANBAN_TOGGLE_AUTO_RUN_ACTION_ID = 'void.kanban.toggleAutoRun'
 export const VOID_KANBAN_CANCEL_ACTION_ID = 'void.kanban.cancelCurrent'
-
-// Trello 連携 (Trello の TODO カードをプロンプトとして自動実行する)
-export const VOID_TRELLO_RUN_NOW_ACTION_ID = 'void.trello.runNow'
-export const VOID_TRELLO_TOGGLE_AUTO_RUN_ACTION_ID = 'void.trello.toggleAutoRun'
-export const VOID_TRELLO_CANCEL_ACTION_ID = 'void.trello.cancelCurrent'

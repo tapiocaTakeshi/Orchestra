@@ -357,15 +357,7 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 				readS.globalSettings.uiLanguage = defaultGlobalSettings.uiLanguage;
 			}
 
-			// add Trello integration settings. Fields are merged individually so that settings
-			// saved by an older build (which only knew about some of them) still get defaults
-			// for the rest instead of coming back as undefined.
-			readS.globalSettings.trello = {
-				...deepClone(defaultGlobalSettings.trello),
-				...(readS.globalSettings.trello ?? {}),
-			};
-
-			// add Obsidian integration settings. Same per-field merge as Trello above, so a
+			// add Obsidian integration settings. Same per-field merge pattern as other integrations, so a
 			// settings file written by an older build keeps its vault path and folder toggles.
 			readS.globalSettings.obsidian = {
 				...deepClone(defaultGlobalSettings.obsidian),

@@ -89,10 +89,6 @@ import './kanbanService.js'
 import './kanbanPane.js'
 import './kanbanActions.js'
 
-// register Trello integration (auto-executes Trello cards as agent prompts)
-import './trelloService.js'
-import './trelloActions.js'
-
 // ---------- common (unclear if these actually need to be imported, because they're already imported wherever they're used) ----------
 
 // llmMessage
