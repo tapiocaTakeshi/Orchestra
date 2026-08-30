@@ -277,15 +277,22 @@
 		splashShellBackground = shellBackground;
 		splashShellForeground = shellForeground;
 
+		// The bloom and the halo behind the mark are a dark-shell treatment: over a
+		// light editor background a blurred copy underneath only makes the logo look
+		// out of focus, so those themes get the crisp mark on its own.
+		const darkShell = (baseTheme ?? 'vs-dark') === 'vs-dark' || baseTheme === 'hc-black';
+		const bloom = darkShell ? ' filter: url(#boot-splash-glow);' : '';
+
 		const style = document.createElement('style');
 		style.className = 'initialShellColors';
 		window.document.head.appendChild(style);
 		style.textContent = `
 			body { background-color: ${shellBackground}; color: ${shellForeground}; margin: 0; padding: 0; }
 			#monaco-workbench-splash-logo { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; pointer-events: none; overflow: visible; animation: monaco-workbench-splash-logo-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
+			#monaco-workbench-splash-logo svg { overflow: visible; }
 			#monaco-workbench-splash-logo .boot-ambient { fill: url(#boot-splash-ambient); animation: monaco-workbench-splash-ambient-pulse 4.8s ease-in-out infinite; }
-			#monaco-workbench-splash-logo .boot-strand { fill: none; stroke: url(#boot-splash-fade); stroke-width: 11; stroke-linecap: round; filter: url(#boot-splash-glow); }
-			#monaco-workbench-splash-logo .boot-arrowhead { fill: #e02431; stroke: #e02431; stroke-width: 1.4; stroke-linejoin: round; transform-box: view-box; transform-origin: 0 0; filter: url(#boot-splash-glow); }
+			#monaco-workbench-splash-logo .boot-strand { fill: none; stroke: url(#boot-splash-fade); stroke-width: 11; stroke-linecap: round;${bloom} }
+			#monaco-workbench-splash-logo .boot-arrowhead { fill: #e02431; stroke: #e02431; stroke-width: 1.4; stroke-linejoin: round; transform-box: view-box; transform-origin: 0 0;${bloom} }
 			#monaco-workbench-splash-logo .boot-strand-a { animation: monaco-workbench-splash-wave-a 3.6s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
 			#monaco-workbench-splash-logo .boot-strand-b { animation: monaco-workbench-splash-wave-b 3.6s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
 			#monaco-workbench-splash-logo .boot-arrowhead-a { animation: monaco-workbench-splash-head-a 3.6s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
@@ -371,19 +378,23 @@
 			id: 'boot-splash-fade', x1: '10', y1: '0', x2: '230', y2: '0', gradientUnits: 'userSpaceOnUse'
 		});
 		gradient.appendChild(svgEl('stop', { offset: '0', 'stop-color': '#e02431', 'stop-opacity': '0' }));
-		gradient.appendChild(svgEl('stop', { offset: '0.28', 'stop-color': '#b81c2c', 'stop-opacity': '0.9' }));
-		gradient.appendChild(svgEl('stop', { offset: '0.55', 'stop-color': '#ff6a55', 'stop-opacity': '1' }));
-		gradient.appendChild(svgEl('stop', { offset: '0.8', 'stop-color': '#e02431', 'stop-opacity': '1' }));
-		gradient.appendChild(svgEl('stop', { offset: '1', 'stop-color': '#c81e2c', 'stop-opacity': '1' }));
+		gradient.appendChild(svgEl('stop', { offset: '0.3', 'stop-color': '#b81c2c', 'stop-opacity': '0.95' }));
+		gradient.appendChild(svgEl('stop', { offset: '0.58', 'stop-color': '#f0455a', 'stop-opacity': '1' }));
+		gradient.appendChild(svgEl('stop', { offset: '1', 'stop-color': '#e02431', 'stop-opacity': '1' }));
 
 		const ambient = svgEl('radialGradient', {
 			id: 'boot-splash-ambient', cx: '0.5', cy: '0.5', r: '0.5'
 		});
-		ambient.appendChild(svgEl('stop', { offset: '0', 'stop-color': '#e02431', 'stop-opacity': '0.22' }));
+		// Eased rather than linear falloff: a straight ramp to zero leaves a visible
+		// rim where the halo ends, which reads as a hard edge against flat chrome.
+		ambient.appendChild(svgEl('stop', { offset: '0', 'stop-color': '#e02431', 'stop-opacity': '0.2' }));
+		ambient.appendChild(svgEl('stop', { offset: '0.35', 'stop-color': '#e02431', 'stop-opacity': '0.13' }));
+		ambient.appendChild(svgEl('stop', { offset: '0.6', 'stop-color': '#e02431', 'stop-opacity': '0.06' }));
+		ambient.appendChild(svgEl('stop', { offset: '0.82', 'stop-color': '#e02431', 'stop-opacity': '0.015' }));
 		ambient.appendChild(svgEl('stop', { offset: '1', 'stop-color': '#e02431', 'stop-opacity': '0' }));
 
 		const glow = svgEl('filter', { id: 'boot-splash-glow', x: '-60%', y: '-60%', width: '220%', height: '220%' });
-		glow.appendChild(svgEl('feGaussianBlur', { in: 'SourceGraphic', stdDeviation: '2.6', result: 'blur' }));
+		glow.appendChild(svgEl('feGaussianBlur', { in: 'SourceGraphic', stdDeviation: '2.2', result: 'blur' }));
 		const glowMerge = svgEl('feMerge', {});
 		glowMerge.appendChild(svgEl('feMergeNode', { in: 'blur' }));
 		glowMerge.appendChild(svgEl('feMergeNode', { in: 'SourceGraphic' }));
@@ -391,11 +402,14 @@
 
 		const defs = svgEl('defs', {});
 		defs.appendChild(gradient);
-		defs.appendChild(ambient);
-		defs.appendChild(glow);
-		svg.appendChild(defs);
-
-		svg.appendChild(svgEl('circle', { class: 'boot-ambient', cx: '121', cy: '60', r: '108' }));
+		if (darkShell) {
+			defs.appendChild(ambient);
+			defs.appendChild(glow);
+			svg.appendChild(defs);
+			svg.appendChild(svgEl('ellipse', { class: 'boot-ambient', cx: '121', cy: '60', rx: '186', ry: '104' }));
+		} else {
+			svg.appendChild(defs);
+		}
 
 		svg.appendChild(svgEl('path', { class: 'boot-strand boot-strand-a', d: 'M10,60 C12.1,59.7 18.2,57.9 22.3,58.2 C26.4,58.4 30.6,59.1 34.7,61.6 C38.8,64.1 42.9,70.7 47,73.3 C51.1,75.8 55.2,78.1 59.3,76.9 C63.4,75.7 67.6,70.5 71.7,66.2 C75.8,61.8 79.9,55 84,51 C88.1,47 92.2,43.1 96.3,42.3 C100.4,41.5 104.6,43.3 108.7,46.2 C112.8,49.2 116.9,55.4 121,60 C125.1,64.6 129.2,70.8 133.3,73.8 C137.4,76.7 141.6,78.5 145.7,77.7 C149.8,76.9 153.9,73 158,69 C162.1,65 166.2,58.2 170.3,53.8 C174.4,49.5 178.6,45.1 182.7,42.8 C186.8,40.5 190.9,40.3 195,40.3 C199.1,40.2 203.2,42.2 207.3,42.4 C211.4,42.6 215.6,41.9 219.7,41.4 C223.8,40.9 229.9,39.6 232,39.2' }));
 		svg.appendChild(svgEl('path', { class: 'boot-strand boot-strand-b', d: 'M10,60 C12.1,60.3 18.2,62.1 22.3,61.8 C26.4,61.6 30.6,60.9 34.7,58.4 C38.8,55.9 42.9,49.3 47,46.7 C51.1,44.2 55.2,41.9 59.3,43.1 C63.4,44.3 67.6,49.5 71.7,53.8 C75.8,58.2 79.9,65 84,69 C88.1,73 92.2,76.9 96.3,77.7 C100.4,78.5 104.6,76.7 108.7,73.8 C112.8,70.8 116.9,64.6 121,60 C125.1,55.4 129.2,49.2 133.3,46.2 C137.4,43.3 141.6,41.5 145.7,42.3 C149.8,43.1 153.9,47 158,51 C162.1,55 166.2,61.8 170.3,66.2 C174.4,70.5 178.6,74.9 182.7,77.2 C186.8,79.5 190.9,79.7 195,79.7 C199.1,79.8 203.2,77.8 207.3,77.6 C211.4,77.4 215.6,78.1 219.7,78.6 C223.8,79.1 229.9,80.4 232,80.8' }));
