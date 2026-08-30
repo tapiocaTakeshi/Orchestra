@@ -283,25 +283,25 @@
 		style.textContent = `
 			body { background-color: ${shellBackground}; color: ${shellForeground}; margin: 0; padding: 0; }
 			#monaco-workbench-splash-logo { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; pointer-events: none; overflow: visible; }
-			#monaco-workbench-splash-logo .boot-strand { fill: none; stroke: url(#boot-splash-fade); stroke-width: 9; stroke-linecap: round; }
+			#monaco-workbench-splash-logo .boot-strand { fill: none; stroke: url(#boot-splash-fade); stroke-width: 14; stroke-linecap: round; }
 			#monaco-workbench-splash-logo .boot-arrowhead { fill: #e02431; stroke: none; }
 			#monaco-workbench-splash-logo .boot-wave-group { animation: monaco-workbench-splash-bob 3.2s ease-in-out infinite; transform-origin: center; }
 			#monaco-workbench-splash-logo .boot-strand-a { animation: monaco-workbench-splash-wave-a 3.2s ease-in-out infinite; }
 			#monaco-workbench-splash-logo .boot-strand-b { animation: monaco-workbench-splash-wave-b 3.2s ease-in-out infinite; }
-			@keyframes monaco-workbench-splash-bob { 0%, 100% { transform: translateY(0); } 25% { transform: translateY(-5px); } 50% { transform: translateY(0); } 75% { transform: translateY(5px); } }
+			@keyframes monaco-workbench-splash-bob { 0%, 100% { transform: translateY(0); } 25% { transform: translateY(-3px); } 50% { transform: translateY(0); } 75% { transform: translateY(3px); } }
 			@keyframes monaco-workbench-splash-wave-a {
-				0%   { d: path("M10,30 C60,15 90,35 130,60 C170,85 200,105 240,90"); }
-				25%  { d: path("M10,30 C60,50 90,60 130,60 C170,60 200,80 240,90"); }
-				50%  { d: path("M10,30 C60,45 90,55 130,60 C170,65 200,75 240,90"); }
-				75%  { d: path("M10,30 C60,10 90,35 130,60 C170,85 200,110 240,90"); }
-				100% { d: path("M10,30 C60,15 90,35 130,60 C170,85 200,105 240,90"); }
+				0%   { d: path("M10,30 C60,24 90,42 130,60 C170,78 200,96 240,90"); }
+				25%  { d: path("M10,30 C60,40 90,52 130,60 C170,68 200,84 240,90"); }
+				50%  { d: path("M10,30 C60,36 90,48 130,60 C170,72 200,88 240,90"); }
+				75%  { d: path("M10,30 C60,22 90,42 130,60 C170,78 200,98 240,90"); }
+				100% { d: path("M10,30 C60,24 90,42 130,60 C170,78 200,96 240,90"); }
 			}
 			@keyframes monaco-workbench-splash-wave-b {
-				0%   { d: path("M10,90 C60,105 90,85 130,60 C170,35 200,15 240,30"); }
-				25%  { d: path("M10,90 C60,70 90,60 130,60 C170,60 200,40 240,30"); }
-				50%  { d: path("M10,90 C60,75 90,65 130,60 C170,55 200,45 240,30"); }
-				75%  { d: path("M10,90 C60,110 90,85 130,60 C170,35 200,10 240,30"); }
-				100% { d: path("M10,90 C60,105 90,85 130,60 C170,35 200,15 240,30"); }
+				0%   { d: path("M10,90 C60,96 90,78 130,60 C170,42 200,24 240,30"); }
+				25%  { d: path("M10,90 C60,80 90,68 130,60 C170,52 200,36 240,30"); }
+				50%  { d: path("M10,90 C60,84 90,72 130,60 C170,48 200,32 240,30"); }
+				75%  { d: path("M10,90 C60,98 90,78 130,60 C170,42 200,22 240,30"); }
+				100% { d: path("M10,90 C60,96 90,78 130,60 C170,42 200,24 240,30"); }
 			}
 			@media (prefers-reduced-motion: reduce) { #monaco-workbench-splash-logo .boot-wave-group, #monaco-workbench-splash-logo .boot-strand-a, #monaco-workbench-splash-logo .boot-strand-b { animation: none; } }
 		`;
@@ -321,10 +321,10 @@
 					</linearGradient>
 				</defs>
 				<g class="boot-wave-group">
-					<path class="boot-strand boot-strand-a" d="M10,30 C60,15 90,35 130,60 C170,85 200,105 240,90" />
-					<path class="boot-strand boot-strand-b" d="M10,90 C60,105 90,85 130,60 C170,35 200,15 240,30" />
-					<polygon class="boot-arrowhead" points="234,72 270,90 234,108" />
-					<polygon class="boot-arrowhead" points="234,12 270,30 234,48" />
+					<path class="boot-strand boot-strand-a" d="M10,30 C60,24 90,42 130,60 C170,78 200,96 240,90" />
+					<path class="boot-strand boot-strand-b" d="M10,90 C60,96 90,78 130,60 C170,42 200,24 240,30" />
+					<polygon class="boot-arrowhead" points="232,68 272,90 232,112" />
+					<polygon class="boot-arrowhead" points="232,8 272,30 232,52" />
 				</g>
 			</svg>
 		`;
