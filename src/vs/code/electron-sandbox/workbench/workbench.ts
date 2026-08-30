@@ -284,11 +284,25 @@
 			body { background-color: ${shellBackground}; color: ${shellForeground}; margin: 0; padding: 0; }
 			#monaco-workbench-splash-logo { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; pointer-events: none; overflow: visible; }
 			#monaco-workbench-splash-logo .boot-strand, #monaco-workbench-splash-logo .boot-arrowhead { fill: none; stroke: #e02431; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
-			#monaco-workbench-splash-logo .boot-strand-a { animation: monaco-workbench-splash-wave-a 2.6s ease-in-out infinite; }
-			#monaco-workbench-splash-logo .boot-strand-b { animation: monaco-workbench-splash-wave-b 2.6s ease-in-out infinite; }
-			@keyframes monaco-workbench-splash-wave-a { 0%, 100% { d: path("M10,30 C60,20 90,40 130,60 C170,80 200,100 240,90"); } 50% { d: path("M10,30 C60,45 90,55 130,60 C170,65 200,75 240,90"); } }
-			@keyframes monaco-workbench-splash-wave-b { 0%, 100% { d: path("M10,90 C60,100 90,80 130,60 C170,40 200,20 240,30"); } 50% { d: path("M10,90 C60,75 90,65 130,60 C170,55 200,45 240,30"); } }
-			@media (prefers-reduced-motion: reduce) { #monaco-workbench-splash-logo .boot-strand-a, #monaco-workbench-splash-logo .boot-strand-b { animation: none; } }
+			#monaco-workbench-splash-logo .boot-wave-group { animation: monaco-workbench-splash-bob 3.2s ease-in-out infinite; transform-origin: center; }
+			#monaco-workbench-splash-logo .boot-strand-a { animation: monaco-workbench-splash-wave-a 3.2s ease-in-out infinite; }
+			#monaco-workbench-splash-logo .boot-strand-b { animation: monaco-workbench-splash-wave-b 3.2s ease-in-out infinite; }
+			@keyframes monaco-workbench-splash-bob { 0%, 100% { transform: translateY(0); } 25% { transform: translateY(-5px); } 50% { transform: translateY(0); } 75% { transform: translateY(5px); } }
+			@keyframes monaco-workbench-splash-wave-a {
+				0%   { d: path("M10,30 C60,15 90,35 130,60 C170,85 200,105 240,90"); }
+				25%  { d: path("M10,30 C60,50 90,60 130,60 C170,60 200,80 240,90"); }
+				50%  { d: path("M10,30 C60,45 90,55 130,60 C170,65 200,75 240,90"); }
+				75%  { d: path("M10,30 C60,10 90,35 130,60 C170,85 200,110 240,90"); }
+				100% { d: path("M10,30 C60,15 90,35 130,60 C170,85 200,105 240,90"); }
+			}
+			@keyframes monaco-workbench-splash-wave-b {
+				0%   { d: path("M10,90 C60,105 90,85 130,60 C170,35 200,15 240,30"); }
+				25%  { d: path("M10,90 C60,70 90,60 130,60 C170,60 200,40 240,30"); }
+				50%  { d: path("M10,90 C60,75 90,65 130,60 C170,55 200,45 240,30"); }
+				75%  { d: path("M10,90 C60,110 90,85 130,60 C170,35 200,10 240,30"); }
+				100% { d: path("M10,90 C60,105 90,85 130,60 C170,35 200,15 240,30"); }
+			}
+			@media (prefers-reduced-motion: reduce) { #monaco-workbench-splash-logo .boot-wave-group, #monaco-workbench-splash-logo .boot-strand-a, #monaco-workbench-splash-logo .boot-strand-b { animation: none; } }
 		`;
 
 		// Orchestra: two crossing wave arrows shown centered over the shell background
@@ -298,10 +312,12 @@
 		splashLogo.id = 'monaco-workbench-splash-logo';
 		splashLogo.innerHTML = `
 			<svg viewBox="0 0 300 120" width="300" height="120">
-				<path class="boot-strand boot-strand-a" d="M10,30 C60,20 90,40 130,60 C170,80 200,100 240,90" />
-				<path class="boot-strand boot-strand-b" d="M10,90 C60,100 90,80 130,60 C170,40 200,20 240,30" />
-				<path class="boot-arrowhead" d="M233,78 L258,90 L231,102" />
-				<path class="boot-arrowhead" d="M233,18 L258,30 L231,42" />
+				<g class="boot-wave-group">
+					<path class="boot-strand boot-strand-a" d="M10,30 C60,15 90,35 130,60 C170,85 200,105 240,90" />
+					<path class="boot-strand boot-strand-b" d="M10,90 C60,105 90,85 130,60 C170,35 200,15 240,30" />
+					<path class="boot-arrowhead" d="M233,78 L258,90 L231,102" />
+					<path class="boot-arrowhead" d="M233,18 L258,30 L231,42" />
+				</g>
 			</svg>
 		`;
 		window.document.body.appendChild(splashLogo);
