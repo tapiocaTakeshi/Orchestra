@@ -339,25 +339,45 @@
 		// Orchestra: two strands weaving around a centre line the whole width before
 		// opening into a pair of arrows, the weave drifting left to right while the
 		// workbench boots; removed with the splash on first layout (see PartsSplash).
+		//
+		// Built through the DOM rather than innerHTML on purpose: workbench.html sets
+		// `require-trusted-types-for 'script'`, so assigning markup here throws and the
+		// window comes up with no splash at all.
+		const svgNS = 'http://www.w3.org/2000/svg';
+		const svgEl = (tag: string, attrs: { [name: string]: string }) => {
+			const node = document.createElementNS(svgNS, tag);
+			for (const name in attrs) {
+				node.setAttribute(name, attrs[name]);
+			}
+			return node;
+		};
+
 		const splashLogo = document.createElement('div');
 		splashLogo.id = 'monaco-workbench-splash-logo';
-		splashLogo.innerHTML = `
-			<svg viewBox="0 0 320 120" width="320" height="120">
-				<defs>
-					<linearGradient id="boot-splash-fade" x1="10" y1="0" x2="230" y2="0" gradientUnits="userSpaceOnUse">
-						<stop offset="0" stop-color="#e02431" stop-opacity="0" />
-						<stop offset="0.3" stop-color="#e02431" stop-opacity="1" />
-						<stop offset="1" stop-color="#e02431" stop-opacity="1" />
-					</linearGradient>
-				</defs>
-				<g>
-					<path class="boot-strand boot-strand-a" d="M10,60 C12.1,59.7 18.2,57.9 22.3,58.2 C26.4,58.4 30.6,59.1 34.7,61.6 C38.8,64.1 42.9,70.7 47,73.3 C51.1,75.8 55.2,78.1 59.3,76.9 C63.4,75.7 67.6,70.5 71.7,66.2 C75.8,61.8 79.9,55 84,51 C88.1,47 92.2,43.1 96.3,42.3 C100.4,41.5 104.6,43.3 108.7,46.2 C112.8,49.2 116.9,55.4 121,60 C125.1,64.6 129.2,70.8 133.3,73.8 C137.4,76.7 141.6,78.5 145.7,77.7 C149.8,76.9 153.9,73 158,69 C162.1,65 166.2,58.2 170.3,53.8 C174.4,49.5 178.6,45.1 182.7,42.8 C186.8,40.5 190.9,40.3 195,40.3 C199.1,40.2 203.2,42.2 207.3,42.4 C211.4,42.6 215.6,41.9 219.7,41.4 C223.8,40.9 229.9,39.6 232,39.2" />
-					<path class="boot-strand boot-strand-b" d="M10,60 C12.1,60.3 18.2,62.1 22.3,61.8 C26.4,61.6 30.6,60.9 34.7,58.4 C38.8,55.9 42.9,49.3 47,46.7 C51.1,44.2 55.2,41.9 59.3,43.1 C63.4,44.3 67.6,49.5 71.7,53.8 C75.8,58.2 79.9,65 84,69 C88.1,73 92.2,76.9 96.3,77.7 C100.4,78.5 104.6,76.7 108.7,73.8 C112.8,70.8 116.9,64.6 121,60 C125.1,55.4 129.2,49.2 133.3,46.2 C137.4,43.3 141.6,41.5 145.7,42.3 C149.8,43.1 153.9,47 158,51 C162.1,55 166.2,61.8 170.3,66.2 C174.4,70.5 178.6,74.9 182.7,77.2 C186.8,79.5 190.9,79.7 195,79.7 C199.1,79.8 203.2,77.8 207.3,77.6 C211.4,77.4 215.6,78.1 219.7,78.6 C223.8,79.1 229.9,80.4 232,80.8" />
-					<polygon class="boot-arrowhead boot-arrowhead-a" points="0,-12 22,0 0,12" style="transform: translate(232px, 39.2px) rotate(-0.1deg)" />
-					<polygon class="boot-arrowhead boot-arrowhead-b" points="0,-12 22,0 0,12" style="transform: translate(232px, 80.8px) rotate(0.1deg)" />
-				</g>
-			</svg>
-		`;
+
+		const svg = svgEl('svg', { viewBox: '0 0 320 120', width: '320', height: '120' });
+
+		const gradient = svgEl('linearGradient', {
+			id: 'boot-splash-fade', x1: '10', y1: '0', x2: '230', y2: '0', gradientUnits: 'userSpaceOnUse'
+		});
+		gradient.appendChild(svgEl('stop', { offset: '0', 'stop-color': '#e02431', 'stop-opacity': '0' }));
+		gradient.appendChild(svgEl('stop', { offset: '0.3', 'stop-color': '#e02431', 'stop-opacity': '1' }));
+		gradient.appendChild(svgEl('stop', { offset: '1', 'stop-color': '#e02431', 'stop-opacity': '1' }));
+
+		const defs = svgEl('defs', {});
+		defs.appendChild(gradient);
+		svg.appendChild(defs);
+
+		svg.appendChild(svgEl('path', { class: 'boot-strand boot-strand-a', d: 'M10,60 C12.1,59.7 18.2,57.9 22.3,58.2 C26.4,58.4 30.6,59.1 34.7,61.6 C38.8,64.1 42.9,70.7 47,73.3 C51.1,75.8 55.2,78.1 59.3,76.9 C63.4,75.7 67.6,70.5 71.7,66.2 C75.8,61.8 79.9,55 84,51 C88.1,47 92.2,43.1 96.3,42.3 C100.4,41.5 104.6,43.3 108.7,46.2 C112.8,49.2 116.9,55.4 121,60 C125.1,64.6 129.2,70.8 133.3,73.8 C137.4,76.7 141.6,78.5 145.7,77.7 C149.8,76.9 153.9,73 158,69 C162.1,65 166.2,58.2 170.3,53.8 C174.4,49.5 178.6,45.1 182.7,42.8 C186.8,40.5 190.9,40.3 195,40.3 C199.1,40.2 203.2,42.2 207.3,42.4 C211.4,42.6 215.6,41.9 219.7,41.4 C223.8,40.9 229.9,39.6 232,39.2' }));
+		svg.appendChild(svgEl('path', { class: 'boot-strand boot-strand-b', d: 'M10,60 C12.1,60.3 18.2,62.1 22.3,61.8 C26.4,61.6 30.6,60.9 34.7,58.4 C38.8,55.9 42.9,49.3 47,46.7 C51.1,44.2 55.2,41.9 59.3,43.1 C63.4,44.3 67.6,49.5 71.7,53.8 C75.8,58.2 79.9,65 84,69 C88.1,73 92.2,76.9 96.3,77.7 C100.4,78.5 104.6,76.7 108.7,73.8 C112.8,70.8 116.9,64.6 121,60 C125.1,55.4 129.2,49.2 133.3,46.2 C137.4,43.3 141.6,41.5 145.7,42.3 C149.8,43.1 153.9,47 158,51 C162.1,55 166.2,61.8 170.3,66.2 C174.4,70.5 178.6,74.9 182.7,77.2 C186.8,79.5 190.9,79.7 195,79.7 C199.1,79.8 203.2,77.8 207.3,77.6 C211.4,77.4 215.6,78.1 219.7,78.6 C223.8,79.1 229.9,80.4 232,80.8' }));
+		svg.appendChild(svgEl('polygon', {
+			class: 'boot-arrowhead boot-arrowhead-a', points: '0,-12 22,0 0,12', style: 'transform: translate(232px, 39.2px) rotate(-0.1deg)'
+		}));
+		svg.appendChild(svgEl('polygon', {
+			class: 'boot-arrowhead boot-arrowhead-b', points: '0,-12 22,0 0,12', style: 'transform: translate(232px, 80.8px) rotate(0.1deg)'
+		}));
+
+		splashLogo.appendChild(svg);
 		window.document.body.appendChild(splashLogo);
 
 		// set zoom level as soon as possible
