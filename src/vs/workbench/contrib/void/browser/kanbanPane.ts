@@ -16,7 +16,7 @@ import { IStorageService } from '../../../../platform/storage/common/storage.js'
 import { Dimension } from '../../../../base/browser/dom.js';
 import { EditorPaneDescriptor, IEditorPaneRegistry } from '../../../browser/editor.js';
 import { SyncDescriptor } from '../../../../platform/instantiation/common/descriptors.js';
-import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
+import { Action2, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { Registry } from '../../../../platform/registry/common/platform.js';
 import { ServicesAccessor } from '../../../../editor/browser/editorExtensions.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
@@ -187,14 +187,7 @@ registerAction2(class extends Action2 {
 				weight: KeybindingWeight.WorkbenchContrib,
 				primary: KeyMod.CtrlCmd | KeyMod.Alt | KeyCode.KeyK,
 			},
-			// タイトルバー右側のツールバー (レイアウト操作やアカウントと同じ並び) に出す。
-			// ボードは「思い出したら開く」画面なので、コマンドパレットを経由せず 1 クリックで
-			// 開けるところに置いておきたい。
-			menu: [{
-				id: MenuId.TitleBar,
-				group: 'navigation',
-				order: 1,
-			}],
+			// 開閉ボタンはチャット上部のヘッダーに移設したので、タイトルバーへの登録はしない。
 		});
 	}
 
