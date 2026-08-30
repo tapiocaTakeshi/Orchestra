@@ -283,39 +283,24 @@
 		style.textContent = `
 			body { background-color: ${shellBackground}; color: ${shellForeground}; margin: 0; padding: 0; }
 			#monaco-workbench-splash-logo { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; pointer-events: none; overflow: visible; }
-			#monaco-workbench-splash-logo .boot-arrow { fill: none; stroke: #e02431; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; animation: monaco-workbench-splash-wave 1.6s ease-in-out infinite; animation-delay: calc(var(--i) * .08s); }
-			#monaco-workbench-splash-logo .boot-wave-row--b .boot-arrow { opacity: .75; animation-delay: calc(var(--i) * .08s + .8s); }
-			@keyframes monaco-workbench-splash-wave { 0%, 100% { transform: translateY(0); } 25% { transform: translateY(-16px); } 50% { transform: translateY(0); } 75% { transform: translateY(16px); } }
-			@media (prefers-reduced-motion: reduce) { #monaco-workbench-splash-logo .boot-arrow { animation: none; } }
+			#monaco-workbench-splash-logo .boot-strand, #monaco-workbench-splash-logo .boot-arrowhead { fill: none; stroke: #e02431; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+			#monaco-workbench-splash-logo .boot-strand-a { animation: monaco-workbench-splash-wave-a 2.4s ease-in-out infinite; }
+			#monaco-workbench-splash-logo .boot-strand-b { animation: monaco-workbench-splash-wave-b 2.4s ease-in-out infinite; }
+			@keyframes monaco-workbench-splash-wave-a { 0%, 100% { d: path("M10,45 C60,20 90,20 130,50 C170,80 200,80 240,60 L 262,56"); } 50% { d: path("M10,55 C60,80 90,80 130,50 C170,20 200,20 240,44 L 262,50"); } }
+			@keyframes monaco-workbench-splash-wave-b { 0%, 100% { d: path("M10,75 C60,95 90,95 130,55 C170,20 200,20 240,50 L 262,60"); } 50% { d: path("M10,65 C60,40 90,40 130,55 C170,80 200,80 240,66 L 262,66"); } }
+			@media (prefers-reduced-motion: reduce) { #monaco-workbench-splash-logo .boot-strand-a, #monaco-workbench-splash-logo .boot-strand-b { animation: none; } }
 		`;
 
-		// Orchestra: animated arrow wave shown centered over the shell background while
-		// the real workbench boots; removed alongside the color/layout splash once the
-		// main container has its first layout pass (see PartsSplash#_removePartsSplash).
+		// Orchestra: animated crossing-wave arrow shown centered over the shell background
+		// while the real workbench boots; removed alongside the color/layout splash once
+		// the main container has its first layout pass (see PartsSplash#_removePartsSplash).
 		const splashLogo = document.createElement('div');
 		splashLogo.id = 'monaco-workbench-splash-logo';
 		splashLogo.innerHTML = `
-			<svg viewBox="0 0 280 140" width="280" height="140">
-				<g class="boot-wave-row boot-wave-row--a">
-					<g transform="translate(20,70)"><path class="boot-arrow" style="--i:0" d="M0,-9 Q9,-6 11,0 Q9,6 0,9" /></g>
-					<g transform="translate(52,70)"><path class="boot-arrow" style="--i:1" d="M0,-9 Q9,-6 11,0 Q9,6 0,9" /></g>
-					<g transform="translate(84,70)"><path class="boot-arrow" style="--i:2" d="M0,-9 Q9,-6 11,0 Q9,6 0,9" /></g>
-					<g transform="translate(116,70)"><path class="boot-arrow" style="--i:3" d="M0,-9 Q9,-6 11,0 Q9,6 0,9" /></g>
-					<g transform="translate(148,70)"><path class="boot-arrow" style="--i:4" d="M0,-9 Q9,-6 11,0 Q9,6 0,9" /></g>
-					<g transform="translate(180,70)"><path class="boot-arrow" style="--i:5" d="M0,-9 Q9,-6 11,0 Q9,6 0,9" /></g>
-					<g transform="translate(212,70)"><path class="boot-arrow" style="--i:6" d="M0,-9 Q9,-6 11,0 Q9,6 0,9" /></g>
-					<g transform="translate(244,70)"><path class="boot-arrow" style="--i:7" d="M0,-9 Q9,-6 11,0 Q9,6 0,9" /></g>
-				</g>
-				<g class="boot-wave-row boot-wave-row--b">
-					<g transform="translate(36,70)"><path class="boot-arrow" style="--i:0" d="M0,-9 Q9,-6 11,0 Q9,6 0,9" /></g>
-					<g transform="translate(68,70)"><path class="boot-arrow" style="--i:1" d="M0,-9 Q9,-6 11,0 Q9,6 0,9" /></g>
-					<g transform="translate(100,70)"><path class="boot-arrow" style="--i:2" d="M0,-9 Q9,-6 11,0 Q9,6 0,9" /></g>
-					<g transform="translate(132,70)"><path class="boot-arrow" style="--i:3" d="M0,-9 Q9,-6 11,0 Q9,6 0,9" /></g>
-					<g transform="translate(164,70)"><path class="boot-arrow" style="--i:4" d="M0,-9 Q9,-6 11,0 Q9,6 0,9" /></g>
-					<g transform="translate(196,70)"><path class="boot-arrow" style="--i:5" d="M0,-9 Q9,-6 11,0 Q9,6 0,9" /></g>
-					<g transform="translate(228,70)"><path class="boot-arrow" style="--i:6" d="M0,-9 Q9,-6 11,0 Q9,6 0,9" /></g>
-					<g transform="translate(260,70)"><path class="boot-arrow" style="--i:7" d="M0,-9 Q9,-6 11,0 Q9,6 0,9" /></g>
-				</g>
+			<svg viewBox="0 0 300 120" width="300" height="120">
+				<path class="boot-strand boot-strand-a" d="M10,45 C60,20 90,20 130,50 C170,80 200,80 240,60 L 262,56" />
+				<path class="boot-strand boot-strand-b" d="M10,75 C60,95 90,95 130,55 C170,20 200,20 240,50 L 262,60" />
+				<path class="boot-arrowhead" d="M255,42 L280,58 L253,74" />
 			</svg>
 		`;
 		window.document.body.appendChild(splashLogo);

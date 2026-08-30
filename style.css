@@ -183,8 +183,8 @@ input, textarea, select { font: inherit; color: inherit; }
 
 .boot-splash-logo-wrap {
   position: relative;
-  width: 280px;
-  height: 140px;
+  width: 300px;
+  height: 120px;
   display: grid;
   place-items: center;
 }
@@ -193,26 +193,33 @@ input, textarea, select { font: inherit; color: inherit; }
   overflow: visible;
 }
 
-.boot-arrow {
+.boot-strand,
+.boot-arrowhead {
   fill: none;
   stroke: #fff;
-  stroke-width: 4;
+  stroke-width: 5;
   stroke-linecap: round;
   stroke-linejoin: round;
-  animation: boot-wave-bob 1.6s ease-in-out infinite;
-  animation-delay: calc(var(--i) * .08s);
 }
 
-.boot-wave-row--b .boot-arrow {
-  opacity: .75;
-  animation-delay: calc(var(--i) * .08s + .8s);
+.boot-strand-a {
+  animation: boot-wave-a 2.4s ease-in-out infinite;
+}
+.boot-strand-b {
+  animation: boot-wave-b 2.4s ease-in-out infinite;
 }
 
-@keyframes boot-wave-bob {
-  0%, 100% { transform: translateY(0); }
-  25%      { transform: translateY(-16px); }
-  50%      { transform: translateY(0); }
-  75%      { transform: translateY(16px); }
+@media (prefers-reduced-motion: reduce) {
+  .boot-strand-a, .boot-strand-b { animation: none; }
+}
+
+@keyframes boot-wave-a {
+  0%, 100% { d: path("M10,45 C60,20 90,20 130,50 C170,80 200,80 240,60 L 262,56"); }
+  50%      { d: path("M10,55 C60,80 90,80 130,50 C170,20 200,20 240,44 L 262,50"); }
+}
+@keyframes boot-wave-b {
+  0%, 100% { d: path("M10,75 C60,95 90,95 130,55 C170,20 200,20 240,50 L 262,60"); }
+  50%      { d: path("M10,65 C60,40 90,40 130,55 C170,80 200,80 240,66 L 262,66"); }
 }
 
 /* =========================================================
