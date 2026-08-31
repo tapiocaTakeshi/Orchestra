@@ -291,7 +291,7 @@
 			#monaco-workbench-splash-logo { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; pointer-events: none; overflow: visible; animation: monaco-workbench-splash-logo-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
 			#monaco-workbench-splash-logo svg { overflow: visible; }
 			#monaco-workbench-splash-logo .boot-ambient { fill: url(#boot-splash-ambient); animation: monaco-workbench-splash-ambient-pulse 4.8s ease-in-out infinite; }
-			#monaco-workbench-splash-logo .boot-strand { fill: none; stroke: url(#boot-splash-fade); stroke-width: 8; stroke-linecap: round;${bloom} }
+			#monaco-workbench-splash-logo .boot-strand { fill: none; stroke: url(#boot-splash-fade); stroke-width: 5; stroke-linecap: round;${bloom} }
 			#monaco-workbench-splash-logo .boot-arrowhead { fill: #e02431; stroke: #e02431; stroke-width: 1.4; stroke-linejoin: round; transform-box: view-box; transform-origin: 0 0;${bloom} }
 			#monaco-workbench-splash-logo .boot-strand-a { animation: monaco-workbench-splash-wave-a 2s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
 			#monaco-workbench-splash-logo .boot-strand-b { animation: monaco-workbench-splash-wave-b 2s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
