@@ -181,7 +181,8 @@ export const displayInfoOfSettingName = (providerName: ProviderName, settingName
 								providerName === 'microsoftAzure' ? 'baseURL' :
 									providerName === 'liteLLM' ? 'baseURL' :
 										providerName === 'awsBedrock' ? 'Endpoint' :
-											'(never)',
+											providerName === 'divisionAPI' ? 'Endpoint' :
+												'(never)',
 
 			placeholder: providerName === 'divisionAPI' ? defaultProviderSettings.divisionAPI.endpoint
 				: providerName === 'ollama' ? defaultProviderSettings.ollama.endpoint
