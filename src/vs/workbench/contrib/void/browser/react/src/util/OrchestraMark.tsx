@@ -12,7 +12,7 @@ import React, { useId } from 'react'
 // `src/vs/code/electron-sandbox/workbench/workbench.ts`). That mark cannot just
 // be scaled down for chat - at the ~16px a loading indicator gets, five crossings
 // on a thin stroke collapse into an unreadable smudge. So this is the same motion
-// law (the phase advance, the 3.6s cycle, the easing) redrawn at three crossings
+// law (the phase advance, the 2s cycle, the easing) redrawn at three crossings
 // on a heavier stroke, which still reads inline next to text.
 //
 // The splash has to spell its keyframes out by hand because it runs before the
@@ -33,7 +33,7 @@ const OPEN_WOBBLE = 1.8
 const SEGMENTS = 16
 const FRAMES = 8
 
-const DURATION = '3.6s'
+const DURATION = '2s'
 const EASING = 'cubic-bezier(0.45, 0, 0.55, 1)'
 
 const ARROW_POINTS = '0,-6 14,0 0,6 4.5,0'
