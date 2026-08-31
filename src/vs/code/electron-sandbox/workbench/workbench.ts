@@ -293,10 +293,10 @@
 			#monaco-workbench-splash-logo .boot-ambient { fill: url(#boot-splash-ambient); animation: monaco-workbench-splash-ambient-pulse 4.8s ease-in-out infinite; }
 			#monaco-workbench-splash-logo .boot-strand { fill: none; stroke: url(#boot-splash-fade); stroke-width: 5; stroke-linecap: round;${bloom} }
 			#monaco-workbench-splash-logo .boot-arrowhead { fill: #e02431; stroke: #e02431; stroke-width: 1.4; stroke-linejoin: round; transform-box: view-box; transform-origin: 0 0;${bloom} }
-			#monaco-workbench-splash-logo .boot-strand-a { animation: monaco-workbench-splash-wave-a 2s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
-			#monaco-workbench-splash-logo .boot-strand-b { animation: monaco-workbench-splash-wave-b 2s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
-			#monaco-workbench-splash-logo .boot-arrowhead-a { animation: monaco-workbench-splash-head-a 2s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
-			#monaco-workbench-splash-logo .boot-arrowhead-b { animation: monaco-workbench-splash-head-b 2s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
+			#monaco-workbench-splash-logo .boot-strand-a { animation: monaco-workbench-splash-wave-a 4s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
+			#monaco-workbench-splash-logo .boot-strand-b { animation: monaco-workbench-splash-wave-b 4s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
+			#monaco-workbench-splash-logo .boot-arrowhead-a { animation: monaco-workbench-splash-head-a 4s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
+			#monaco-workbench-splash-logo .boot-arrowhead-b { animation: monaco-workbench-splash-head-b 4s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
 			@keyframes monaco-workbench-splash-logo-in {
 				0%   { opacity: 0; transform: scale(0.96); }
 				100% { opacity: 1; transform: scale(1); }
