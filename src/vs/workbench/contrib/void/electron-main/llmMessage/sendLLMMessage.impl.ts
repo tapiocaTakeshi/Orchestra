@@ -24,10 +24,19 @@ import {
 	isEmptyProjectContext,
 	mergeProjectContext,
 	parseProjectContext,
-	renderContextForRole,
 	renderSharedContext,
+	selectRelevantFilesForRole,
+	type ContextFile,
 	type ProjectContext,
 } from './divisionProjectContext.js';
+import {
+	applyContextPolicy,
+	ContextRequestLedger,
+	parseContextRequest,
+	renderDecision,
+	roleReceivesFileBodies,
+	type ContextRequest,
+} from './divisionContextPolicy.js';
 import { availableTools, InternalToolInfo } from '../../common/prompt/prompts.js';
 import { generateUuid } from '../../../../../base/common/uuid.js';
 
@@ -1524,6 +1533,73 @@ const callDivisionGenerateStream = async (
 	}
 };
 
+// Pull 型。各ロールは足りないファイルを自分から要求できる。
+//
+//   Coder →「Auth.ts が必要」→ Policy Layer → file-search の成果 → Coder
+//
+// 要求は divisionContextPolicy のゲートを通り、回数にも上限がある（暴走と循環の防止）。
+const PULL_REQUEST_INSTRUCTIONS = `## 足りないファイルの要求
+
+上に載っていないファイルが必要なら、回答の末尾に次のブロックを付けてください。追加のファイルを添えてもう一度あなたに依頼します。
+
+\`\`\`json context-request
+{ "paths": ["src/auth/Auth.ts"], "reason": "実装に必要" }
+\`\`\`
+
+- 本当に必要なファイルだけを挙げてください（1 回につき最大 8 件、1 タスクにつき最大 2 回）。
+- 要求と同時に、いま分かる範囲での回答も書いてください。要求だけを返さないでください。`;
+
+// file-search の成果を Leader へ戻し、残りタスクへのファイル配分を決めさせるための指示。
+//
+//   User → Leader →「FileSearcher に調査させよう」→ FileSearcher → 検索結果
+//        → Leader →「この情報なら Coder には A,B,C を渡そう」→ Coder
+const CONTEXT_ROUTING_PROMPT_HEADER = `あなたはAIチームのリーダーです。file-search の調査が終わったので、これから走る各タスクに「どのファイルを渡すか」を配分してください。
+
+## 配分の考え方
+- そのタスクを遂行するのに実際に読む必要があるファイルだけを挙げてください。多く渡すほど良いわけではありません。
+- ロールによって必要なものは違います。実装なら変更対象と呼び出し元、レビューなら実装とテスト、テストならテストと対象実装、デザインなら画面とスタイル。
+- ファイル一覧に無いパスは書かないでください。
+- 配分を決めきれないタスクは routes から省いてください。自動選択にフォールバックします。
+- サイズ上限・秘密情報の除外・ロール権限・コンテキスト上限は実行側が別途強制します。
+
+## 出力
+次の JSON だけを出力してください。挨拶や説明文は出力しないでください。
+
+\`\`\`json
+{ "routes": [ { "task": 1, "context": ["src/auth/Auth.ts"] } ] }
+\`\`\``;
+
+/** `{"routes":[{"task":n,"context":[...]}]}` を読む。読めなければ空配列。 */
+const parseContextRoutes = (output: string): { task: number; context: string[] }[] => {
+	const text = String(output ?? '');
+	const fence = text.match(/```(?:json)?\s*\n?([\s\S]*?)(\n?```|$)/);
+	const candidate = fence && fence[1].trim().startsWith('{')
+		? fence[1].trim()
+		: text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1);
+	if (!candidate || !candidate.startsWith('{')) return [];
+	try {
+		const parsed = JSON.parse(candidate) as { routes?: unknown };
+		if (!Array.isArray(parsed.routes)) return [];
+		const out: { task: number; context: string[] }[] = [];
+		for (const entry of parsed.routes) {
+			if (!entry || typeof entry !== 'object') continue;
+			const rec = entry as Record<string, unknown>;
+			const task = Number(rec.task ?? rec.taskIndex ?? rec.index);
+			if (!Number.isInteger(task)) continue;
+			const raw = rec.context ?? rec.files;
+			if (!Array.isArray(raw)) continue;
+			const context = raw
+				.map(v => (typeof v === 'string' ? v : (v as Record<string, unknown>)?.path))
+				.filter((v): v is string => typeof v === 'string' && !!v.trim())
+				.map(v => v.trim().replace(/^\.\//, ''));
+			if (context.length > 0) out.push({ task, context });
+		}
+		return out;
+	} catch (_e) {
+		return [];
+	}
+};
+
 const callDivisionTaskCreate = async (
 	endpointBase: string,
 	projectId: string,
@@ -1534,7 +1610,7 @@ const callDivisionTaskCreate = async (
 	workspacePath?: string,
 ): Promise<{
 	sessionId: string;
-	tasks: { taskId: string; role: string; title: string; input?: string; output?: string; provider?: string; dependsOn?: string[]; description?: string; reason?: string; mode?: string }[];
+	tasks: { taskId: string; role: string; title: string; input?: string; output?: string; provider?: string; dependsOn?: string[]; description?: string; reason?: string; mode?: string; context?: string[] }[];
 	finalRole: string;
 	error?: string;
 }> => {
@@ -2946,6 +3022,11 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			description?: string;
 			reason?: string;
 			mode?: string;
+			/**
+			 * Leader がこのタスクに配分したファイルパス。空なら自動選択。
+			 * どちらの場合も divisionContextPolicy のゲートを通してから渡す。
+			 */
+			context?: string[];
 		};
 
 		const isFileSearchRole = (r: string): boolean => {
@@ -3186,18 +3267,125 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			if (isFileSearchRole(o.role)) absorbFileSearchReport(o.output || '');
 		}
 
-		const buildPriorContextHistory = (targetRole: string): { role: 'user' | 'assistant'; content: string }[] => {
+		// Pull 型の追加要求を数え、循環と暴走を止める台帳。
+		const contextLedger = new ContextRequestLedger();
+
+		// ロールへ渡すコンテキストを組み立てる。
+		//
+		//  - Level 1（サマリ / ファイル一覧 / 依存関係）は全ロールへ。
+		//  - Level 2（本文）は **Leader が配分した task.context** を優先し、
+		//    指定が無ければロール別の自動選択にフォールバックする。
+		//  - どちらの経路も divisionContextPolicy のゲートを必ず通る。
+		//    サイズ上限・秘密情報・ロール権限・コンテキスト上限は Leader には動かせない。
+		const buildRoleContextBlock = (
+			targetRole: string,
+			leaderRoutedPaths: string[] | undefined,
+			extraPaths?: string[],
+		): { markdown: string; grantedPaths: string[] } => {
+			const ctx = currentProjectContext();
+			if (!ctx) return { markdown: '', grantedPaths: [] };
+
+			const shared = renderSharedContext(ctx);
+			if (!roleReceivesFileBodies(targetRole)) return { markdown: shared, grantedPaths: [] };
+
+			const byPath = new Map(ctx.relevantFiles.map(f => [f.path, f]));
+			const toContextFile = (path: string, reason?: string): ContextFile => {
+				const known = byPath.get(path);
+				if (!known) return { path, ...(reason ? { reason } : {}) };
+				return reason ? { ...known, reason } : known;
+			};
+
+			const routed = (leaderRoutedPaths ?? []).filter(Boolean);
+			const requested: ContextFile[] = [];
+			for (const p of extraPaths ?? []) requested.push(toContextFile(p, 'このタスクからの追加要求'));
+			if (routed.length > 0) {
+				for (const p of routed) requested.push(toContextFile(p, 'Leader が配分'));
+			} else {
+				requested.push(...selectRelevantFilesForRole(ctx, targetRole));
+			}
+
+			const decision = applyContextPolicy(targetRole, requested, ctx);
+			return {
+				markdown: [shared, renderDecision(targetRole, decision), PULL_REQUEST_INSTRUCTIONS]
+					.filter(Boolean)
+					.join('\n\n'),
+				grantedPaths: decision.granted.map(g => g.path),
+			};
+		};
+
+		// file-search の成果を Leader へ戻し、残りのタスクへのファイル配分を決めさせる。
+		// 1 実行につき 1 回。失敗しても致命ではない — 配分が得られなければロール別の
+		// 自動選択に戻るだけ。
+		let contextRoutingDone = false;
+		const applyLeaderContextRouting = async (fromIndex: number): Promise<void> => {
+			if (contextRoutingDone) return;
+			const ctx = currentProjectContext();
+			if (!ctx) return;
+			contextRoutingDone = true;
+
+			const targets = tasks
+				.map((t, idx) => ({ t, idx }))
+				.filter(({ t, idx }) =>
+					idx >= fromIndex
+					&& !isFileSearchRole(t.role)
+					&& !isImageRole(t.role)
+					&& (t.context ?? []).length === 0
+					&& roleReceivesFileBodies(t.role)
+				);
+			if (targets.length === 0) return;
+
+			const taskList = targets
+				.map(({ t, idx }) => `- task ${idx}: role=${t.role} / ${(t.description || t.title || '').slice(0, 200)}`)
+				.join('\n');
+			const routingInput = [
+				CONTEXT_ROUTING_PROMPT_HEADER,
+				`## ユーザーの元のリクエスト\n${currentInput}`,
+				renderSharedContext(ctx),
+				`## 配分先のタスク\n${taskList}`,
+			].join('\n\n---\n\n');
+
+			const routingResult = await callDivisionTaskExecute(
+				endpointBase, projectId, 'leader', routingInput, controller.signal,
+				() => { /* 配分の生ストリームはチャットに流さない */ },
+				divisionApiKey, sessionId,
+				undefined,
+				workspaceFolderPath,
+			);
+			if (routingResult.error) {
+				console.log(`[DivisionAPI] context routing failed: ${routingResult.error}`);
+				return;
+			}
+
+			const knownPaths = new Set(ctx.files);
+			const targetIndices = new Set(targets.map(t => t.idx));
+			let applied = 0;
+			for (const route of parseContextRoutes(routingResult.output || '')) {
+				if (!targetIndices.has(route.task)) continue;
+				const paths = route.context.filter(pth => knownPaths.has(pth));
+				if (paths.length === 0) continue;
+				tasks[route.task].context = paths;
+				applied++;
+			}
+			if (applied > 0) {
+				appendText(`🧭 Leader が ${applied} 件のタスクにファイルを配分しました\n\n`);
+			}
+		};
+
+		const buildPriorContextHistory = (
+			targetRole: string,
+			leaderRoutedPaths?: string[],
+			// 既に組み立て済みのコンテキストブロック（Pull 型の再実行で使う）。
+			// 指定するとポリシー適用をやり直さず、そのまま差し込む。
+			prebuiltContext?: string,
+		): { role: 'user' | 'assistant'; content: string }[] => {
 			const entries: { role: 'user' | 'assistant'; content: string }[] = [];
 			let total = 0;
 
 			// Level 1 + Level 2: file-search の成果はこのロール向けに整形して渡す。
-			const sharedForRole = currentProjectContext();
-			if (sharedForRole) {
-				const roleContext = renderContextForRole(sharedForRole, targetRole);
-				if (roleContext) {
-					entries.push({ role: 'assistant', content: roleContext });
-					total += roleContext.length;
-				}
+			const roleContext = prebuiltContext ?? buildRoleContextBlock(targetRole, leaderRoutedPaths).markdown;
+			if (roleContext) {
+				entries.push({ role: 'assistant', content: roleContext });
+				total += roleContext.length;
 			}
 
 			for (const o of taskOutputs) {
@@ -3261,6 +3449,8 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 						`📂 file-search 完了（${rawOutput.length.toLocaleString()} 文字を走査 → `
 						+ `共有コンテキスト ${sharedMarkdown.length.toLocaleString()} 文字 / ${fileCount} ファイル）\n\n`
 					);
+					// 調査結果を Leader へ戻し、後続タスクへの配分を決めさせる。
+					await applyLeaderContextRouting(i + 1);
 					if (mdInfo && maybePauseForApproval('filesearch', sharedMarkdown, mdInfo, i + 1, false)) return;
 				} catch (e: any) {
 					const errMsg = `(file-search failed: ${e?.message || String(e)})`;
@@ -3298,7 +3488,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 						controller.signal,
 						() => { /* base64 チャンクの生ストリーミングは行わない */ },
 						divisionApiKey, sessionId,
-						withStackContext([...chatHistory, ...buildPriorContextHistory(task.role)]),
+						withStackContext([...chatHistory, ...buildPriorContextHistory(task.role, task.context)]),
 						workspaceFolderPath,
 					);
 
@@ -3398,15 +3588,67 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				extraCoderBlock,
 			].filter(Boolean).join('\n');
 
-			const taskHistory = withStackContext([...chatHistory, ...buildPriorContextHistory(task.role)]);
-
-			const execResult = await callDivisionTaskExecute(
+			// Pull 型: ロールが「このファイルも要る」と要求したら、ポリシーを通して渡し直し、
+			// 同じタスクをもう一度だけ実行する。台帳が回数と繰り返しを見張るので止まる。
+			let roleContextBlock = buildRoleContextBlock(task.role, task.context);
+			let execResult = await callDivisionTaskExecute(
 				endpointBase, projectId, task.role, taskInput, controller.signal,
 				(chunk) => appendText(chunk),
 				divisionApiKey, sessionId,
-				taskHistory,
+				withStackContext([
+					...chatHistory,
+					...buildPriorContextHistory(task.role, task.context, roleContextBlock.markdown),
+				]),
 				workspaceFolderPath,
 			);
+
+			if (!execResult.error) {
+				contextLedger.recordGranted(i, roleContextBlock.grantedPaths);
+				while (true) {
+					const request: ContextRequest | null = parseContextRequest(execResult.output || '');
+					if (!request) break;
+
+					const denial = contextLedger.tryConsume(i, request);
+					if (denial) {
+						appendText(`\n> 📁 追加コンテキストの要求を見送りました: ${denial}\n\n`);
+						break;
+					}
+
+					const followUp = buildRoleContextBlock(task.role, task.context, request.paths);
+					const newlyGranted = followUp.grantedPaths.filter(
+						pth => !contextLedger.grantedPathsFor(i).has(pth)
+					);
+					if (newlyGranted.length === 0) {
+						appendText(`\n> 📁 要求されたファイルは渡せませんでした（存在しない / ポリシーで非配布）。\n\n`);
+						break;
+					}
+					contextLedger.recordGranted(i, followUp.grantedPaths);
+					roleContextBlock = followUp;
+					appendText(`\n> 📁 ${task.role} の要求に応じて追加: ${newlyGranted.map(pth => `\`${pth}\``).join(', ')}\n\n`);
+
+					const retryInput = [
+						`## 追加コンテキストを渡しました`,
+						[
+							`あなたが要求したファイル${request.reason ? `（理由: ${request.reason}）` : ''}を添付しました。`,
+							`要求が却下されたファイルは理由つきで記載しています。それらは前提から外して進めてください。`,
+							`今度は context-request を出さず、最終的な回答を書いてください。`,
+						].join('\n'),
+						taskInput,
+					].join('\n\n---\n\n');
+
+					execResult = await callDivisionTaskExecute(
+						endpointBase, projectId, task.role, retryInput, controller.signal,
+						(chunk) => appendText(chunk),
+						divisionApiKey, sessionId,
+						withStackContext([
+							...chatHistory,
+							...buildPriorContextHistory(task.role, task.context, followUp.markdown),
+						]),
+						workspaceFolderPath,
+					);
+					if (execResult.error) break;
+				}
+			}
 
 			if (execResult.error) {
 				const errMsg = `(execution failed: ${execResult.error})`;
@@ -3464,9 +3706,8 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		{
 			let total = 0;
 			// Reviewer にも他ロールと同じ共有コンテキストを渡す（reviewer 向けに絞った関連ファイル本文つき）。
-			const reviewSharedContext = currentProjectContext();
-			if (reviewSharedContext) {
-				const reviewerContext = renderContextForRole(reviewSharedContext, 'reviewer');
+			{
+				const reviewerContext = buildRoleContextBlock('reviewer', undefined).markdown;
 				if (reviewerContext) {
 					reviewContextHistory.push({ role: 'assistant', content: reviewerContext });
 					total += reviewerContext.length;
