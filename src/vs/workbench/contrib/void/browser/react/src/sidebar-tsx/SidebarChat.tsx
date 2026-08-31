@@ -2240,6 +2240,15 @@ max-w-none
 }
 
 // ─── Flow Indicator ──────────────────────────────────────
+
+// 「チャットが実際に動いているか」。`isRunning` には `idle` (呼び出しの合間の装飾用)
+// と `awaiting_user` (ユーザーの承認待ち) も入るが、どちらも実際には何も進んでいない。
+// 進行中インジケータ (ウェーブアニメーション / 思考中キャプション) はこの判定だけを
+// 見て出し入れする — 止まっている間もアニメーションが回っていると、待っているのか
+// 終わったのか読み取れなくなるため。
+const isChatActivelyRunning = (isRunning: IsRunningType): boolean =>
+	isRunning === 'LLM' || isRunning === 'tool';
+
 type FlowPhase = {
 	id: string;
 	label: string;
@@ -2340,7 +2349,7 @@ const FlowIndicator = ({ messages, isRunning, reasoningSoFar }: {
 		[messages, isRunning, reasoningSoFar, isDivision, roleAssignments]
 	);
 
-	if (!isRunning || phases.length === 0) return null;
+	if (!isChatActivelyRunning(isRunning) || phases.length === 0) return null;
 
 	const activePhase = phases.find(p => p.status === 'active');
 	if (!activePhase) return null;
@@ -3177,7 +3186,9 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 			<div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
 				<ReasoningWrapper
 					isDoneReasoning={isDoneReasoning}
-					isStreaming={!isCommitted}
+					// チャットが止まっている間は「思考中」ではない。中断などで isCommitted が
+					// 落ちないまま残っても、ウェーブが回り続けないようにする。
+					isStreaming={!isCommitted && isChatActivelyRunning(streamState?.isRunning)}
 					reasoningDuration={chatMessage.reasoningDuration}
 				>
 					<SmallProseWrapper>
@@ -5583,23 +5594,8 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 				displayContentSoFar={displayContentSoFar}
 			/>
 
-			{/* loading indicator — a compact "typing" pill so the wait reads as the
-			    assistant composing a reply rather than a bare row of dots. */}
-			{isRunning === 'LLM' || isRunning === 'idle' && !toolIsGenerating ?
-				<div className='void-bubble-in flex items-center'>
-					<span
-						className='inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full text-void-fg-3'
-						style={{
-							background: 'color-mix(in srgb, var(--void-bg-2) 88%, transparent)',
-							border: '1px solid color-mix(in srgb, var(--void-border-2) 70%, transparent)',
-							boxShadow: '0 1px 2px rgba(0,0,0,0.10)',
-						}}
-					>
-						<IconLoading />
-						<span className='text-[11px] leading-none text-void-fg-3'>{tUI('chat.generating')}</span>
-					</span>
-				</div>
-				: null}
+			{/* 「生成中」ピルは廃止。進行状況は FlowIndicator が 1 行で示すので、
+			    同じことを二重に出すと画面末尾が常にざわつく。 */}
 		</StickyStackProvider>
 
 
