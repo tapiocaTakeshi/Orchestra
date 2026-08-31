@@ -16,7 +16,7 @@ export const DIVISION_SUPABASE_ANON_KEY =
 	'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndtaHJiaGNueGdsdnF3dm5ieGx0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3OTg1MDAsImV4cCI6MjA5MTM3NDUwMH0.4qjCIOjFwm4XnmtqZN_N0zcZlhjGc2GQ4-x7ygMa3hM';
 
 // Division API のベース URL（API キーの作成時など）
-export const DIVISION_API_BASE_URL = 'http://localhost:3000';
+export const DIVISION_API_BASE_URL = 'https://api.division.he-ro.jp';
 
 // Supabase 上の API キーテーブル名（Prisma 側のモデル名 = 物理テーブル名 = "ApiKey"）
 export const DIVISION_API_KEY_TABLE = 'ApiKey';
