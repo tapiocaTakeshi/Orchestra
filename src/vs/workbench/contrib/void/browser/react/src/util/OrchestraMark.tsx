@@ -31,7 +31,7 @@ const RAMP = 20       // amplitude eases in over roughly one period, so the tail
 const OPEN_BASE = 11.5
 const OPEN_WOBBLE = 1.8
 const SEGMENTS = 16
-const FRAMES = 8
+const FRAMES = 16     // more phase samples per cycle keeps the weave smooth now that it runs faster
 
 const DURATION = '2s'
 const EASING = 'cubic-bezier(0.45, 0, 0.55, 1)'
@@ -99,7 +99,7 @@ const keyframesFor = (name: string, at: (phase: number) => string): string => {
 // attributes pass through that rewrite untouched.
 const buildCss = (): string => [
 	`[data-orchestra-mark] { display: inline-block; vertical-align: middle; overflow: visible; flex: none; }`,
-	`[data-orchestra-mark] [data-om^="strand"] { fill: none; stroke-width: 5; stroke-linecap: round; }`,
+	`[data-orchestra-mark] [data-om^="strand"] { fill: none; stroke-width: 4; stroke-linecap: round; }`,
 	`[data-orchestra-mark] [data-om^="head"] { fill: #e02431; stroke: none; transform-box: view-box; transform-origin: 0 0; }`,
 	`[data-orchestra-mark] [data-om="strand-a"] { animation: orchestra-mark-wave-a ${DURATION} ${EASING} infinite; }`,
 	`[data-orchestra-mark] [data-om="strand-b"] { animation: orchestra-mark-wave-b ${DURATION} ${EASING} infinite; }`,
