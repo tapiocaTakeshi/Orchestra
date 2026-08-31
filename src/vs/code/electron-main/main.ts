@@ -26,6 +26,7 @@ import { ProxyChannel } from '../../base/parts/ipc/common/ipc.js';
 import { Client as NodeIPCClient } from '../../base/parts/ipc/common/ipc.net.js';
 import { connect as nodeIPCConnect, serve as nodeIPCServe, Server as NodeIPCServer, XDG_RUNTIME_DIR } from '../../base/parts/ipc/node/ipc.net.js';
 import { CodeApplication } from './app.js';
+import { launchDivisionApiIfAvailable, stopDivisionApi } from '../../platform/division/electron-main/divisionApiLauncher.js';
 import { localize } from '../../nls.js';
 import { IConfigurationService } from '../../platform/configuration/common/configuration.js';
 import { ConfigurationService } from '../../platform/configuration/common/configurationService.js';
@@ -113,6 +114,10 @@ class CodeMain {
 			// .env not found or unreadable, ignore
 		}
 
+		// Start the local Division API server (sibling `division` checkout) if available.
+		// Fire-and-forget so it never blocks Orchestra's own startup.
+		launchDivisionApiIfAvailable().catch(err => console.error('[division-api] launch failed:', err));
+
 		// Create services
 		const [instantiationService, instanceEnvironment, environmentMainService, configurationService, stateMainService, bufferLogger, productService, userDataProfilesMainService] = this.createServices();
 
@@ -152,6 +157,7 @@ class CodeMain {
 
 				// Lifecycle
 				Event.once(lifecycleMainService.onWillShutdown)(evt => {
+					stopDivisionApi();
 					fileService.dispose();
 					configurationService.dispose();
 					evt.join('instanceLockfile', promises.unlink(environmentMainService.mainLockfile).catch(() => { /* ignored */ }));
