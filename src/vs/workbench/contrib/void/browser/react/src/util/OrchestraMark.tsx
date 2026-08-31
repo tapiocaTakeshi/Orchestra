@@ -99,7 +99,7 @@ const keyframesFor = (name: string, at: (phase: number) => string): string => {
 // attributes pass through that rewrite untouched.
 const buildCss = (): string => [
 	`[data-orchestra-mark] { display: inline-block; vertical-align: middle; overflow: visible; flex: none; }`,
-	`[data-orchestra-mark] [data-om^="strand"] { fill: none; stroke-width: 4; stroke-linecap: round; }`,
+	`[data-orchestra-mark] [data-om^="strand"] { fill: none; stroke-width: 2.5; stroke-linecap: round; }`,
 	`[data-orchestra-mark] [data-om^="head"] { fill: #e02431; stroke: none; transform-box: view-box; transform-origin: 0 0; }`,
 	`[data-orchestra-mark] [data-om="strand-a"] { animation: orchestra-mark-wave-a ${DURATION} ${EASING} infinite; }`,
 	`[data-orchestra-mark] [data-om="strand-b"] { animation: orchestra-mark-wave-b ${DURATION} ${EASING} infinite; }`,
