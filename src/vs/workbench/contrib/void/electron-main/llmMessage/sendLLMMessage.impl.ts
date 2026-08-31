@@ -20,6 +20,14 @@ import { AnthropicLLMChatMessage, GeminiLLMChatMessage, LLMChatMessage, LLMFIMMe
 import { ChatMode, displayInfoOfProviderName, ModelSelectionOptions, OverridesOfModel, ProviderName, RoleAssignment, SettingsOfProvider } from '../../common/voidSettingsTypes.js';
 import { getSendableReasoningInfo, getModelCapabilities, getProviderCapabilities, defaultProviderSettings, getReservedOutputTokenSpace } from '../../common/modelCapabilities.js';
 import { extractReasoningWrapper, extractXMLToolsWrapper } from './extractGrammar.js';
+import {
+	isEmptyProjectContext,
+	mergeProjectContext,
+	parseProjectContext,
+	renderContextForRole,
+	renderSharedContext,
+	type ProjectContext,
+} from './divisionProjectContext.js';
 import { availableTools, InternalToolInfo } from '../../common/prompt/prompts.js';
 import { generateUuid } from '../../../../../base/common/uuid.js';
 
@@ -3156,11 +3164,46 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			return true;
 		};
 
-		const buildPriorContextHistory = (): { role: 'user' | 'assistant'; content: string }[] => {
+		// file-search の成果は「共有プロジェクトコンテキスト」として全ロールに配る。
+		// 全文レポートをそのまま全員に渡すとトークンが爆発し、途中打ち切りで
+		// ファイル一覧すら欠落するため、Level 1（要約・ファイル一覧・依存関係）と
+		// Level 2（そのロールに関係するファイル本文だけ）に分けて配布する。
+		let projectContext: ProjectContext | null = null;
+
+		const absorbFileSearchReport = (report: string): void => {
+			if (!report || !report.trim()) return;
+			const parsed = parseProjectContext(report);
+			if (isEmptyProjectContext(parsed)) return;
+			projectContext = mergeProjectContext(projectContext, parsed);
+		};
+		/** projectContext は複数のクロージャから更新されるので、参照は必ずこの getter 経由で行う。 */
+		const currentProjectContext = (): ProjectContext | null =>
+			projectContext && !isEmptyProjectContext(projectContext) ? projectContext : null;
+
+		// 承認モードからの再開時は taskOutputs しか残っていないので、
+		// 保存済みの file-search 出力からコンテキストを組み直す。
+		for (const o of taskOutputs) {
+			if (isFileSearchRole(o.role)) absorbFileSearchReport(o.output || '');
+		}
+
+		const buildPriorContextHistory = (targetRole: string): { role: 'user' | 'assistant'; content: string }[] => {
 			const entries: { role: 'user' | 'assistant'; content: string }[] = [];
 			let total = 0;
+
+			// Level 1 + Level 2: file-search の成果はこのロール向けに整形して渡す。
+			const sharedForRole = currentProjectContext();
+			if (sharedForRole) {
+				const roleContext = renderContextForRole(sharedForRole, targetRole);
+				if (roleContext) {
+					entries.push({ role: 'assistant', content: roleContext });
+					total += roleContext.length;
+				}
+			}
+
 			for (const o of taskOutputs) {
 				if (!o.output || !o.output.trim()) continue;
+				// file-search の全文レポートは共有コンテキストとして配布済み。
+				if (isFileSearchRole(o.role)) continue;
 				const truncated = truncateForContext(o.output.trim(), MAX_CHARS_PER_CONTEXT);
 				if (total + truncated.length > MAX_TOTAL_CONTEXT_CHARS) {
 					entries.push({
@@ -3201,17 +3244,24 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 						maxIterations: 3,
 						onIterationProgress: (text) => appendText(text),
 					});
-					const capped = truncateForContext(rawOutput, MAX_CHARS_PER_CONTEXT);
+					// 全文レポートは taskOutputs に持っておき（Level 2 の切り出し元）、
+					// 後続ロールへは共有コンテキストに変換したものだけを渡す。
+					absorbFileSearchReport(rawOutput);
+					const searchedContext = currentProjectContext();
+					const sharedMarkdown = searchedContext
+						? renderSharedContext(searchedContext)
+						: truncateForContext(rawOutput, MAX_CHARS_PER_CONTEXT);
 					const mdInfo = buildMdFileInfo(workspaceFolderPath, 'file-search');
 					if (mdInfo) {
-						saveFlowResultAsMd(workspaceFolderPath, 'file-search', task.title || '', capped, sessionId || 'file-search');
+						saveFlowResultAsMd(workspaceFolderPath, 'file-search', task.title || '', sharedMarkdown, sessionId || 'file-search');
 					}
-					taskOutputs.push({ role: 'filesearch', title: task.title || '', output: capped, mdFileName: mdInfo?.mdFileName, mdFilePath: mdInfo?.mdFilePath });
-					const sizeMsg = rawOutput.length > capped.length
-						? `（${rawOutput.length.toLocaleString()} → ${capped.length.toLocaleString()} 文字に要約）`
-						: `（${capped.length.toLocaleString()} 文字）`;
-					appendText(`📂 file-search 完了 ${sizeMsg}\n\n`);
-					if (mdInfo && maybePauseForApproval('filesearch', capped, mdInfo, i + 1, false)) return;
+					taskOutputs.push({ role: 'filesearch', title: task.title || '', output: rawOutput, mdFileName: mdInfo?.mdFileName, mdFilePath: mdInfo?.mdFilePath });
+					const fileCount = searchedContext ? searchedContext.files.length : 0;
+					appendText(
+						`📂 file-search 完了（${rawOutput.length.toLocaleString()} 文字を走査 → `
+						+ `共有コンテキスト ${sharedMarkdown.length.toLocaleString()} 文字 / ${fileCount} ファイル）\n\n`
+					);
+					if (mdInfo && maybePauseForApproval('filesearch', sharedMarkdown, mdInfo, i + 1, false)) return;
 				} catch (e: any) {
 					const errMsg = `(file-search failed: ${e?.message || String(e)})`;
 					appendText(`⚠️ file-search エラー: ${e?.message || String(e)}\n\n`);
@@ -3248,7 +3298,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 						controller.signal,
 						() => { /* base64 チャンクの生ストリーミングは行わない */ },
 						divisionApiKey, sessionId,
-						withStackContext([...chatHistory, ...buildPriorContextHistory()]),
+						withStackContext([...chatHistory, ...buildPriorContextHistory(task.role)]),
 						workspaceFolderPath,
 					);
 
@@ -3304,15 +3354,13 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			// Coder/Writer 系には実装指示と existing files を添付
 			let extraCoderBlock = '';
 			if (isCoderLikeRole(role)) {
-				const existingFilePaths: string[] = [];
-				for (const o of taskOutputs) {
-					if (!isFileSearchRole(o.role)) continue;
-					const lines = (o.output || '').split('\n');
-					for (const line of lines) {
-						const m = line.match(/^###\s+`([^`]+)`\s*$/);
-						if (m && m[1]) existingFilePaths.push(m[1]);
-					}
-				}
+				// 既存ファイル一覧は共有コンテキストから引く（全文レポートの見出し解析より
+				// 取りこぼしが少なく、承認モードで再開したあとでも同じ結果になる）。
+				// 一覧が長くなりすぎないよう、関連度の高いファイルに絞る。
+				const coderContext = currentProjectContext();
+				const existingFilePaths: string[] = coderContext
+					? coderContext.relevantFiles.slice(0, 200).map(f => f.path)
+					: [];
 				const existingBlock = existingFilePaths.length > 0
 					? [
 						``,
@@ -3350,7 +3398,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				extraCoderBlock,
 			].filter(Boolean).join('\n');
 
-			const taskHistory = withStackContext([...chatHistory, ...buildPriorContextHistory()]);
+			const taskHistory = withStackContext([...chatHistory, ...buildPriorContextHistory(task.role)]);
 
 			const execResult = await callDivisionTaskExecute(
 				endpointBase, projectId, task.role, taskInput, controller.signal,
@@ -3415,8 +3463,18 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		const reviewContextHistory: { role: 'user' | 'assistant'; content: string }[] = [];
 		{
 			let total = 0;
+			// Reviewer にも他ロールと同じ共有コンテキストを渡す（reviewer 向けに絞った関連ファイル本文つき）。
+			const reviewSharedContext = currentProjectContext();
+			if (reviewSharedContext) {
+				const reviewerContext = renderContextForRole(reviewSharedContext, 'reviewer');
+				if (reviewerContext) {
+					reviewContextHistory.push({ role: 'assistant', content: reviewerContext });
+					total += reviewerContext.length;
+				}
+			}
 			for (const o of taskOutputs) {
 				if (!o.output || !o.output.trim()) continue;
+				if (isFileSearchRole(o.role)) continue;
 				const truncated = truncateForContext(o.output.trim(), MAX_CHARS_PER_CONTEXT);
 				if (total + truncated.length > MAX_TOTAL_CONTEXT_CHARS) {
 					reviewContextHistory.push({
