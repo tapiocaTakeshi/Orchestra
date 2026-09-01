@@ -659,7 +659,9 @@ export const defaultGlobalSettings: GlobalSettings = {
 	enableFastApply: true,
 	chatMode: 'agent',
 	commitMessageLanguage: 'auto',
-	autoApprove: {},
+	// AI チャットが生成したターミナルコマンド (run_command / run_persistent_command) は
+	// 承認待ちで止めず、生成された瞬間に自動実行する。
+	autoApprove: { terminal: true },
 	showInlineSuggestions: true,
 	includeToolLintErrors: true,
 	isOnboardingComplete: false,
