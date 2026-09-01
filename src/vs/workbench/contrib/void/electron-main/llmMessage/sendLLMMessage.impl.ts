@@ -2866,11 +2866,33 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 
 			const mode = chatMode === 'agent' ? 'function_calling' : chatMode === 'gather' ? 'search' : 'chat';
 
+			// 単独モデル選択時（Leader によるロール分解を経由しない）でも、file-searcher と
+			// 同じローカル実装（main process の fs アクセス）でワークスペースの実ファイルを
+			// 読み込み、プロンプトへ埋め込んで渡す。リモート Division API へは workspacePath
+			// を送っているだけでは無視される（file-searcher / coder はローカル実行専用）ので、
+			// ここで読んでおかないとモデルは実際のコード内容を一切見られない。
+			let workspaceContextMarkdown = '';
+			if (workspaceFolderPath) {
+				const stackMd = buildStackContextMarkdown(workspaceFolderPath);
+				const fileSearchMd = buildFileSearchOutputLooped(workspaceFolderPath, prompt, {
+					maxIterations: 2,
+					onIterationProgress: (text) => appendText(text),
+				});
+				workspaceContextMarkdown = [stackMd, fileSearchMd].filter(Boolean).join('\n\n---\n\n');
+				if (workspaceContextMarkdown) {
+					const parsedCtx = parseProjectContext(fileSearchMd);
+					const fileCount = !isEmptyProjectContext(parsedCtx) ? parsedCtx.files.length : 0;
+					appendText(`📂 ワークスペースのファイルを読み込みました（${fileCount} ファイル）\n\n`);
+				}
+			}
+
 			// In agent mode, append code output instructions so the model produces
 			// file-targeted code blocks / SEARCH-REPLACE diffs that we can auto-apply.
-			const directPrompt = chatMode === 'agent'
-				? `${prompt}\n\n${buildCodeOutputInstructions()}`
-				: prompt;
+			const directPrompt = [
+				workspaceContextMarkdown,
+				chatMode === 'agent' ? buildCodeOutputInstructions() : '',
+				prompt,
+			].filter(Boolean).join('\n\n---\n\n');
 
 			const result = await callDivisionGenerateStream(
 				endpointBase, selectedModel, directPrompt, controller.signal,
