@@ -3270,6 +3270,27 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		// Pull 型の追加要求を数え、循環と暴走を止める台帳。
 		const contextLedger = new ContextRequestLedger();
 
+		// file-search の全件スキャンは予算（MAX_SEARCH_FILES / MAX_TOTAL_OUTPUT_CHARS）で
+		// 打ち切られるため、パスは分かっていても本文（ctx.bodies）が無いファイルが残る。
+		// これまでは「本文未取得。必要ならツールで読むこと」と却下するだけで、ロール側に
+		// 実際の read_file ツールが無いため Level 3 が機能していなかった。
+		// main process はワークスペースへの fs アクセスを既に持っているので、Leader 配分や
+		// ロールからの Pull 型要求で指定されたパスはここで直接ディスクから読み込んで補完する。
+		const loadMissingFileBodies = (ctx: ProjectContext, paths: string[]): void => {
+			if (!workspaceFolderPath) return;
+			const root = path.resolve(workspaceFolderPath);
+			for (const rawPath of paths) {
+				const relPath = String(rawPath ?? '').trim();
+				if (!relPath || path.isAbsolute(relPath) || ctx.bodies[relPath] !== undefined) continue;
+				const full = path.resolve(root, relPath);
+				if (full !== root && !full.startsWith(root + path.sep)) continue; // パストラバーサル防止
+				const content = safeReadText(full, MAX_FILE_SIZE_BYTES);
+				if (content === null) continue;
+				ctx.bodies[relPath] = content;
+				if (!ctx.files.includes(relPath)) ctx.files.push(relPath);
+			}
+		};
+
 		// ロールへ渡すコンテキストを組み立てる。
 		//
 		//  - Level 1（サマリ / ファイル一覧 / 依存関係）は全ロールへ。
@@ -3303,6 +3324,8 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			} else {
 				requested.push(...selectRelevantFilesForRole(ctx, targetRole));
 			}
+
+			loadMissingFileBodies(ctx, requested.map(f => f.path));
 
 			const decision = applyContextPolicy(targetRole, requested, ctx);
 			return {
