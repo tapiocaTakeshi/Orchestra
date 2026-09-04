@@ -2,7 +2,9 @@
  *  Division Project Service
  *  Manages .division/projects.json per workspace for project-local agent role assignments.
  *  Supports multiple division projects with an active project selection.
- *  Auto-syncs project data to Supabase when projects change.
+ *  Auto-syncs project data to Supabase when projects change (push), and periodically
+ *  polls Supabase for role/provider changes made remotely (pull), so local roles stay
+ *  in sync without requiring a manual "Pull from Remote".
  *--------------------------------------------------------------------------------------*/
 
 import { Disposable } from '../../../../base/common/lifecycle.js';
@@ -15,6 +17,13 @@ import { createDecorator } from '../../../../platform/instantiation/common/insta
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
 import { AgentRole, defaultRoleAssignments, displayInfoOfProviderName, ProviderName, providerNames, RoleAssignment } from '../common/voidSettingsTypes.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
+import * as dom from '../../../../base/browser/dom.js';
+
+
+// --- Auto-pull configuration ---
+// Supabase 側（Web ダッシュボード等）でロール/プロバイダが変更された場合に、
+// 手動で "Pull from Remote" を叩かなくても自動的にローカルへ反映されるようにする。
+const AUTO_PULL_INTERVAL_MS = 60 * 1000; // 1 minute
 
 
 // --- Canonical ID normalizers ---
@@ -230,6 +239,9 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 	private _activeProjectIds: string[] = [];
 	private _projectConfigUri: URI | null = null;
 
+	private _autoPullIntervalId: number | undefined;
+	private _isAutoPulling = false;
+
 	get projectConfig(): DivisionProjectConfig | null {
 		const firstActiveId = this._activeProjectIds[0];
 		if (!firstActiveId) return null;
@@ -271,6 +283,46 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 
 		// Eagerly fetch the Division API key at startup (independent of sync)
 		this._fetchAndStoreDivisionApiKey();
+
+		// Periodically pull the latest roles from Supabase so that changes made
+		// remotely (e.g. via the web dashboard) are reflected locally automatically.
+		this._startAutoPull();
+	}
+
+	private _startAutoPull(): void {
+		const { window } = dom.getActiveWindow();
+		this._autoPullIntervalId = window.setInterval(() => {
+			this._autoPullFromSupabase();
+		}, AUTO_PULL_INTERVAL_MS);
+	}
+
+	private async _autoPullFromSupabase(): Promise<void> {
+		if (this._isAutoPulling) return;
+		if (!this._projectConfigUri || this._projects.length === 0) return;
+
+		this._isAutoPulling = true;
+		try {
+			const result = await this.fetchFromSupabase();
+			if (result.success) {
+				console.log('[DivisionProjectService] Auto-pull from Supabase:', result.message);
+			} else {
+				// Not logged in / no project configured yet — not an error, just skip quietly.
+				console.log('[DivisionProjectService] Auto-pull skipped:', result.message);
+			}
+		} catch (e) {
+			console.warn('[DivisionProjectService] Auto-pull from Supabase failed:', e);
+		} finally {
+			this._isAutoPulling = false;
+		}
+	}
+
+	override dispose(): void {
+		if (this._autoPullIntervalId !== undefined) {
+			const { window } = dom.getActiveWindow();
+			window.clearInterval(this._autoPullIntervalId);
+			this._autoPullIntervalId = undefined;
+		}
+		super.dispose();
 	}
 
 	private async _initForWorkspace(): Promise<void> {
