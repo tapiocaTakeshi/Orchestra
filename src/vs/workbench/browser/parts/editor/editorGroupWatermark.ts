@@ -15,7 +15,7 @@ import { ICommandService } from '../../../../platform/commands/common/commands.j
 import { defaultKeybindingLabelStyles } from '../../../../platform/theme/browser/defaultStyles.js';
 import { editorForeground, registerColor, transparent } from '../../../../platform/theme/common/colorRegistry.js';
 import { IThemeService } from '../../../../platform/theme/common/themeService.js';
-import { isRecentFolder, IWorkspacesService } from '../../../../platform/workspaces/common/workspaces.js';
+import { IRecent, isRecentFolder, IWorkspacesService } from '../../../../platform/workspaces/common/workspaces.js';
 import { IHostService } from '../../../services/host/browser/host.js';
 import { ILabelService, Verbosity } from '../../../../platform/label/common/label.js';
 
@@ -26,6 +26,13 @@ import { IViewsService } from '../../../services/views/common/viewsService.js';
 
 /* eslint-disable */ // Void
 import { VOID_CTRL_K_ACTION_ID, VOID_CTRL_L_ACTION_ID } from '../../../contrib/void/browser/actionIDs.js';
+import {
+	ORCHESTRA_CHAT_SEND_PROMPT_ACTION_ID,
+	ORCHESTRA_UI_MODE_SETTING,
+	ORCHESTRA_UI_SET_PRO_MODE_ACTION_ID,
+	ORCHESTRA_UI_TOGGLE_FILES_ACTION_ID,
+	ORCHESTRA_UI_TOGGLE_TERMINAL_ACTION_ID,
+} from '../../../contrib/void/browser/orchestraUiModeTypes.js';
 import { VIEWLET_ID as REMOTE_EXPLORER_VIEWLET_ID } from '../../../contrib/remote/browser/remoteExplorer.js';
 /* eslint-enable */
 
@@ -82,6 +89,8 @@ import { VIEWLET_ID as REMOTE_EXPLORER_VIEWLET_ID } from '../../../contrib/remot
 
 
 export class EditorGroupWatermark extends Disposable {
+	private readonly rootElement: HTMLElement;
+	private readonly iconElement: HTMLElement;
 	private readonly shortcuts: HTMLElement;
 	private readonly transientDisposables = this._register(new DisposableStore());
 	// private enabled: boolean = false;
@@ -109,12 +118,14 @@ export class EditorGroupWatermark extends Disposable {
 		]);
 
 		append(container, elements.root);
+		this.rootElement = elements.root;
+		this.iconElement = elements.icon;
 		this.shortcuts = elements.shortcuts; // shortcuts div is modified on render()
 
 		// void icon style
 		const updateTheme = () => {
-			elements.icon.style.maxWidth = '220px'
-			elements.icon.style.opacity = '70%' // Slightly higher opacity for the new logo
+			elements.icon.style.maxWidth = this.isSimpleMode() ? '96px' : '220px'
+			elements.icon.style.opacity = this.isSimpleMode() ? '90%' : '70%' // Slightly higher opacity for the new logo
 			// elements.icon.style.filter = isDark ? '' : 'invert(1)' //brightness(.5)
 		}
 		updateTheme()
@@ -130,7 +141,7 @@ export class EditorGroupWatermark extends Disposable {
 
 	private registerListeners(): void {
 		this._register(this.configurationService.onDidChangeConfiguration(e => {
-			if (e.affectsConfiguration('workbench.tips.enabled')) {
+			if (e.affectsConfiguration('workbench.tips.enabled') || e.affectsConfiguration(ORCHESTRA_UI_MODE_SETTING)) {
 				this.render();
 			}
 		}));
@@ -156,9 +167,21 @@ export class EditorGroupWatermark extends Disposable {
 
 
 
+	// Orchestra: かんたんモードかどうか。かんたんモードでは Void 由来のショートカット表ではなく、
+	// 日本語のホーム画面 (renderSimpleHome) を出す。
+	private isSimpleMode(): boolean {
+		return this.configurationService.getValue<string>(ORCHESTRA_UI_MODE_SETTING) !== 'pro';
+	}
+
 	private render(): void {
 
 		this.clear();
+
+		const simple = this.isSimpleMode();
+		this.rootElement.classList.toggle('orchestra-home', simple);
+		this.iconElement.style.maxWidth = simple ? '96px' : '220px';
+		this.iconElement.style.opacity = simple ? '90%' : '70%';
+
 		const voidIconBox = append(this.shortcuts, $('.watermark-box'));
 		const recentsBox = append(this.shortcuts, $('div'));
 		recentsBox.style.display = 'flex'
@@ -178,6 +201,11 @@ export class EditorGroupWatermark extends Disposable {
 			this.currentDisposables.forEach(label => label.dispose());
 			this.currentDisposables.clear();
 
+			// Orchestra: かんたんモードのホーム画面
+			if (this.isSimpleMode()) {
+				this.renderSimpleHome(voidIconBox, recentlyOpened);
+				return;
+			}
 
 			// Void - if the workbench is empty, show open
 			if (this.contextService.getWorkbenchState() === WorkbenchState.EMPTY) {
@@ -325,6 +353,112 @@ export class EditorGroupWatermark extends Disposable {
 
 		update();
 		this.transientDisposables.add(this.keybindingService.onDidUpdateKeybindings(update));
+	}
+
+	// ---------------------------------------------------------------------------------------
+	// Orchestra かんたんモードのホーム画面
+	//
+	// IDE の「透かし + ショートカット一覧」ではなく、次に何をすればいいかが日本語で分かる画面。
+	// フォルダ未選択なら「フォルダを開く」、選択済みなら「チャットに話しかける」へ誘導する。
+	// ---------------------------------------------------------------------------------------
+	private renderSimpleHome(box: HTMLElement, recentlyOpened: readonly IRecent[]): void {
+		const hasFolder = this.contextService.getWorkbenchState() !== WorkbenchState.EMPTY;
+		const run = (id: string, ...args: unknown[]) => () => { this.commandService.executeCommand(id, ...args); };
+
+		const home = append(box, $('.orchestra-home__body'));
+
+		// 見出し
+		const heading = append(home, $('.orchestra-home__heading'));
+		append(heading, $('h1.orchestra-home__title')).textContent = hasFolder
+			? '準備ができました'
+			: 'ようこそ、Orchestra へ';
+		append(heading, $('p.orchestra-home__subtitle')).textContent = hasFolder
+			? '右側の AI チャットに、作りたいものや困っていることをそのまま書いてください。コードは AI が書きます。'
+			: '作りたいものを日本語で伝えるだけで、AI がコードを書いてくれるアプリです。まずは作業するフォルダを選びましょう。';
+
+		if (!hasFolder) {
+			// 3 ステップ
+			const steps = append(home, $('ol.orchestra-home__steps'));
+			for (const [n, title, desc] of [
+				['1', 'フォルダを選ぶ', '作業場所になるフォルダです。空のフォルダでも大丈夫。'],
+				['2', 'チャットに話しかける', '「TODO アプリを作って」のように、日本語で。'],
+				['3', 'できあがりを確認する', 'AI が作ったものを見て、気になる点をまた伝えるだけ。'],
+			]) {
+				const li = append(steps, $('li.orchestra-home__step'));
+				append(li, $('span.orchestra-home__step-num')).textContent = n;
+				const text = append(li, $('div.orchestra-home__step-text'));
+				append(text, $('strong')).textContent = title;
+				append(text, $('span')).textContent = desc;
+			}
+
+			// 主ボタン
+			const actions = append(home, $('.orchestra-home__actions'));
+			const openFolder = append(actions, $('button.orchestra-home__button.orchestra-home__button--primary'));
+			openFolder.textContent = 'フォルダを開く';
+			openFolder.onclick = () => {
+				this.commandService.executeCommand(isMacintosh && isNative ? OpenFileFolderAction.ID : OpenFolderAction.ID);
+			};
+			const askAi = append(actions, $('button.orchestra-home__button'));
+			askAi.textContent = 'まずは AI に相談する';
+			askAi.onclick = run(ORCHESTRA_CHAT_SEND_PROMPT_ACTION_ID);
+
+			// 最近使ったフォルダ
+			const recents = recentlyOpened.filter(isRecentFolder).slice(0, 5);
+			if (recents.length > 0) {
+				append(home, $('h2.orchestra-home__section-title')).textContent = '最近使ったフォルダ';
+				const list = append(home, $('ul.orchestra-home__recents'));
+				for (const w of recents) {
+					const fullPath = w.label || this.labelService.getWorkspaceLabel(w.folderUri, { verbose: Verbosity.LONG });
+					const { name, parentPath } = splitRecentLabel(fullPath);
+					const item = append(list, $('li'));
+					const button = append(item, $('button.orchestra-home__recent'));
+					button.title = fullPath;
+					append(button, $('span.orchestra-home__recent-name')).textContent = name;
+					append(button, $('span.orchestra-home__recent-path')).textContent = parentPath;
+					button.onclick = e => {
+						this.hostService.openWindow([{ folderUri: w.folderUri } satisfies IWindowOpenable], {
+							forceNewWindow: e.ctrlKey || e.metaKey,
+							remoteAuthority: w.remoteAuthority || null,
+						});
+						e.preventDefault();
+						e.stopPropagation();
+					};
+				}
+			}
+		} else {
+			// 例: 押すとそのままチャットに送られる
+			append(home, $('h2.orchestra-home__section-title')).textContent = 'たとえば、こんなふうに';
+			const examples = append(home, $('.orchestra-home__examples'));
+			for (const [label, prompt] of [
+				['このフォルダに何が入っているか教えて', 'このフォルダの中身を見て、何のプロジェクトで、どんなファイルがあるのか初心者にも分かるように説明してください。'],
+				['シンプルな TODO アプリを作って', 'このフォルダに、ブラウザで動くシンプルな TODO アプリを作ってください。HTML / CSS / JavaScript だけで作り、開き方も教えてください。'],
+				['エラーが出たので直してほしい', 'いまエラーが出ています。原因を調べて直してください。必要なら、どのエラーメッセージを貼ればいいか教えてください。'],
+			]) {
+				const chip = append(examples, $('button.orchestra-home__example'));
+				chip.textContent = label;
+				chip.title = 'クリックするとチャットに送信します';
+				chip.onclick = run(ORCHESTRA_CHAT_SEND_PROMPT_ACTION_ID, prompt);
+			}
+
+			const actions = append(home, $('.orchestra-home__actions'));
+			const chat = append(actions, $('button.orchestra-home__button.orchestra-home__button--primary'));
+			chat.textContent = 'チャットに話しかける';
+			chat.onclick = run(ORCHESTRA_CHAT_SEND_PROMPT_ACTION_ID);
+			const files = append(actions, $('button.orchestra-home__button'));
+			files.textContent = 'ファイル一覧を見る';
+			files.onclick = run(ORCHESTRA_UI_TOGGLE_FILES_ACTION_ID);
+			const terminal = append(actions, $('button.orchestra-home__button'));
+			terminal.textContent = 'ターミナルを開く';
+			terminal.onclick = run(ORCHESTRA_UI_TOGGLE_TERMINAL_ACTION_ID);
+		}
+
+		// 上級者向けの逃げ道
+		const footer = append(home, $('p.orchestra-home__footer'));
+		append(footer, $('span')).textContent = 'エディタの操作に慣れている方は ';
+		const pro = append(footer, $('button.orchestra-home__link'));
+		pro.textContent = '上級者モード (IDE 表示)';
+		pro.onclick = run(ORCHESTRA_UI_SET_PRO_MODE_ACTION_ID);
+		append(footer, $('span')).textContent = ' に切り替えられます。';
 	}
 
 	private clear(): void {

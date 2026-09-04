@@ -10,7 +10,7 @@ import './sidebar-chat-modern.css'
 import './sidebar-chat-redesign.css';
 
 
-import { useAccessor, useChatThreadsState, useChatThreadsStreamState, useSettingsState, useActiveURI, useCommandBarState, useFullChatThreadsStreamState, useDivisionProjects, useDivisionProjectConfig, useIsDark, useOrchestraUpdateState } from '../util/services.js';
+import { useAccessor, useChatThreadsState, useChatThreadsStreamState, useSettingsState, useActiveURI, useCommandBarState, useFullChatThreadsStreamState, useDivisionProjects, useDivisionProjectConfig, useIsDark, useOrchestraUpdateState, useOrchestraUiMode } from '../util/services.js';
 import { useTranslation } from '../util/i18n.js';
 import { OrchestraMark } from '../util/OrchestraMark.js';
 import { FloatingPortal } from '@floating-ui/react';
@@ -26,12 +26,13 @@ import { ModelDropdown, } from '../void-settings-tsx/ModelDropdown.js';
 import { PastThreadsList } from './SidebarThreadSelector.js';
 import { VOID_CTRL_L_ACTION_ID, VOID_TOGGLE_KANBAN_ACTION_ID } from '../../../actionIDs.js';
 import { VOID_OPEN_SETTINGS_ACTION_ID } from '../../../voidSettingsPane.js';
+import { ORCHESTRA_UI_TOGGLE_MODE_ACTION_ID } from '../../../orchestraUiModeTypes.js';
 // import { VOID_OPEN_ROLE_OUTPUT_ACTION_ID } from '../../../roleOutputPane.js';
 import { AgentRole, ChatMode, displayInfoOfProviderName, contextTags, contextTagGroups, FeatureName, isFeatureNameDisabled, RoleAssignment } from '../../../../../../../workbench/contrib/void/common/voidSettingsTypes.js';
 import { ICommandService } from '../../../../../../../platform/commands/common/commands.js';
 import { WarningBox } from '../void-settings-tsx/WarningBox.js';
 import { getModelCapabilities, getIsReasoningEnabledState } from '../../../../common/modelCapabilities.js';
-import { AlertTriangle, File, Ban, Check, ChevronDown, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text, Image as ImageIcon, Paperclip, Palette, Blocks, SendHorizontal, Code, Package, RotateCcw, Loader2, ListPlus, Sun, Moon, Flame, ClipboardCheck, CornerUpLeft, Download as DownloadIcon, ExternalLink as ExternalLinkIcon } from 'lucide-react';
+import { AlertTriangle, File, Ban, Check, ChevronDown, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text, Image as ImageIcon, Paperclip, Palette, Blocks, SendHorizontal, Code, Package, RotateCcw, Loader2, ListPlus, Sun, Moon, Flame, ClipboardCheck, CornerUpLeft, Download as DownloadIcon, ExternalLink as ExternalLinkIcon, Sparkles, SlidersHorizontal } from 'lucide-react';
 import { ChatMessage, CheckpointEntry, StagingSelectionItem, ToolMessage } from '../../../../common/chatThreadServiceTypes.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, ToolName, LintErrorItem, ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsServiceTypes.js';
 import { CopyButton, EditToolAcceptRejectButtonsHTML, IconShell1, JumpToFileButton, JumpToTerminalButton, StatusIndicator, StatusIndicatorForApplyButton, useApplyStreamState, useEditToolStreamState } from '../markdown/ApplyBlockHoverButtons.js';
@@ -366,6 +367,8 @@ interface VoidChatAreaProps {
 	// UI customization
 	className?: string;
 	showModelDropdown?: boolean;
+	// showModelDropdown=false のとき、モデル選択の代わりに左下へ置くもの (かんたんモードの「詳しい設定」ボタンなど)
+	leftSlot?: React.ReactNode;
 	showSelections?: boolean;
 	showProspectiveSelections?: boolean;
 	loadingIcon?: React.ReactNode;
@@ -400,6 +403,7 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 	isDisabled = false,
 	className = '',
 	showModelDropdown = true,
+	leftSlot,
 	showSelections = false,
 	showProspectiveSelections = false,
 	selections,
@@ -658,6 +662,7 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 					border: '1px solid color-mix(in srgb, var(--void-border-2) 40%, transparent)',
 				}}
 			>
+				{!showModelDropdown && (leftSlot ?? <div />)}
 				{showModelDropdown && (
 					<div className='flex flex-col gap-y-1'>
 						<ReasoningOptionSlider featureName={featureName} />
@@ -5214,6 +5219,7 @@ const SidebarHeader = ({ onLoginClick }: { onLoginClick: () => void }) => {
 	const settingsService = accessor.get('IVoidSettingsService')
 	const settingsState = useSettingsState()
 	const isLoggedIn = settingsState.globalSettings.isLoggedIn
+	const { t: tHeader } = useTranslation()
 
 	return (
 		<div className="shrink-0 px-4 pt-2 pb-1.5 border-b border-void-border-3/60 bg-gradient-to-b from-void-bg-1 to-transparent">
@@ -5222,9 +5228,17 @@ const SidebarHeader = ({ onLoginClick }: { onLoginClick: () => void }) => {
 				<button
 					onClick={() => commandService.executeCommand(VOID_TOGGLE_KANBAN_ACTION_ID)}
 					className="text-void-fg-3 hover:text-void-fg-1 transition-colors p-1 rounded-md hover:bg-void-bg-3"
-					title="Kanban Board"
+					title={tHeader('chat.header.kanban')}
 				>
 					<ClipboardCheck size={14} />
+				</button>
+
+				<button
+					onClick={() => commandService.executeCommand(ORCHESTRA_UI_TOGGLE_MODE_ACTION_ID)}
+					className="text-void-fg-3 hover:text-void-fg-1 transition-colors p-1 rounded-md hover:bg-void-bg-3"
+					title={tHeader('chat.header.uiMode')}
+				>
+					<Sparkles size={14} />
 				</button>
 
 				<OrchestraThemeSwitcher compact />
@@ -5255,7 +5269,7 @@ const SidebarHeader = ({ onLoginClick }: { onLoginClick: () => void }) => {
 				<button
 					onClick={() => commandService.executeCommand(VOID_OPEN_SETTINGS_ACTION_ID)}
 					className="text-void-fg-3 hover:text-void-fg-1 hover:rotate-45 transition-all duration-300 ease-out p-1 rounded-md hover:bg-void-bg-3"
-					title="Settings"
+					title={tHeader('chat.header.settings')}
 				>
 					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
 						<circle cx="12" cy="12" r="3" />
@@ -5349,6 +5363,11 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 
 	const settingsState = useSettingsState()
 	const { t: tUI } = useTranslation()
+
+	// かんたんモード: 文言を初心者向けにし、モデル選択などの細かい行は「詳しい設定」を押すまで畳む
+	const uiMode = useOrchestraUiMode()
+	const isSimpleUi = uiMode === 'simple'
+	const [showAdvancedInSimpleUi, setShowAdvancedInSimpleUi] = useState(false)
 	// ----- HIGHER STATE -----
 
 	// threads state
@@ -5650,13 +5669,27 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 		selections={selections}
 		setSelections={setSelections}
 		onClickAnywhere={() => { textAreaRef.current?.focus() }}
+		showModelDropdown={!isSimpleUi || showAdvancedInSimpleUi}
+		leftSlot={isSimpleUi ? (
+			<button
+				type='button'
+				onClick={(e) => { e.stopPropagation(); setShowAdvancedInSimpleUi(true) }}
+				className='flex items-center gap-1 px-1.5 py-1 rounded text-[11px] text-void-fg-4 hover:text-void-fg-1 hover:bg-void-bg-2 transition-colors'
+				title={tUI('chat.simple.advanced')}
+			>
+				<SlidersHorizontal size={12} />
+				<span>{tUI('chat.simple.advanced')}</span>
+			</button>
+		) : undefined}
 	>
 		<VoidInputBox2
 			enableAtToMention
 			className={`min-h-[81px] px-0.5 py-0.5`}
-			placeholder={isRunning
-				? `${tUI('chat.inputPlaceholder.streamingPrefix')}${keybindingString ? `${tUI('chat.inputPlaceholder.streamingAddSelection').replace('{kb}', keybindingString)}` : ''}${tUI('chat.inputPlaceholder.streamingStop')}`
-				: `${tUI('chat.inputPlaceholder.mention')}${keybindingString ? `${tUI('chat.inputPlaceholder.addSelection').replace('{kb}', keybindingString)}` : ''}${tUI('chat.inputPlaceholder.enterInstructions')}`}
+			placeholder={isSimpleUi
+				? (isRunning ? tUI('chat.simple.placeholderStreaming') : tUI('chat.simple.placeholder'))
+				: isRunning
+					? `${tUI('chat.inputPlaceholder.streamingPrefix')}${keybindingString ? `${tUI('chat.inputPlaceholder.streamingAddSelection').replace('{kb}', keybindingString)}` : ''}${tUI('chat.inputPlaceholder.streamingStop')}`
+					: `${tUI('chat.inputPlaceholder.mention')}${keybindingString ? `${tUI('chat.inputPlaceholder.addSelection').replace('{kb}', keybindingString)}` : ''}${tUI('chat.inputPlaceholder.enterInstructions')}`}
 			onChangeText={onChangeText}
 			onKeyDown={onKeyDown}
 			onFocus={() => { chatThreadsService.setCurrentlyFocusedMessageIdx(undefined) }}
@@ -5671,18 +5704,24 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 	const isLandingPage = previousMessages.length === 0
 
 
-	const suggestedPrompts: { text: string; icon: React.ReactNode; hint: string }[] = [
+	// かんたんモードの例は、表示する短い文 (text) と実際に送る少し丁寧な文 (prompt) を分ける。
+	// 初心者は「エラーが出た」としか書かないので、AI が次に何を聞けばいいかまで含めて送る。
+	const suggestedPrompts: { text: string; icon: React.ReactNode; hint: string; prompt?: string }[] = isSimpleUi ? [
+		{ text: tUI('chat.simple.suggested.explain'), icon: <Folder size={14} />, hint: tUI('chat.simple.suggested.explain.hint'), prompt: tUI('chat.simple.suggested.explain.prompt') },
+		{ text: tUI('chat.simple.suggested.todo'), icon: <Sparkles size={14} />, hint: tUI('chat.simple.suggested.todo.hint'), prompt: tUI('chat.simple.suggested.todo.prompt') },
+		{ text: tUI('chat.simple.suggested.fix'), icon: <AlertTriangle size={14} />, hint: tUI('chat.simple.suggested.fix.hint'), prompt: tUI('chat.simple.suggested.fix.prompt') },
+	] : [
 		{ text: tUI('chat.suggested.summarize'), icon: <Folder size={14} />, hint: tUI('chat.suggested.summarize.hint') },
 		{ text: tUI('chat.suggested.types'), icon: <Info size={14} />, hint: tUI('chat.suggested.types.hint') },
 		{ text: tUI('chat.suggested.voidrules'), icon: <CirclePlus size={14} />, hint: tUI('chat.suggested.voidrules.hint') },
 	]
 
 	const initiallySuggestedPromptsHTML = <div className='flex flex-col gap-2 w-full select-none'>
-		{suggestedPrompts.map(({ text, icon, hint }, index) => (
+		{suggestedPrompts.map(({ text, icon, hint, prompt }, index) => (
 			<button
 				key={index}
 				type='button'
-				onClick={() => onSubmit(text)}
+				onClick={() => onSubmit(prompt ?? text)}
 				className='group relative w-full text-left rounded-lg overflow-hidden
 					border border-void-border-2 hover:border-[color-mix(in_srgb,var(--vscode-focusBorder)_50%,var(--void-border-1)_50%)]
 					bg-gradient-to-br from-void-bg-2 to-[color-mix(in_srgb,var(--void-bg-2)_92%,var(--vscode-focusBorder)_8%)]
@@ -5724,12 +5763,25 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 		</div>
 	</div>
 
+	// かんたんモードの最初の画面: 入力欄の上に「何を作りましょうか？」と一言。
+	// 空の入力欄だけが出ている状態は、初めての人には何をすればいいか分からない。
+	const simpleGreetingHTML = isSimpleUi ? (
+		<div className='pt-8 pb-3 flex flex-col gap-1 select-none'>
+			<div className='text-[20px] font-semibold text-void-fg-1 leading-tight'>{tUI('chat.simple.greeting')}</div>
+			<div className='text-[12px] text-void-fg-3'>{tUI('chat.simple.greetingHint')}</div>
+		</div>
+	) : null
+
 	const landingPageInput = <div>
 		{errorDisplayHTML && <div className='px-2'>{errorDisplayHTML}</div>}
 		{queueListHTML && <div className='px-2 pt-2'>{queueListHTML}</div>}
-		<div className='pt-8'>
+		{simpleGreetingHTML}
+		<div className={isSimpleUi ? 'pt-0' : 'pt-8'}>
 			{inputChatArea}
 		</div>
+		{isSimpleUi && (
+			<div className='pt-2 text-[11px] text-void-fg-4 select-none'>{tUI('chat.simple.tip')}</div>
+		)}
 	</div>
 
 	const landingPageContent = <div
@@ -5748,7 +5800,7 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 			</ErrorBoundary>
 			:
 			<ErrorBoundary>
-				<SectionLabel label='おすすめの質問' />
+				<SectionLabel label={isSimpleUi ? tUI('chat.simple.suggestedTitle') : 'おすすめの質問'} />
 				{initiallySuggestedPromptsHTML}
 			</ErrorBoundary>
 		}

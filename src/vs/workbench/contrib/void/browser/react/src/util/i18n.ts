@@ -311,6 +311,45 @@ export const translations = {
 	'chat.suggested.voidrules': { en: 'Create a .voidrules file for me', ja: '.voidrules ファイルを作成して' },
 	'chat.suggested.voidrules.hint': { en: 'Generate a file', ja: 'ファイルを生成' },
 
+	// Sidebar chat - かんたんモード (初心者向け) の文言
+	'chat.simple.greeting': { en: 'What would you like to make?', ja: '何を作りましょうか？' },
+	'chat.simple.greetingHint': { en: 'Just describe it in your own words. No code needed.', ja: 'やりたいことを、そのまま自分の言葉で書いてください。コードは要りません。' },
+	'chat.simple.placeholder': { en: 'e.g. "Make a simple to-do app" or "Explain this error"', ja: '例:「シンプルな TODO アプリを作って」「このエラーを説明して」' },
+	'chat.simple.placeholderStreaming': { en: 'Working on it… Press Esc to stop', ja: '作業中です… 止めたいときは Esc' },
+	'chat.simple.suggestedTitle': { en: 'Try one of these', ja: 'たとえば、こんなふうに' },
+	'chat.simple.suggested.explain': { en: 'Tell me what is in this folder', ja: 'このフォルダに何が入っているか教えて' },
+	'chat.simple.suggested.explain.hint': { en: 'Get a plain-language tour of the project', ja: 'プロジェクトの中身をやさしく説明してもらう' },
+	'chat.simple.suggested.todo': { en: 'Make a simple to-do app', ja: 'シンプルな TODO アプリを作って' },
+	'chat.simple.suggested.todo.hint': { en: 'Build something from scratch', ja: 'ゼロから何かを作ってみる' },
+	'chat.simple.suggested.fix': { en: 'Something is broken, please fix it', ja: 'エラーが出たので直してほしい' },
+	'chat.simple.suggested.fix.hint': { en: 'Paste the error and let the AI investigate', ja: 'エラーを貼って AI に調べてもらう' },
+	'chat.simple.suggested.explain.prompt': {
+		en: 'Look at this folder and explain, for a beginner, what kind of project it is and what the main files do.',
+		ja: 'このフォルダの中身を見て、何のプロジェクトで、どんなファイルがあるのか初心者にも分かるように説明してください。',
+	},
+	'chat.simple.suggested.todo.prompt': {
+		en: 'Create a simple to-do app in this folder that runs in the browser, using only HTML, CSS and JavaScript. Then tell me how to open it.',
+		ja: 'このフォルダに、ブラウザで動くシンプルな TODO アプリを作ってください。HTML / CSS / JavaScript だけで作り、開き方も教えてください。',
+	},
+	'chat.simple.suggested.fix.prompt': {
+		en: 'Something is not working. Please investigate and fix it. If you need the error message, tell me exactly what to paste.',
+		ja: 'いまエラーが出ています。原因を調べて直してください。必要なら、どのエラーメッセージを貼ればいいか教えてください。',
+	},
+	'chat.simple.advanced': { en: 'Advanced options', ja: '詳しい設定' },
+	'chat.simple.tip': { en: 'Tip: you can attach a file with @ or paste a screenshot.', ja: 'ヒント: @ でファイルを指定したり、スクリーンショットを貼り付けたりできます。' },
+	'chat.header.kanban': { en: 'Task board', ja: 'タスクボード' },
+	'chat.header.settings': { en: 'Settings', ja: '設定' },
+	'chat.header.uiMode': { en: 'Display mode', ja: '表示モード' },
+
+	// Settings - 表示モード
+	'general.uiMode.title': { en: 'Display mode', ja: '表示モード' },
+	'general.uiMode.subtitle': { en: 'Choose how much of the editor is shown. You can switch anytime.', ja: 'どこまでエディタの部品を表示するかを選びます。いつでも切り替えられます。' },
+	'general.uiMode.simple': { en: 'Simple', ja: 'かんたんモード' },
+	'general.uiMode.simple.desc': { en: 'Chat and a home screen take center stage. IDE parts like the activity bar, status bar and minimap are hidden.', ja: 'チャットとホーム画面が中心。アクティビティバー・ステータスバー・ミニマップなど IDE 的な部品は隠れます。' },
+	'general.uiMode.pro': { en: 'Pro (IDE)', ja: '上級者モード (IDE 表示)' },
+	'general.uiMode.pro.desc': { en: 'The full VS Code layout for people who already know their way around an editor.', ja: 'エディタの操作に慣れている方向け。VS Code と同じ IDE の表示になります。' },
+	'general.uiMode.current': { en: 'Current', ja: '現在' },
+
 	// Onboarding
 	'onboarding.welcome': { en: 'Welcome to Orchestra', ja: 'Orchestra へようこそ' },
 	'onboarding.getStarted': { en: 'Get Started', ja: 'はじめる' },
