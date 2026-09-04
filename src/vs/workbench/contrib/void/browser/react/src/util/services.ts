@@ -36,6 +36,7 @@ import { ILanguageDetectionService } from '../../../../../../services/languageDe
 import { IKeybindingService } from '../../../../../../../platform/keybinding/common/keybinding.js'
 import { IEnvironmentService } from '../../../../../../../platform/environment/common/environment.js'
 import { IConfigurationService } from '../../../../../../../platform/configuration/common/configuration.js'
+import { ORCHESTRA_UI_MODE_SETTING, OrchestraUiMode } from '../../../orchestraUiModeTypes.js'
 import { IPathService } from '../../../../../../../workbench/services/path/common/pathService.js'
 import { IMetricsService } from '../../../../../../../workbench/contrib/void/common/metricsService.js'
 import { URI } from '../../../../../../../base/common/uri.js'
@@ -565,4 +566,22 @@ export const useIsOptedOut = () => {
 	}, [storageService, getVal])
 
 	return s
+}
+
+
+// Orchestra の表示モード (かんたん / 上級者)。実体は VS Code 設定 `orchestra.ui.mode`。
+// かんたんモードではチャットの文言を初心者向けにし、細かいオプションを畳む。
+export const useOrchestraUiMode = (): OrchestraUiMode => {
+	const accessor = useAccessor()
+	const configurationService = accessor.get('IConfigurationService')
+	const read = useCallback((): OrchestraUiMode => configurationService.getValue<string>(ORCHESTRA_UI_MODE_SETTING) === 'pro' ? 'pro' : 'simple', [configurationService])
+	const [mode, setMode] = useState<OrchestraUiMode>(read)
+	useEffect(() => {
+		setMode(read())
+		const d = configurationService.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration(ORCHESTRA_UI_MODE_SETTING)) setMode(read())
+		})
+		return () => d.dispose()
+	}, [configurationService, read])
+	return mode
 }

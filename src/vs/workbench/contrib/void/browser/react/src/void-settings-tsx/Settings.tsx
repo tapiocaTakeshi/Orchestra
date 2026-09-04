@@ -31,6 +31,7 @@ import { Lock, Languages } from 'lucide-react';
 import { OrchestraUpdatesPane } from './UpdatesPane.js';
 import { useTranslation } from '../util/i18n.js';
 import { KanbanSettings } from './KanbanSettings.js';
+import { UiModeSettings } from './UiModeSettings.js';
 import { ObsidianSettings } from './ObsidianSettings.js';
 import { uiLanguages, displayInfoOfUILanguage } from '../../../../common/voidSettingsTypes.js';
 
@@ -1910,6 +1911,13 @@ export const Settings = () => {
 
 							{/* General section */}
 							<div className={`${shouldShowTab('general') ? `` : 'hidden'} flex flex-col gap-12`}>
+								{/* 表示モード (かんたん / 上級者) */}
+								<div>
+									<ErrorBoundary>
+										<UiModeSettings />
+									</ErrorBoundary>
+								</div>
+
 								{/* Language section */}
 								<div>
 									<ErrorBoundary>

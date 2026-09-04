@@ -72,6 +72,9 @@ import './voidOnboardingService.js'
 // register misc service
 import './miscWokrbenchContrib.js'
 
+// register Orchestra 表示モード (かんたん / 上級者)。IDE 的な部品の表示切替とタイトルバーのボタン
+import './orchestraUiMode.js'
+
 // register file service (for explorer context menu)
 import './fileService.js'
 
