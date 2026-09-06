@@ -124,8 +124,8 @@ export class EditorGroupWatermark extends Disposable {
 
 		// void icon style
 		const updateTheme = () => {
-			elements.icon.style.maxWidth = this.isSimpleMode() ? '96px' : '220px'
-			elements.icon.style.opacity = this.isSimpleMode() ? '90%' : '70%' // Slightly higher opacity for the new logo
+			elements.icon.style.maxWidth = this.isAgentMode() ? '96px' : '220px'
+			elements.icon.style.opacity = this.isAgentMode() ? '90%' : '70%' // Slightly higher opacity for the new logo
 			// elements.icon.style.filter = isDark ? '' : 'invert(1)' //brightness(.5)
 		}
 		updateTheme()
@@ -167,9 +167,9 @@ export class EditorGroupWatermark extends Disposable {
 
 
 
-	// Orchestra: かんたんモードかどうか。かんたんモードでは Void 由来のショートカット表ではなく、
-	// 日本語のホーム画面 (renderSimpleHome) を出す。
-	private isSimpleMode(): boolean {
+	// Orchestra: エージェントモードかどうか。エージェントモードでは Void 由来のショートカット表ではなく、
+	// 「エージェントに何をさせるか」のホーム画面 (renderAgentHome) を出す。
+	private isAgentMode(): boolean {
 		return this.configurationService.getValue<string>(ORCHESTRA_UI_MODE_SETTING) !== 'pro';
 	}
 
@@ -177,10 +177,10 @@ export class EditorGroupWatermark extends Disposable {
 
 		this.clear();
 
-		const simple = this.isSimpleMode();
-		this.rootElement.classList.toggle('orchestra-home', simple);
-		this.iconElement.style.maxWidth = simple ? '96px' : '220px';
-		this.iconElement.style.opacity = simple ? '90%' : '70%';
+		const agent = this.isAgentMode();
+		this.rootElement.classList.toggle('orchestra-home', agent);
+		this.iconElement.style.maxWidth = agent ? '96px' : '220px';
+		this.iconElement.style.opacity = agent ? '90%' : '70%';
 
 		const voidIconBox = append(this.shortcuts, $('.watermark-box'));
 		const recentsBox = append(this.shortcuts, $('div'));
@@ -201,9 +201,9 @@ export class EditorGroupWatermark extends Disposable {
 			this.currentDisposables.forEach(label => label.dispose());
 			this.currentDisposables.clear();
 
-			// Orchestra: かんたんモードのホーム画面
-			if (this.isSimpleMode()) {
-				this.renderSimpleHome(voidIconBox, recentlyOpened);
+			// Orchestra: エージェントモードのホーム画面
+			if (this.isAgentMode()) {
+				this.renderAgentHome(voidIconBox, recentlyOpened);
 				return;
 			}
 
@@ -356,12 +356,12 @@ export class EditorGroupWatermark extends Disposable {
 	}
 
 	// ---------------------------------------------------------------------------------------
-	// Orchestra かんたんモードのホーム画面
+	// Orchestra エージェントモードのホーム画面
 	//
-	// IDE の「透かし + ショートカット一覧」ではなく、次に何をすればいいかが日本語で分かる画面。
-	// フォルダ未選択なら「フォルダを開く」、選択済みなら「チャットに話しかける」へ誘導する。
+	// IDE の「透かし + ショートカット一覧」ではなく、「エージェントに何をさせるか」が分かる画面。
+	// フォルダ未選択なら「フォルダを開く」、選択済みなら「エージェントに指示する」へ誘導する。
 	// ---------------------------------------------------------------------------------------
-	private renderSimpleHome(box: HTMLElement, recentlyOpened: readonly IRecent[]): void {
+	private renderAgentHome(box: HTMLElement, recentlyOpened: readonly IRecent[]): void {
 		const hasFolder = this.contextService.getWorkbenchState() !== WorkbenchState.EMPTY;
 		const run = (id: string, ...args: unknown[]) => () => { this.commandService.executeCommand(id, ...args); };
 
@@ -370,19 +370,32 @@ export class EditorGroupWatermark extends Disposable {
 		// 見出し
 		const heading = append(home, $('.orchestra-home__heading'));
 		append(heading, $('h1.orchestra-home__title')).textContent = hasFolder
-			? '準備ができました'
+			? 'エージェントに任せましょう'
 			: 'ようこそ、Orchestra へ';
 		append(heading, $('p.orchestra-home__subtitle')).textContent = hasFolder
-			? '右側の AI チャットに、作りたいものや困っていることをそのまま書いてください。コードは AI が書きます。'
-			: '作りたいものを日本語で伝えるだけで、AI がコードを書いてくれるアプリです。まずは作業するフォルダを選びましょう。';
+			? '右側のエージェントに、やってほしいことをそのまま書いてください。ファイルの編集からコマンドの実行、結果の確認まで、エージェントが自分で進めます。'
+			: 'やってほしいことを日本語で伝えるだけで、AI エージェントがファイルを編集し、コマンドを実行し、結果まで確認してくれるアプリです。まずは作業するフォルダを選びましょう。';
+
+		// エージェントにできること
+		const capabilities = append(home, $('ul.orchestra-home__capabilities'));
+		for (const [icon, text] of [
+			['📝', 'ファイルの作成・編集'],
+			['⌨️', 'コマンドの実行'],
+			['🔍', 'コードの調査とエラー修正'],
+			['✅', '動作の確認と報告'],
+		]) {
+			const li = append(capabilities, $('li.orchestra-home__capability'));
+			append(li, $('span.orchestra-home__capability-icon')).textContent = icon;
+			append(li, $('span')).textContent = text;
+		}
 
 		if (!hasFolder) {
 			// 3 ステップ
 			const steps = append(home, $('ol.orchestra-home__steps'));
 			for (const [n, title, desc] of [
-				['1', 'フォルダを選ぶ', '作業場所になるフォルダです。空のフォルダでも大丈夫。'],
-				['2', 'チャットに話しかける', '「TODO アプリを作って」のように、日本語で。'],
-				['3', 'できあがりを確認する', 'AI が作ったものを見て、気になる点をまた伝えるだけ。'],
+				['1', 'フォルダを選ぶ', 'エージェントの作業場所になるフォルダです。空のフォルダでも大丈夫。'],
+				['2', 'やってほしいことを伝える', '「TODO アプリを作って」「テストを通して」のように、日本語で。'],
+				['3', 'エージェントが進めます', 'ファイル編集・コマンド実行・確認まで自動。できあがりを見て、直したい点をまた伝えるだけ。'],
 			]) {
 				const li = append(steps, $('li.orchestra-home__step'));
 				append(li, $('span.orchestra-home__step-num')).textContent = n;
@@ -398,9 +411,9 @@ export class EditorGroupWatermark extends Disposable {
 			openFolder.onclick = () => {
 				this.commandService.executeCommand(isMacintosh && isNative ? OpenFileFolderAction.ID : OpenFolderAction.ID);
 			};
-			const askAi = append(actions, $('button.orchestra-home__button'));
-			askAi.textContent = 'まずは AI に相談する';
-			askAi.onclick = run(ORCHESTRA_CHAT_SEND_PROMPT_ACTION_ID);
+			const askAgent = append(actions, $('button.orchestra-home__button'));
+			askAgent.textContent = 'まずはエージェントに相談する';
+			askAgent.onclick = run(ORCHESTRA_CHAT_SEND_PROMPT_ACTION_ID);
 
 			// 最近使ったフォルダ
 			const recents = recentlyOpened.filter(isRecentFolder).slice(0, 5);
@@ -426,23 +439,24 @@ export class EditorGroupWatermark extends Disposable {
 				}
 			}
 		} else {
-			// 例: 押すとそのままチャットに送られる
-			append(home, $('h2.orchestra-home__section-title')).textContent = 'たとえば、こんなふうに';
+			// 例: 押すとそのままエージェントに送られ、エージェントが作業を始める
+			append(home, $('h2.orchestra-home__section-title')).textContent = 'たとえば、こんな仕事を任せられます';
 			const examples = append(home, $('.orchestra-home__examples'));
 			for (const [label, prompt] of [
-				['このフォルダに何が入っているか教えて', 'このフォルダの中身を見て、何のプロジェクトで、どんなファイルがあるのか初心者にも分かるように説明してください。'],
-				['シンプルな TODO アプリを作って', 'このフォルダに、ブラウザで動くシンプルな TODO アプリを作ってください。HTML / CSS / JavaScript だけで作り、開き方も教えてください。'],
-				['エラーが出たので直してほしい', 'いまエラーが出ています。原因を調べて直してください。必要なら、どのエラーメッセージを貼ればいいか教えてください。'],
+				['このプロジェクトを調べて、構成を説明して', 'このフォルダの中身を調べて、何のプロジェクトで、どんな構成になっているか、主要なファイルの役割とあわせて分かりやすく説明してください。'],
+				['シンプルな TODO アプリを作って動かして', 'このフォルダに、ブラウザで動くシンプルな TODO アプリを作ってください。HTML / CSS / JavaScript だけで作り、必要なファイルを作成したら、実際に開いて動作を確認できる手順まで用意してください。'],
+				['エラーを調べて直して', 'いまエラーが出ています。原因を調べて、修正まで行ってください。必要なコマンドがあれば実行して確認し、何をどう直したか最後に報告してください。'],
+				['テストを実行して、失敗を直して', 'このプロジェクトのテストを実行してください。失敗するものがあれば原因を調べて修正し、もう一度実行して通ることを確認してから結果を報告してください。'],
 			]) {
 				const chip = append(examples, $('button.orchestra-home__example'));
 				chip.textContent = label;
-				chip.title = 'クリックするとチャットに送信します';
+				chip.title = 'クリックするとエージェントに送信し、作業が始まります';
 				chip.onclick = run(ORCHESTRA_CHAT_SEND_PROMPT_ACTION_ID, prompt);
 			}
 
 			const actions = append(home, $('.orchestra-home__actions'));
 			const chat = append(actions, $('button.orchestra-home__button.orchestra-home__button--primary'));
-			chat.textContent = 'チャットに話しかける';
+			chat.textContent = 'エージェントに指示する';
 			chat.onclick = run(ORCHESTRA_CHAT_SEND_PROMPT_ACTION_ID);
 			const files = append(actions, $('button.orchestra-home__button'));
 			files.textContent = 'ファイル一覧を見る';
@@ -452,9 +466,9 @@ export class EditorGroupWatermark extends Disposable {
 			terminal.onclick = run(ORCHESTRA_UI_TOGGLE_TERMINAL_ACTION_ID);
 		}
 
-		// 上級者向けの逃げ道
+		// 自分でもコードを触りたい人向けの逃げ道
 		const footer = append(home, $('p.orchestra-home__footer'));
-		append(footer, $('span')).textContent = 'エディタの操作に慣れている方は ';
+		append(footer, $('span')).textContent = '自分でもコードを編集したい方は ';
 		const pro = append(footer, $('button.orchestra-home__link'));
 		pro.textContent = '上級者モード (IDE 表示)';
 		pro.onclick = run(ORCHESTRA_UI_SET_PRO_MODE_ACTION_ID);

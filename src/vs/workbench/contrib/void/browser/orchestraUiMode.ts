@@ -5,19 +5,26 @@
 
 // Orchestra の表示モード。
 //
-// 「かんたんモード (simple)」が既定で、VS Code 由来の IDE 的な部品 (アクティビティバー・
-// ステータスバー・ミニマップ・パンくず・レイアウトコントロール等) を隠し、
-// エディタの空き領域にはコードではなく日本語のホーム画面を出す。チャットが主役になる。
+// 「エージェントモード (agent)」が既定。AI エージェントに作業を任せるための画面で、
+// VS Code 由来の IDE 的な部品 (アクティビティバー・ステータスバー・ミニマップ・パンくず・
+// レイアウトコントロール等) を隠し、エディタの空き領域にはコードではなく「エージェントに
+// 何をさせるか」のホーム画面を出す。チャット (= エージェントへの指示欄) が主役になる。
 //
-// 「上級者モード (pro)」に切り替えると、それらの部品が通常の VS Code と同じ形で戻る。
+// エージェントモードでは動作面でも「任せる」側に寄せる:
+//   - チャットモードを 'agent' (ファイル編集・ツール実行あり) にする
+//   - ファイル編集とターミナル実行のツールを自動承認にする (いちいち「許可」を押さなくていい)
+//   - エージェントが動いている間はタイトルバーに「止める」ボタン、承認待ちなら「確認する」ボタンを出す
 //
-// 仕組みは「設定の既定値の上書き (configuration defaults)」で、ユーザーの settings.json には
-// 何も書き込まない。かんたんモードで隠している部品も、ユーザーが settings.json で明示的に
-// 値を書いていればそちらが優先される (既定値より常にユーザー設定が強い)。
+// 「上級者モード (pro)」に切り替えると、IDE の部品が通常の VS Code と同じ形で戻る。
+//
+// 見た目の切替は「設定の既定値の上書き (configuration defaults)」で、ユーザーの settings.json には
+// 何も書き込まない。隠している部品も、ユーザーが settings.json で明示的に値を書いていれば
+// そちらが優先される (既定値より常にユーザー設定が強い)。
 
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
+import Severity from '../../../../base/common/severity.js';
 import { localize, localize2 } from '../../../../nls.js';
 import { Registry } from '../../../../platform/registry/common/platform.js';
 import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
@@ -38,23 +45,30 @@ import { TERMINAL_VIEW_ID } from '../../terminal/common/terminal.js';
 import {
 	ORCHESTRA_UI_MODE_SETTING,
 	ORCHESTRA_UI_MODE_CONTEXT_KEY,
-	ORCHESTRA_UI_SET_SIMPLE_MODE_ACTION_ID,
+	ORCHESTRA_AGENT_RUNNING_CONTEXT_KEY,
+	ORCHESTRA_AGENT_AWAITING_CONTEXT_KEY,
+	ORCHESTRA_UI_SET_AGENT_MODE_ACTION_ID,
 	ORCHESTRA_UI_SET_PRO_MODE_ACTION_ID,
 	ORCHESTRA_UI_TOGGLE_MODE_ACTION_ID,
 	ORCHESTRA_UI_TOGGLE_FILES_ACTION_ID,
 	ORCHESTRA_UI_TOGGLE_TERMINAL_ACTION_ID,
 	ORCHESTRA_UI_TOGGLE_CHAT_ACTION_ID,
+	ORCHESTRA_AGENT_STOP_ACTION_ID,
+	ORCHESTRA_AGENT_SHOW_PENDING_ACTION_ID,
 	ORCHESTRA_CHAT_SEND_PROMPT_ACTION_ID,
 	OrchestraUiMode,
 } from './orchestraUiModeTypes.js';
 import { IChatThreadService } from './chatThreadServiceInterface.js';
+import { IVoidSettingsService } from '../common/voidSettingsService.js';
 
 
 // ---------------------------------------------------------------------------------------
 // 設定・コンテキストキー
 // ---------------------------------------------------------------------------------------
 
-export const OrchestraUiModeContext = new RawContextKey<OrchestraUiMode>(ORCHESTRA_UI_MODE_CONTEXT_KEY, 'simple');
+export const OrchestraUiModeContext = new RawContextKey<OrchestraUiMode>(ORCHESTRA_UI_MODE_CONTEXT_KEY, 'agent');
+export const OrchestraAgentRunningContext = new RawContextKey<boolean>(ORCHESTRA_AGENT_RUNNING_CONTEXT_KEY, false);
+export const OrchestraAgentAwaitingContext = new RawContextKey<boolean>(ORCHESTRA_AGENT_AWAITING_CONTEXT_KEY, false);
 
 Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).registerConfiguration({
 	id: 'orchestraUi',
@@ -64,26 +78,26 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 	properties: {
 		[ORCHESTRA_UI_MODE_SETTING]: {
 			type: 'string',
-			enum: ['simple', 'pro'],
+			enum: ['agent', 'pro'],
 			enumDescriptions: [
-				localize('orchestraUi.mode.simple', "かんたんモード: チャットとホーム画面が中心。アクティビティバー・ステータスバー・ミニマップなど IDE 的な部品を隠します。"),
+				localize('orchestraUi.mode.agent', "エージェントモード: AI エージェントに作業を任せる画面。チャットとホーム画面が中心で、アクティビティバー・ステータスバー・ミニマップなど IDE 的な部品を隠します。"),
 				localize('orchestraUi.mode.pro', "上級者モード: VS Code と同じ IDE の表示に戻します。"),
 			],
-			default: 'simple',
-			description: localize('orchestraUi.mode', "Orchestra の見た目。初めての方は「かんたんモード」、慣れている方は「上級者モード」がおすすめです。"),
+			default: 'agent',
+			description: localize('orchestraUi.mode', "Orchestra の見た目。AI に任せて進めるなら「エージェントモード」、自分でもコードを触るなら「上級者モード」がおすすめです。"),
 		},
 	},
 });
 
 
 // ---------------------------------------------------------------------------------------
-// かんたんモードで上書きする既定値
+// エージェントモードで上書きする既定値
 // ---------------------------------------------------------------------------------------
 
 // これらは「既定値」であって「ユーザー設定」ではない。ユーザーが settings.json に同じキーを
-// 書いていればそちらが勝つので、かんたんモードのままミニマップだけ戻す、といったことも可能。
-const SIMPLE_MODE_DEFAULTS: IConfigurationDefaults = {
-	source: { id: 'orchestra.simpleMode', displayName: 'Orchestra かんたんモード' },
+// 書いていればそちらが勝つので、エージェントモードのままミニマップだけ戻す、といったことも可能。
+const AGENT_MODE_DEFAULTS: IConfigurationDefaults = {
+	source: { id: 'orchestra.agentMode', displayName: 'Orchestra エージェントモード' },
 	overrides: {
 		// レイアウト: 左端のアイコン列と下端のステータスバーを消す。
 		'workbench.activityBar.location': 'hidden',
@@ -92,7 +106,7 @@ const SIMPLE_MODE_DEFAULTS: IConfigurationDefaults = {
 		'window.commandCenter': false,
 		'workbench.tips.enabled': false,
 		'workbench.startupEditor': 'none',
-		// 「ここが何なのか分からない」要素を減らす。
+		// エージェントが開いたファイルを眺めるのに要らない要素を減らす。
 		'breadcrumbs.enabled': false,
 		'editor.minimap.enabled': false,
 		'editor.glyphMargin': false,
@@ -102,7 +116,7 @@ const SIMPLE_MODE_DEFAULTS: IConfigurationDefaults = {
 		'editor.fontSize': 15,
 		'editor.lineHeight': 1.6,
 		'editor.padding.top': 12,
-		// エクスプローラーはフォルダをまとめて折りたたまない (a/b/c のような表示は初心者に分かりにくい)。
+		// エクスプローラーはフォルダをまとめて折りたたまない (a/b/c のような表示は分かりにくい)。
 		'explorer.compactFolders': false,
 		'explorer.confirmDelete': true,
 		'explorer.confirmDragAndDrop': true,
@@ -111,25 +125,41 @@ const SIMPLE_MODE_DEFAULTS: IConfigurationDefaults = {
 
 const configurationRegistry = Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration);
 
-// かんたんモードが既定なので、モジュール読み込み時点 (= 設定サービスの初期化より前) で
+// エージェントモードが既定なので、モジュール読み込み時点 (= 設定サービスの初期化より前) で
 // 既定値を登録しておく。上級者モードのユーザーは起動時の contribution で外す。
-let simpleDefaultsRegistered = false;
-function applySimpleModeDefaults(enable: boolean): void {
-	if (enable === simpleDefaultsRegistered) {
+let agentDefaultsRegistered = false;
+function applyAgentModeDefaults(enable: boolean): void {
+	if (enable === agentDefaultsRegistered) {
 		return;
 	}
-	simpleDefaultsRegistered = enable;
+	agentDefaultsRegistered = enable;
 	if (enable) {
-		configurationRegistry.registerDefaultConfigurations([SIMPLE_MODE_DEFAULTS]);
+		configurationRegistry.registerDefaultConfigurations([AGENT_MODE_DEFAULTS]);
 	} else {
-		configurationRegistry.deregisterDefaultConfigurations([SIMPLE_MODE_DEFAULTS]);
+		configurationRegistry.deregisterDefaultConfigurations([AGENT_MODE_DEFAULTS]);
 	}
 }
-applySimpleModeDefaults(true);
+applyAgentModeDefaults(true);
 
 
+// 'pro' 以外は全部エージェントモード扱い (未設定・不正値・旧名の 'simple' を含む)。
 export function getOrchestraUiMode(configurationService: IConfigurationService): OrchestraUiMode {
-	return configurationService.getValue<string>(ORCHESTRA_UI_MODE_SETTING) === 'pro' ? 'pro' : 'simple';
+	return configurationService.getValue<string>(ORCHESTRA_UI_MODE_SETTING) === 'pro' ? 'pro' : 'agent';
+}
+
+
+// エージェントモードの「動作」側の設定。
+// チャットモードを agent にし、ファイル編集とターミナル実行を自動承認にする。
+// ユーザーがあとから Settings で個別に戻せるよう、モードに入った瞬間 (切替時・初回起動時) にだけ書く。
+async function applyAgentModeBehaviour(settingsService: IVoidSettingsService): Promise<void> {
+	await settingsService.waitForInitState;
+	const { chatMode, autoApprove } = settingsService.state.globalSettings;
+	if (chatMode !== 'agent') {
+		settingsService.setGlobalSetting('chatMode', 'agent');
+	}
+	if (!autoApprove.edits || !autoApprove.terminal) {
+		settingsService.setGlobalSetting('autoApprove', { ...autoApprove, edits: true, terminal: true });
+	}
 }
 
 
@@ -162,34 +192,40 @@ class OrchestraUiModeContribution extends Disposable implements IWorkbenchContri
 	private sync(): void {
 		const mode = getOrchestraUiMode(this.configurationService);
 		this.modeContextKey.set(mode);
-		applySimpleModeDefaults(mode === 'simple');
+		applyAgentModeDefaults(mode === 'agent');
 	}
 }
 registerWorkbenchContribution2(OrchestraUiModeContribution.ID, OrchestraUiModeContribution, WorkbenchPhase.BlockStartup);
 
 
-// 初回起動時 (かんたんモード) のレイアウト整形。
-// 「ファイル一覧」と「ターミナル」は最初は閉じておき、チャットはウィンドウ幅の 4 割ほどに広げる。
-// 一度やったら記録して二度と触らない (以降はユーザーがドラッグした幅を VS Code が覚える)。
-class OrchestraSimpleLayoutFirstRun extends Disposable implements IWorkbenchContribution {
-	static readonly ID = 'workbench.contrib.orchestraSimpleLayoutFirstRun';
-	private static readonly STORAGE_KEY = 'orchestra.ui.simpleLayoutInitialized';
+// 初回起動時 (エージェントモード) の整形。
+// 「ファイル一覧」と「ターミナル」は最初は閉じておき、エージェント (チャット) はウィンドウ幅の 4 割ほどに広げる。
+// あわせてエージェントモードの動作設定 (agent チャット・自動承認) を入れる。
+// 一度やったら記録して二度と触らない (以降はユーザーがドラッグした幅や変えた設定を尊重する)。
+class OrchestraAgentModeFirstRun extends Disposable implements IWorkbenchContribution {
+	static readonly ID = 'workbench.contrib.orchestraAgentModeFirstRun';
+	private static readonly STORAGE_KEY = 'orchestra.ui.agentModeInitialized';
 
 	constructor(
 		@IConfigurationService configurationService: IConfigurationService,
 		@IStorageService storageService: IStorageService,
 		@IWorkbenchLayoutService layoutService: IWorkbenchLayoutService,
 		@IViewsService viewsService: IViewsService,
+		@IVoidSettingsService settingsService: IVoidSettingsService,
 	) {
 		super();
 
-		if (getOrchestraUiMode(configurationService) !== 'simple') {
+		if (getOrchestraUiMode(configurationService) !== 'agent') {
 			return;
 		}
-		if (storageService.getBoolean(OrchestraSimpleLayoutFirstRun.STORAGE_KEY, StorageScope.APPLICATION, false)) {
+		if (storageService.getBoolean(OrchestraAgentModeFirstRun.STORAGE_KEY, StorageScope.APPLICATION, false)) {
 			return;
 		}
-		storageService.store(OrchestraSimpleLayoutFirstRun.STORAGE_KEY, true, StorageScope.APPLICATION, StorageTarget.MACHINE);
+		storageService.store(OrchestraAgentModeFirstRun.STORAGE_KEY, true, StorageScope.APPLICATION, StorageTarget.MACHINE);
+
+		applyAgentModeBehaviour(settingsService).catch(err => {
+			console.warn('[Orchestra] エージェントモードの初期設定に失敗しました', err);
+		});
 
 		try {
 			layoutService.setPartHidden(true, Parts.SIDEBAR_PART);
@@ -209,27 +245,87 @@ class OrchestraSimpleLayoutFirstRun extends Disposable implements IWorkbenchCont
 		}
 	}
 }
-registerWorkbenchContribution2(OrchestraSimpleLayoutFirstRun.ID, OrchestraSimpleLayoutFirstRun, WorkbenchPhase.AfterRestored);
+registerWorkbenchContribution2(OrchestraAgentModeFirstRun.ID, OrchestraAgentModeFirstRun, WorkbenchPhase.AfterRestored);
+
+
+// エージェントの稼働状況をコンテキストキーに流す。
+// エージェントモードではチャットを閉じたまま作業させることもあるので、タイトルバーから
+// 「止める」「確認する」ができるようにし、承認待ちになったらチャットが隠れていても知らせる。
+class OrchestraAgentActivityContribution extends Disposable implements IWorkbenchContribution {
+	static readonly ID = 'workbench.contrib.orchestraAgentActivity';
+
+	private readonly runningKey: IContextKey<boolean>;
+	private readonly awaitingKey: IContextKey<boolean>;
+	private wasAwaiting = false;
+
+	constructor(
+		@IContextKeyService contextKeyService: IContextKeyService,
+		@IChatThreadService private readonly chatThreadService: IChatThreadService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IWorkbenchLayoutService private readonly layoutService: IWorkbenchLayoutService,
+		@INotificationService private readonly notificationService: INotificationService,
+		@ICommandService private readonly commandService: ICommandService,
+	) {
+		super();
+		this.runningKey = OrchestraAgentRunningContext.bindTo(contextKeyService);
+		this.awaitingKey = OrchestraAgentAwaitingContext.bindTo(contextKeyService);
+		this.sync();
+		this._register(this.chatThreadService.onDidChangeStreamState(() => this.sync()));
+	}
+
+	private sync(): void {
+		let running = false;
+		let awaiting = false;
+		for (const s of Object.values(this.chatThreadService.streamState)) {
+			if (!s?.isRunning) { continue; }
+			if (s.isRunning === 'awaiting_user') { awaiting = true; }
+			else { running = true; }
+		}
+		this.runningKey.set(running);
+		this.awaitingKey.set(awaiting);
+
+		// 承認待ちに「なった」瞬間だけ、チャットが見えていなければ知らせる。
+		if (awaiting && !this.wasAwaiting && getOrchestraUiMode(this.configurationService) === 'agent' && !this.layoutService.isVisible(Parts.AUXILIARYBAR_PART)) {
+			this.notificationService.prompt(
+				Severity.Info,
+				localize('orchestraAgent.awaitingNotification', "エージェントがあなたの確認を待っています。"),
+				[{
+					label: localize('orchestraAgent.awaitingNotification.open', "確認する"),
+					run: () => { this.commandService.executeCommand(ORCHESTRA_AGENT_SHOW_PENDING_ACTION_ID); },
+				}],
+				{ sticky: true },
+			);
+		}
+		this.wasAwaiting = awaiting;
+	}
+}
+registerWorkbenchContribution2(OrchestraAgentActivityContribution.ID, OrchestraAgentActivityContribution, WorkbenchPhase.AfterRestored);
 
 
 // ---------------------------------------------------------------------------------------
 // コマンド
 // ---------------------------------------------------------------------------------------
 
-const isSimpleMode = ContextKeyExpr.equals(ORCHESTRA_UI_MODE_CONTEXT_KEY, 'simple');
+const isAgentMode = ContextKeyExpr.equals(ORCHESTRA_UI_MODE_CONTEXT_KEY, 'agent');
 const isProMode = ContextKeyExpr.equals(ORCHESTRA_UI_MODE_CONTEXT_KEY, 'pro');
+const isAgentRunning = ContextKeyExpr.equals(ORCHESTRA_AGENT_RUNNING_CONTEXT_KEY, true);
+const isAgentAwaiting = ContextKeyExpr.equals(ORCHESTRA_AGENT_AWAITING_CONTEXT_KEY, true);
 
 async function setUiMode(accessor: ServicesAccessor, mode: OrchestraUiMode): Promise<void> {
 	const configurationService = accessor.get(IConfigurationService);
 	const notificationService = accessor.get(INotificationService);
+	const settingsService = accessor.get(IVoidSettingsService);
 	if (getOrchestraUiMode(configurationService) === mode) {
 		return;
 	}
-	// 既定値が simple なので、simple に戻すときは undefined を書いてユーザー設定から消す。
-	await configurationService.updateValue(ORCHESTRA_UI_MODE_SETTING, mode === 'simple' ? undefined : mode, ConfigurationTarget.USER);
-	notificationService.info(mode === 'simple'
-		? localize('orchestraUi.switchedToSimple', "かんたんモードに切り替えました。チャットに話しかけるだけで作業を始められます。")
-		: localize('orchestraUi.switchedToPro', "上級者モードに切り替えました。IDE の全ての部品が表示されます。「Orchestra: かんたんモードに戻す」でいつでも戻せます。"));
+	// 既定値が agent なので、agent に戻すときは undefined を書いてユーザー設定から消す。
+	await configurationService.updateValue(ORCHESTRA_UI_MODE_SETTING, mode === 'agent' ? undefined : mode, ConfigurationTarget.USER);
+	if (mode === 'agent') {
+		await applyAgentModeBehaviour(settingsService);
+	}
+	notificationService.info(mode === 'agent'
+		? localize('orchestraUi.switchedToAgent', "エージェントモードに切り替えました。やってほしいことを伝えるだけで、エージェントがファイル編集やコマンド実行まで進めます。")
+		: localize('orchestraUi.switchedToPro', "上級者モードに切り替えました。IDE の全ての部品が表示されます。「Orchestra: エージェントモードに戻す」でいつでも戻せます。"));
 }
 
 registerAction2(class extends Action2 {
@@ -240,7 +336,7 @@ registerAction2(class extends Action2 {
 			category: localize2('orchestraUi.category', "Orchestra"),
 			f1: true,
 			icon: Codicon.tools,
-			precondition: isSimpleMode,
+			precondition: isAgentMode,
 		});
 	}
 	run(accessor: ServicesAccessor) {
@@ -251,16 +347,16 @@ registerAction2(class extends Action2 {
 registerAction2(class extends Action2 {
 	constructor() {
 		super({
-			id: ORCHESTRA_UI_SET_SIMPLE_MODE_ACTION_ID,
-			title: localize2('orchestraUi.setSimple', "Orchestra: かんたんモードに戻す"),
+			id: ORCHESTRA_UI_SET_AGENT_MODE_ACTION_ID,
+			title: localize2('orchestraUi.setAgent', "Orchestra: エージェントモードに戻す"),
 			category: localize2('orchestraUi.category', "Orchestra"),
 			f1: true,
-			icon: Codicon.sparkle,
+			icon: Codicon.robot,
 			precondition: isProMode,
 		});
 	}
 	run(accessor: ServicesAccessor) {
-		return setUiMode(accessor, 'simple');
+		return setUiMode(accessor, 'agent');
 	}
 });
 
@@ -268,7 +364,7 @@ registerAction2(class extends Action2 {
 	constructor() {
 		super({
 			id: ORCHESTRA_UI_TOGGLE_MODE_ACTION_ID,
-			title: localize2('orchestraUi.toggle', "Orchestra: 表示モードを切り替える (かんたん / 上級者)"),
+			title: localize2('orchestraUi.toggle', "Orchestra: 表示モードを切り替える (エージェント / 上級者)"),
 			category: localize2('orchestraUi.category', "Orchestra"),
 			f1: true,
 			keybinding: {
@@ -279,12 +375,12 @@ registerAction2(class extends Action2 {
 	}
 	run(accessor: ServicesAccessor) {
 		const mode = getOrchestraUiMode(accessor.get(IConfigurationService));
-		return setUiMode(accessor, mode === 'simple' ? 'pro' : 'simple');
+		return setUiMode(accessor, mode === 'agent' ? 'pro' : 'agent');
 	}
 });
 
 
-// かんたんモードではアクティビティバーが無いので、「ファイル一覧」「ターミナル」「チャット」の
+// エージェントモードではアクティビティバーが無いので、「ファイル一覧」「ターミナル」「エージェント」の
 // 開閉ボタンをタイトルバー右側に、言葉付きのツールチップで置く。上級者モードでは出さない。
 
 registerAction2(class extends Action2 {
@@ -295,7 +391,7 @@ registerAction2(class extends Action2 {
 			category: localize2('orchestraUi.category', "Orchestra"),
 			f1: true,
 			icon: Codicon.files,
-			menu: { id: MenuId.TitleBar, group: 'navigation', order: 1, when: isSimpleMode },
+			menu: { id: MenuId.TitleBar, group: 'navigation', order: 1, when: isAgentMode },
 		});
 	}
 	run(accessor: ServicesAccessor) {
@@ -319,7 +415,7 @@ registerAction2(class extends Action2 {
 			category: localize2('orchestraUi.category', "Orchestra"),
 			f1: true,
 			icon: Codicon.terminal,
-			menu: { id: MenuId.TitleBar, group: 'navigation', order: 2, when: isSimpleMode },
+			menu: { id: MenuId.TitleBar, group: 'navigation', order: 2, when: isAgentMode },
 		});
 	}
 	run(accessor: ServicesAccessor) {
@@ -339,11 +435,11 @@ registerAction2(class extends Action2 {
 	constructor() {
 		super({
 			id: ORCHESTRA_UI_TOGGLE_CHAT_ACTION_ID,
-			title: localize2('orchestraUi.toggleChat', "AI チャットを表示 / 隠す"),
+			title: localize2('orchestraUi.toggleChat', "エージェントを表示 / 隠す"),
 			category: localize2('orchestraUi.category', "Orchestra"),
 			f1: true,
-			icon: Codicon.commentDiscussion,
-			menu: { id: MenuId.TitleBar, group: 'navigation', order: 3, when: isSimpleMode },
+			icon: Codicon.robot,
+			menu: { id: MenuId.TitleBar, group: 'navigation', order: 3, when: isAgentMode },
 		});
 	}
 	run(accessor: ServicesAccessor) {
@@ -359,14 +455,72 @@ registerAction2(class extends Action2 {
 	}
 });
 
-// タイトルバーの一番右: 上級者モードへ / かんたんモードへ。
+
+// エージェントの制御: 動いている間は「止める」、承認待ちなら「確認する」。
+// どちらもエージェントモードのタイトルバーに出る (チャットを閉じていても手が届くように)。
+
+registerAction2(class extends Action2 {
+	constructor() {
+		super({
+			id: ORCHESTRA_AGENT_STOP_ACTION_ID,
+			title: localize2('orchestraAgent.stop', "エージェントを止める"),
+			category: localize2('orchestraUi.category', "Orchestra"),
+			f1: true,
+			icon: Codicon.debugStop,
+			precondition: isAgentRunning,
+			menu: { id: MenuId.TitleBar, group: 'navigation', order: 4, when: ContextKeyExpr.and(isAgentMode, isAgentRunning) },
+		});
+	}
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const chatThreadService = accessor.get(IChatThreadService);
+		const running = Object.entries(chatThreadService.streamState)
+			.filter(([, s]) => s?.isRunning && s.isRunning !== 'awaiting_user')
+			.map(([threadId]) => threadId);
+		await Promise.all(running.map(threadId => chatThreadService.abortRunning(threadId)));
+	}
+});
+
+registerAction2(class extends Action2 {
+	constructor() {
+		super({
+			id: ORCHESTRA_AGENT_SHOW_PENDING_ACTION_ID,
+			title: localize2('orchestraAgent.showPending', "エージェントの確認待ちを見る"),
+			category: localize2('orchestraUi.category', "Orchestra"),
+			f1: true,
+			icon: Codicon.bellDot,
+			precondition: isAgentAwaiting,
+			menu: { id: MenuId.TitleBar, group: 'navigation', order: 4, when: ContextKeyExpr.and(isAgentMode, isAgentAwaiting) },
+		});
+	}
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const chatThreadService = accessor.get(IChatThreadService);
+		const commandService = accessor.get(ICommandService);
+		const viewsService = accessor.get(IViewsService);
+
+		// 今のスレッドが承認待ちでなければ、承認待ちのスレッドへ切り替える。
+		const currentId = chatThreadService.state.currentThreadId;
+		if (chatThreadService.streamState[currentId]?.isRunning !== 'awaiting_user') {
+			const pending = Object.entries(chatThreadService.streamState).find(([, s]) => s?.isRunning === 'awaiting_user');
+			if (pending) {
+				chatThreadService.switchToThread(pending[0]);
+			}
+		}
+		if (!viewsService.isViewContainerVisible(VOID_VIEW_CONTAINER_ID)) {
+			await commandService.executeCommand(VOID_OPEN_SIDEBAR_ACTION_ID);
+		}
+		await chatThreadService.focusCurrentChat();
+	}
+});
+
+
+// タイトルバーの一番右: 上級者モードへ / エージェントモードへ。
 registerAction2(class extends Action2 {
 	constructor() {
 		super({
 			id: 'orchestra.ui.titleBar.switchToPro',
 			title: localize2('orchestraUi.titleBar.toPro', "上級者モード (IDE 表示) に切り替える"),
 			icon: Codicon.tools,
-			menu: { id: MenuId.TitleBar, group: 'navigation', order: 9, when: isSimpleMode },
+			menu: { id: MenuId.TitleBar, group: 'navigation', order: 9, when: isAgentMode },
 		});
 	}
 	run(accessor: ServicesAccessor) {
@@ -377,27 +531,27 @@ registerAction2(class extends Action2 {
 registerAction2(class extends Action2 {
 	constructor() {
 		super({
-			id: 'orchestra.ui.titleBar.switchToSimple',
-			title: localize2('orchestraUi.titleBar.toSimple', "かんたんモードに戻す"),
-			icon: Codicon.sparkle,
+			id: 'orchestra.ui.titleBar.switchToAgent',
+			title: localize2('orchestraUi.titleBar.toAgent', "エージェントモードに戻す"),
+			icon: Codicon.robot,
 			menu: { id: MenuId.TitleBar, group: 'navigation', order: 9, when: isProMode },
 		});
 	}
 	run(accessor: ServicesAccessor) {
-		return setUiMode(accessor, 'simple');
+		return setUiMode(accessor, 'agent');
 	}
 });
 
 
 // ---------------------------------------------------------------------------------------
-// ホーム画面などから、文字列を 1 つ渡してそのままチャットに送る
+// ホーム画面などから、文字列を 1 つ渡してそのままエージェントに送る
 // ---------------------------------------------------------------------------------------
 
 registerAction2(class extends Action2 {
 	constructor() {
 		super({
 			id: ORCHESTRA_CHAT_SEND_PROMPT_ACTION_ID,
-			title: localize2('orchestraUi.sendPrompt', "Orchestra: チャットにメッセージを送る"),
+			title: localize2('orchestraUi.sendPrompt', "Orchestra: エージェントにメッセージを送る"),
 		});
 	}
 	async run(accessor: ServicesAccessor, userMessage?: unknown): Promise<void> {

@@ -311,43 +311,45 @@ export const translations = {
 	'chat.suggested.voidrules': { en: 'Create a .voidrules file for me', ja: '.voidrules ファイルを作成して' },
 	'chat.suggested.voidrules.hint': { en: 'Generate a file', ja: 'ファイルを生成' },
 
-	// Sidebar chat - かんたんモード (初心者向け) の文言
-	'chat.simple.greeting': { en: 'What would you like to make?', ja: '何を作りましょうか？' },
-	'chat.simple.greetingHint': { en: 'Just describe it in your own words. No code needed.', ja: 'やりたいことを、そのまま自分の言葉で書いてください。コードは要りません。' },
-	'chat.simple.placeholder': { en: 'e.g. "Make a simple to-do app" or "Explain this error"', ja: '例:「シンプルな TODO アプリを作って」「このエラーを説明して」' },
-	'chat.simple.placeholderStreaming': { en: 'Working on it… Press Esc to stop', ja: '作業中です… 止めたいときは Esc' },
-	'chat.simple.suggestedTitle': { en: 'Try one of these', ja: 'たとえば、こんなふうに' },
-	'chat.simple.suggested.explain': { en: 'Tell me what is in this folder', ja: 'このフォルダに何が入っているか教えて' },
-	'chat.simple.suggested.explain.hint': { en: 'Get a plain-language tour of the project', ja: 'プロジェクトの中身をやさしく説明してもらう' },
-	'chat.simple.suggested.todo': { en: 'Make a simple to-do app', ja: 'シンプルな TODO アプリを作って' },
-	'chat.simple.suggested.todo.hint': { en: 'Build something from scratch', ja: 'ゼロから何かを作ってみる' },
-	'chat.simple.suggested.fix': { en: 'Something is broken, please fix it', ja: 'エラーが出たので直してほしい' },
-	'chat.simple.suggested.fix.hint': { en: 'Paste the error and let the AI investigate', ja: 'エラーを貼って AI に調べてもらう' },
-	'chat.simple.suggested.explain.prompt': {
-		en: 'Look at this folder and explain, for a beginner, what kind of project it is and what the main files do.',
-		ja: 'このフォルダの中身を見て、何のプロジェクトで、どんなファイルがあるのか初心者にも分かるように説明してください。',
+	// Sidebar chat - エージェントモードの文言 (チャットを「エージェントへの指示欄」として見せる)
+	'chat.agent.greeting': { en: 'What should the agent do?', ja: 'エージェントに何をさせますか？' },
+	'chat.agent.greetingHint': { en: 'Describe the task in your own words. The agent edits files, runs commands and checks the result on its own.', ja: 'やってほしいことを自分の言葉で書いてください。エージェントがファイル編集・コマンド実行・結果の確認まで自分で進めます。' },
+	'chat.agent.placeholder': { en: 'e.g. "Build a simple to-do app and run it" or "Fix the failing tests"', ja: '例:「シンプルな TODO アプリを作って動かして」「落ちているテストを直して」' },
+	'chat.agent.placeholderStreaming': { en: 'The agent is working… Press Esc to stop', ja: 'エージェントが作業中です… 止めたいときは Esc' },
+	'chat.agent.suggestedTitle': { en: 'Tasks you can hand over', ja: 'たとえば、こんな仕事を任せられます' },
+	'chat.agent.suggested.explore': { en: 'Explore this project and explain its structure', ja: 'このプロジェクトを調べて、構成を説明して' },
+	'chat.agent.suggested.explore.hint': { en: 'The agent reads the code and reports back', ja: 'エージェントがコードを読んで報告します' },
+	'chat.agent.suggested.build': { en: 'Build a simple to-do app and run it', ja: 'シンプルな TODO アプリを作って動かして' },
+	'chat.agent.suggested.build.hint': { en: 'Create files, then verify it works', ja: 'ファイルを作成して、動作まで確認します' },
+	'chat.agent.suggested.fix': { en: 'Run the tests and fix what fails', ja: 'テストを実行して、失敗を直して' },
+	'chat.agent.suggested.fix.hint': { en: 'Run, investigate, fix, re-run', ja: '実行 → 調査 → 修正 → 再実行まで自動' },
+	'chat.agent.suggested.explore.prompt': {
+		en: 'Explore this folder and explain what kind of project it is and how it is structured, including what the main files do.',
+		ja: 'このフォルダの中身を調べて、何のプロジェクトで、どんな構成になっているか、主要なファイルの役割とあわせて分かりやすく説明してください。',
 	},
-	'chat.simple.suggested.todo.prompt': {
-		en: 'Create a simple to-do app in this folder that runs in the browser, using only HTML, CSS and JavaScript. Then tell me how to open it.',
-		ja: 'このフォルダに、ブラウザで動くシンプルな TODO アプリを作ってください。HTML / CSS / JavaScript だけで作り、開き方も教えてください。',
+	'chat.agent.suggested.build.prompt': {
+		en: 'Create a simple to-do app in this folder that runs in the browser, using only HTML, CSS and JavaScript. Create the files, then make sure it can be opened and works, and tell me how to open it.',
+		ja: 'このフォルダに、ブラウザで動くシンプルな TODO アプリを作ってください。HTML / CSS / JavaScript だけで作り、必要なファイルを作成したら、実際に開いて動作を確認できる手順まで用意してください。',
 	},
-	'chat.simple.suggested.fix.prompt': {
-		en: 'Something is not working. Please investigate and fix it. If you need the error message, tell me exactly what to paste.',
-		ja: 'いまエラーが出ています。原因を調べて直してください。必要なら、どのエラーメッセージを貼ればいいか教えてください。',
+	'chat.agent.suggested.fix.prompt': {
+		en: 'Run this project\'s tests. If any fail, investigate the cause, fix it, run the tests again to confirm they pass, and then report what you changed.',
+		ja: 'このプロジェクトのテストを実行してください。失敗するものがあれば原因を調べて修正し、もう一度実行して通ることを確認してから結果を報告してください。',
 	},
-	'chat.simple.advanced': { en: 'Advanced options', ja: '詳しい設定' },
-	'chat.simple.tip': { en: 'Tip: you can attach a file with @ or paste a screenshot.', ja: 'ヒント: @ でファイルを指定したり、スクリーンショットを貼り付けたりできます。' },
+	'chat.agent.advanced': { en: 'Model & options', ja: 'モデルなどの設定' },
+	'chat.agent.tip': { en: 'Tip: @ attaches a file, screenshots can be pasted, and Esc stops the agent at any time.', ja: 'ヒント: @ でファイルを指定、スクリーンショットは貼り付け、Esc でいつでもエージェントを止められます。' },
+	'chat.agent.autoBadge': { en: 'Autonomous: edits & commands run without asking', ja: '自律実行中: ファイル編集とコマンドは確認なしで進みます' },
 	'chat.header.kanban': { en: 'Task board', ja: 'タスクボード' },
 	'chat.header.settings': { en: 'Settings', ja: '設定' },
-	'chat.header.uiMode': { en: 'Display mode', ja: '表示モード' },
+	'chat.header.uiMode': { en: 'Display mode (Agent / Pro)', ja: '表示モード (エージェント / 上級者)' },
 
 	// Settings - 表示モード
 	'general.uiMode.title': { en: 'Display mode', ja: '表示モード' },
-	'general.uiMode.subtitle': { en: 'Choose how much of the editor is shown. You can switch anytime.', ja: 'どこまでエディタの部品を表示するかを選びます。いつでも切り替えられます。' },
-	'general.uiMode.simple': { en: 'Simple', ja: 'かんたんモード' },
-	'general.uiMode.simple.desc': { en: 'Chat and a home screen take center stage. IDE parts like the activity bar, status bar and minimap are hidden.', ja: 'チャットとホーム画面が中心。アクティビティバー・ステータスバー・ミニマップなど IDE 的な部品は隠れます。' },
+	'general.uiMode.subtitle': { en: 'Choose whether the agent or the editor takes center stage. You can switch anytime.', ja: 'エージェントとエディタのどちらを主役にするかを選びます。いつでも切り替えられます。' },
+	'general.uiMode.agent': { en: 'Agent mode', ja: 'エージェントモード' },
+	'general.uiMode.agent.desc': { en: 'Hand the work to the AI agent. Chat and a home screen take center stage; IDE parts like the activity bar, status bar and minimap are hidden.', ja: 'AI エージェントに作業を任せるモード。チャットとホーム画面が中心で、アクティビティバー・ステータスバー・ミニマップなど IDE 的な部品は隠れます。' },
+	'general.uiMode.agent.note': { en: 'Switching to Agent mode also sets the chat to "Agent" and turns on auto-approval for file edits and terminal commands. You can change those individually below.', ja: 'エージェントモードに切り替えると、チャットモードが「エージェント」になり、ファイル編集とターミナル実行の自動承認がオンになります。それぞれは下の設定で個別に変えられます。' },
 	'general.uiMode.pro': { en: 'Pro (IDE)', ja: '上級者モード (IDE 表示)' },
-	'general.uiMode.pro.desc': { en: 'The full VS Code layout for people who already know their way around an editor.', ja: 'エディタの操作に慣れている方向け。VS Code と同じ IDE の表示になります。' },
+	'general.uiMode.pro.desc': { en: 'The full VS Code layout for people who want to edit code themselves alongside the agent.', ja: 'エージェントと並んで自分でもコードを編集したい方向け。VS Code と同じ IDE の表示になります。' },
 	'general.uiMode.current': { en: 'Current', ja: '現在' },
 
 	// Onboarding
