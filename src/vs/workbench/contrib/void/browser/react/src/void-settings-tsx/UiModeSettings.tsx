@@ -4,16 +4,16 @@
  *--------------------------------------------------------------------------------------*/
 
 // Settings > 一般 の「表示モード」。
-// かんたんモード (初心者向け・IDE 的な部品を隠す) と 上級者モード (VS Code そのまま) を
+// エージェントモード (AI エージェントに任せる・IDE 的な部品を隠す) と 上級者モード (VS Code そのまま) を
 // 2 枚のカードで選ぶ。実体は VS Code 設定 `orchestra.ui.mode` で、切替の処理は
-// orchestraUiMode.ts 側のコマンドに任せる (通知やユーザー設定の書き戻しをそこに集約している)。
+// orchestraUiMode.ts 側のコマンドに任せる (通知・ユーザー設定の書き戻し・エージェント動作設定をそこに集約している)。
 
 import React from 'react';
-import { Check, Sparkles, Wrench } from 'lucide-react';
+import { Bot, Check, Wrench } from 'lucide-react';
 
 import { useAccessor, useOrchestraUiMode } from '../util/services.js';
 import { useTranslation } from '../util/i18n.js';
-import { ORCHESTRA_UI_SET_PRO_MODE_ACTION_ID, ORCHESTRA_UI_SET_SIMPLE_MODE_ACTION_ID, OrchestraUiMode } from '../../../orchestraUiModeTypes.js';
+import { ORCHESTRA_UI_SET_PRO_MODE_ACTION_ID, ORCHESTRA_UI_SET_AGENT_MODE_ACTION_ID, OrchestraUiMode } from '../../../orchestraUiModeTypes.js';
 
 
 const ModeCard = ({ selected, icon, title, description, currentLabel, onSelect }: {
@@ -56,7 +56,7 @@ export const UiModeSettings = () => {
 
 	const select = (next: OrchestraUiMode) => {
 		if (next === mode) return;
-		commandService.executeCommand(next === 'pro' ? ORCHESTRA_UI_SET_PRO_MODE_ACTION_ID : ORCHESTRA_UI_SET_SIMPLE_MODE_ACTION_ID);
+		commandService.executeCommand(next === 'pro' ? ORCHESTRA_UI_SET_PRO_MODE_ACTION_ID : ORCHESTRA_UI_SET_AGENT_MODE_ACTION_ID);
 	};
 
 	return (
@@ -65,12 +65,12 @@ export const UiModeSettings = () => {
 			<h4 className='text-void-fg-3 mb-4'>{t('general.uiMode.subtitle')}</h4>
 			<div className='grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl'>
 				<ModeCard
-					selected={mode === 'simple'}
-					icon={<Sparkles size={16} />}
-					title={t('general.uiMode.simple')}
-					description={t('general.uiMode.simple.desc')}
+					selected={mode === 'agent'}
+					icon={<Bot size={16} />}
+					title={t('general.uiMode.agent')}
+					description={t('general.uiMode.agent.desc')}
 					currentLabel={t('general.uiMode.current')}
-					onSelect={() => select('simple')}
+					onSelect={() => select('agent')}
 				/>
 				<ModeCard
 					selected={mode === 'pro'}
@@ -81,6 +81,7 @@ export const UiModeSettings = () => {
 					onSelect={() => select('pro')}
 				/>
 			</div>
+			<p className='text-[12px] text-void-fg-4 mt-3 max-w-2xl leading-relaxed'>{t('general.uiMode.agent.note')}</p>
 		</div>
 	);
 };

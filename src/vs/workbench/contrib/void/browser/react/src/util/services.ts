@@ -569,12 +569,12 @@ export const useIsOptedOut = () => {
 }
 
 
-// Orchestra の表示モード (かんたん / 上級者)。実体は VS Code 設定 `orchestra.ui.mode`。
-// かんたんモードではチャットの文言を初心者向けにし、細かいオプションを畳む。
+// Orchestra の表示モード (エージェント / 上級者)。実体は VS Code 設定 `orchestra.ui.mode`。
+// エージェントモードではチャットを「エージェントへの指示欄」として見せ、細かいオプションを畳む。
 export const useOrchestraUiMode = (): OrchestraUiMode => {
 	const accessor = useAccessor()
 	const configurationService = accessor.get('IConfigurationService')
-	const read = useCallback((): OrchestraUiMode => configurationService.getValue<string>(ORCHESTRA_UI_MODE_SETTING) === 'pro' ? 'pro' : 'simple', [configurationService])
+	const read = useCallback((): OrchestraUiMode => configurationService.getValue<string>(ORCHESTRA_UI_MODE_SETTING) === 'pro' ? 'pro' : 'agent', [configurationService])
 	const [mode, setMode] = useState<OrchestraUiMode>(read)
 	useEffect(() => {
 		setMode(read())

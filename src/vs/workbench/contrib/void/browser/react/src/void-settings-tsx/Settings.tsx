@@ -1911,7 +1911,7 @@ export const Settings = () => {
 
 							{/* General section */}
 							<div className={`${shouldShowTab('general') ? `` : 'hidden'} flex flex-col gap-12`}>
-								{/* 表示モード (かんたん / 上級者) */}
+								{/* 表示モード (エージェント / 上級者) */}
 								<div>
 									<ErrorBoundary>
 										<UiModeSettings />

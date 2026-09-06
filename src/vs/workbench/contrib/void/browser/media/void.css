@@ -245,10 +245,10 @@
 
 
 /* =====================================================================================
- * Orchestra かんたんモードのホーム画面 (editorGroupWatermark.ts の renderSimpleHome)
+ * Orchestra エージェントモードのホーム画面 (editorGroupWatermark.ts の renderAgentHome)
  *
  * VS Code の透かし (.editor-group-watermark) は幅 290px で中央寄せ・ショートカット表を
- * 出す前提の CSS なので、かんたんモードでは .orchestra-home を付けて広げ、カード状の
+ * 出す前提の CSS なので、エージェントモードでは .orchestra-home を付けて広げ、カード状の
  * ホーム画面として描き直す。色はすべてテーマ変数から取り、ライト / ダーク両方で読めるようにする。
  * ===================================================================================== */
 
@@ -326,6 +326,34 @@
 	letter-spacing: 0.06em;
 	text-transform: uppercase;
 	color: var(--vscode-descriptionForeground);
+}
+
+/* エージェントにできること (横並びのチップ) */
+.orchestra-home__capabilities {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 8px;
+}
+
+.orchestra-home__capability {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 5px 12px;
+	border-radius: 999px;
+	font-size: 12px;
+	color: var(--vscode-descriptionForeground);
+	background: color-mix(in srgb, var(--vscode-sideBar-background) 70%, var(--vscode-editor-background));
+	border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, transparent));
+}
+
+.orchestra-home__capability-icon {
+	font-size: 13px;
+	line-height: 1;
 }
 
 /* 3 ステップ */
