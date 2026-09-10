@@ -34,7 +34,7 @@ const SEGMENTS = 16
 const FRAMES = 16     // more phase samples per cycle keeps the weave smooth now that it runs faster
 
 const DURATION = '2s'
-const EASING = 'cubic-bezier(0.45, 0, 0.55, 1)'
+const EASING = 'linear'
 
 const ARROW_POINTS = '0,-6 14,0 0,6 4.5,0'
 
@@ -109,10 +109,14 @@ const buildCss = (): string => [
 	keyframesFor('orchestra-mark-wave-b', p => `d: path("${pathFor(p, 1)}");`),
 	keyframesFor('orchestra-mark-head-a', p => `transform: ${headTransform(p, -1)};`),
 	keyframesFor('orchestra-mark-head-b', p => `transform: ${headTransform(p, 1)};`),
+	`[data-orchestra-mark] [data-om-light] { fill: none; stroke: #ffbac2; stroke-width: 1; stroke-linecap: round; stroke-dasharray: 9 91; animation: orchestra-mark-wave-a ${DURATION} ${EASING} infinite, orchestra-mark-signal ${DURATION} linear infinite; }`,
+	`[data-orchestra-mark] [data-om-light="b"] { animation-name: orchestra-mark-wave-b, orchestra-mark-signal; animation-delay: 0s, -1s; }`,
+	`@keyframes orchestra-mark-signal { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }`,
 	// Falls back to the mark held at its first phase, which the `d` attributes and the
 	// inline transforms on the arrowheads already put on screen.
 	`@media (prefers-reduced-motion: reduce) {
-	[data-orchestra-mark] [data-om] { animation: none; }
+	[data-orchestra-mark] [data-om], [data-orchestra-mark] [data-om-light] { animation: none; }
+	[data-orchestra-mark] [data-om-light] { display: none; }
 }`
 ].join('\n')
 
@@ -153,6 +157,8 @@ export const OrchestraMark = ({ height = 16, className = '' }: { height?: number
 			</defs>
 			<path data-om='strand-a' d={pathFor(phaseAt(0), -1)} stroke={`url(#${fadeId})`} />
 			<path data-om='strand-b' d={pathFor(phaseAt(0), 1)} stroke={`url(#${fadeId})`} />
+			<path data-om='strand-a' data-om-light='a' pathLength={100} d={pathFor(phaseAt(0), -1)} />
+			<path data-om='strand-b' data-om-light='b' pathLength={100} d={pathFor(phaseAt(0), 1)} />
 			<polygon data-om='head-a' points={ARROW_POINTS} style={{ transform: headTransform(phaseAt(0), -1) }} />
 			<polygon data-om='head-b' points={ARROW_POINTS} style={{ transform: headTransform(phaseAt(0), 1) }} />
 		</svg>

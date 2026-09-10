@@ -95,6 +95,7 @@
 
 		// Drop the spinner/logo, then reuse its full-window container for the message.
 		splashLogo.textContent = '';
+		splashLogo.setAttribute('aria-label', 'Orchestra を起動できませんでした');
 		splashLogo.style.flexDirection = 'column';
 		splashLogo.style.gap = '12px';
 		splashLogo.style.padding = '40px';
@@ -288,15 +289,24 @@
 		window.document.head.appendChild(style);
 		style.textContent = `
 			body { background-color: ${shellBackground}; color: ${shellForeground}; margin: 0; padding: 0; }
-			#monaco-workbench-splash-logo { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; pointer-events: none; overflow: visible; animation: monaco-workbench-splash-logo-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
-			#monaco-workbench-splash-logo svg { overflow: visible; }
+			#monaco-workbench-splash-logo { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 18px; background-color: ${shellBackground}; pointer-events: none; overflow: hidden; animation: monaco-workbench-splash-logo-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
+			#monaco-workbench-splash-logo svg { overflow: visible; width: min(320px, 80vw); height: auto; flex-shrink: 0; }
+			#monaco-workbench-splash-logo .boot-wordmark { font: 500 15px system-ui, sans-serif; letter-spacing: 0.32em; padding-left: 0.32em; animation: monaco-workbench-splash-caption-in 0.8s 0.15s both; }
+			#monaco-workbench-splash-logo .boot-meter { width: 96px; height: 2px; overflow: hidden; background: rgba(224, 36, 49, 0.12); border-radius: 2px; animation: monaco-workbench-splash-caption-in 0.8s 0.3s both; }
+			#monaco-workbench-splash-logo .boot-meter::after { content: ''; display: block; height: 100%; width: 50%; background: linear-gradient(90deg, transparent, #e02431, transparent); animation: monaco-workbench-splash-meter 1.8s ease-in-out infinite; }
+			#monaco-workbench-splash-logo .boot-strand.boot-signal { stroke: #ffbac2; stroke-width: 1.8; stroke-dasharray: 8 92; filter: none; }
+			#monaco-workbench-splash-logo .boot-strand.boot-signal-a { animation: monaco-workbench-splash-wave-a 4s linear infinite, monaco-workbench-splash-signal 2s linear infinite; }
+			#monaco-workbench-splash-logo .boot-strand.boot-signal-b { animation: monaco-workbench-splash-wave-b 4s linear infinite, monaco-workbench-splash-signal 2s -1s linear infinite; }
+			@keyframes monaco-workbench-splash-caption-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+			@keyframes monaco-workbench-splash-meter { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+			@keyframes monaco-workbench-splash-signal { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
 			#monaco-workbench-splash-logo .boot-ambient { fill: url(#boot-splash-ambient); animation: monaco-workbench-splash-ambient-pulse 4.8s ease-in-out infinite; }
 			#monaco-workbench-splash-logo .boot-strand { fill: none; stroke: url(#boot-splash-fade); stroke-width: 5; stroke-linecap: round;${bloom} }
 			#monaco-workbench-splash-logo .boot-arrowhead { fill: #e02431; stroke: #e02431; stroke-width: 1.4; stroke-linejoin: round; transform-box: view-box; transform-origin: 0 0;${bloom} }
-			#monaco-workbench-splash-logo .boot-strand-a { animation: monaco-workbench-splash-wave-a 4s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
-			#monaco-workbench-splash-logo .boot-strand-b { animation: monaco-workbench-splash-wave-b 4s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
-			#monaco-workbench-splash-logo .boot-arrowhead-a { animation: monaco-workbench-splash-head-a 4s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
-			#monaco-workbench-splash-logo .boot-arrowhead-b { animation: monaco-workbench-splash-head-b 4s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
+			#monaco-workbench-splash-logo .boot-strand-a { animation: monaco-workbench-splash-wave-a 4s linear infinite; }
+			#monaco-workbench-splash-logo .boot-strand-b { animation: monaco-workbench-splash-wave-b 4s linear infinite; }
+			#monaco-workbench-splash-logo .boot-arrowhead-a { animation: monaco-workbench-splash-head-a 4s linear infinite; }
+			#monaco-workbench-splash-logo .boot-arrowhead-b { animation: monaco-workbench-splash-head-b 4s linear infinite; }
 			@keyframes monaco-workbench-splash-logo-in {
 				0%   { opacity: 0; transform: scale(0.96); }
 				100% { opacity: 1; transform: scale(1); }
@@ -381,7 +391,10 @@
 				93.75%     { transform: translate(232px, 81.9px) rotate(4.6deg); }
 				100%     { transform: translate(232px, 80.8px) rotate(0.1deg); }
 			}
-			@media (prefers-reduced-motion: reduce) { #monaco-workbench-splash-logo, #monaco-workbench-splash-logo .boot-ambient, #monaco-workbench-splash-logo .boot-strand-a, #monaco-workbench-splash-logo .boot-strand-b, #monaco-workbench-splash-logo .boot-arrowhead-a, #monaco-workbench-splash-logo .boot-arrowhead-b { animation: none; } }
+			@media (prefers-reduced-motion: reduce) {
+				#monaco-workbench-splash-logo, #monaco-workbench-splash-logo *, #monaco-workbench-splash-logo ::after { animation: none !important; }
+				#monaco-workbench-splash-logo .boot-signal { display: none; }
+			}
 		`;
 
 		// Orchestra: two strands weaving around a centre line the whole width before
@@ -403,8 +416,10 @@
 
 		const splashLogo = document.createElement('div');
 		splashLogo.id = 'monaco-workbench-splash-logo';
+		splashLogo.setAttribute('role', 'status');
+		splashLogo.setAttribute('aria-label', 'Orchestra を起動しています');
 
-		const svg = svgEl('svg', { viewBox: '0 0 320 120', width: '320', height: '120' });
+		const svg = svgEl('svg', { viewBox: '0 0 266 120', width: '320', height: '144', 'aria-hidden': 'true' });
 
 		const gradient = svgEl('linearGradient', {
 			id: 'boot-splash-fade', x1: '10', y1: '0', x2: '230', y2: '0', gradientUnits: 'userSpaceOnUse'
@@ -452,7 +467,26 @@
 			class: 'boot-arrowhead boot-arrowhead-b', points: '0,-11 24,0 0,11 7,0', style: 'transform: translate(232px, 80.8px) rotate(0.1deg)'
 		}));
 
+		// Reuse each strand's geometry so the travelling highlight stays attached.
+		for (const side of ['a', 'b']) {
+			const strand = svg.querySelector('.boot-strand-' + side);
+			if (strand) {
+				const signal = strand.cloneNode(false) as SVGElement;
+				signal.setAttribute('class', 'boot-strand boot-signal boot-signal-' + side);
+				signal.setAttribute('pathLength', '100');
+				svg.appendChild(signal);
+			}
+		}
 		splashLogo.appendChild(svg);
+		const wordmark = document.createElement('div');
+		wordmark.className = 'boot-wordmark';
+		wordmark.textContent = 'ORCHESTRA';
+		wordmark.setAttribute('aria-hidden', 'true');
+		splashLogo.appendChild(wordmark);
+		const meter = document.createElement('div');
+		meter.className = 'boot-meter';
+		meter.setAttribute('aria-hidden', 'true');
+		splashLogo.appendChild(meter);
 		window.document.body.appendChild(splashLogo);
 
 		// set zoom level as soon as possible
