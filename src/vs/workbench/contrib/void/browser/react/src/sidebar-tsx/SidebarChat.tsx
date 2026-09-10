@@ -60,14 +60,30 @@ if (typeof document !== 'undefined' && !document.getElementById('void-sidebar-ch
 	50% { opacity: 0.55; transform: scale(0.85); }
 }
 @keyframes voidBubbleIn {
-	from { opacity: 0; transform: translateY(6px) scale(0.985); }
+	from { opacity: 0; transform: translateY(10px) scale(0.985); }
 	to { opacity: 1; transform: translateY(0) scale(1); }
 }
-.void-bubble-in { animation: voidBubbleIn 220ms cubic-bezier(0.16, 1, 0.3, 1) both; }
-.void-pulse-dot { animation: pulse 1.4s ease-in-out infinite; }
+/* Data attributes survive the scope-tailwind class prefix rewrite. */
+[data-orchestra-enter] { animation: voidBubbleIn 420ms cubic-bezier(0.16, 1, 0.3, 1) backwards; transform-origin: top left; }
+[data-orchestra-enter="user"] { transform-origin: top right; animation-duration: 320ms; }
+[data-orchestra-card] { position: relative; }
+[data-orchestra-card="active"]::after {
+	content: ''; position: absolute; inset: 0 0 auto; height: 1px; pointer-events: none;
+	background: linear-gradient(90deg, transparent, var(--vscode-focusBorder, #e02431), transparent);
+	animation: orchestraChatSweep 2.4s ease-in-out infinite;
+}
+@keyframes orchestraChatSweep {
+	0% { transform: translateX(-100%); opacity: 0; }
+	25%, 65% { opacity: 0.8; }
+	100% { transform: translateX(100%); opacity: 0; }
+}
+[data-orchestra-loading] { animation: voidBubbleIn 300ms ease-out backwards; }
+
+[data-orchestra-pulse] { animation: pulse 1.4s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
-	.void-bubble-in { animation: none; }
-	.void-pulse-dot { animation: none; }
+	[data-orchestra-enter], [data-orchestra-loading], [data-orchestra-card]::after { animation: none; }
+	[data-orchestra-card]::after { display: none; }
+	[data-orchestra-pulse] { animation: none; }
 }
 `
 	document.head.appendChild(style)
@@ -163,6 +179,7 @@ export const IconLoading = ({ className = '' }: { className?: string }) => {
 	return (
 		<span
 			className={`inline-flex items-center ${className}`}
+			data-orchestra-loading=''
 			role='status'
 			aria-label='読み込み中'
 		>
@@ -1861,8 +1878,9 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 
 	return <div
 		ref={stickyRef}
+		data-orchestra-enter="user"
 		className={`
-        void-bubble-in group relative w-full max-w-full rounded-lg overflow-hidden mb-1.5
+        group relative w-full max-w-full rounded-lg overflow-hidden mb-1.5
         ${mode === 'edit' ? 'pl-0 pr-0 py-0' : 'pl-2.5 pr-7 py-1'}
 
         ${isCheckpointGhost && !isMsgAfterCheckpoint ? 'opacity-50 pointer-events-none' : ''}
@@ -2366,7 +2384,8 @@ const FlowIndicator = ({ messages, isRunning, reasoningSoFar }: {
 	return (
 		<div className="flex items-center gap-1.5 text-[11px] text-void-fg-3 py-1">
 			<span
-				className="void-pulse-dot inline-block w-1.5 h-1.5 rounded-full bg-[var(--vscode-focusBorder)]"
+				data-orchestra-pulse=""
+				className="inline-block w-1.5 h-1.5 rounded-full bg-[var(--vscode-focusBorder)]"
 				style={{ boxShadow: '0 0 6px var(--vscode-focusBorder)' }}
 			/>
 			<span>{activePhase.label}</span>
@@ -2417,7 +2436,7 @@ const CollapsibleFlowCard = ({
 	}, [isStreaming])
 
 	return (
-		<div className='rounded-md border border-void-border-2 bg-void-bg-2/60 overflow-hidden'>
+		<div data-orchestra-enter="assistant" data-orchestra-card={isStreaming ? 'active' : 'idle'} className='rounded-md border border-void-border-2 bg-void-bg-2/60 overflow-hidden'>
 			<div
 				className='flex items-center gap-1.5 px-2 py-1 cursor-pointer select-none hover:bg-void-bg-3/60 transition-colors min-h-[24px]'
 				onClick={() => setIsOpen(o => !o)}
@@ -2443,7 +2462,7 @@ const CollapsibleFlowCard = ({
 					</span>
 				)}
 				{isStreaming && (
-					<Loader2 className='h-3 w-3 text-void-fg-3 animate-spin flex-shrink-0' />
+					<IconLoading />
 				)}
 				{rightAction && (
 					<div className='flex-shrink-0' onClick={(e) => e.stopPropagation()}>
@@ -2615,7 +2634,9 @@ const StaticCollapsibleCard = ({
 
 	return (
 		<div
-			className='void-bubble-in rounded-md border overflow-hidden transition-[border-color,box-shadow] duration-200'
+			data-orchestra-enter='assistant'
+			data-orchestra-card={isStreaming ? 'active' : 'idle'}
+			className='rounded-md border overflow-hidden transition-[border-color,box-shadow] duration-200'
 			style={{
 				borderColor: isStreaming
 					? 'color-mix(in srgb, var(--vscode-focusBorder) 45%, var(--void-border-2))'
@@ -2648,7 +2669,7 @@ const StaticCollapsibleCard = ({
 					{title}
 				</span>
 				{isStreaming && (
-					<Loader2 className='h-3 w-3 text-[color:var(--vscode-focusBorder)] animate-spin flex-shrink-0' />
+					<IconLoading />
 				)}
 			</div>
 			<div
@@ -3250,7 +3271,8 @@ const ReasoningWrapper = ({ isDoneReasoning, isStreaming, reasoningDuration, chi
 	const title = (
 		<span className='inline-flex items-center gap-1.5'>
 			<span
-				className={`inline-block w-1.5 h-1.5 rounded-full ${isWriting ? 'void-pulse-dot bg-[var(--vscode-focusBorder)]' : 'bg-void-fg-4 opacity-50'}`}
+				data-orchestra-pulse={isWriting ? '' : undefined}
+				className={`inline-block w-1.5 h-1.5 rounded-full ${isWriting ? 'bg-[var(--vscode-focusBorder)]' : 'bg-void-fg-4 opacity-50'}`}
 				style={isWriting ? { boxShadow: '0 0 6px var(--vscode-focusBorder)' } : {}}
 			/>
 			{titleText}

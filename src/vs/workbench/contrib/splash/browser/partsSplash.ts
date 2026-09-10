@@ -113,11 +113,25 @@ export class PartsSplash {
 			element.style.display = 'none';
 		}
 
-		// remove startup logo animation
-		mainWindow.document.getElementById('monaco-workbench-splash-logo')?.remove();
+		// Reveal the ready editor without delaying its layout or intercepting input.
+		const logo = mainWindow.document.getElementById('monaco-workbench-splash-logo');
+		if (logo && !mainWindow.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+			const fade = logo.animate([{ opacity: mainWindow.getComputedStyle(logo).opacity }, { opacity: 0 }], { duration: 280, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'forwards' });
+			fade.onfinish = () => logo.remove();
+			fade.oncancel = () => logo.remove();
+			// Also clean up if a hidden window suspends its animation timeline.
+			mainWindow.setTimeout(() => logo.remove(), 400);
+		} else {
+			logo?.remove();
+		}
 
-		// remove initial colors
+		// Keep the startup styles until the exit completes, then release them.
 		const defaultStyles = mainWindow.document.head.getElementsByClassName('initialShellColors');
-		defaultStyles[0]?.remove();
+		const initialStyle = defaultStyles[0];
+		if (logo?.isConnected) {
+			mainWindow.setTimeout(() => initialStyle?.remove(), 400);
+		} else {
+			initialStyle?.remove();
+		}
 	}
 }
