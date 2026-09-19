@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import styles from './AIChatPanel.module.css';
 import { useAIChat } from './useAIChat';
 import type { ChatMessage, ChatPhase } from './types';
+import StructuredResponse from './StructuredResponse';
 
 interface Props {
   title?: string;
@@ -46,11 +47,12 @@ const PhaseIndicator: React.FC<{ phase: ChatPhase }> = ({ phase }) => {
 
 const Bubble: React.FC<{ msg: ChatMessage }> = ({ msg }) => {
   const isUser = msg.role === 'user';
+  const structured = !isUser ? <StructuredResponse content={msg.content} /> : null;
   return (
     <div className={[styles.row, isUser ? styles.rowUser : styles.rowAi].join(' ')}>
       {!isUser && <div className={styles.avatar} aria-hidden>AI</div>}
       <div className={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAi].join(' ')}>
-        {msg.content}
+        {structured ?? msg.content}
       </div>
     </div>
   );
