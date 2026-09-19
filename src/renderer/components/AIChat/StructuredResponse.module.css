@@ -1,0 +1,48 @@
+.root {
+  --card-bg: var(--surface, #fafafa);
+  --card-border: var(--border, #e5e7eb);
+  --card-fg: var(--fg, #111418);
+  --card-muted: var(--muted, #6b7280);
+  --card-accent: var(--accent, #111418);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(100%, 620px);
+  padding: 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  background: var(--card-bg);
+  color: var(--card-fg);
+  font-size: 12px;
+}
+.header, .taskTop { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.eyebrow, .metaLabel { color: var(--card-muted); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+.title { margin-top: 2px; font-size: 14px; font-weight: 650; }
+.leaderBadge, .role, .chip {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  padding: 3px 7px;
+  color: var(--card-muted);
+  background: transparent;
+}
+.taskList, .answerList, .metaGrid { display: flex; flex-direction: column; gap: 7px; }
+.task, .answer { padding: 9px; border: 1px solid var(--card-border); border-radius: 9px; background: color-mix(in srgb, var(--card-bg) 70%, var(--card-fg) 3%); }
+.taskTitle { margin-top: 7px; font-weight: 600; }
+.status { display: inline-flex; align-items: center; gap: 5px; color: var(--card-muted); font-size: 10px; }
+.statusDot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.status-running { color: #c47b00; }
+.status-completed { color: #16845b; }
+.status-failed { color: #b42318; }
+.role { font-size: 10px; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.chip { font-size: 10px; }
+.detail, .answerText { margin-top: 7px; color: var(--card-muted); white-space: pre-wrap; word-break: break-word; }
+.question { font-weight: 600; }
+.metaGrid { margin-top: 2px; }
+.rawDetails, .details { border-top: 1px solid var(--card-border); padding-top: 7px; color: var(--card-muted); }
+.rawDetails summary, .details summary { cursor: pointer; font-size: 10px; }
+.rawDetails pre, .details pre { max-height: 220px; overflow: auto; margin: 7px 0 0; padding: 8px; border-radius: 7px; background: rgba(0,0,0,.06); font-size: 10px; white-space: pre-wrap; word-break: break-word; }
