@@ -162,6 +162,7 @@ export type SendLLMMessageParams = {
 	settingsOfProvider: SettingsOfProvider;
 	mcpTools: InternalToolInfo[] | undefined;
 	divisionRoleAssignments?: RoleAssignment[];
+	divisionAutoRouting?: { minPerformance: number; maxCostUsd: number; maxOutputTokens: number };
 	divisionProjectId?: string;
 	divisionApiKey?: string;
 	// Brief Gate / Reviewer それぞれの最大試行回数（divisionAPI のみ使用）

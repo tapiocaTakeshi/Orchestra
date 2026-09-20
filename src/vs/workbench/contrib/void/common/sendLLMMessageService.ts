@@ -214,6 +214,7 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 			settingsOfProvider,
 			modelSelection,
 			mcpTools,
+			divisionAutoRouting: modelSelection.providerName === 'divisionAPI' ? globalSettings.divisionAutoRouting : undefined,
 			divisionRoleAssignments,
 			divisionProjectId,
 			divisionApiKey,

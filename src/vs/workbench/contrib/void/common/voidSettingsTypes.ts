@@ -598,6 +598,7 @@ export type GlobalSettings = {
 	autoAcceptLLMChanges: boolean;
 	roleAssignments: RoleAssignment[];
 	divisionProjectId: string;
+	divisionAutoRouting?: { minPerformance: number; maxCostUsd: number; maxOutputTokens: number };
 	divisionApiKey: string;
 	// Supabase 認証セッション（Division API のキーを引くために使用）
 	divisionUserId: string;

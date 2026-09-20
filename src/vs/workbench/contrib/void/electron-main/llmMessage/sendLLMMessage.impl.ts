@@ -3,6 +3,8 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
+import { randomUUID as routingRequestId } from 'node:crypto';
+
 // disable foreign import complaints
 /* eslint-disable */
 import Anthropic from '@anthropic-ai/sdk';
@@ -76,6 +78,7 @@ type SendChatParams_Internal = InternalCommonMessageParams & {
 	chatMode: ChatMode | null;
 	mcpTools: InternalToolInfo[] | undefined;
 	divisionRoleAssignments?: RoleAssignment[];
+	divisionAutoRouting?: { minPerformance: number; maxCostUsd: number; maxOutputTokens: number };
 	divisionProjectId?: string;
 	divisionApiKey?: string;
 	divisionMaxBriefGateIterations?: number;
@@ -1411,6 +1414,8 @@ const saveCodeBlocksFromOutput = (output: string, _sessionId: string, workspaceF
 
 
 
+type DivisionRoutingOptions = { policy?: { minPerformance: number; maxCostUsd: number; maxOutputTokens: number }; requestId: string };
+
 const callDivisionGenerateStream = async (
 	endpointBase: string,
 	divisionModelName: string,
@@ -1421,12 +1426,17 @@ const callDivisionGenerateStream = async (
 	divisionApiKey?: string,
 	sessionId?: string,
 	workspacePath?: string,
+	routingOptions?: DivisionRoutingOptions,
 ): Promise<{ output: string; error?: string; provider?: string; durationMs?: number }> => {
 	try {
 		const apiKey = divisionApiKey || process.env.DIVISION_API_KEY || '';
 		const headers: Record<string, string> = {
 			'Content-Type': 'application/json',
 		};
+		if (routingOptions?.policy) {
+			headers['X-Division-Routing'] = JSON.stringify(routingOptions.policy);
+			headers['X-Division-Request-Id'] = routingOptions.requestId;
+		}
 		if (apiKey) {
 			headers['Authorization'] = `Bearer ${apiKey}`;
 		}
@@ -1608,6 +1618,7 @@ const callDivisionTaskCreate = async (
 	divisionApiKey?: string,
 	chatHistory?: { role: 'user' | 'assistant'; content: string }[],
 	workspacePath?: string,
+	routingOptions?: DivisionRoutingOptions,
 ): Promise<{
 	sessionId: string;
 	tasks: { taskId: string; role: string; title: string; input?: string; output?: string; provider?: string; dependsOn?: string[]; description?: string; reason?: string; mode?: string; context?: string[] }[];
@@ -1619,6 +1630,10 @@ const callDivisionTaskCreate = async (
 		const headers: Record<string, string> = {
 			'Content-Type': 'application/json',
 		};
+		if (routingOptions?.policy) {
+			headers['X-Division-Routing'] = JSON.stringify(routingOptions.policy);
+			headers['X-Division-Request-Id'] = routingOptions.requestId;
+		}
 		if (apiKey) {
 			headers['Authorization'] = `Bearer ${apiKey}`;
 		}
@@ -1665,6 +1680,7 @@ const callDivisionTaskExecute = async (
 	sessionId?: string,
 	chatHistory?: { role: 'user' | 'assistant'; content: string }[],
 	workspacePath?: string,
+	routingOptions?: DivisionRoutingOptions,
 ): Promise<{ output: string; error?: string; provider?: string; durationMs?: number }> => {
 	try {
 		const apiKey = divisionApiKey || process.env.DIVISION_API_KEY || '';
@@ -1672,6 +1688,10 @@ const callDivisionTaskExecute = async (
 			'Content-Type': 'application/json',
 			'Accept': 'text/event-stream, application/json',
 		};
+		if (routingOptions?.policy) {
+			headers['X-Division-Routing'] = JSON.stringify(routingOptions.policy);
+			headers['X-Division-Request-Id'] = routingOptions.requestId;
+		}
 		if (apiKey) {
 			headers['Authorization'] = `Bearer ${apiKey}`;
 		}
@@ -2805,6 +2825,8 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 	// シンプル化版では Reviewer は 1 回しか走らせないため、これらの設定は使わない。
 	// 互換のため params 側のキー (divisionMax*) は受け入れるが、ここでは無視する。
 
+	const routingOptions: DivisionRoutingOptions = { policy: params.divisionAutoRouting, requestId: routingRequestId() };
+
 	try {
 		const endpointBase = settingsOfProvider.divisionAPI.endpoint || 'https://api.division.he-ro.jp';
 		const projectId = divisionProjectIdParam || '';
@@ -2897,7 +2919,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			const result = await callDivisionGenerateStream(
 				endpointBase, selectedModel, directPrompt, controller.signal,
 				(chunk) => appendText(chunk),
-				mode, divisionApiKey, undefined, workspaceFolderPath,
+				mode, divisionApiKey, undefined, workspaceFolderPath, routingOptions,
 			);
 
 			if (result.error) {
@@ -3160,7 +3182,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			const leaderResult = await callDivisionTaskCreate(
 				endpointBase, projectId, currentInput, controller.signal,
 				divisionApiKey, leaderHistory.length > 0 ? leaderHistory : undefined,
-				workspaceFolderPath,
+				workspaceFolderPath, routingOptions,
 			);
 
 			if (leaderResult.error) {
@@ -3394,7 +3416,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				() => { /* 配分の生ストリームはチャットに流さない */ },
 				divisionApiKey, sessionId,
 				undefined,
-				workspaceFolderPath,
+				workspaceFolderPath, routingOptions,
 			);
 			if (routingResult.error) {
 				console.log(`[DivisionAPI] context routing failed: ${routingResult.error}`);
@@ -3534,7 +3556,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 						() => { /* base64 チャンクの生ストリーミングは行わない */ },
 						divisionApiKey, sessionId,
 						withStackContext([...chatHistory, ...buildPriorContextHistory(task.role, task.context)]),
-						workspaceFolderPath,
+						workspaceFolderPath, routingOptions,
 					);
 
 					if (execResult.error) {
@@ -3644,7 +3666,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					...chatHistory,
 					...buildPriorContextHistory(task.role, task.context, roleContextBlock.markdown),
 				]),
-				workspaceFolderPath,
+				workspaceFolderPath, routingOptions,
 			);
 
 			if (!execResult.error) {
@@ -3689,7 +3711,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 							...chatHistory,
 							...buildPriorContextHistory(task.role, task.context, followUp.markdown),
 						]),
-						workspaceFolderPath,
+						workspaceFolderPath, routingOptions,
 					);
 					if (execResult.error) break;
 				}
@@ -3805,7 +3827,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			(chunk) => appendText(chunk),
 			divisionApiKey, sessionId,
 			withStackContext(reviewContextHistory),
-			workspaceFolderPath,
+			workspaceFolderPath, routingOptions,
 		);
 
 		appendText(`\n${REVIEWER_END}\n`);
