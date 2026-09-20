@@ -27,6 +27,7 @@ import { Client as NodeIPCClient } from '../../base/parts/ipc/common/ipc.net.js'
 import { connect as nodeIPCConnect, serve as nodeIPCServe, Server as NodeIPCServer, XDG_RUNTIME_DIR } from '../../base/parts/ipc/node/ipc.net.js';
 import { CodeApplication } from './app.js';
 import { startDivisionLocalRuntime, stopDivisionLocalRuntime } from '../../platform/division/electron-main/divisionLocalRuntime.js';
+import { startOrchestraMobileRemoteControl, stopOrchestraMobileRemoteControl } from './orchestraMobileRemoteControl.js';
 import { localize } from '../../nls.js';
 import { IConfigurationService } from '../../platform/configuration/common/configuration.js';
 import { ConfigurationService } from '../../platform/configuration/common/configurationService.js';
@@ -148,6 +149,7 @@ class CodeMain {
 				// If this throws an error it means we are not the first
 				// instance of VS Code running and so we would quit.
 				const mainProcessNodeIpcServer = await this.claimInstance(logService, environmentMainService, lifecycleMainService, instantiationService, productService, true);
+				startOrchestraMobileRemoteControl().catch(err => console.error('[orchestra-mobile-remote] failed to start:', err));
 
 				// Write a lockfile to indicate an instance is running
 				// (https://github.com/microsoft/vscode/issues/127861#issuecomment-877417451)
@@ -161,6 +163,7 @@ class CodeMain {
 				// Lifecycle
 				Event.once(lifecycleMainService.onWillShutdown)(evt => {
 					stopDivisionLocalRuntime();
+					stopOrchestraMobileRemoteControl().catch(() => { /* ignored during shutdown */ });
 					fileService.dispose();
 					configurationService.dispose();
 					evt.join('instanceLockfile', promises.unlink(environmentMainService.mainLockfile).catch(() => { /* ignored */ }));
