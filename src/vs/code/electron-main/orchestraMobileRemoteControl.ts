@@ -41,7 +41,7 @@ function send(res: ServerResponse, status: number, body: unknown): void {
 		// The desktop workbench has an opaque vscode origin. Requests are still
 		// loopback-only and the Supabase JWT is verified below.
 		'Access-Control-Allow-Origin': '*',
-		'Access-Control-Allow-Headers': 'Content-Type, X-Orchestra-Token',
+		'Access-Control-Allow-Headers': 'Content-Type, X-Orchestra-Token, X-Division-Access-Token',
 	});
 	res.end(status === 204 ? undefined : JSON.stringify(body));
 }
@@ -124,18 +124,43 @@ async function setDivisionAccount(next: DivisionAccount | undefined): Promise<vo
 	startHeartbeat();
 }
 
+type VerifiedDivisionToken = { value: string; userId: string; email: string; expiresAt: number };
+let verifiedToken: VerifiedDivisionToken | undefined;
+
+async function getDivisionTokenUser(accessToken: string): Promise<{ userId: string; email: string }> {
+	if (verifiedToken?.value === accessToken && verifiedToken.expiresAt > Date.now()) {
+		return { userId: verifiedToken.userId, email: verifiedToken.email };
+	}
+	const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+		headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${accessToken}` },
+	});
+	if (!response.ok) throw new Error('Division session is invalid');
+	const user = await response.json() as { id?: unknown; email?: unknown };
+	if (typeof user.id !== 'string') throw new Error('Division session has no user');
+	const verified = { userId: user.id, email: typeof user.email === 'string' ? user.email : '' };
+	verifiedToken = { value: accessToken, ...verified, expiresAt: Date.now() + 30_000 };
+	return verified;
+}
+
 async function authenticateDivisionAccount(raw: unknown): Promise<DivisionAccount> {
 	const input = raw as Partial<DivisionAccount>;
 	if (typeof input?.userId !== 'string' || typeof input?.accessToken !== 'string' || !input.userId || !input.accessToken) {
 		throw new Error('userId and accessToken are required');
 	}
-	const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-		headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${input.accessToken}` },
-	});
-	if (!response.ok) throw new Error('Division session is invalid');
-	const user = await response.json() as { id?: unknown; email?: unknown };
-	if (user.id !== input.userId) throw new Error('Division user does not match the session');
-	return { userId: input.userId, accessToken: input.accessToken, email: typeof user.email === 'string' ? user.email : '' };
+	const user = await getDivisionTokenUser(input.accessToken);
+	if (user.userId !== input.userId) throw new Error('Division user does not match the session');
+	return { userId: input.userId, accessToken: input.accessToken, email: user.email };
+}
+
+async function isMatchingMobileAccount(req: IncomingMessage): Promise<boolean> {
+	if (!account) return false;
+	const rawToken = req.headers['x-division-access-token'];
+	if (typeof rawToken !== 'string' || !rawToken) return false;
+	try {
+		return (await getDivisionTokenUser(rawToken)).userId === account.userId;
+	} catch {
+		return false;
+	}
 }
 
 /**
@@ -172,7 +197,7 @@ export async function startOrchestraMobileRemoteControl(): Promise<void> {
 		try {
 			const path = new URL(req.url ?? '/', url).pathname;
 			if (req.method === 'OPTIONS') {
-				res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, X-Orchestra-Token' });
+				res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, X-Orchestra-Token, X-Division-Access-Token' });
 				res.end();
 				return;
 			}
@@ -200,6 +225,10 @@ export async function startOrchestraMobileRemoteControl(): Promise<void> {
 			}
 			if (req.headers['x-orchestra-token'] !== token) {
 				send(res, 401, { error: 'invalid_token' });
+				return;
+			}
+			if (!await isMatchingMobileAccount(req)) {
+				send(res, 403, { error: 'account_mismatch', detail: '同じ Division アカウントでログインしてください。' });
 				return;
 			}
 			if (req.method === 'GET' && path === '/api/state') {
