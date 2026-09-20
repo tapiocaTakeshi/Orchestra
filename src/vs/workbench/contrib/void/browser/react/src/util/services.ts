@@ -65,6 +65,7 @@ import { IVoidUpdateService } from '../../../../../../../workbench/contrib/void/
 import { OrchestraUpdateState } from '../../../../../../../workbench/contrib/void/common/voidUpdateServiceTypes.js'
 import { IOpenerService } from '../../../../../../../platform/opener/common/opener.js'
 import { IDialogService } from '../../../../../../../platform/dialogs/common/dialogs.js'
+import { syncMobileRemoteSession } from '../void-login-tsx/divisionAuth.js'
 
 
 // normally to do this you'd use a useEffect that calls .onDidChangeState(), but useEffect mounts too late and misses initial state changes
@@ -154,9 +155,19 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 	)
 
 	settingsState = settingsStateService.state
+	const syncRemoteSession = () => {
+		const globals = settingsState.globalSettings
+		void syncMobileRemoteSession(
+			globals.isLoggedIn && globals.divisionUserId && globals.divisionAccessToken
+				? { userId: globals.divisionUserId, email: globals.divisionUserEmail, accessToken: globals.divisionAccessToken }
+				: null,
+		)
+	}
+	syncRemoteSession()
 	disposables.push(
 		settingsStateService.onDidChangeState(() => {
 			settingsState = settingsStateService.state
+			syncRemoteSession()
 			settingsStateListeners.forEach(l => l(settingsState))
 		})
 	)

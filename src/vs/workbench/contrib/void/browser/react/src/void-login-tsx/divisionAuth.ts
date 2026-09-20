@@ -15,6 +15,32 @@ import {
 let _client: SupabaseClient | null = null;
 let _profileUnsubscribe: (() => void) | null = null;
 
+type RemoteSessionAuth = {
+	userId: string;
+	email: string;
+	accessToken: string;
+};
+
+/**
+ * Tells the local Electron gateway which signed-in Division account owns this
+ * desktop. The gateway verifies the JWT against Supabase before publishing a
+ * RemoteSession, so a phone only discovers desktops belonging to its own
+ * Division account. This is intentionally a loopback request, never a cloud
+ * request from another device.
+ */
+export const syncMobileRemoteSession = async (auth: RemoteSessionAuth | null): Promise<void> => {
+	try {
+		await fetch('http://127.0.0.1:39231/api/internal/division-session', {
+			method: auth ? 'POST' : 'DELETE',
+			headers: auth ? { 'Content-Type': 'application/json' } : undefined,
+			body: auth ? JSON.stringify(auth) : undefined,
+		});
+	} catch {
+		// The gateway is unavailable in the browser/web build. Login itself must
+		// remain usable there, and the next desktop heartbeat will retry.
+	}
+};
+
 /**
  * Division (Supabase) クライアントのシングルトン。
  * Anon Key で初期化し、ユーザーの JWT は signInWithPassword 等で
