@@ -82,7 +82,7 @@ export const BillingPanel = ({ onClose }: { onClose: () => void }) => {
 		}
 	};
 
-	const currentPlan = profile?.plan ?? 'free';
+	const currentPlan = profile?.isPaid ? profile.plan : 'free';
 	const planLabel = profile?.isPaid ? '有料プラン（Plus）' : '無料プラン';
 
 	return (
