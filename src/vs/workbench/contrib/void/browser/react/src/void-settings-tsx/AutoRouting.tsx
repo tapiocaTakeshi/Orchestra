@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { fetchDivisionProfile } from '../void-login-tsx/divisionBilling.js';
 
 type Policy = { minPerformance: number; maxCostUsd: number; maxOutputTokens: number };
 type Quote = { role: string; model: string; performance: number; performanceSource: string; inputTokens: number; outputTokens: number; totalCostUsd: number };
 type History = { id: string; createdAt: string; role: string; modelId: string; inputTokens: number; outputTokens: number; totalCostUsd: number; routingDetails?: { requestGroupId?: string; estimateUsd?: number; allocatedOutputTokens?: number } };
 const usd = (n: number) => `$${n.toFixed(6)}`;
-export const AutoRouting = ({ endpoint, accessToken, policy, onChange }: { endpoint: string; accessToken: string; policy?: Policy; onChange: (p: Policy | undefined) => void }) => {
+export const AutoRouting = ({ endpoint, accessToken, refreshToken, policy, onChange }: { endpoint: string; accessToken: string; refreshToken: string; policy?: Policy; onChange: (p: Policy | undefined) => void }) => {
  const [draft, setDraft] = useState<Policy>(policy ?? { minPerformance: 70, maxCostUsd: 0.05, maxOutputTokens: 4096 });
  const [input, setInput] = useState('');
  const [inputTokens, setInputTokens] = useState(2000);
@@ -14,6 +15,16 @@ export const AutoRouting = ({ endpoint, accessToken, policy, onChange }: { endpo
  const [cursor, setCursor] = useState<string | null>(null);
  const [error, setError] = useState('');
  const [busy, setBusy] = useState(false);
+ const [isPaid, setIsPaid] = useState<boolean | null>(null);
+ useEffect(() => {
+  let active = true;
+  if (!accessToken) { setIsPaid(false); return () => { active = false; }; }
+  setIsPaid(null);
+  void fetchDivisionProfile(accessToken, refreshToken).then(profile => {
+   if (active) setIsPaid(profile?.isPaid === true);
+  }).catch(() => { if (active) setIsPaid(false); });
+  return () => { active = false; };
+ }, [accessToken, refreshToken]);
  const valid = Number.isFinite(draft.minPerformance) && draft.minPerformance >= 0 && draft.minPerformance <= 100 &&
   Number.isFinite(draft.maxCostUsd) && draft.maxCostUsd > 0 && draft.maxCostUsd <= 100 &&
   Number.isInteger(draft.maxOutputTokens) && draft.maxOutputTokens >= 256 && draft.maxOutputTokens <= 32768;
@@ -52,10 +63,13 @@ export const AutoRouting = ({ endpoint, accessToken, policy, onChange }: { endpo
   <p>性能はサーバーに登録した評価スコアです。料金＝入力トークン×入力単価＋出力トークン×出力単価＋固定料金。</p>
   <textarea aria-label="見積もる依頼" placeholder="Jev にトークン予算を判定させる依頼内容" className="bg-void-bg-1 border border-void-border-2 p-2" value={input} onChange={e => { setInput(e.target.value); setQuotes([]); }} />
   <label>各ロールの想定入力トークン数 <input type="number" min={0} max={2000000} step={1} className="bg-void-bg-1 w-28 p-1" value={inputTokens} onChange={e => { setInputTokens(Number(e.target.value)); setQuotes([]); }} /></label>
-  <button disabled={busy || !valid || !input.trim() || !Number.isInteger(inputTokens) || inputTokens < 0 || inputTokens > 2000000} onClick={() => run(async () => {
+  <button disabled={busy || isPaid !== true || !valid || !input.trim() || !Number.isInteger(inputTokens) || inputTokens < 0 || inputTokens > 2000000} onClick={() => run(async () => {
    setQuotes([]);
+   if (isPaid !== true) throw new Error('この機能は有料プラン（Plus）が必要です。');
    const data = await request('quote', { input, inputTokens, roles: ['leader', 'coder', 'review'], policy: draft }); setQuotes(data.quotes);
   })}>Jev で見積もる（判定料金が発生）</button>
+  {isPaid === false && <p>見積もりの実行には有料プラン（Plus）が必要です。プラン・支払い設定から変更してください。</p>}
+  {isPaid === null && accessToken && <p>プラン情報を確認しています…</p>}
   {quotes.length > 0 && <><p>Leader / Coder / Review の試算。実行時は実際の各ロールで再判定します。</p><table><thead><tr><th>ロール / モデル</th><th>性能</th><th>入力 / 出力</th><th>見積 USD</th></tr></thead><tbody>{quotes.map(q => <tr key={q.role}><td>{q.role}<br />{q.model}</td><td title={q.performanceSource}>{q.performance}</td><td>{q.inputTokens} / {q.outputTokens}</td><td>{usd(q.totalCostUsd)}</td></tr>)}</tbody></table></>}
   <div className="flex gap-3"><strong>リクエスト履歴・実際の料金</strong><button disabled={busy} onClick={() => run(() => loadHistory())}>更新</button></div>
   <p>モデル実行ごとの実測使用量と料金。古い履歴は従来の記録値です。グループ合計には同じ依頼の全記録を含みます。</p>
