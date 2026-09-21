@@ -1273,6 +1273,7 @@ const DivisionSettings = () => {
 		<div className="flex flex-col gap-4">
 			<AutoRouting endpoint={settingsState.settingsOfProvider.divisionAPI.endpoint || 'https://api.division.he-ro.jp'}
                 accessToken={settingsState.globalSettings.divisionAccessToken}
+                refreshToken={settingsState.globalSettings.divisionRefreshToken}
                 policy={settingsState.globalSettings.divisionAutoRouting}
                 onChange={policy => voidSettingsService.setGlobalSetting('divisionAutoRouting', policy)} />
             {/* Orchestration loop iteration caps */}
