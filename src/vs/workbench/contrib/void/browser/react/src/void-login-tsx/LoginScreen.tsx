@@ -53,10 +53,9 @@ export const LoginScreen = ({ onClose }: { onClose: () => void }) => {
 		voidSettingsService.setGlobalSetting('divisionAccessToken', result.accessToken);
 		voidSettingsService.setGlobalSetting('divisionRefreshToken', result.refreshToken);
 		voidSettingsService.setGlobalSetting('divisionPlan', result.plan);
-		// 有料プランの場合のみ API キーを設定
-		if (result.apiKey) {
-			voidSettingsService.setGlobalSetting('divisionApiKey', result.apiKey);
-		}
+		// 既存のDivision API呼び出し経路との互換性を保ちつつ、
+		// 実際に保存・送信する値はAPIキーではなくSupabase JWTに統一する。
+		voidSettingsService.setGlobalSetting('divisionApiKey', result.accessToken);
 		voidSettingsService.setGlobalSetting('isLoggedIn', true);
 	};
 
