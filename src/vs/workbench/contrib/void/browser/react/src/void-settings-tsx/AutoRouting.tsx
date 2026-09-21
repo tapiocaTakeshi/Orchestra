@@ -4,7 +4,7 @@ type Policy = { minPerformance: number; maxCostUsd: number; maxOutputTokens: num
 type Quote = { role: string; model: string; performance: number; performanceSource: string; inputTokens: number; outputTokens: number; totalCostUsd: number };
 type History = { id: string; createdAt: string; role: string; modelId: string; inputTokens: number; outputTokens: number; totalCostUsd: number; routingDetails?: { requestGroupId?: string; estimateUsd?: number; allocatedOutputTokens?: number } };
 const usd = (n: number) => `$${n.toFixed(6)}`;
-export const AutoRouting = ({ endpoint, apiKey, policy, onChange }: { endpoint: string; apiKey: string; policy?: Policy; onChange: (p: Policy | undefined) => void }) => {
+export const AutoRouting = ({ endpoint, accessToken, policy, onChange }: { endpoint: string; accessToken: string; policy?: Policy; onChange: (p: Policy | undefined) => void }) => {
  const [draft, setDraft] = useState<Policy>(policy ?? { minPerformance: 70, maxCostUsd: 0.05, maxOutputTokens: 4096 });
  const [input, setInput] = useState('');
  const [inputTokens, setInputTokens] = useState(2000);
@@ -19,7 +19,7 @@ export const AutoRouting = ({ endpoint, apiKey, policy, onChange }: { endpoint: 
   Number.isInteger(draft.maxOutputTokens) && draft.maxOutputTokens >= 256 && draft.maxOutputTokens <= 32768;
  const request = async (path: string, body?: unknown) => {
   const response = await fetch(`${endpoint.replace(/\/$/, '')}/api/routing/${path}`, {
-   method: body ? 'POST' : 'GET', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+   method: body ? 'POST' : 'GET', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
    ...(body ? { body: JSON.stringify(body) } : {}),
   });
   const data = await response.json();
