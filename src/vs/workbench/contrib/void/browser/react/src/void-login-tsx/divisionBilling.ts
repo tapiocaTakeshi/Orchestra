@@ -11,6 +11,11 @@ import {
 
 export type DivisionPlanId = 'free' | 'plus';
 
+export const isPaidDivisionPlan = (plan: DivisionPlanId, subscriptionStatus: string | null): boolean => {
+	if (plan === 'free') return false;
+	return !['canceled', 'incomplete', 'incomplete_expired', 'unpaid'].includes(subscriptionStatus ?? '');
+};
+
 export const divisionPlans: {
 	id: DivisionPlanId;
 	name: string;
@@ -23,6 +28,7 @@ export const divisionPlans: {
 
 export type DivisionProfile = {
 	plan: DivisionPlanId;
+	isPaid: boolean;
 	subscriptionStatus: string | null;
 	currentPeriodEnd: string | null;
 	creditBalance: number;
@@ -54,8 +60,12 @@ export const fetchDivisionProfile = async (
 
 	if (error || !data) return null;
 
+	const plan = (data.plan as DivisionPlanId) ?? 'free';
+	const subscriptionStatus = data.subscription_status ?? null;
+
 	return {
-		plan: (data.plan as DivisionPlanId) ?? 'free',
+		plan,
+		isPaid: isPaidDivisionPlan(plan, subscriptionStatus),
 		subscriptionStatus: data.subscription_status ?? null,
 		currentPeriodEnd: data.current_period_end ?? null,
 		creditBalance: Number(data.credit_balance ?? 0),
