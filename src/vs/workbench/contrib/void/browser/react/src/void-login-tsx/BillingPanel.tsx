@@ -122,7 +122,6 @@ export const BillingPanel = ({ onClose }: { onClose: () => void }) => {
 										<span className="text-void-fg-1 font-medium">{planLabel}</span>
 									</div>
 									<div>サブスクリプション状態: {profile.subscriptionStatus ?? 'なし'}</div>
-									</div>
 									{profile.currentPeriodEnd && (
 										<div>次回更新日: {new Date(profile.currentPeriodEnd).toLocaleDateString('ja-JP')}</div>
 									)}
@@ -131,6 +130,7 @@ export const BillingPanel = ({ onClose }: { onClose: () => void }) => {
 									</div>
 								</div>
 							)}
+
 
 							<div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
 								{divisionPlans.map((plan) => {
