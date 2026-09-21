@@ -83,6 +83,7 @@ export const BillingPanel = ({ onClose }: { onClose: () => void }) => {
 	};
 
 	const currentPlan = profile?.plan ?? 'free';
+	const planLabel = profile?.isPaid ? '有料プラン（Plus）' : '無料プラン';
 
 	return (
 		<div className={`@@void-scope ${isDark ? 'dark' : ''}`}>
@@ -117,8 +118,10 @@ export const BillingPanel = ({ onClose }: { onClose: () => void }) => {
 							{profile && (
 								<div className="text-xs text-void-fg-3 bg-void-bg-2 border border-void-border-2 rounded-lg px-3 py-2 flex flex-col gap-0.5">
 									<div>
-										現在のステータス:{' '}
-										<span className="text-void-fg-1 font-medium">{profile.subscriptionStatus ?? '無料プラン'}</span>
+										現在のプラン:{' '}
+										<span className="text-void-fg-1 font-medium">{planLabel}</span>
+									</div>
+									<div>サブスクリプション状態: {profile.subscriptionStatus ?? 'なし'}</div>
 									</div>
 									{profile.currentPeriodEnd && (
 										<div>次回更新日: {new Date(profile.currentPeriodEnd).toLocaleDateString('ja-JP')}</div>
