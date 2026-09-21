@@ -43,15 +43,14 @@ export const syncMobileRemoteSession = async (auth: RemoteSessionAuth | null): P
 
 /**
  * Division (Supabase) クライアントのシングルトン。
- * Anon Key で初期化し、ユーザーの JWT は signInWithPassword 等で
- * 内部的に保持される。
+ * Anon Key で初期化し、ユーザーのJWTはDivision APIのBearer認証に使う。
  */
 export const getDivisionSupabase = (): SupabaseClient => {
 	if (_client) return _client;
 	_client = createClient(DIVISION_SUPABASE_URL, DIVISION_SUPABASE_ANON_KEY, {
 		auth: {
 			persistSession: false,
-			autoRefreshToken: false,
+			autoRefreshToken: true,
 			detectSessionInUrl: false,
 		},
 	});
@@ -77,7 +76,7 @@ const restoreSession = async (accessToken: string, refreshToken: string) => {
 };
 
 /**
- * ユーザーのプラン情報とAPIキーを取得する（有料プランかどうかを判定するため）
+ * ユーザーのプラン情報を取得する（有料プランかどうかを判定するため）
  */
 const fetchUserPlanAndApiKey = async (userId: string, accessToken: string): Promise<{ plan: 'free' | 'plus'; apiKey: string | null }> => {
 	try {
