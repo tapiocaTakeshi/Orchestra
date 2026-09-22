@@ -22,6 +22,7 @@ import { URI } from '../../../../../../../base/common/uri.js';
 import { IDisposable } from '../../../../../../../base/common/lifecycle.js';
 import { ErrorDisplay } from './ErrorDisplay.js';
 import { BlockCode, TextAreaFns, VoidCustomDropdownBox, VoidInputBox2, VoidSlider, VoidSwitch, VoidDiffEditor } from '../util/inputs.js';
+import { AutoRouting } from '../void-settings-tsx/AutoRouting.js';
 import { ModelDropdown, } from '../void-settings-tsx/ModelDropdown.js';
 import { PastThreadsList } from './SidebarThreadSelector.js';
 import { VOID_CTRL_L_ACTION_ID, VOID_TOGGLE_KANBAN_ACTION_ID } from '../../../actionIDs.js';
@@ -5422,6 +5423,9 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 	// state of current message
 	const initVal = ''
 	const [instructionsAreEmpty, setInstructionsAreEmpty] = useState(!initVal)
+	const [composerPrompt, setComposerPrompt] = useState('')
+	const [showCostTuning, setShowCostTuning] = useState(false)
+	useEffect(() => { setShowCostTuning(false); setComposerPrompt(''); }, [currentThread.id])
 
 	const isDisabled = instructionsAreEmpty || !!isFeatureNameDisabled('Chat', settingsState)
 
@@ -5473,6 +5477,7 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 		const snapshotSelections = selections.slice()
 		setSelections([])
 		textAreaFnsRef.current?.setValue('')
+		setComposerPrompt('')
 		textAreaRef.current?.focus()
 
 		await sendUserMessageImmediately(threadId, userMessage, snapshotSelections)
@@ -5497,6 +5502,7 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 		// 入力欄 / staging をクリアして次のキュー待ち状態へ
 		setSelections([])
 		textAreaFnsRef.current?.setValue('')
+		setComposerPrompt('')
 		textAreaRef.current?.focus()
 	}, [isDisabled, chatThreadsService, textAreaRef, textAreaFnsRef, setSelections, selections, updateQueueForThread])
 
@@ -5552,6 +5558,7 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 			scrollToBottom: () => scrollToBottom(scrollContainerRef),
 			setInputText: (text: string) => {
 				textAreaFnsRef.current?.setValue(text)
+			setComposerPrompt(text)
 			},
 		})
 
@@ -5662,6 +5669,7 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 
 	const onChangeText = useCallback((newStr: string) => {
 		setInstructionsAreEmpty(!newStr)
+		setComposerPrompt(newStr)
 	}, [setInstructionsAreEmpty])
 	const onKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
 		if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -5725,6 +5733,26 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 			multiline={true}
 		/>
 
+		<div className='flex flex-col gap-2' onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
+			<button type='button' aria-expanded={showCostTuning}
+				className='self-start flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-void-bg-2'
+				onClick={() => { setComposerPrompt(textAreaRef.current?.value ?? ''); setShowCostTuning(v => !v); }}>
+				<SlidersHorizontal size={14} /> コスト調整
+				{settingsState.globalSettings.divisionAutoRouting ? '（有効）' : ''}
+			</button>
+			{showCostTuning && <div className='max-h-80 overflow-auto'>
+				{settingsState.modelSelectionOfFeature.Chat?.providerName !== 'divisionAPI'
+					? <p className='text-xs'>この条件はDivision API選択時に適用されます。</p> : null}
+				<AutoRouting
+					prompt={composerPrompt} compact
+					endpoint={settingsState.settingsOfProvider.divisionAPI.endpoint || 'https://api.division.he-ro.jp'}
+					accessToken={settingsState.globalSettings.divisionAccessToken}
+					refreshToken={settingsState.globalSettings.divisionRefreshToken}
+					policy={settingsState.globalSettings.divisionAutoRouting}
+					onChange={policy => accessor.get('IVoidSettingsService').setGlobalSetting('divisionAutoRouting', policy)}
+				/>
+			</div>}
+		</div>
 	</VoidChatArea>
 
 
