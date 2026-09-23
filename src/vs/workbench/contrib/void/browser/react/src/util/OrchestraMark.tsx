@@ -12,11 +12,14 @@ import React, { useId } from 'react'
 // `src/vs/code/electron-sandbox/workbench/workbench.ts`). That mark cannot just
 // be scaled down for chat - at the ~16px a loading indicator gets, five crossings
 // on a thin stroke collapse into an unreadable smudge. So this is the same motion
-// law (the phase advance, the 2s cycle, the easing) redrawn at three crossings
-// on a heavier stroke, which still reads inline next to text.
+// law (the phase advance, the easing) redrawn at three crossings on a heavier
+// stroke, which still reads inline next to text, cycling at twice the splash's
+// pace so a short wait still shows the weave move.
 //
-// The splash has to spell its keyframes out by hand because it runs before the
-// module loader; here the phases are just evaluated from the curve.
+// Both sample their keyframes from the curve, and both open the same way: the
+// strands draw out of the origin, the arrowheads launch once the strands reach
+// them, and only then does the travelling highlight start - here compressed to
+// under a second so it does not hold up a status that may only last a moment.
 
 const VIEW_W = 76
 const VIEW_H = 42
@@ -31,10 +34,17 @@ const RAMP = 20       // amplitude eases in over roughly one period, so the tail
 const OPEN_BASE = 11.5
 const OPEN_WOBBLE = 1.8
 const SEGMENTS = 16
-const FRAMES = 16     // more phase samples per cycle keeps the weave smooth now that it runs faster
+const FRAMES = 32     // enough phase samples per cycle that the weave glides rather than steps
 
 const DURATION = '2s'
 const EASING = 'linear'
+
+// Entrance, played once per mount (duration + delay).
+const INTRO_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
+const INTRO_DRAW = '0.5s'
+const INTRO_LAUNCH = '0.35s 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
+const INTRO_LIGHT_DELAY = '0.55s'
+const INTRO_LIGHT = `0.3s ${INTRO_LIGHT_DELAY}`
 
 const ARROW_POINTS = '0,-6 14,0 0,6 4.5,0'
 
@@ -101,16 +111,19 @@ const buildCss = (): string => [
 	`[data-orchestra-mark] { display: inline-block; vertical-align: middle; overflow: visible; flex: none; }`,
 	`[data-orchestra-mark] [data-om^="strand"] { fill: none; stroke-width: 2.5; stroke-linecap: round; }`,
 	`[data-orchestra-mark] [data-om^="head"] { fill: #e02431; stroke: none; transform-box: view-box; transform-origin: 0 0; }`,
-	`[data-orchestra-mark] [data-om="strand-a"] { animation: orchestra-mark-wave-a ${DURATION} ${EASING} infinite; }`,
-	`[data-orchestra-mark] [data-om="strand-b"] { animation: orchestra-mark-wave-b ${DURATION} ${EASING} infinite; }`,
-	`[data-orchestra-mark] [data-om="head-a"] { animation: orchestra-mark-head-a ${DURATION} ${EASING} infinite; }`,
-	`[data-orchestra-mark] [data-om="head-b"] { animation: orchestra-mark-head-b ${DURATION} ${EASING} infinite; }`,
+	`[data-orchestra-mark] [data-om="strand-a"] { animation: orchestra-mark-wave-a ${DURATION} ${EASING} infinite, orchestra-mark-draw ${INTRO_DRAW} ${INTRO_EASING} both; }`,
+	`[data-orchestra-mark] [data-om="strand-b"] { animation: orchestra-mark-wave-b ${DURATION} ${EASING} infinite, orchestra-mark-draw ${INTRO_DRAW} ${INTRO_EASING} both; }`,
+	`[data-orchestra-mark] [data-om="head-a"] { animation: orchestra-mark-head-a ${DURATION} ${EASING} infinite, orchestra-mark-launch ${INTRO_LAUNCH} both; }`,
+	`[data-orchestra-mark] [data-om="head-b"] { animation: orchestra-mark-head-b ${DURATION} ${EASING} infinite, orchestra-mark-launch ${INTRO_LAUNCH} both; }`,
+	`@keyframes orchestra-mark-draw { from { stroke-dasharray: 100 100; stroke-dashoffset: 100; } to { stroke-dasharray: 100 100; stroke-dashoffset: 0; } }`,
+	`@keyframes orchestra-mark-launch { from { opacity: 0; translate: -6px 0; } to { opacity: 1; translate: 0 0; } }`,
+	`@keyframes orchestra-mark-fade-in { from { opacity: 0; } to { opacity: 1; } }`,
 	keyframesFor('orchestra-mark-wave-a', p => `d: path("${pathFor(p, -1)}");`),
 	keyframesFor('orchestra-mark-wave-b', p => `d: path("${pathFor(p, 1)}");`),
 	keyframesFor('orchestra-mark-head-a', p => `transform: ${headTransform(p, -1)};`),
 	keyframesFor('orchestra-mark-head-b', p => `transform: ${headTransform(p, 1)};`),
-	`[data-orchestra-mark] [data-om-light] { fill: none; stroke: #ffbac2; stroke-width: 1; stroke-linecap: round; stroke-dasharray: 9 91; animation: orchestra-mark-wave-a ${DURATION} ${EASING} infinite, orchestra-mark-signal ${DURATION} linear infinite; }`,
-	`[data-orchestra-mark] [data-om-light="b"] { animation-name: orchestra-mark-wave-b, orchestra-mark-signal; animation-delay: 0s, -1s; }`,
+	`[data-orchestra-mark] [data-om-light] { fill: none; stroke: #ffbac2; stroke-width: 1; stroke-linecap: round; stroke-dasharray: 9 91; animation: orchestra-mark-wave-a ${DURATION} ${EASING} infinite, orchestra-mark-signal ${DURATION} linear infinite, orchestra-mark-fade-in ${INTRO_LIGHT} both; }`,
+	`[data-orchestra-mark] [data-om-light="b"] { animation-name: orchestra-mark-wave-b, orchestra-mark-signal, orchestra-mark-fade-in; animation-delay: 0s, -1s, ${INTRO_LIGHT_DELAY}; }`,
 	`@keyframes orchestra-mark-signal { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }`,
 	// Falls back to the mark held at its first phase, which the `d` attributes and the
 	// inline transforms on the arrowheads already put on screen.
@@ -155,8 +168,8 @@ export const OrchestraMark = ({ height = 16, className = '' }: { height?: number
 					<stop offset='1' stopColor='#e02431' stopOpacity='1' />
 				</linearGradient>
 			</defs>
-			<path data-om='strand-a' d={pathFor(phaseAt(0), -1)} stroke={`url(#${fadeId})`} />
-			<path data-om='strand-b' d={pathFor(phaseAt(0), 1)} stroke={`url(#${fadeId})`} />
+			<path data-om='strand-a' pathLength={100} d={pathFor(phaseAt(0), -1)} stroke={`url(#${fadeId})`} />
+			<path data-om='strand-b' pathLength={100} d={pathFor(phaseAt(0), 1)} stroke={`url(#${fadeId})`} />
 			<path data-om='strand-a' data-om-light='a' pathLength={100} d={pathFor(phaseAt(0), -1)} />
 			<path data-om='strand-b' data-om-light='b' pathLength={100} d={pathFor(phaseAt(0), 1)} />
 			<polygon data-om='head-a' points={ARROW_POINTS} style={{ transform: headTransform(phaseAt(0), -1) }} />
