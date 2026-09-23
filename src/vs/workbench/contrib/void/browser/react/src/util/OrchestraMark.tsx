@@ -46,7 +46,8 @@ const INTRO_LAUNCH = '0.5s 0.45s cubic-bezier(0.16, 1, 0.3, 1)'
 const INTRO_LIGHT_DELAY = '0.7s'
 const INTRO_LIGHT = `0.5s ${INTRO_LIGHT_DELAY}`
 
-const ARROW_POINTS = '0,-5 13,0 0,5 3.5,0'
+// Anchored at the notch, so the strand runs into the arrowhead instead of stopping short.
+const ARROW_POINTS = '-3.5,-5 9.5,0 -3.5,5 0,0'
 const ACCENT = '#d8283b'
 
 const smoothstep = (t: number) => t * t * (3 - 2 * t)
@@ -93,6 +94,23 @@ const headTransform = (phase: number, side: number): string => {
 	return `translate(${X_END}px, ${Number(y.toFixed(2))}px) rotate(${Number(angle.toFixed(1))}deg)`
 }
 
+// The weave is a double helix, as on the splash: each strand is in front for half
+// of every period, swapping at the peaks, so each crossing has a clear over and
+// under. These are the front-facing share of `side`'s strand across one period at
+// phase 0; a mask slides them along with the weave (`z` is the strand's depth).
+const depthStops = (side: number): { offset: number, opacity: number }[] => {
+	const stops: { offset: number, opacity: number }[] = []
+	for (let i = 0; i <= 24; i++) {
+		const z = side * Math.cos((2 * Math.PI * i) / 24)
+		stops.push({ offset: Number((i / 24).toFixed(3)), opacity: Number(smoothstep(Math.min(1, Math.max(0, (z + 0.4) / 0.8))).toFixed(3)) })
+	}
+	return stops
+}
+
+// The depth masks cover the view with a little room to spare; the sliding layer is
+// one period wider so it still covers the view at the end of its travel.
+const MASK = { x: -6, y: -6, width: VIEW_W + 12, height: VIEW_H + 12 }
+
 const phaseAt = (frame: number) => (2 * Math.PI * frame) / FRAMES
 
 const keyframesFor = (name: string, at: (phase: number) => string): string => {
@@ -110,7 +128,11 @@ const keyframesFor = (name: string, at: (phase: number) => string): string => {
 // attributes pass through that rewrite untouched.
 const buildCss = (): string => [
 	`[data-orchestra-mark] { display: inline-block; vertical-align: middle; overflow: visible; flex: none; }`,
-	`[data-orchestra-mark] [data-om^="strand"] { fill: none; stroke-width: 2.2; stroke-linecap: round; }`,
+	`[data-orchestra-mark] [data-om^="strand"] { fill: none; stroke-width: 2.4; stroke-linecap: round; }`,
+	`[data-orchestra-mark] [data-om-back] { stroke-width: 1.7; opacity: 0.5; }`,
+	`[data-orchestra-mark] [data-om-shift] { animation: orchestra-mark-depth ${DURATION} ${EASING} infinite; }`,
+	// A full cycle advances the phase by 2π, which moves the helix one period.
+	`@keyframes orchestra-mark-depth { from { transform: translateX(0); } to { transform: translateX(-${PERIOD}px); } }`,
 	`[data-orchestra-mark] [data-om^="head"] { fill: ${ACCENT}; stroke: none; transform-box: view-box; transform-origin: 0 0; }`,
 	`[data-orchestra-mark] [data-om="strand-a"] { animation: orchestra-mark-wave-a ${DURATION} ${EASING} infinite, orchestra-mark-draw ${INTRO_DRAW} ${INTRO_EASING} both; }`,
 	`[data-orchestra-mark] [data-om="strand-b"] { animation: orchestra-mark-wave-b ${DURATION} ${EASING} infinite, orchestra-mark-draw ${INTRO_DRAW} ${INTRO_EASING} both; }`,
@@ -129,7 +151,7 @@ const buildCss = (): string => [
 	// Falls back to the mark held at its first phase, which the `d` attributes and the
 	// inline transforms on the arrowheads already put on screen.
 	`@media (prefers-reduced-motion: reduce) {
-	[data-orchestra-mark] [data-om], [data-orchestra-mark] [data-om-light] { animation: none; }
+	[data-orchestra-mark] [data-om], [data-orchestra-mark] [data-om-light], [data-orchestra-mark] [data-om-shift] { animation: none; }
 	[data-orchestra-mark] [data-om-light] { display: none; }
 }`
 ].join('\n')
@@ -153,6 +175,8 @@ export const OrchestraMark = ({ height = 16, className = '' }: { height?: number
 	const uid = useId().replace(/:/g, '')
 	const fadeId = `orchestra-mark-fade-${uid}`
 	const sheenId = `orchestra-mark-sheen-${uid}`
+	const openId = `orchestra-mark-open-${uid}`
+	const depthId = (side: 'a' | 'b') => `orchestra-mark-depth-${side}-${uid}`
 
 	return (
 		<svg
@@ -177,11 +201,35 @@ export const OrchestraMark = ({ height = 16, className = '' }: { height?: number
 					<stop offset='0.8' stopColor='#fff4f5' stopOpacity='1' />
 					<stop offset='1' stopColor='#fff4f5' stopOpacity='0' />
 				</linearGradient>
+				{/* past the opening both arms of the fork face the viewer */}
+				<linearGradient id={openId} x1={X_OPEN - 5} y1='0' x2={X_OPEN + 6} y2='0' gradientUnits='userSpaceOnUse'>
+					<stop offset='0' stopColor='#fff' stopOpacity='0' />
+					<stop offset='1' stopColor='#fff' stopOpacity='1' />
+				</linearGradient>
+				{([['a', -1], ['b', 1]] as const).map(([side, sign]) => (
+					<React.Fragment key={side}>
+						<linearGradient id={`${depthId(side)}-fill`} x1={X0} y1='0' x2={X0 + PERIOD} y2='0' gradientUnits='userSpaceOnUse' spreadMethod='repeat'>
+							{depthStops(sign).map(({ offset, opacity }) => <stop key={offset} offset={offset} stopColor='#fff' stopOpacity={opacity} />)}
+						</linearGradient>
+						<mask id={depthId(side)} maskUnits='userSpaceOnUse' {...MASK}>
+							<rect data-om-shift='' {...MASK} width={MASK.width + PERIOD} fill={`url(#${depthId(side)}-fill)`} />
+							<rect {...MASK} fill={`url(#${openId})`} />
+						</mask>
+					</React.Fragment>
+				))}
 			</defs>
-			<path data-om='strand-a' pathLength={100} d={pathFor(phaseAt(0), -1)} stroke={`url(#${fadeId})`} />
-			<path data-om='strand-b' pathLength={100} d={pathFor(phaseAt(0), 1)} stroke={`url(#${fadeId})`} />
-			<path data-om='strand-a' data-om-light='a' pathLength={100} d={pathFor(phaseAt(0), -1)} stroke={`url(#${sheenId})`} />
-			<path data-om='strand-b' data-om-light='b' pathLength={100} d={pathFor(phaseAt(0), 1)} stroke={`url(#${sheenId})`} />
+			{/* both strands whole, thin and dim: what shows where one is behind the other */}
+			<path data-om='strand-a' data-om-back='' pathLength={100} d={pathFor(phaseAt(0), -1)} stroke={`url(#${fadeId})`} />
+			<path data-om='strand-b' data-om-back='' pathLength={100} d={pathFor(phaseAt(0), 1)} stroke={`url(#${fadeId})`} />
+			{/* then each at full weight with its sheen, masked to where it is in front */}
+			<g mask={`url(#${depthId('a')})`}>
+				<path data-om='strand-a' pathLength={100} d={pathFor(phaseAt(0), -1)} stroke={`url(#${fadeId})`} />
+				<path data-om='strand-a' data-om-light='a' pathLength={100} d={pathFor(phaseAt(0), -1)} stroke={`url(#${sheenId})`} />
+			</g>
+			<g mask={`url(#${depthId('b')})`}>
+				<path data-om='strand-b' pathLength={100} d={pathFor(phaseAt(0), 1)} stroke={`url(#${fadeId})`} />
+				<path data-om='strand-b' data-om-light='b' pathLength={100} d={pathFor(phaseAt(0), 1)} stroke={`url(#${sheenId})`} />
+			</g>
 			<polygon data-om='head-a' points={ARROW_POINTS} style={{ transform: headTransform(phaseAt(0), -1) }} />
 			<polygon data-om='head-b' points={ARROW_POINTS} style={{ transform: headTransform(phaseAt(0), 1) }} />
 		</svg>
