@@ -3,7 +3,8 @@
     pip install numpy
     python3 promo/music.py
 
-Cinematic pad + plucked arpeggio + hits synced to the scene timeline in promo.html.
+Upbeat 120 BPM pop groove (kick / clap / hats / bass / chord stabs) with whooshes and
+impacts placed on the scene cuts of promo.html.
 """
 import os
 import wave
@@ -11,196 +12,214 @@ import wave
 import numpy as np
 
 SR = 44100
-DUR = 50.0
-BPM = 100
+DUR = 28.0
+BPM = 120
 BEAT = 60 / BPM
 N = int(SR * DUR)
 t = np.arange(N) / SR
-rng = np.random.default_rng(3)
+rng = np.random.default_rng(5)
 
-# Scene boundaries (keep in sync with T in promo.html)
-LOGO_HIT = 5.3
-SCENE_HITS = [11.0, 17.2, 29.4, 38.4]
-FINAL_HIT = 44.6
+# Keep in sync with T in promo.html
+CUTS = [3.4, 6.0, 8.4, 9.5, 10.7, 16.6, 19.6, 22.4]
+LOGO_TILE = 12.85     # 3D tile lands, rays burst
+DROP = 14.4           # groove returns after the logo break
+FINAL = 24.5          # swoop logo lands
+GROOVE = [(3.4, 12.0), (DROP, FINAL)]
+
+mix = np.zeros((N, 2))
 
 
 def midi(n):
     return 440.0 * 2 ** ((n - 69) / 12)
 
 
-def env_ar(n, a, r):
-    """Attack/release envelope of n samples (seconds for a, r)."""
-    e = np.ones(n)
-    na, nr = min(n, int(a * SR)), min(n, int(r * SR))
-    if na:
-        e[:na] = np.linspace(0, 1, na)
-    if nr:
-        e[n - nr:] *= np.linspace(1, 0, nr)
-    return e
-
-
-def saw(f, tt, harmonics=10, detune=0.0):
-    out = np.zeros_like(tt)
-    for k in range(1, harmonics + 1):
-        out += np.sin(2 * np.pi * f * (1 + detune) * k * tt) / k ** 1.4
-    return out
-
-
-def place(buf, start, sig, gain=1.0, pan=0.0):
+def place(sig, start, gain=1.0, pan=0.0):
     i = int(start * SR)
-    if i >= len(buf):
+    if i < 0 or i >= N:
         return
-    sig = sig[: len(buf) - i]
+    sig = sig[: N - i]
     l, r = np.cos((pan + 1) * np.pi / 4), np.sin((pan + 1) * np.pi / 4)
-    buf[i:i + len(sig), 0] += sig * gain * l
-    buf[i:i + len(sig), 1] += sig * gain * r
+    mix[i:i + len(sig), 0] += sig * gain * l
+    mix[i:i + len(sig), 1] += sig * gain * r
 
 
-def smooth(x, a, b):
-    return np.clip((x - a) / (b - a), 0, 1)
+def tt(d):
+    return np.arange(int(d * SR)) / SR
 
 
-mix = np.zeros((N, 2))
+def lowpass(x, k):
+    return np.convolve(x, np.ones(k) / k, mode='same')
 
-# --- chord progression: Am - F - C - G (i - VI - III - VII), 4 beats each
-PROG = [[57, 60, 64, 69], [53, 57, 60, 65], [55, 60, 64, 67], [55, 59, 62, 67]]
+
+def in_groove(s):
+    return any(a <= s < b for a, b in GROOVE)
+
+
+# ---- sounds
+def kick():
+    x = tt(0.4)
+    f = 45 + 110 * np.exp(-x / 0.025)
+    return np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-x / 0.16)
+
+
+def clap():
+    x = tt(0.3)
+    n = rng.standard_normal(len(x))
+    n = n - lowpass(n, 6)
+    e = np.exp(-x / 0.07) * (1 + 0.6 * np.exp(-((x - 0.012) / 0.004) ** 2) + 0.4 * np.exp(-((x - 0.024) / 0.004) ** 2))
+    return n * e
+
+
+def hat(open_=False):
+    x = tt(0.25 if open_ else 0.06)
+    n = rng.standard_normal(len(x))
+    n = n - lowpass(n, 3)
+    return n * np.exp(-x / (0.08 if open_ else 0.015))
+
+
+def pluck(note, d=0.35, bright=1.0):
+    x = tt(d)
+    f = midi(note)
+    s = sum(np.sin(2 * np.pi * f * k * x) * (bright ** (k - 1)) / k for k in range(1, 7))
+    return s * np.exp(-x / 0.09) * np.minimum(1, x / 0.002)
+
+
+def bass(note, d):
+    x = tt(d)
+    f = midi(note)
+    s = np.sin(2 * np.pi * f * x) + 0.35 * np.sin(4 * np.pi * f * x) + 0.15 * np.sign(np.sin(2 * np.pi * f * x))
+    env = np.minimum(1, x / 0.004) * np.exp(-x / 0.35)
+    env[-200:] *= np.linspace(1, 0, 200)
+    return s * env
+
+
+def pad(notes, d, detune=0.004):
+    x = tt(d)
+    s = np.zeros(len(x))
+    for n in notes:
+        for dt in (-detune, 0, detune):
+            f = midi(n) * (1 + dt)
+            s += sum(np.sin(2 * np.pi * f * k * x) / k ** 1.6 for k in range(1, 6))
+    a = np.minimum(1, x / 0.25) * np.minimum(1, (d - x) / 0.4)
+    return s * a
+
+
+def whoosh(d=0.6, up=True):
+    x = tt(d)
+    n = rng.standard_normal(len(x))
+    n = n - lowpass(n, 4)
+    e = (x / d) ** 3 if up else np.exp(-x / (d / 4))
+    return n * e * (np.minimum(1, (d - x) / 0.02) if up else 1)
+
+
+def impact(d=2.5):
+    x = tt(d)
+    f = 35 + 90 * np.exp(-x / 0.06)
+    body = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-x / 0.7)
+    n = rng.standard_normal(len(x)) * np.exp(-x / 0.12)
+    return body + 0.4 * lowpass(n, 3)
+
+
+def shimmer(d=2.5):
+    x = tt(d)
+    s = sum(np.sin(2 * np.pi * midi(n) * x + i) for i, n in enumerate([84, 88, 91, 96, 100]))
+    return s * np.exp(-x / 0.8) * np.minimum(1, x / 0.01)
+
+
+# ---- harmony: F - G - Em - Am (IV V iii vi), one chord per bar
+PROG = [(53, [65, 69, 72, 76]), (55, [67, 71, 74, 79]), (52, [64, 67, 71, 76]), (57, [69, 72, 76, 81])]
 BAR = 4 * BEAT
 
-# master dynamics curve for the pad
-dyn = (0.35 + 0.25 * smooth(t, 4.5, 5.5) + 0.2 * smooth(t, 17, 18) + 0.2 * smooth(t, 38, 39))
-dyn *= 1 - smooth(t, 43.6, 44.5) * 0.7  # breath before the final hit
+# intro pad + rising filter-ish swell (0 - 3.4)
+place(pad([65, 69, 72, 76], 3.6), 0.0, 0.018)
+place(whoosh(1.2), 3.4 - 1.2, 0.18)
 
-bar = 0
-while bar * BAR < FINAL_HIT - 0.01:
-    start = bar * BAR
-    length = min(BAR, FINAL_HIT - start) + 0.6
-    n = int(length * SR)
-    tt = np.arange(n) / SR
-    chord = PROG[bar % 4]
-    sig = np.zeros(n)
-    for j, note in enumerate(chord):
-        f = midi(note)
-        sig += saw(f, tt, 8, 0.0025) + saw(f, tt, 8, -0.0025)
-    sig += 0.9 * np.sin(2 * np.pi * midi(chord[0] - 12) * tt)  # bass
-    sig *= env_ar(n, 0.5, 0.6) * 0.035
-    i = int(start * SR)
-    sig = sig[: N - i] * dyn[i:i + n]
-    place(mix, start, sig, pan=-0.15)
-    place(mix, start + 0.012, sig * 0.7, pan=0.3)
-    bar += 1
-
-# --- final chord: A minor add9, long tail
-n = int((DUR - FINAL_HIT) * SR)
-tt = np.arange(n) / SR
-sig = np.zeros(n)
-for note in [45, 57, 64, 69, 71, 72, 76]:
-    sig += saw(midi(note), tt, 8, 0.003) + saw(midi(note), tt, 8, -0.003)
-sig *= np.exp(-tt / 3.2) * env_ar(n, 0.02, 1.5) * 0.04
-place(mix, FINAL_HIT, sig)
-
-# --- plucked arpeggio (16ths) from the chaos scene through the stats scene
-ARP_START, ARP_END = 11.0, 44.2
-step = BEAT / 4
-k = int(np.ceil(ARP_START / step))
-pattern = [0, 2, 1, 3, 2, 1, 3, 2]
-while k * step < ARP_END:
-    st = k * step
-    chord = PROG[int(st // BAR) % 4]
-    note = chord[pattern[k % 8]] + 12 + (12 if (k // 8) % 4 == 3 and k % 2 else 0)
-    nn = int(0.45 * SR)
-    tt = np.arange(nn) / SR
-    f = midi(note)
-    pl = (np.sin(2 * np.pi * f * tt) + 0.35 * np.sin(4 * np.pi * f * tt) + 0.12 * np.sin(6 * np.pi * f * tt))
-    pl *= np.exp(-tt / 0.11) * env_ar(nn, 0.003, 0.05)
-    vel = 0.55 + 0.45 * (k % 4 == 0)
-    level = 0.05 * (0.5 + 0.5 * smooth(st, 17, 18)) * (1 - 0.6 * smooth(st, 43, 44))
-    place(mix, st, pl * vel * level, pan=0.45 * np.sin(k * 0.7))
-    k += 1
-
-# --- soft pulse (kick) on beats during the orchestration & feature scenes
-b = int(np.ceil(17.2 / BEAT))
-while b * BEAT < 44.0:
-    st = b * BEAT
-    nn = int(0.35 * SR)
-    tt = np.arange(nn) / SR
-    f = 50 + 70 * np.exp(-tt / 0.03)
-    kick = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-tt / 0.12)
-    place(mix, st, kick * 0.22 * (0.6 if b % 2 else 1.0))
+# groove sections
+b = 0
+while b * BEAT < DUR:
+    s = b * BEAT
+    if in_groove(s):
+        root, chord = PROG[int(s // BAR) % 4]
+        beat_in_bar = b % 4
+        place(kick(), s, 0.9)
+        if beat_in_bar in (1, 3):
+            place(clap(), s, 0.28, pan=0.05)
+        # 8th hats, open on the "and" of 4
+        place(hat(), s + BEAT / 2 * 0, 0.06, pan=0.3)
+        place(hat(open_=beat_in_bar == 3), s + BEAT / 2, 0.1 if beat_in_bar == 3 else 0.08, pan=-0.3)
+        # offbeat bass 8ths (pumping)
+        place(bass(root - 12, BEAT / 2 - 0.02), s + BEAT / 2, 0.32)
+        place(bass(root - 12, BEAT / 4), s, 0.12)
+        # syncopated chord stabs
+        for off in (0.0, 0.75, 1.5) if beat_in_bar in (0, 2) else ():
+            for j, n in enumerate(chord):
+                place(pluck(n, 0.3, 0.55), s + off * BEAT, 0.05, pan=(j - 1.5) * 0.25)
+        # top arp 16ths during the second groove
+        if s >= DROP:
+            for k in range(4):
+                n = chord[(b * 4 + k) % 4] + 12
+                place(pluck(n, 0.18, 0.4), s + k * BEAT / 4, 0.025, pan=0.5 * np.sin(b + k))
     b += 1
 
+# pads under grooves (soft sidechain feel handled by the kick level)
+for a, e in GROOVE:
+    bar = int(np.ceil(a / BAR - 1e-6))
+    while bar * BAR < e - 0.01:
+        root, chord = PROG[bar % 4]
+        place(pad(chord, min(BAR, e - bar * BAR) + 0.3), bar * BAR, 0.009)
+        bar += 1
 
-# --- hits and risers
-def boom(dur=3.0, gain=0.5):
-    nn = int(dur * SR)
-    tt = np.arange(nn) / SR
-    f = 38 + 60 * np.exp(-tt / 0.08)
-    body = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-tt / 0.9)
-    noise = rng.standard_normal(nn) * np.exp(-tt / 0.05) * 0.3
-    return (body + noise) * gain
+# logo break (12.0 - 14.4): riser, impact, shimmer, tail pad
+place(whoosh(0.85), LOGO_TILE - 0.85, 0.3)
+place(impact(2.0), LOGO_TILE, 0.8)
+place(shimmer(2.0), LOGO_TILE, 0.02, pan=0.2)
+place(pad([57, 64, 69, 72, 76], 1.8), LOGO_TILE, 0.02)
+place(whoosh(0.8), DROP - 0.8, 0.28)
+place(impact(1.0), DROP, 0.45)
 
+# cut accents
+for c in CUTS:
+    place(whoosh(0.35), c - 0.35, 0.14, pan=-0.4)
+    place(whoosh(0.3, up=False), c, 0.08, pan=0.4)
 
-def riser(dur, gain=0.12):
-    nn = int(dur * SR)
-    tt = np.arange(nn) / SR
-    x = rng.standard_normal(nn)
-    # crude rising band: difference of two moving averages whose width shrinks over time
-    c = np.cumsum(x)
-    out = np.zeros(nn)
-    for i0 in range(0, nn, 512):
-        w = int(40 - 36 * i0 / nn)
-        a = c[i0:i0 + 512]
-        bshift = c[max(0, i0 - w):max(0, i0 - w) + len(a)]
-        if len(bshift) == len(a):
-            out[i0:i0 + len(a)] = (a - bshift) / w
-    return out * (tt / dur) ** 2 * gain
+# click sounds in the UI scenes
+for c in [4.68, 20.45, 21.9] + [17.1, 17.7, 18.3, 18.9]:
+    x = tt(0.03)
+    place(np.sin(2 * np.pi * 2200 * x) * np.exp(-x / 0.004), c, 0.25)
 
-
-def whoosh(dur=1.2, gain=0.08):
-    nn = int(dur * SR)
-    tt = np.arange(nn) / SR
-    x = rng.standard_normal(nn)
-    x = np.convolve(x, np.ones(12) / 12, mode='same')
-    e = np.sin(np.pi * tt / dur) ** 2
-    return x * e * gain
-
-
-place(mix, LOGO_HIT - 1.8, riser(1.8, 0.25))
-place(mix, LOGO_HIT, boom(3.5, 0.55))
-for s in SCENE_HITS:
-    place(mix, s - 0.6, whoosh(1.2, 0.35), pan=-0.3)
-place(mix, FINAL_HIT - 2.0, riser(2.0, 0.3))
-place(mix, FINAL_HIT, boom(4.0, 0.7))
-
-# --- shimmer on the logo reveal (high sine cluster)
-for base_t, g in [(LOGO_HIT, 0.018), (FINAL_HIT, 0.022)]:
-    nn = int(4 * SR)
-    tt = np.arange(nn) / SR
-    sh = sum(np.sin(2 * np.pi * midi(n) * tt + ph) for n, ph in [(81, 0), (88, 1), (93, 2), (96, 3)])
-    sh *= np.exp(-tt / 1.4) * env_ar(nn, 0.05, 0.5) * g
-    place(mix, base_t, sh, pan=0.2)
+# finale: swoop, impact on logo, bright chord ring-out
+place(whoosh(0.6), FINAL - 0.6, 0.3)
+place(impact(3.0), FINAL, 0.7)
+ring = tt(3.0)
+for j, n in enumerate([53, 65, 69, 72, 76, 79, 84]):
+    f = midi(n)
+    tone = sum(np.sin(2 * np.pi * f * k * ring) * 0.6 ** (k - 1) / k for k in range(1, 5))
+    place(tone * np.exp(-ring / 1.0) * np.minimum(1, ring / 0.003), FINAL, 0.03, pan=(j - 3) * 0.15)
+place(pad([65, 69, 72, 76, 79], 3.4), FINAL, 0.02)
+place(shimmer(3.0), FINAL + 0.05, 0.02, pan=-0.2)
 
 
-# --- reverb: FFT convolution with a decaying stereo noise impulse
-def reverb(x, secs=2.6, wet=0.28):
-    nn = int(secs * SR)
-    tt = np.arange(nn) / SR
-    out = np.zeros_like(x)
-    L = len(x) + nn
+# ---- short room reverb + master
+def reverb(x, secs=1.4, wet=0.18):
+    n = int(secs * SR)
+    tr = np.arange(n) / SR
+    out = x.copy()
+    L = len(x) + n
     nfft = 1 << (L - 1).bit_length()
     for ch in range(2):
-        ir = rng.standard_normal(nn) * np.exp(-tt / (secs / 5))
-        ir = np.convolve(ir, np.ones(6) / 6, mode='same')
+        ir = rng.standard_normal(n) * np.exp(-tr / (secs / 5))
+        ir = lowpass(ir, 8)
         ir /= np.sqrt(np.sum(ir ** 2))
-        y = np.fft.irfft(np.fft.rfft(x[:, ch], nfft) * np.fft.rfft(ir, nfft), nfft)[: len(x)]
-        out[:, ch] = x[:, ch] + wet * y
+        out[:, ch] += wet * np.fft.irfft(np.fft.rfft(x[:, ch], nfft) * np.fft.rfft(ir, nfft), nfft)[: len(x)]
     return out
 
 
 mix = reverb(mix)
-# fade in/out and normalize
-mix *= smooth(t, 0, 0.3)[:, None] * (1 - smooth(t, DUR - 1.2, DUR))[:, None]
-mix = np.tanh(mix * 1.4) / np.tanh(1.4)
-mix /= np.max(np.abs(mix)) / 0.89
+fade = np.clip(t / 0.05, 0, 1) * np.clip((DUR - t) / 0.6, 0, 1)
+mix *= fade[:, None]
+mix /= np.max(np.abs(mix))
+mix = np.tanh(mix * 1.3) / np.tanh(1.3)
+mix /= np.max(np.abs(mix)) / 0.9
 
 out = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'music.wav')
 with wave.open(out, 'wb') as w:

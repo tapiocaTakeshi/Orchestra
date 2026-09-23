@@ -1,30 +1,37 @@
 # Orchestra プロモーションビデオ
 
-`orchestra-promo.mp4` — 1920×1080 / 30fps / 50 秒 / BGM つき
+`orchestra-promo.mp4` — 1920×1080 / 30fps / 28 秒 / BGM つき
+
+白と赤を基調にした、テンポの速いモーショングラフィックス版です。
 
 | 時間 | シーン |
 | --- | --- |
-| 0:00 | 「コードを書く時代から、AI を指揮する時代へ。」 |
-| 0:05 | ロゴとタグライン（最強のマルチエージェントを搭載した次世代 AI IDE） |
-| 0:11 | 「どの AI に、何を任せるか。」— バラバラのモデルが整列する |
-| 0:17 | マルチエージェント・オーケストレーション（Leader AI → Search / Planning / Coding / Review） |
-| 0:29 | 自律型エージェントモード（コード生成・コマンド実行・レビューまで自走） |
-| 0:38 | 6 プロバイダー / 38+ LLM / VS Code 互換 / `@` コンテキスト |
-| 0:44 | 「AI を、指揮せよ。」— ORCHESTRA / Powered by Division API |
+| 0:00 | 3D 空間に浮かぶ UI ウィンドウと紙飛行機 —「つくりたいものは？」 |
+| 0:03 | プロンプト入力 → カーソルから役割タグ（検索 / 設計 / 実装 / レビュー）が飛び出す |
+| 0:06 | タイムライン —「複数のAIが、同時に動く。」 |
+| 0:08 | ピルの文字切り替え：マルチエージェント → 自律型エージェント（赤フラッシュ）→ VS Code 完全互換 |
+| 0:12 | 黒背景で 3D ロゴタイルが現れ、放射状の光がはじける |
+| 0:14 | 「AIを、指揮しよう。」— 横切るバーと背景のグレーアップ |
+| 0:16 | モデルカードのカルーセル（Perplexity / Gemini / Claude / GPT / Grok / DeepSeek） |
+| 0:19 | コーディング担当モデルを選択 → エージェント構成カード →「実行する」 |
+| 0:22 | 「1つのプロンプトで、最高のチームを。」→ 巨大なロゴが画面を横切って着地 |
+| 0:24 | ロゴ + Orchestra ワードマーク +「AIを、指揮せよ。」/ Powered by Division API |
 
 ## 作り直し方
 
 アニメーションは `promo.html`（時刻 `t` を渡すと 1 コマ描く `render(t)`）で、
-BGM は `music.py` で合成しています。ブラウザで `promo.html` を開くとリアルタイムでプレビューできます。
+BGM は `music.py` で合成しています。ブラウザで `promo.html` を開くとリアルタイムでプレビューできます
+（モーションブラーは書き出し時のみ）。
 
 ```bash
+python3 promo/fonts.py                           # 画面の文字を変えたらフォントのサブセットを作り直す
 pip install numpy && python3 promo/music.py      # promo/music.wav を生成
 npm i -D playwright                              # 未導入の場合
 node promo/render.mjs                            # promo/orchestra-promo.mp4 を生成（ffmpeg が必要）
 ```
 
 - `FFMPEG=/path/to/ffmpeg` で ffmpeg の場所を指定できます。
-- `FROM=17 TO=29 OUT=/tmp/part.mp4 node promo/render.mjs` で一部だけ書き出せます。
-- 文言やタイミングを変えたら、`promo.html` の `T`（シーン区切り）と `music.py` の `SCENE_HITS` などを合わせてください。
-- `fonts/` は Inter / Noto Sans JP / JetBrains Mono（SIL Open Font License）を動画で使う文字だけに絞ったものです。
-  新しい文字を足した場合は、フォントに含まれず代替フォントで表示されることがあります。
+- `SUB` は 1 コマあたりに重ねるサブフレーム数（モーションブラーの滑らかさ、既定 8）。`SUB=1` でブラーなし・高速。
+- `FROM=12 TO=16 OUT=/tmp/part.mp4 SUB=1 node promo/render.mjs` で一部だけ素早く書き出せます。
+- シーンの区切りを変えたら、`promo.html` の `T` と `music.py` の `CUTS` などを合わせてください。
+- `fonts/` は Inter / Noto Sans JP（SIL Open Font License）を動画で使う文字だけに絞ったものです。
