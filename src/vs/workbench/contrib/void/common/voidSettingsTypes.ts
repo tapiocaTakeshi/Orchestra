@@ -553,10 +553,29 @@ export const contextTagsOfGroup = (group: ContextTagGroup): ContextTag[] =>
 // Division API role assignment types
 export type AgentRole = 'leader' | 'coder' | 'planner' | 'search' | 'research' | 'design' | 'writing' | 'ideaman' | 'filesearch' | 'image' | 'review';
 
+// Division ロール割り当てごとの推論エフォート。未設定ならモデル既定。
+// Division API 側でプロバイダごとのネイティブ設定（Anthropic output_config.effort /
+// OpenAI reasoning.effort / Gemini thinkingBudget）に変換される。
+export const reasoningEfforts = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+export type ReasoningEffort = typeof reasoningEfforts[number];
+export const reasoningEffortLabels: Record<ReasoningEffort, string> = {
+	low: 'Low',
+	medium: 'Medium',
+	high: 'High',
+	xhigh: 'Extra high',
+	max: 'Max',
+};
+export const normalizeReasoningEffort = (value: unknown): ReasoningEffort | undefined => {
+	if (typeof value !== 'string') return undefined;
+	const v = value.trim().toLowerCase();
+	return (reasoningEfforts as readonly string[]).includes(v) ? v as ReasoningEffort : undefined;
+};
+
 export type RoleAssignment = {
 	role: AgentRole;
 	provider: ProviderName;
 	model: string;
+	effort?: ReasoningEffort;
 };
 
 // AI コミットメッセージ生成の出力言語設定。
