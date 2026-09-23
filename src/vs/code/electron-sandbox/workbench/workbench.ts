@@ -241,7 +241,8 @@
 	const SPLASH_OPEN_WOBBLE = 4;
 	const SPLASH_SEGMENTS = 24;
 	const SPLASH_FRAMES = 48;
-	const SPLASH_ARROW_POINTS = '0,-7 19,0 0,7 4.5,0';
+	// Anchored at the notch, so the strand runs into the arrowhead instead of stopping short.
+	const SPLASH_ARROW_POINTS = '-4.5,-7 14.5,0 -4.5,7 0,0';
 	const SPLASH_CYCLE = '6s';     // slow enough to read as calm rather than busy
 	const SPLASH_ACCENT = '#d8283b';
 
@@ -290,6 +291,21 @@
 		return `translate(${SPLASH_X_END}px, ${splashRound(y)}px) rotate(${Number(angle.toFixed(1))}deg)`;
 	}
 
+	// The weave is drawn as a double helix: each strand is nearer the viewer for half
+	// of every period, swapping at the peaks where the strands are furthest apart, so
+	// every crossing has one strand clearly passing in front of the other. This is the
+	// front-facing share of `side`'s strand over one period at phase 0, as gradient
+	// stops; a mask slides it along with the weave (`z` is the strand's depth).
+	function splashDepthStops(side: number): [string, string][] {
+		const stops: [string, string][] = [];
+		for (let i = 0; i <= 24; i++) {
+			const z = side * Math.cos((2 * Math.PI * i) / 24);
+			const front = splashSmoothstep(Math.min(1, Math.max(0, (z + 0.4) / 0.8)));
+			stops.push([String(splashRound(i / 24)), String(splashRound(front))]);
+		}
+		return stops;
+	}
+
 	function splashMotionKeyframes(): string {
 		const keyframes = (name: string, at: (phase: number) => string) => {
 			const rows: string[] = [];
@@ -304,6 +320,8 @@
 			keyframes('monaco-workbench-splash-wave-b', p => `d: path("${splashStrandPath(p, 1)}");`),
 			keyframes('monaco-workbench-splash-head-a', p => `transform: ${splashHeadTransform(p, -1)};`),
 			keyframes('monaco-workbench-splash-head-b', p => `transform: ${splashHeadTransform(p, 1)};`),
+			// A full cycle advances the phase by 2π, which moves the helix one period.
+			`@keyframes monaco-workbench-splash-depth { from { transform: translateX(0); } to { transform: translateX(-${SPLASH_PERIOD}px); } }`,
 		].join('\n');
 	}
 
@@ -393,7 +411,9 @@
 			@keyframes monaco-workbench-splash-meter { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
 			@keyframes monaco-workbench-splash-signal { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
 			#monaco-workbench-splash-logo .boot-ambient { fill: url(#boot-splash-ambient); animation: monaco-workbench-splash-fade-in 2s 0.4s ease-out both; }
-			#monaco-workbench-splash-logo .boot-strand { fill: none; stroke: url(#boot-splash-fade); stroke-width: 2.2; stroke-linecap: round;${bloom} }
+			#monaco-workbench-splash-logo .boot-strand { fill: none; stroke: url(#boot-splash-fade); stroke-width: 2.4; stroke-linecap: round;${bloom} }
+			#monaco-workbench-splash-logo .boot-strand-back { stroke-width: 1.5; opacity: ${darkShell ? '0.5' : '0.36'}; filter: none; }
+			#monaco-workbench-splash-logo .boot-depth-shift { animation: monaco-workbench-splash-depth ${SPLASH_CYCLE} linear infinite; }
 			#monaco-workbench-splash-logo .boot-arrowhead { fill: ${SPLASH_ACCENT}; stroke: none; transform-box: view-box; transform-origin: 0 0;${bloom} }
 			#monaco-workbench-splash-logo .boot-strand-a { animation: monaco-workbench-splash-wave-a ${SPLASH_CYCLE} linear infinite, monaco-workbench-splash-draw 1.6s 0.2s cubic-bezier(0.65, 0, 0.35, 1) both; }
 			#monaco-workbench-splash-logo .boot-strand-b { animation: monaco-workbench-splash-wave-b ${SPLASH_CYCLE} linear infinite, monaco-workbench-splash-draw 1.6s 0.2s cubic-bezier(0.65, 0, 0.35, 1) both; }
@@ -467,13 +487,13 @@
 		const ambient = svgEl('radialGradient', {
 			id: 'boot-splash-ambient', cx: '0.5', cy: '0.5', r: '0.5'
 		});
-		// Eased rather than linear falloff: a straight ramp to zero leaves a visible
-		// rim where the halo ends, which reads as a hard edge against flat chrome.
-		// Kept faint and still: a halo you notice is a halo that looks cheap.
-		ambient.appendChild(svgEl('stop', { offset: '0', 'stop-color': '#c01e31', 'stop-opacity': '0.06' }));
-		ambient.appendChild(svgEl('stop', { offset: '0.4', 'stop-color': '#c01e31', 'stop-opacity': '0.03' }));
-		ambient.appendChild(svgEl('stop', { offset: '0.7', 'stop-color': '#c01e31', 'stop-opacity': '0.015' }));
-		ambient.appendChild(svgEl('stop', { offset: '1', 'stop-color': '#c01e31', 'stop-opacity': '0' }));
+		// Kept faint and still: a halo you notice is a halo that looks cheap. The falloff
+		// is (1 - t²)³, which reaches zero with zero slope, so there is no rim where the
+		// halo ends - any kink in the ramp shows up as an oval edge on flat chrome.
+		for (let i = 0; i <= 12; i++) {
+			const t = i / 12;
+			ambient.appendChild(svgEl('stop', { offset: String(splashRound(t)), 'stop-color': '#c01e31', 'stop-opacity': String(Number((0.07 * Math.pow(1 - t * t, 3)).toFixed(4))) }));
+		}
 
 		const glow = svgEl('filter', { id: 'boot-splash-glow', x: '-60%', y: '-60%', width: '220%', height: '220%' });
 		// A soft aura at a third strength rather than a neon bloom.
@@ -487,6 +507,29 @@
 		const defs = svgEl('defs', {});
 		defs.appendChild(gradient);
 		defs.appendChild(sheen);
+
+		// Past the opening both arms of the fork face the viewer.
+		const opening = svgEl('linearGradient', {
+			id: 'boot-splash-depth-open', x1: String(SPLASH_X_OPEN - 12), y1: '0', x2: String(SPLASH_X_OPEN + 16), y2: '0', gradientUnits: 'userSpaceOnUse'
+		});
+		opening.appendChild(svgEl('stop', { offset: '0', 'stop-color': '#fff', 'stop-opacity': '0' }));
+		opening.appendChild(svgEl('stop', { offset: '1', 'stop-color': '#fff', 'stop-opacity': '1' }));
+		defs.appendChild(opening);
+
+		for (const [side, sign] of [['a', -1], ['b', 1]] as const) {
+			const depth = svgEl('linearGradient', {
+				id: `boot-splash-depth-${side}-fill`, x1: String(SPLASH_X0), y1: '0', x2: String(SPLASH_X0 + SPLASH_PERIOD), y2: '0', gradientUnits: 'userSpaceOnUse', spreadMethod: 'repeat'
+			});
+			for (const [offset, opacity] of splashDepthStops(sign)) {
+				depth.appendChild(svgEl('stop', { offset, 'stop-color': '#fff', 'stop-opacity': opacity }));
+			}
+			defs.appendChild(depth);
+
+			const mask = svgEl('mask', { id: `boot-splash-depth-${side}`, maskUnits: 'userSpaceOnUse', x: '-20', y: '-20', width: '306', height: '160' });
+			mask.appendChild(svgEl('rect', { class: 'boot-depth-shift', x: '-20', y: '-20', width: String(306 + SPLASH_PERIOD), height: '160', fill: `url(#boot-splash-depth-${side}-fill)` }));
+			mask.appendChild(svgEl('rect', { x: '-20', y: '-20', width: '306', height: '160', fill: 'url(#boot-splash-depth-open)' }));
+			defs.appendChild(mask);
+		}
 		if (darkShell) {
 			defs.appendChild(ambient);
 			defs.appendChild(glow);
@@ -496,8 +539,18 @@
 			svg.appendChild(defs);
 		}
 
-		svg.appendChild(svgEl('path', { class: 'boot-strand boot-strand-a', pathLength: '100', d: splashStrandPath(0, -1) }));
-		svg.appendChild(svgEl('path', { class: 'boot-strand boot-strand-b', pathLength: '100', d: splashStrandPath(0, 1) }));
+		// Both strands whole, thin and dim: what shows where a strand is behind the other.
+		svg.appendChild(svgEl('path', { class: 'boot-strand boot-strand-a boot-strand-back', pathLength: '100', d: splashStrandPath(0, -1) }));
+		svg.appendChild(svgEl('path', { class: 'boot-strand boot-strand-b boot-strand-back', pathLength: '100', d: splashStrandPath(0, 1) }));
+
+		// Then each strand at full weight with its sheen, masked to where it is in front.
+		for (const [side, sign] of [['a', -1], ['b', 1]] as const) {
+			const front = svgEl('g', { mask: `url(#boot-splash-depth-${side})` });
+			front.appendChild(svgEl('path', { class: `boot-strand boot-strand-${side}`, pathLength: '100', d: splashStrandPath(0, sign) }));
+			front.appendChild(svgEl('path', { class: `boot-strand boot-signal boot-signal-${side}`, pathLength: '100', d: splashStrandPath(0, sign) }));
+			svg.appendChild(front);
+		}
+
 		svg.appendChild(svgEl('polygon', {
 			class: 'boot-arrowhead boot-arrowhead-a', points: SPLASH_ARROW_POINTS, style: `transform: ${splashHeadTransform(0, -1)}`
 		}));
@@ -505,16 +558,6 @@
 			class: 'boot-arrowhead boot-arrowhead-b', points: SPLASH_ARROW_POINTS, style: `transform: ${splashHeadTransform(0, 1)}`
 		}));
 
-		// Reuse each strand's geometry so the travelling highlight stays attached.
-		for (const side of ['a', 'b']) {
-			const strand = svg.querySelector('.boot-strand-' + side);
-			if (strand) {
-				const signal = strand.cloneNode(false) as SVGElement;
-				signal.setAttribute('class', 'boot-strand boot-signal boot-signal-' + side);
-				signal.setAttribute('pathLength', '100');
-				svg.appendChild(signal);
-			}
-		}
 		splashLogo.appendChild(svg);
 		const wordmark = document.createElement('div');
 		wordmark.className = 'boot-wordmark';

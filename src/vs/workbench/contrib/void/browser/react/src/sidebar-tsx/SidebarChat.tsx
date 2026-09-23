@@ -78,11 +78,22 @@ if (typeof document !== 'undefined' && !document.getElementById('void-sidebar-ch
 	25%, 65% { opacity: 0.8; }
 	100% { transform: translateX(100%); opacity: 0; }
 }
-[data-orchestra-loading] { animation: voidBubbleIn 300ms ease-out backwards; }
+/* The mark draws itself in, so its wrapper only fades - sliding it too read as a jolt. */
+[data-orchestra-loading] { animation: orchestraFadeIn 240ms ease-out backwards; }
+@keyframes orchestraFadeIn { from { opacity: 0; } }
+/* In-progress labels: a crimson sheen passes through the text in step with the mark's
+   2.6s cycle. Only the text fill goes transparent - color stays - so currentColor in the
+   gradient is still the label's own colour and the sheen suits any theme. */
+[data-orchestra-shimmer] {
+	background: linear-gradient(90deg, currentColor 38%, color-mix(in srgb, currentColor 35%, #e8475a) 50%, currentColor 62%) 100% 0 / 250% 100% no-repeat;
+	-webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+	animation: orchestraShimmer 2.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+@keyframes orchestraShimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
 
 [data-orchestra-pulse] { animation: pulse 1.4s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
-	[data-orchestra-enter], [data-orchestra-loading], [data-orchestra-card]::after { animation: none; }
+	[data-orchestra-enter], [data-orchestra-loading], [data-orchestra-card]::after, [data-orchestra-shimmer] { animation: none; }
 	[data-orchestra-card]::after { display: none; }
 	[data-orchestra-pulse] { animation: none; }
 }
@@ -2389,7 +2400,7 @@ const FlowIndicator = ({ messages, isRunning, reasoningSoFar }: {
 				className="inline-block w-1.5 h-1.5 rounded-full bg-[var(--vscode-focusBorder)]"
 				style={{ boxShadow: '0 0 6px var(--vscode-focusBorder)' }}
 			/>
-			<span>{activePhase.label}</span>
+			<span data-orchestra-shimmer=''>{activePhase.label}</span>
 			<IconLoading />
 		</div>
 	);
@@ -3299,7 +3310,7 @@ const ReasoningWrapper = ({ isDoneReasoning, isStreaming, reasoningDuration, chi
 
 const loadingTitleWrapper = (item: React.ReactNode): React.ReactNode => {
 	return <span className='flex items-center flex-nowrap'>
-		{item}
+		<span data-orchestra-shimmer=''>{item}</span>
 		<IconLoading />
 	</span>
 }
