@@ -15,7 +15,7 @@ import { IFileService } from '../../../../platform/files/common/files.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
-import { AgentRole, defaultRoleAssignments, displayInfoOfProviderName, ProviderName, providerNames, RoleAssignment } from '../common/voidSettingsTypes.js';
+import { AgentRole, defaultRoleAssignments, displayInfoOfProviderName, normalizeReasoningEffort, ProviderName, providerNames, ReasoningEffort, RoleAssignment } from '../common/voidSettingsTypes.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
 import * as dom from '../../../../base/browser/dom.js';
 
@@ -391,10 +391,12 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 
 			if (rawRole !== role || rawProvider !== provider) changed = true;
 
+			const effort = normalizeReasoningEffort(a?.effort);
 			return {
 				role,
 				provider,
 				model: String(a?.model ?? ''),
+				...(effort ? { effort } : {}),
 			};
 		});
 		return { agents: result, changed };
@@ -635,7 +637,7 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 							roleId: roleSlug,
 							providerId: providerSupabaseId,
 							priority: priority++,
-							config: JSON.stringify({ model: agent.model }),
+							config: JSON.stringify({ model: agent.model, ...(agent.effort ? { effort: agent.effort } : {}) }),
 							updatedAt: now,
 						});
 					}
@@ -819,9 +821,11 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 
 		return assignments.map(a => {
 			let model = '';
+			let effort: ReasoningEffort | undefined;
 			try {
 				const cfg = JSON.parse(a.config || '{}');
 				model = cfg.model || '';
+				effort = normalizeReasoningEffort(cfg.effort);
 			} catch { /* ignore */ }
 
 			// Resolve role: 埋め込みリレーションの slug → ルックアップマップ → raw roleId の順で探索する。
@@ -846,7 +850,7 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 			const role = (normalizeAgentRole(roleRaw) ?? roleRaw) as AgentRole;
 			const provider = (normalizeProviderName(providerRaw) ?? providerRaw) as ProviderName;
 
-			return { role, provider, model };
+			return { role, provider, model, ...(effort ? { effort } : {}) };
 		});
 	}
 

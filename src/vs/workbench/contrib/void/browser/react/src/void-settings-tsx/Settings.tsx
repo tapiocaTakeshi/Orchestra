@@ -6,7 +6,7 @@
 import { AutoRouting } from './AutoRouting.js';
 
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react'; // Added useRef import just in case it was missed, though likely already present
-import { ProviderName, SettingName, displayInfoOfSettingName, providerNames, VoidStatefulModelInfo, customSettingNamesOfProvider, RefreshableProviderName, refreshableProviderNames, displayInfoOfProviderName, nonlocalProviderNames, localProviderNames, GlobalSettingName, featureNames, displayInfoOfFeatureName, isProviderNameDisabled, FeatureName, hasDownloadButtonsOnModelsProviderNames, subTextMdOfProviderName, commitMessageLanguages, displayInfoOfCommitMessageLanguage } from '../../../../common/voidSettingsTypes.js'
+import { ProviderName, SettingName, displayInfoOfSettingName, providerNames, VoidStatefulModelInfo, customSettingNamesOfProvider, RefreshableProviderName, refreshableProviderNames, displayInfoOfProviderName, nonlocalProviderNames, localProviderNames, GlobalSettingName, featureNames, displayInfoOfFeatureName, isProviderNameDisabled, FeatureName, hasDownloadButtonsOnModelsProviderNames, subTextMdOfProviderName, commitMessageLanguages, displayInfoOfCommitMessageLanguage, reasoningEfforts, reasoningEffortLabels, normalizeReasoningEffort } from '../../../../common/voidSettingsTypes.js'
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
 import { VoidButtonBgDarken, VoidCustomDropdownBox, VoidInputBox2, VoidSimpleInputBox, VoidSwitch } from '../util/inputs.js'
 import { useAccessor, useDivisionProjects, useIsDark, useIsOptedOut, useRefreshModelListener, useRefreshModelState, useSettingsState } from '../util/services.js'
@@ -1228,13 +1228,20 @@ const DivisionSettings = () => {
 		return [...(defaultModelsOfProvider[pn] || [])];
 	};
 
-	const updateProjectRole = (project: any, role: string, field: 'provider' | 'model', value: string) => {
+	const updateProjectRole = (project: any, role: string, field: 'provider' | 'model' | 'effort', value: string) => {
 		const agents = project.agents || [];
+		const applyField = (ra: any) => {
+			if (field !== 'effort') return { ...ra, [field]: value };
+			// 空文字 = モデル既定。キーごと落として config に残さない。
+			const { effort: _drop, ...rest } = ra;
+			const effort = normalizeReasoningEffort(value);
+			return effort ? { ...rest, effort } : rest;
+		};
 		let updated = agents.map((ra: any) =>
-			ra.role === role ? { ...ra, [field]: value } : ra
+			ra.role === role ? applyField(ra) : ra
 		);
 		if (!updated.some((ra: any) => ra.role === role)) {
-			updated.push({ role: role as any, provider: field === 'provider' ? value as any : 'openAI', model: field === 'model' ? value : '' });
+			updated.push(applyField({ role: role as any, provider: field === 'provider' ? value as any : 'openAI', model: field === 'model' ? value : '' }));
 		}
 		if (field === 'provider') {
 			const models = getModelsForProvider(value as any);
@@ -1482,6 +1489,21 @@ const DivisionSettings = () => {
 											>
 												{models.map(m => (
 													<option key={m} value={m}>{m}</option>
+												))}
+											</select>
+											<select
+												value={assignment?.effort ?? ''}
+												onChange={(e) => updateProjectRole(project, role, 'effort', e.target.value)}
+												title="Reasoning effort"
+												style={{
+													padding: '3px 4px', background: 'var(--void-bg-2)',
+													border: '1px solid var(--void-border-2)', borderRadius: '4px',
+													fontSize: '10px', color: 'var(--void-fg-2)', flex: '0 0 84px',
+												}}
+											>
+												<option value=''>Effort: Default</option>
+												{reasoningEfforts.map(level => (
+													<option key={level} value={level}>{reasoningEffortLabels[level]}</option>
 												))}
 											</select>
 										</div>
