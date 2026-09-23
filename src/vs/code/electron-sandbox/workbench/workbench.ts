@@ -235,13 +235,15 @@
 	const SPLASH_X_OPEN = 164;     // where the weave starts swinging out into the fork
 	const SPLASH_X_END = 232;      // where the strands hand off to the arrowheads
 	const SPLASH_PERIOD = 76;
-	const SPLASH_AMP = 17;
+	const SPLASH_AMP = 14;
 	const SPLASH_RAMP = 56;        // amplitude eases in, so the tail tapers out of the origin
 	const SPLASH_OPEN_BASE = 28;
-	const SPLASH_OPEN_WOBBLE = 6;
+	const SPLASH_OPEN_WOBBLE = 4;
 	const SPLASH_SEGMENTS = 24;
 	const SPLASH_FRAMES = 48;
-	const SPLASH_ARROW_POINTS = '0,-11 24,0 0,11 7,0';
+	const SPLASH_ARROW_POINTS = '0,-7 19,0 0,7 4.5,0';
+	const SPLASH_CYCLE = '6s';     // slow enough to read as calm rather than busy
+	const SPLASH_ACCENT = '#d8283b';
 
 	const splashSmoothstep = (t: number) => t * t * (3 - 2 * t);
 	const splashRound = (v: number) => Number(v.toFixed(2));
@@ -370,46 +372,44 @@
 		window.document.head.appendChild(style);
 		style.textContent = `
 			body { background-color: ${shellBackground}; color: ${shellForeground}; margin: 0; padding: 0; }
-			#monaco-workbench-splash-logo { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 18px; background-color: ${shellBackground}; pointer-events: none; overflow: hidden; animation: monaco-workbench-splash-logo-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
-			#monaco-workbench-splash-logo svg { overflow: visible; width: min(320px, 80vw); height: auto; flex-shrink: 0; }
-			#monaco-workbench-splash-logo .boot-wordmark { font: 500 15px system-ui, sans-serif; letter-spacing: 0.32em; padding-left: 0.32em; white-space: nowrap; }
-			#monaco-workbench-splash-logo .boot-wordmark span { display: inline-block; animation: monaco-workbench-splash-letter-in 0.7s calc(0.55s + var(--i) * 45ms) cubic-bezier(0.16, 1, 0.3, 1) both; }
-			#monaco-workbench-splash-logo .boot-meter { width: 96px; height: 2px; overflow: hidden; background: rgba(224, 36, 49, 0.12); border-radius: 2px; animation: monaco-workbench-splash-caption-in 0.8s 1.1s both; }
-			#monaco-workbench-splash-logo .boot-meter::after { content: ''; display: block; height: 100%; width: 50%; background: linear-gradient(90deg, transparent, #e02431, transparent); animation: monaco-workbench-splash-meter 1.8s ease-in-out infinite; }
-			#monaco-workbench-splash-logo .boot-strand.boot-signal { stroke: #ffbac2; stroke-width: 1.8; stroke-dasharray: 8 92; filter: none; }
-			#monaco-workbench-splash-logo .boot-strand.boot-signal-a { animation: monaco-workbench-splash-wave-a 4s linear infinite, monaco-workbench-splash-signal 2s linear infinite, monaco-workbench-splash-fade-in 0.5s 1.15s both; }
-			#monaco-workbench-splash-logo .boot-strand.boot-signal-b { animation: monaco-workbench-splash-wave-b 4s linear infinite, monaco-workbench-splash-signal 2s -1s linear infinite, monaco-workbench-splash-fade-in 0.5s 1.15s both; }
-			@keyframes monaco-workbench-splash-caption-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-			@keyframes monaco-workbench-splash-letter-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-			@keyframes monaco-workbench-splash-fade-in { from { opacity: 0; } to { opacity: 1; } }
-			@keyframes monaco-workbench-splash-meter { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+			#monaco-workbench-splash-logo { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 22px; background-color: ${shellBackground};${darkShell ? ' background-image: radial-gradient(ellipse 60% 50% at 50% 46%, rgba(255, 255, 255, 0.035), transparent 70%);' : ''} pointer-events: none; overflow: hidden; animation: monaco-workbench-splash-logo-in 1s cubic-bezier(0.16, 1, 0.3, 1) both; }
+			#monaco-workbench-splash-logo svg { overflow: visible; width: min(300px, 76vw); height: auto; flex-shrink: 0; }
+			#monaco-workbench-splash-logo .boot-wordmark { font: 300 12px "Helvetica Neue", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif; letter-spacing: 0.62em; padding-left: 0.62em; white-space: nowrap; color: transparent; background: linear-gradient(100deg, ${shellForeground} 42%, ${SPLASH_ACCENT} 50%, ${shellForeground} 58%) 100% 0 / 260% 100% no-repeat; -webkit-background-clip: text; background-clip: text; opacity: 0.82; animation: monaco-workbench-splash-track-in 1.6s 0.9s cubic-bezier(0.16, 1, 0.3, 1) both, monaco-workbench-splash-sheen 6s 2.4s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
+			#monaco-workbench-splash-logo .boot-meter { position: relative; width: 56px; height: 1px; overflow: hidden; background: ${shellForeground}; opacity: 0.22; animation: monaco-workbench-splash-hairline-in 1.2s 1.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+			#monaco-workbench-splash-logo .boot-meter::after { content: ''; position: absolute; inset: 0; width: 40%; background: linear-gradient(90deg, transparent, ${SPLASH_ACCENT}, transparent); animation: monaco-workbench-splash-meter 2.8s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
+			#monaco-workbench-splash-logo .boot-strand.boot-signal { stroke: url(#boot-splash-sheen); stroke-width: 1; stroke-dasharray: 14 86; opacity: 0.8; filter: none; }
+			#monaco-workbench-splash-logo .boot-strand.boot-signal-a { animation: monaco-workbench-splash-wave-a ${SPLASH_CYCLE} linear infinite, monaco-workbench-splash-signal 3.6s cubic-bezier(0.45, 0, 0.55, 1) infinite, monaco-workbench-splash-fade-in 1s 1.9s both; }
+			#monaco-workbench-splash-logo .boot-strand.boot-signal-b { animation: monaco-workbench-splash-wave-b ${SPLASH_CYCLE} linear infinite, monaco-workbench-splash-signal 3.6s -1.8s cubic-bezier(0.45, 0, 0.55, 1) infinite, monaco-workbench-splash-fade-in 1s 1.9s both; }
+			@keyframes monaco-workbench-splash-track-in {
+				from { opacity: 0; letter-spacing: 1.1em; padding-left: 1.1em; filter: blur(6px); }
+				to   { opacity: 0.82; letter-spacing: 0.62em; padding-left: 0.62em; filter: blur(0); }
+			}
+			@keyframes monaco-workbench-splash-sheen {
+				0%        { background-position: 100% 0; }
+				35%, 100% { background-position: 0 0; }
+			}
+			@keyframes monaco-workbench-splash-hairline-in { from { opacity: 0; transform: scaleX(0); } }
+			@keyframes monaco-workbench-splash-fade-in { from { opacity: 0; } }
+			@keyframes monaco-workbench-splash-meter { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
 			@keyframes monaco-workbench-splash-signal { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
-			#monaco-workbench-splash-logo .boot-ambient { fill: url(#boot-splash-ambient); animation: monaco-workbench-splash-ambient-in 1.2s 0.2s ease-out both, monaco-workbench-splash-ambient-pulse 4.8s 1.4s ease-in-out infinite; }
-			#monaco-workbench-splash-logo .boot-strand { fill: none; stroke: url(#boot-splash-fade); stroke-width: 5; stroke-linecap: round;${bloom} }
-			#monaco-workbench-splash-logo .boot-arrowhead { fill: #e02431; stroke: #e02431; stroke-width: 1.4; stroke-linejoin: round; transform-box: view-box; transform-origin: 0 0;${bloom} }
-			#monaco-workbench-splash-logo .boot-strand-a { animation: monaco-workbench-splash-wave-a 4s linear infinite, monaco-workbench-splash-draw 1.1s 0.1s cubic-bezier(0.22, 1, 0.36, 1) both; }
-			#monaco-workbench-splash-logo .boot-strand-b { animation: monaco-workbench-splash-wave-b 4s linear infinite, monaco-workbench-splash-draw 1.1s 0.1s cubic-bezier(0.22, 1, 0.36, 1) both; }
-			#monaco-workbench-splash-logo .boot-arrowhead-a { animation: monaco-workbench-splash-head-a 4s linear infinite, monaco-workbench-splash-launch 0.55s 0.75s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
-			#monaco-workbench-splash-logo .boot-arrowhead-b { animation: monaco-workbench-splash-head-b 4s linear infinite, monaco-workbench-splash-launch 0.55s 0.75s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+			#monaco-workbench-splash-logo .boot-ambient { fill: url(#boot-splash-ambient); animation: monaco-workbench-splash-fade-in 2s 0.4s ease-out both; }
+			#monaco-workbench-splash-logo .boot-strand { fill: none; stroke: url(#boot-splash-fade); stroke-width: 2.2; stroke-linecap: round;${bloom} }
+			#monaco-workbench-splash-logo .boot-arrowhead { fill: ${SPLASH_ACCENT}; stroke: none; transform-box: view-box; transform-origin: 0 0;${bloom} }
+			#monaco-workbench-splash-logo .boot-strand-a { animation: monaco-workbench-splash-wave-a ${SPLASH_CYCLE} linear infinite, monaco-workbench-splash-draw 1.6s 0.2s cubic-bezier(0.65, 0, 0.35, 1) both; }
+			#monaco-workbench-splash-logo .boot-strand-b { animation: monaco-workbench-splash-wave-b ${SPLASH_CYCLE} linear infinite, monaco-workbench-splash-draw 1.6s 0.2s cubic-bezier(0.65, 0, 0.35, 1) both; }
+			#monaco-workbench-splash-logo .boot-arrowhead-a { animation: monaco-workbench-splash-head-a ${SPLASH_CYCLE} linear infinite, monaco-workbench-splash-launch 1s 1.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
+			#monaco-workbench-splash-logo .boot-arrowhead-b { animation: monaco-workbench-splash-head-b ${SPLASH_CYCLE} linear infinite, monaco-workbench-splash-launch 1s 1.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
 			@keyframes monaco-workbench-splash-draw {
 				from { stroke-dasharray: 100 100; stroke-dashoffset: 100; }
 				to   { stroke-dasharray: 100 100; stroke-dashoffset: 0; }
 			}
 			@keyframes monaco-workbench-splash-launch {
-				from { opacity: 0; translate: -18px 0; }
+				from { opacity: 0; translate: -10px 0; }
 				to   { opacity: 1; translate: 0 0; }
 			}
-			@keyframes monaco-workbench-splash-ambient-in {
-				from { opacity: 0; }
-				to   { opacity: 0.55; }
-			}
 			@keyframes monaco-workbench-splash-logo-in {
-				0%   { opacity: 0; transform: scale(0.96); }
-				100% { opacity: 1; transform: scale(1); }
-			}
-			@keyframes monaco-workbench-splash-ambient-pulse {
-				0%, 100% { opacity: 0.55; }
-				50%      { opacity: 0.9; }
+				from { opacity: 0; transform: scale(0.985); }
+				to   { opacity: 1; transform: scale(1); }
 			}
 			${splashMotionKeyframes()}
 			@media (prefers-reduced-motion: reduce) {
@@ -422,8 +422,9 @@
 		// opening into a pair of arrows, the weave drifting left to right while the
 		// workbench boots, lifted by a soft glow filter and a pulsing ambient halo
 		// behind it. It opens with the strands drawing out of the origin, the
-		// arrowheads launching once the strands reach them and the wordmark settling
-		// in a letter at a time; removed with the splash on first layout (see PartsSplash).
+		// arrowheads gliding out once the strands reach them and the wordmark tracking
+		// in from wide spacing, a slow sheen passing over it now and then; removed
+		// with the splash on first layout (see PartsSplash).
 		//
 		// Built through the DOM rather than innerHTML on purpose: workbench.html sets
 		// `require-trusted-types-for 'script'`, so assigning markup here throws and the
@@ -447,31 +448,45 @@
 		const gradient = svgEl('linearGradient', {
 			id: 'boot-splash-fade', x1: '10', y1: '0', x2: '230', y2: '0', gradientUnits: 'userSpaceOnUse'
 		});
-		gradient.appendChild(svgEl('stop', { offset: '0', 'stop-color': '#e02431', 'stop-opacity': '0' }));
-		gradient.appendChild(svgEl('stop', { offset: '0.3', 'stop-color': '#b81c2c', 'stop-opacity': '0.95' }));
-		gradient.appendChild(svgEl('stop', { offset: '0.58', 'stop-color': '#f0455a', 'stop-opacity': '1' }));
-		gradient.appendChild(svgEl('stop', { offset: '1', 'stop-color': '#e02431', 'stop-opacity': '1' }));
+		// Deep wine out of the origin, warming to the brand crimson at the arrows.
+		gradient.appendChild(svgEl('stop', { offset: '0', 'stop-color': '#5e0b16', 'stop-opacity': '0' }));
+		gradient.appendChild(svgEl('stop', { offset: '0.28', 'stop-color': '#8c1223', 'stop-opacity': '0.9' }));
+		gradient.appendChild(svgEl('stop', { offset: '0.65', 'stop-color': '#c01e31', 'stop-opacity': '1' }));
+		gradient.appendChild(svgEl('stop', { offset: '1', 'stop-color': SPLASH_ACCENT, 'stop-opacity': '1' }));
+
+		// The sheen fades in and out along the strand, so it never shows on the
+		// transparent tail or overruns the arrowheads.
+		const sheen = svgEl('linearGradient', {
+			id: 'boot-splash-sheen', x1: '10', y1: '0', x2: '230', y2: '0', gradientUnits: 'userSpaceOnUse'
+		});
+		sheen.appendChild(svgEl('stop', { offset: '0.2', 'stop-color': '#fff4f5', 'stop-opacity': '0' }));
+		sheen.appendChild(svgEl('stop', { offset: '0.45', 'stop-color': '#fff4f5', 'stop-opacity': '1' }));
+		sheen.appendChild(svgEl('stop', { offset: '0.8', 'stop-color': '#fff4f5', 'stop-opacity': '1' }));
+		sheen.appendChild(svgEl('stop', { offset: '1', 'stop-color': '#fff4f5', 'stop-opacity': '0' }));
 
 		const ambient = svgEl('radialGradient', {
 			id: 'boot-splash-ambient', cx: '0.5', cy: '0.5', r: '0.5'
 		});
 		// Eased rather than linear falloff: a straight ramp to zero leaves a visible
 		// rim where the halo ends, which reads as a hard edge against flat chrome.
-		ambient.appendChild(svgEl('stop', { offset: '0', 'stop-color': '#e02431', 'stop-opacity': '0.2' }));
-		ambient.appendChild(svgEl('stop', { offset: '0.35', 'stop-color': '#e02431', 'stop-opacity': '0.13' }));
-		ambient.appendChild(svgEl('stop', { offset: '0.6', 'stop-color': '#e02431', 'stop-opacity': '0.06' }));
-		ambient.appendChild(svgEl('stop', { offset: '0.82', 'stop-color': '#e02431', 'stop-opacity': '0.015' }));
-		ambient.appendChild(svgEl('stop', { offset: '1', 'stop-color': '#e02431', 'stop-opacity': '0' }));
+		// Kept faint and still: a halo you notice is a halo that looks cheap.
+		ambient.appendChild(svgEl('stop', { offset: '0', 'stop-color': '#c01e31', 'stop-opacity': '0.06' }));
+		ambient.appendChild(svgEl('stop', { offset: '0.4', 'stop-color': '#c01e31', 'stop-opacity': '0.03' }));
+		ambient.appendChild(svgEl('stop', { offset: '0.7', 'stop-color': '#c01e31', 'stop-opacity': '0.015' }));
+		ambient.appendChild(svgEl('stop', { offset: '1', 'stop-color': '#c01e31', 'stop-opacity': '0' }));
 
 		const glow = svgEl('filter', { id: 'boot-splash-glow', x: '-60%', y: '-60%', width: '220%', height: '220%' });
-		glow.appendChild(svgEl('feGaussianBlur', { in: 'SourceGraphic', stdDeviation: '2.2', result: 'blur' }));
+		// A soft aura at a third strength rather than a neon bloom.
+		glow.appendChild(svgEl('feGaussianBlur', { in: 'SourceGraphic', stdDeviation: '3', result: 'blur' }));
+		glow.appendChild(svgEl('feColorMatrix', { in: 'blur', type: 'matrix', values: '1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.35 0', result: 'aura' }));
 		const glowMerge = svgEl('feMerge', {});
-		glowMerge.appendChild(svgEl('feMergeNode', { in: 'blur' }));
+		glowMerge.appendChild(svgEl('feMergeNode', { in: 'aura' }));
 		glowMerge.appendChild(svgEl('feMergeNode', { in: 'SourceGraphic' }));
 		glow.appendChild(glowMerge);
 
 		const defs = svgEl('defs', {});
 		defs.appendChild(gradient);
+		defs.appendChild(sheen);
 		if (darkShell) {
 			defs.appendChild(ambient);
 			defs.appendChild(glow);
@@ -503,13 +518,7 @@
 		splashLogo.appendChild(svg);
 		const wordmark = document.createElement('div');
 		wordmark.className = 'boot-wordmark';
-		// One span per letter so the wordmark can settle in a letter at a time.
-		Array.from('ORCHESTRA').forEach((letter, i) => {
-			const span = document.createElement('span');
-			span.textContent = letter;
-			span.style.setProperty('--i', String(i));
-			wordmark.appendChild(span);
-		});
+		wordmark.textContent = 'ORCHESTRA';
 		wordmark.setAttribute('aria-hidden', 'true');
 		splashLogo.appendChild(wordmark);
 		const meter = document.createElement('div');

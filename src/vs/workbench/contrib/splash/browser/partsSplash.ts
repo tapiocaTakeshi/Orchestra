@@ -116,14 +116,14 @@ export class PartsSplash {
 		// Reveal the ready editor without delaying its layout or intercepting input.
 		const logo = mainWindow.document.getElementById('monaco-workbench-splash-logo');
 		if (logo && !mainWindow.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-			const fade = logo.animate([{ opacity: mainWindow.getComputedStyle(logo).opacity }, { opacity: 0 }], { duration: 280, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'forwards' });
+			const fade = logo.animate([{ opacity: mainWindow.getComputedStyle(logo).opacity }, { opacity: 0 }], { duration: 420, easing: 'cubic-bezier(0.65, 0, 0.35, 1)', fill: 'forwards' });
 			// The mark carries on forward as it fades, so the hand-off reads as the arrows
 			// launching into the editor rather than a cut.
-			logo.querySelector('svg')?.animate([{ transform: 'translateX(0) scale(1)' }, { transform: 'translateX(12px) scale(1.04)' }], { duration: 280, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'forwards' });
+			logo.querySelector('svg')?.animate([{ transform: 'translateX(0) scale(1)' }, { transform: 'translateX(6px) scale(1.02)' }], { duration: 420, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'forwards' });
 			fade.onfinish = () => logo.remove();
 			fade.oncancel = () => logo.remove();
 			// Also clean up if a hidden window suspends its animation timeline.
-			mainWindow.setTimeout(() => logo.remove(), 400);
+			mainWindow.setTimeout(() => logo.remove(), 540);
 		} else {
 			logo?.remove();
 		}
@@ -132,7 +132,7 @@ export class PartsSplash {
 		const defaultStyles = mainWindow.document.head.getElementsByClassName('initialShellColors');
 		const initialStyle = defaultStyles[0];
 		if (logo?.isConnected) {
-			mainWindow.setTimeout(() => initialStyle?.remove(), 400);
+			mainWindow.setTimeout(() => initialStyle?.remove(), 540);
 		} else {
 			initialStyle?.remove();
 		}
