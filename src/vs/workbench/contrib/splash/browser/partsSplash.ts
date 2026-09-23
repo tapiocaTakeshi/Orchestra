@@ -117,6 +117,9 @@ export class PartsSplash {
 		const logo = mainWindow.document.getElementById('monaco-workbench-splash-logo');
 		if (logo && !mainWindow.matchMedia('(prefers-reduced-motion: reduce)').matches) {
 			const fade = logo.animate([{ opacity: mainWindow.getComputedStyle(logo).opacity }, { opacity: 0 }], { duration: 280, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'forwards' });
+			// The mark carries on forward as it fades, so the hand-off reads as the arrows
+			// launching into the editor rather than a cut.
+			logo.querySelector('svg')?.animate([{ transform: 'translateX(0) scale(1)' }, { transform: 'translateX(12px) scale(1.04)' }], { duration: 280, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'forwards' });
 			fade.onfinish = () => logo.remove();
 			fade.oncancel = () => logo.remove();
 			// Also clean up if a hidden window suspends its animation timeline.
