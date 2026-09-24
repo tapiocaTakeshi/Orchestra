@@ -7,6 +7,7 @@
  *  in sync without requiring a manual "Pull from Remote".
  *--------------------------------------------------------------------------------------*/
 
+import { generateUuid } from '../../../../base/common/uuid.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { URI } from '../../../../base/common/uri.js';
@@ -69,6 +70,17 @@ const ROLE_ALIASES: Record<string, AgentRole> = {
 	'filesearcher': 'filesearch',
 	'file_searcher': 'filesearch',
 	'file search': 'filesearch',
+};
+
+// Supabase の Role.id (= サーバーのロール slug) は一部 Orchestra 内部名と違う。
+// 同期時は ROLE_ALIASES の逆向きでサーバー側の名前にする (Role に無い ID は外部キー違反で入らない)。
+const AGENT_ROLE_TO_SUPABASE_ID: Partial<Record<AgentRole, string>> = {
+	review: 'reviewer',
+	design: 'designer',
+	image: 'imager',
+	writing: 'writer',
+	search: 'searcher',
+	research: 'researcher',
 };
 
 function normalizeProviderName(value: string | undefined | null): ProviderName | null {
@@ -271,6 +283,12 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 				this.voidSettingsService.setGlobalSetting('divisionProjectId', actives[0].projectId);
 			}
 			this._syncToSupabase();
+			void this._ensureRemoteProjectIds();
+		}));
+
+		// ログインした時点で、ID 未発行のプロジェクトを Division に登録する
+		this._register(this.voidSettingsService.onDidChangeState(() => {
+			void this._ensureRemoteProjectIds();
 		}));
 
 		// Initialize for existing workspace folders
@@ -287,6 +305,31 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 		// Periodically pull the latest roles from Supabase so that changes made
 		// remotely (e.g. via the web dashboard) are reflected locally automatically.
 		this._startAutoPull();
+	}
+
+	/**
+	 * 新しいワークスペースの既定プロジェクトは projectId が空のまま作られる。Division API は
+	 * 実在する Project (とそのロール割り当て) を必須にしているので、空のままだとタスク作成が
+	 * 「projectId must contain at least 1 character」で必ず失敗する。
+	 * ログイン済みなら ID を発行して projects.json に保存する。保存後の変更通知で
+	 * _syncToSupabase が Project 行 (所有者はログイン中のアカウント) とロール割り当てを作る。
+	 * (Division API の POST /api/projects はレンダラーからだと CORS で呼べない。)
+	 */
+	private async _ensureRemoteProjectIds(): Promise<void> {
+		if (!this._projectConfigUri || !this._projects.some(p => !p.projectId)) return;
+		const { isLoggedIn, divisionUserId } = this.voidSettingsService.state.globalSettings;
+		if (!isLoggedIn || !divisionUserId) return;
+
+		for (const project of this._projects) {
+			if (project.projectId) continue;
+			const id = generateUuid();
+			if (this._activeProjectIds.includes('')) {
+				this._activeProjectIds = this._activeProjectIds.map(a => a === '' ? id : a);
+			}
+			project.projectId = id;
+		}
+		await this._persistToDisk();
+		this._onDidChangeProject.fire();
 	}
 
 	private _startAutoPull(): void {
@@ -544,6 +587,10 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 		// Wait for settings service to be ready
 		await this.voidSettingsService.waitForInitState;
 
+		// ログイン中はログイン時に入れたアクセストークンが Division API の認証に使われる。
+		// profiles.division_api_key は古い ak_ キーのことがあり、上書きすると 401 になる。
+		if (this.voidSettingsService.state.globalSettings.isLoggedIn) return;
+
 		const projectId = this.voidSettingsService.state.globalSettings.divisionProjectId
 			|| this.projectConfig?.projectId;
 		if (!projectId) {
@@ -601,8 +648,9 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 			for (const project of projects) {
 				let priority = 0;
 				for (const agent of project.agents) {
-					const roleSlug = normalizeAgentRole(agent.role);
-					if (!roleSlug) continue; // 不明なロールは同期しない
+					const agentRole = normalizeAgentRole(agent.role);
+					if (!agentRole) continue; // 不明なロールは同期しない
+					const roleSlug = AGENT_ROLE_TO_SUPABASE_ID[agentRole] ?? agentRole;
 					const providerSupabaseId = toSupabaseProviderId(agent.provider);
 					if (!providerSupabaseId) {
 						skippedProviders.add(String(agent.provider));
@@ -670,7 +718,9 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 			})));
 
 			// 4) Upsert RoleAssignments
-			await this._supabaseUpsert('RoleAssignment', roleAssignmentRows);
+			// 1 行ずつ送る。まとめて送ると、サーバーの Role に無いロール (例: filesearch) が 1 つでも
+			// あると外部キー違反で全行が失敗し、leader の割り当てまで入らずタスク作成できなくなる。
+			await Promise.all(roleAssignmentRows.map(row => this._supabaseUpsert('RoleAssignment', [row])));
 
 			console.log(`[DivisionProjectService] Supabase sync OK — ${projects.length} project(s), ${roleAssignmentRows.length} assignment(s)`);
 
