@@ -11,7 +11,7 @@ import { IDisposable } from '../../../../../../../base/common/lifecycle.js';
 import { Checkbox } from '../../../../../../../base/browser/ui/toggle/toggle.js';
 
 import { CodeEditorWidget } from '../../../../../../../editor/browser/widget/codeEditor/codeEditorWidget.js'
-import { useAccessor } from './services.js';
+import { useAccessor, useIsDark } from './services.js';
 import { ITextModel } from '../../../../../../../editor/common/model.js';
 import { asCssVariable } from '../../../../../../../platform/theme/common/colorUtils.js';
 import { inputBackground, inputForeground } from '../../../../../../../platform/theme/common/colorRegistry.js';
@@ -181,7 +181,7 @@ function getRelativeWorkspacePath(accessor: ReturnType<typeof useAccessor>, uri:
 
 const numOptionsToShow = 100
 
-const portalDropdownColors = {
+const darkPortalDropdownColors = {
 	background: '#2b2b2b',
 	backgroundHover: '#343434',
 	border: '#555555',
@@ -191,11 +191,15 @@ const portalDropdownColors = {
 	activeForeground: '#ffffff',
 } as const
 
-const portalDropdownBackgroundStyle = {
-	background: portalDropdownColors.background,
-	backgroundColor: portalDropdownColors.background,
-	opacity: 1,
-} satisfies React.CSSProperties
+const lightPortalDropdownColors = {
+	background: '#ffffff',
+	backgroundHover: '#f3f4f6',
+	border: '#d1d5db',
+	foreground: '#1f2937',
+	mutedForeground: '#6b7280',
+	activeBackground: '#2563eb',
+	activeForeground: '#ffffff',
+} as const
 
 const voidDropdownOpenedEventName = 'void-custom-dropdown-opened'
 
@@ -1382,6 +1386,13 @@ export const VoidCustomDropdownBox = <T extends NonNullable<any>>({
 	gapPx?: number;
 	offsetPx?: number;
 }) => {
+	const isDark = useIsDark();
+	const portalDropdownColors = isDark ? darkPortalDropdownColors : lightPortalDropdownColors;
+	const portalDropdownBackgroundStyle = {
+		background: portalDropdownColors.background,
+		backgroundColor: portalDropdownColors.background,
+		opacity: 1,
+	} satisfies React.CSSProperties;
 	const [isOpen, setIsOpen] = useState(false);
 	const dropdownInstanceId = useId();
 	const measureRef = useRef<HTMLDivElement>(null);
