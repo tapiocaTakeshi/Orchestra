@@ -70,7 +70,7 @@ if (typeof document !== 'undefined' && !document.getElementById('void-sidebar-ch
 [data-orchestra-card] { position: relative; }
 [data-orchestra-card="active"]::after {
 	content: ''; position: absolute; inset: 0 0 auto; height: 1px; pointer-events: none;
-	background: linear-gradient(90deg, transparent, var(--vscode-focusBorder, #e02431), transparent);
+	background: linear-gradient(90deg, transparent, var(--vscode-progressBar-background, #c6a769), transparent);
 	animation: orchestraChatSweep 2.4s ease-in-out infinite;
 }
 @keyframes orchestraChatSweep {
@@ -81,11 +81,11 @@ if (typeof document !== 'undefined' && !document.getElementById('void-sidebar-ch
 /* The mark draws itself in, so its wrapper only fades - sliding it too read as a jolt. */
 [data-orchestra-loading] { animation: orchestraFadeIn 240ms ease-out backwards; }
 @keyframes orchestraFadeIn { from { opacity: 0; } }
-/* In-progress labels: a crimson sheen passes through the text in step with the mark's
+/* In-progress labels: a champagne sheen (the theme's progress colour) passes through the text in step with the mark's
    2.6s cycle. Only the text fill goes transparent - color stays - so currentColor in the
    gradient is still the label's own colour and the sheen suits any theme. */
 [data-orchestra-shimmer] {
-	background: linear-gradient(90deg, currentColor 38%, color-mix(in srgb, currentColor 35%, #e8475a) 50%, currentColor 62%) 100% 0 / 250% 100% no-repeat;
+	background: linear-gradient(90deg, currentColor 38%, color-mix(in srgb, currentColor 35%, var(--vscode-progressBar-background, #c6a769)) 50%, currentColor 62%) 100% 0 / 250% 100% no-repeat;
 	-webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
 	animation: orchestraShimmer 2.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
 }

@@ -35,8 +35,8 @@
 	--void-border-3: var(--vscode-commandCenter-inactiveBorder);
 	--void-border-4: var(--vscode-editorGroup-border);
 
-	--void-ring-color: #007FD4;
-	--void-link-color: #007FD4;
+	--void-ring-color: var(--vscode-focusBorder, #007FD4);
+	--void-link-color: var(--vscode-textLink-foreground, #007FD4);
 }
 
 .select-child-restyle select {
