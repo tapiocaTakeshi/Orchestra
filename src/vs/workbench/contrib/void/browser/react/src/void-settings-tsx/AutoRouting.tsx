@@ -1,102 +1,238 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { fetchDivisionProfile } from '../void-login-tsx/divisionBilling.js';
+import { useAccessor } from '../util/services.js';
 
 type Policy = { minPerformance: number; maxCostUsd: number; maxOutputTokens: number };
-type Benchmark = { rawScore: number; metric: string; source: string; asOf?: string | null };
-type Quote = { role: string; model: string; domain?: string; performance: number; performanceSource: string; benchmark?: Benchmark; inputTokens: number; outputTokens: number; totalCostUsd: number };
-type Plan = { snapshotId: string; catalogUpdatedAt: string; quotes: Quote[]; allocatorCostUsd: number; inferenceEstimateUsd: number; totalEstimateUsd: number; overallPerformance: { score: number; minimum: number; note: string } };
-type History = { id: string; createdAt: string; role: string; modelId: string; inputTokens: number; outputTokens: number; totalCostUsd: number; routingDetails?: { requestGroupId?: string; estimateUsd?: number; allocatedOutputTokens?: number } };
-const usd = (n: number) => `$${n.toFixed(6)}`;
-export const AutoRouting = ({ endpoint, accessToken, refreshToken, policy, onChange, prompt, compact = false }: { endpoint: string; accessToken: string; refreshToken: string; policy?: Policy; onChange: (p: Policy | undefined) => void; prompt?: string; compact?: boolean }) => {
- const [draft, setDraft] = useState<Policy>(policy ?? { minPerformance: 70, maxCostUsd: 0.05, maxOutputTokens: 4096 });
- const [ownInput, setInput] = useState('');
- const input = prompt ?? ownInput;
- const [inputTokens, setInputTokens] = useState(2000);
- const [quotes, setQuotes] = useState<Quote[]>([]);
- const [plan, setPlan] = useState<Plan | null>(null);
- const [history, setHistory] = useState<History[]>([]);
- const [groupTotals, setGroupTotals] = useState<Record<string, number>>({});
- const [cursor, setCursor] = useState<string | null>(null);
- const [error, setError] = useState('');
- const [busy, setBusy] = useState(false);
- const quoteKey = JSON.stringify([input, inputTokens, draft, accessToken, endpoint]);
- const latestQuoteKey = useRef(quoteKey);
- latestQuoteKey.current = quoteKey;
- const [notice, setNotice] = useState('');
- useEffect(() => { setQuotes([]); setPlan(null); }, [input]);
- const [isPaid, setIsPaid] = useState<boolean | null>(null);
- useEffect(() => {
-  let active = true;
-  if (!accessToken) { setIsPaid(false); return () => { active = false; }; }
-  setIsPaid(null);
-  void fetchDivisionProfile(accessToken, refreshToken).then(profile => {
-   if (active) setIsPaid(profile?.isPaid === true);
-  }).catch(() => { if (active) setIsPaid(false); });
-  return () => { active = false; };
- }, [accessToken, refreshToken]);
- const valid = Number.isFinite(draft.minPerformance) && draft.minPerformance >= 0 && draft.minPerformance <= 100 &&
-  Number.isFinite(draft.maxCostUsd) && draft.maxCostUsd > 0 && draft.maxCostUsd <= 100 &&
-  Number.isInteger(draft.maxOutputTokens) && draft.maxOutputTokens >= 256 && draft.maxOutputTokens <= 32768;
- const apiRequest = async (apiPath: string, body?: unknown) => {
-  const response = await fetch(`${endpoint.replace(/\/$/, '')}${apiPath}`, {
-   method: body ? 'POST' : 'GET', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-   ...(body ? { body: JSON.stringify(body) } : {}),
-  });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-  return data;
- };
- const request = (path: string, body?: unknown) => apiRequest(`/api/routing/${path}`, body);
- const run = async (action: () => Promise<void>) => {
-  setBusy(true); setError('');
-  try { await action(); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } finally { setBusy(false); }
- };
- const loadHistory = async (more = false) => {
-  const data = await request(`history${more && cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`);
-  setHistory(old => more ? [...old, ...data.items] : data.items); setCursor(data.nextCursor); setGroupTotals(old => more ? { ...old, ...data.groupTotals } : data.groupTotals);
- };
- return <div onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()} className="flex flex-col gap-3 border border-void-border-2 rounded-sm p-3 text-xs">
-  <strong>OpenRouter 自動割り当て・料金計算</strong>
-  <p>Jev がSupabaseに保存した料金・分野別性能を見て、各ロールの分野・モデル・出力トークン予算を決定します。合計にはJevの判定料金も含みます。</p>
-  {([
-   ['minPerformance', '最低性能スコア（0〜100）', 0, 100, 1],
-   ['maxCostUsd', '1回のモデル呼び出し上限（USD）', 0.000001, 100, 0.001],
-   ['maxOutputTokens', 'Jev が割り当て可能な最大出力トークン', 256, 32768, 1],
-  ] as const).map(([key, label, min, max, step]) => <label key={key} className="flex justify-between gap-3">{label}
-   <input className="bg-void-bg-1 border border-void-border-2 p-1 w-28" type="number" min={min} max={max} step={step} value={draft[key]}
-    onChange={e => { setDraft({ ...draft, [key]: Number(e.target.value) }); setQuotes([]); setPlan(null); }} />
-  </label>)}
-  <div className="flex gap-3">
-   <button type="button" disabled={!valid} onClick={() => onChange(draft)}>設定を保存して有効化</button>
-   <button type="button" onClick={() => onChange(undefined)}>無効化</button><span>{policy ? '有効' : '無効'}</span>
-  </div>
-  <p>性能は分野内ランキングのパーセンタイルです。元のArtificial Analysis指数・Design Arena Eloも見積もりに表示します。</p>
-  <button type="button" disabled={busy || !accessToken} onClick={() => run(async () => {
-   const data = await apiRequest('/api/models/sync', {});
-   setQuotes([]); setPlan(null);
-   const catalog = data.routingCatalog;
-   setNotice(catalog ? `モデルを更新しました（${catalog.models}モデル・${catalog.domains?.length ?? 0}分野）` : 'モデルを更新しました');
-  })}>モデル料金・性能を更新</button>
-  <p>更新時だけOpenRouterから取得し、見積もりと実行はSupabaseの保存データを使います。</p>
-  {prompt === undefined ? <textarea aria-label="見積もる依頼" placeholder="Jev にトークン予算を判定させる依頼内容" className="bg-void-bg-1 border border-void-border-2 p-2" value={input} onChange={e => { setInput(e.target.value); setQuotes([]); setPlan(null); }} /> : <p>入力中のプロンプトを見積もります。添付ファイル・会話履歴の量に応じて、想定入力トークン数を調整してください。</p>}
-  <label>各ロールの想定入力トークン数 <input type="number" min={0} max={2000000} step={1} className="bg-void-bg-1 w-28 p-1" value={inputTokens} onChange={e => { setInputTokens(Number(e.target.value)); setQuotes([]); setPlan(null); }} /></label>
-  <button type="button" disabled={busy || isPaid !== true || !valid || !input.trim() || !Number.isInteger(inputTokens) || inputTokens < 0 || inputTokens > 2000000} onClick={() => run(async () => {
-   setQuotes([]); setPlan(null);
-   if (isPaid !== true) throw new Error('この機能は有料プラン（Plus）が必要です。');
-   const data = await request('quote', { input, inputTokens, roles: ['leader', 'coder', 'review'], policy: draft }); if (latestQuoteKey.current === quoteKey) { setPlan(data); setQuotes(data.quotes); }
-  })}>Jev で見積もる（判定料金が発生）</button>
-  {isPaid === false && <p>見積もりの実行には有料プラン（Plus）が必要です。プラン・支払い設定から変更してください。</p>}
-  {isPaid === null && accessToken && <p>プラン情報を確認しています…</p>}
-  {quotes.length > 0 && <><p>Leader / Coder / Review の試算。実行時は実際の各ロールで再判定します。</p>
-  {plan && <div className="flex flex-col gap-1"><strong>合計 {usd(plan.totalEstimateUsd)}</strong><span>モデル推論 {usd(plan.inferenceEstimateUsd)} + Jev {usd(plan.allocatorCostUsd)}</span><span>全体性能 {plan.overallPerformance.score.toFixed(1)}（最低 {plan.overallPerformance.minimum.toFixed(1)}）</span><span>性能は分野内順位の参考値で、完成品質を保証する値ではありません。</span><span>保存データ: {new Date(plan.catalogUpdatedAt).toLocaleString()} · {plan.snapshotId.slice(0, 8)}</span></div>}
-  <table><thead><tr><th>ロール / モデル</th><th>性能</th><th>入力 / 出力</th><th>見積 USD</th></tr></thead><tbody>{quotes.map(q => <tr key={q.role}><td>{q.role}<br />{q.model}{q.domain ? ` · ${q.domain}` : ''}</td><td title={q.performanceSource}>{q.performance.toFixed(1)}{q.benchmark ? <><br />元 {q.benchmark.rawScore} ({q.benchmark.metric})</> : null}</td><td>{q.inputTokens} / {q.outputTokens}</td><td>{usd(q.totalCostUsd)}</td></tr>)}</tbody></table></>}
-  {!compact && <><div className="flex gap-3"><strong>リクエスト履歴・実際の料金</strong><button type="button" disabled={busy} onClick={() => run(() => loadHistory())}>更新</button></div>
-  <p>モデル実行ごとの実測使用量と料金。古い履歴は従来の記録値です。グループ合計には同じ依頼の全記録を含みます。</p>
-  <div className="overflow-x-auto"><table className="w-full text-left"><thead><tr><th>日時 / ロール</th><th>モデル</th><th>入力 / 出力</th><th>見積</th><th>実際 USD</th></tr></thead><tbody>{history.map(h => <tr key={h.id}><td>{new Date(h.createdAt).toLocaleString()}<br />{h.role}</td><td>{h.modelId}</td><td>{h.inputTokens} / {h.outputTokens}</td><td>{h.routingDetails?.estimateUsd === undefined ? '—' : usd(h.routingDetails.estimateUsd)}</td><td>{usd(h.totalCostUsd)}</td></tr>)}</tbody></table></div>
-  {Object.entries(groupTotals).map(([id, sum]) => <div key={id}>リクエスト {id.slice(0, 8)}：{usd(sum)}</div>)}
-  {cursor && <button type="button" disabled={busy} onClick={() => run(() => loadHistory(true))}>さらに読み込む</button>}
-  </>}
-  {notice && <p role="status">{notice}</p>}
-  {error && <p role="alert" className="text-red-400">{error}</p>}
- </div>;
+type Quote = { role: string; model: string; totalCostUsd: number };
+type Plan = { quotes: Quote[]; totalEstimateUsd: number };
+type History = { id: string; createdAt: string; role: string; modelId: string; totalCostUsd: number };
+
+const DEFAULT_POLICY: Policy = { minPerformance: 70, maxCostUsd: 0.05, maxOutputTokens: 4096 };
+
+// スライダーの目盛り。金額と長さは桁が大きく変わるので、等間隔ではなく選びやすい値に刻む。
+const COST_STEPS = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5];
+const LENGTH_STEPS = [256, 512, 1024, 2048, 4096, 8192, 16384, 32768];
+const AMOUNT_STEPS = [500, 2000, 8000, 32000, 128000];
+const AMOUNT_LABELS = ['少ない', 'ふつう', '多い', 'かなり多い', 'とても多い'];
+
+const nearestIndex = (steps: number[], value: number) =>
+	steps.reduce((best, v, i) => Math.abs(v - value) < Math.abs(steps[best] - value) ? i : best, 0);
+
+const formatUsd = (n: number): string => {
+	if (!Number.isFinite(n) || n <= 0) return '$0';
+	if (n < 0.0001) return '$0.0001 未満';
+	if (n >= 1) return `$${n.toFixed(2)}`;
+	// 小数 4 桁まで出し、余分な 0 は落とす (ただしセントの 2 桁は残す): 0.1 → $0.10, 0.001 → $0.001
+	return `$${n.toFixed(4).replace(/(\.\d\d\d*?)0+$/, '$1')}`;
+};
+
+const performanceLabel = (v: number) => v >= 85 ? '最高性能のモデルだけ' : v >= 65 ? '性能を重視' : v >= 40 ? 'バランス' : '料金を重視';
+const lengthLabel = (v: number) => v <= 1024 ? '短め' : v <= 4096 ? 'ふつう' : v <= 16384 ? '長め' : 'とても長い';
+
+const ROLE_LABELS: Record<string, string> = {
+	leader: 'リーダー', coder: 'コーダー', review: 'レビュー', reviewer: 'レビュー', planner: 'プランナー',
+	search: '検索', searcher: '検索', research: 'リサーチ', researcher: 'リサーチ', design: 'デザイン', designer: 'デザイン',
+	writing: 'ライター', writer: 'ライター', ideaman: 'アイデア', image: '画像', imager: '画像', generate: 'チャット',
+};
+const roleLabel = (role: string) => ROLE_LABELS[role.toLowerCase()] ?? role;
+
+const friendlyError = (status: number, data: any, fallback?: string): string => {
+	if (status === 0) return 'サーバーに接続できませんでした。ネットワークを確認して、もう一度お試しください。';
+	if (status === 401) return 'ログインの有効期限が切れています。ログインし直してください。';
+	if (status === 402) return 'クレジットが不足しています。';
+	if (status === 403) return 'この機能は Plus プランで使えます。';
+	return (data && typeof data.error === 'string' && data.error) || fallback || `エラーが発生しました（${status}）`;
+};
+
+const Slider = ({ label, valueText, hint, min, max, value, onChange, left, right }: {
+	label: string; valueText: string; hint?: string; min: number; max: number; value: number;
+	onChange: (v: number) => void; left: string; right: string;
+}) => (
+	<label className="flex flex-col gap-1">
+		<span className="flex items-baseline justify-between gap-2">
+			<span className="text-void-fg-2">{label}</span>
+			<span className="text-void-fg-1 font-medium">{valueText}</span>
+		</span>
+		<input
+			type="range" min={min} max={max} step={1} value={value}
+			onChange={e => onChange(Number(e.target.value))}
+			className="w-full cursor-pointer"
+			style={{ accentColor: 'var(--vscode-button-background)' }}
+		/>
+		<span className="flex justify-between text-[10px] text-void-fg-4"><span>{left}</span>{hint && <span>{hint}</span>}<span>{right}</span></span>
+	</label>
+);
+
+// クラス名は className に直接書く (ビルド時の scope-tailwind は className の文字列しか書き換えない)
+const PrimaryButton = (props: React.ButtonHTMLAttributes<HTMLButtonElement>) =>
+	<button type="button" {...props} className="rounded px-2.5 py-1 text-xs bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] hover:bg-[var(--vscode-button-hoverBackground)] disabled:opacity-40 disabled:cursor-not-allowed" />;
+const SubtleButton = (props: React.ButtonHTMLAttributes<HTMLButtonElement>) =>
+	<button type="button" {...props} className="rounded border border-void-border-2 px-2 py-0.5 text-xs text-void-fg-2 hover:text-void-fg-1 hover:bg-void-bg-2 disabled:opacity-40 disabled:cursor-not-allowed" />;
+
+export const AutoRouting = ({ endpoint, accessToken, refreshToken, policy, onChange, prompt, compact = false }: {
+	endpoint: string; accessToken: string; refreshToken: string; policy?: Policy;
+	onChange: (p: Policy | undefined) => void; prompt?: string; compact?: boolean;
+}) => {
+	const accessor = useAccessor();
+	const llmMessageService = accessor.get('ILLMMessageService');
+
+	const enabled = !!policy;
+	const [draft, setDraft] = useState<Policy>(policy ?? DEFAULT_POLICY);
+	useEffect(() => { if (policy) setDraft(policy); }, [policy]);
+
+	// スライダーを動かしたら、有効なときはそのまま保存する (保存ボタンは置かない)
+	const update = (patch: Partial<Policy>) => {
+		const next = { ...draft, ...patch };
+		setDraft(next);
+		setPlan(null);
+		if (enabled) onChange(next);
+	};
+
+	const [ownInput, setOwnInput] = useState('');
+	const input = prompt ?? ownInput;
+	const [amountIdx, setAmountIdx] = useState(1);
+	const [plan, setPlan] = useState<Plan | null>(null);
+	const [history, setHistory] = useState<History[] | null>(null);
+	const [cursor, setCursor] = useState<string | null>(null);
+	const [error, setError] = useState('');
+	const [notice, setNotice] = useState('');
+	const [busy, setBusy] = useState(false);
+	const [isPaid, setIsPaid] = useState<boolean | null>(null);
+
+	const quoteKey = JSON.stringify([input, amountIdx, draft, accessToken, endpoint]);
+	const latestQuoteKey = useRef(quoteKey);
+	latestQuoteKey.current = quoteKey;
+	useEffect(() => { setPlan(null); }, [input]);
+
+	useEffect(() => {
+		let active = true;
+		if (!accessToken) { setIsPaid(false); return () => { active = false; }; }
+		setIsPaid(null);
+		void fetchDivisionProfile(accessToken, refreshToken).then(profile => {
+			if (active) setIsPaid(profile?.isPaid === true);
+		}).catch(() => { if (active) setIsPaid(false); });
+		return () => { active = false; };
+	}, [accessToken, refreshToken]);
+
+	const api = async (path: string, body?: unknown) => {
+		const res = await llmMessageService.divisionApiRequest({ endpoint, accessToken, path, body });
+		if (!res.ok) throw new Error(friendlyError(res.status, res.data, res.error));
+		return res.data;
+	};
+	const run = async (action: () => Promise<void>) => {
+		setBusy(true); setError(''); setNotice('');
+		try { await action(); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } finally { setBusy(false); }
+	};
+	const loadHistory = (more = false) => run(async () => {
+		const data = await api(`/api/routing/history${more && cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`);
+		const items: History[] = Array.isArray(data?.items) ? data.items : [];
+		setHistory(old => more && old ? [...old, ...items] : items);
+		setCursor(data?.nextCursor ?? null);
+	});
+
+	const costIdx = nearestIndex(COST_STEPS, draft.maxCostUsd);
+	const lengthIdx = nearestIndex(LENGTH_STEPS, draft.maxOutputTokens);
+	const canEstimate = isPaid === true && !!input.trim() && !busy;
+
+	return <div onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()} className="flex flex-col gap-4 border border-void-border-2 rounded-md p-3 text-xs">
+		{/* オン / オフ */}
+		<div className="flex items-start justify-between gap-3">
+			<div className="flex flex-col gap-0.5">
+				<strong className="text-sm text-void-fg-1">コストを自動で調整</strong>
+				<span className="text-void-fg-3">依頼ごとに、下の条件に合うモデルと回答の長さを選びます。</span>
+			</div>
+			<button
+				type="button" role="switch" aria-checked={enabled} aria-label="コストを自動で調整"
+				onClick={() => onChange(enabled ? undefined : draft)}
+				className={`relative shrink-0 w-9 h-5 rounded-full transition-colors ${enabled ? 'bg-[var(--vscode-button-background)]' : 'bg-void-bg-3 border border-void-border-2'}`}
+			>
+				<span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${enabled ? 'left-[18px]' : 'left-0.5'}`} />
+			</button>
+		</div>
+
+		{/* 条件 */}
+		<div className={`flex flex-col gap-3 ${enabled ? '' : 'opacity-60'}`}>
+			<Slider
+				label="性能" valueText={`${performanceLabel(draft.minPerformance)}（${draft.minPerformance}）`}
+				min={0} max={100} value={draft.minPerformance}
+				onChange={v => update({ minPerformance: Math.round(v / 5) * 5 })}
+				left="料金を重視" right="性能を重視"
+			/>
+			<Slider
+				label="1 回あたりの上限" valueText={`${formatUsd(COST_STEPS[costIdx])} まで`}
+				min={0} max={COST_STEPS.length - 1} value={costIdx}
+				onChange={i => update({ maxCostUsd: COST_STEPS[i] })}
+				left={formatUsd(COST_STEPS[0])} right={formatUsd(COST_STEPS[COST_STEPS.length - 1])}
+			/>
+			<Slider
+				label="回答の長さ" valueText={`${lengthLabel(LENGTH_STEPS[lengthIdx])}（${LENGTH_STEPS[lengthIdx].toLocaleString()} トークンまで）`}
+				min={0} max={LENGTH_STEPS.length - 1} value={lengthIdx}
+				onChange={i => update({ maxOutputTokens: LENGTH_STEPS[i] })}
+				left="短め" right="長め"
+			/>
+		</div>
+
+		{/* 見積もり */}
+		<div className="flex flex-col gap-2 border-t border-void-border-2 pt-3">
+			<strong className="text-void-fg-1">料金の見積もり</strong>
+			{prompt === undefined
+				? <textarea aria-label="見積もりたい依頼" placeholder="見積もりたい依頼を入力" rows={2}
+					className="bg-void-bg-1 border border-void-border-2 rounded p-2 resize-y"
+					value={ownInput} onChange={e => setOwnInput(e.target.value)} />
+				: <span className="text-void-fg-3">入力中の依頼を見積もります。</span>}
+			<Slider
+				label="添付ファイルや会話の量" valueText={AMOUNT_LABELS[amountIdx]}
+				min={0} max={AMOUNT_STEPS.length - 1} value={amountIdx}
+				onChange={i => { setAmountIdx(i); setPlan(null); }}
+				left="少ない" right="とても多い"
+			/>
+			<div className="flex items-center gap-2 flex-wrap">
+				<PrimaryButton disabled={!canEstimate} onClick={() => run(async () => {
+					const key = quoteKey;
+					const data = await api('/api/routing/quote', { input, inputTokens: AMOUNT_STEPS[amountIdx], roles: ['leader', 'coder', 'review'], policy: draft });
+					if (latestQuoteKey.current === key) setPlan({ quotes: data?.quotes ?? [], totalEstimateUsd: Number(data?.totalEstimateUsd ?? 0) });
+				})}>{busy ? '計算中…' : '見積もる'}</PrimaryButton>
+				<span className="text-[10px] text-void-fg-4">見積もり自体にも少額の料金がかかります</span>
+			</div>
+			{isPaid === false && <span className="text-void-fg-3">見積もりは Plus プランで使えます。</span>}
+			{!input.trim() && isPaid === true && <span className="text-void-fg-4">{prompt === undefined ? '依頼を入力すると見積もれます。' : '入力欄に依頼を書くと見積もれます。'}</span>}
+			{plan && <div className="flex flex-col gap-1.5 rounded bg-void-bg-2 p-2">
+				<span className="text-sm text-void-fg-1">合計 約 <strong>{formatUsd(plan.totalEstimateUsd)}</strong></span>
+				{plan.quotes.map(q => <span key={q.role} className="flex justify-between gap-2 text-void-fg-3">
+					<span>{roleLabel(q.role)}{q.model ? <span className="text-void-fg-4"> · {q.model}</span> : null}</span>
+					<span>{formatUsd(q.totalCostUsd)}</span>
+				</span>)}
+				<span className="text-[10px] text-void-fg-4">目安です。実際の料金は実行時の内容で決まります。</span>
+			</div>}
+		</div>
+
+		{/* 利用履歴 (設定画面だけ) */}
+		{!compact && <div className="flex flex-col gap-2 border-t border-void-border-2 pt-3">
+			<div className="flex items-center justify-between">
+				<strong className="text-void-fg-1">最近の利用料金</strong>
+				<div className="flex gap-1">
+					<SubtleButton disabled={busy || !accessToken} onClick={() => loadHistory()}>{history ? '更新' : '表示する'}</SubtleButton>
+					<SubtleButton disabled={busy || !accessToken} onClick={() => run(async () => {
+						await api('/api/models/sync', {});
+						setPlan(null);
+						setNotice('モデルの料金表を最新にしました。');
+					})}>料金表を最新にする</SubtleButton>
+				</div>
+			</div>
+			{history && history.length === 0 && <span className="text-void-fg-4">まだ利用履歴はありません。</span>}
+			{history && history.length > 0 && <div className="flex flex-col divide-y divide-void-border-2 rounded border border-void-border-2">
+				{history.map(h => <div key={h.id} className="flex items-center justify-between gap-3 px-2 py-1.5">
+					<span className="flex flex-col min-w-0">
+						<span className="text-void-fg-2">{roleLabel(h.role)}{h.modelId ? <span className="text-void-fg-4"> · {h.modelId}</span> : null}</span>
+						<span className="text-[10px] text-void-fg-4">{new Date(h.createdAt).toLocaleString('ja-JP')}</span>
+					</span>
+					<span className="text-void-fg-1 shrink-0">{formatUsd(h.totalCostUsd)}</span>
+				</div>)}
+			</div>}
+			{history && cursor && <div><SubtleButton disabled={busy} onClick={() => loadHistory(true)}>さらに表示</SubtleButton></div>}
+		</div>}
+
+		{notice && <p role="status" className="text-void-fg-3">{notice}</p>}
+		{error && <p role="alert" className="text-red-400">{error}</p>}
+	</div>;
 };
