@@ -390,6 +390,8 @@ interface VoidChatAreaProps {
 	 */
 	onQueue?: () => void;
 	isStreaming: boolean;
+	/** ユーザーの判断待ち (承認・目標ループの確認など) で止まっている。停止ボタンの代わりに「確認待ち」を出す */
+	isAwaitingUser?: boolean;
 	isDisabled?: boolean;
 	divRef?: React.RefObject<HTMLDivElement | null>;
 
@@ -429,6 +431,7 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 	onClickAnywhere,
 	divRef,
 	isStreaming = false,
+	isAwaitingUser = false,
 	isDisabled = false,
 	className = '',
 	showModelDropdown = true,
@@ -732,7 +735,7 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 						</button>
 					)}
 
-					{isStreaming && loadingIcon}
+					{isStreaming && !isAwaitingUser && loadingIcon}
 
 					{/* 過去メッセージを編集中（onClickRevert が渡されている）の場合は、
 					    送信/停止ボタンを表示せずリバートボタンだけを置く。
@@ -750,7 +753,7 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 										disabled={isDisabled}
 									/>
 								)}
-								<ButtonStop onClick={onAbort} />
+								{isAwaitingUser ? <AwaitingUserBadge /> : <ButtonStop onClick={onAbort} />}
 							</>
 						) : (
 							<ButtonSubmit
@@ -790,6 +793,17 @@ export const ButtonSubmit = ({ className, disabled, ...props }: ButtonProps & Re
 	>
 		<IconArrowUp size={DEFAULT_BUTTON_SIZE} className="stroke-[2] p-[2px]" />
 	</button>
+}
+
+// 判断待ちのあいだ停止ボタンの位置に出す印。作業中ではないことが一目で分かるようにする。
+const AwaitingUserBadge = () => {
+	const { t: tUI } = useTranslation()
+	return (
+		<span className='flex items-center gap-1.5 rounded-full border border-void-border-2 px-2 py-0.5 text-[11px] text-void-fg-2 select-none' role='status'>
+			<span className='inline-block w-1.5 h-1.5 rounded-full bg-[var(--vscode-charts-yellow)]' />
+			{tUI('chat.awaitingBadge')}
+		</span>
+	)
 }
 
 export const ButtonStop = ({ className, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => {
@@ -5752,6 +5766,7 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 		onAbort={onAbort}
 		onQueue={onQueue}
 		isStreaming={!!isRunning}
+		isAwaitingUser={isRunning === 'awaiting_user'}
 		isDisabled={isDisabled}
 		showSelections={true}
 		// showProspectiveSelections={previousMessagesHTML.length === 0}
@@ -5775,8 +5790,10 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 			enableAtToMention
 			className={`min-h-[81px] px-0.5 py-0.5`}
 			placeholder={isAgentUi
-				? (isRunning ? tUI('chat.agent.placeholderStreaming') : tUI('chat.agent.placeholder'))
-				: isRunning
+				? (isRunning === 'awaiting_user' ? tUI('chat.agent.placeholderAwaiting') : isRunning ? tUI('chat.agent.placeholderStreaming') : tUI('chat.agent.placeholder'))
+				: isRunning === 'awaiting_user'
+					? tUI('chat.agent.placeholderAwaiting')
+					: isRunning
 					? `${tUI('chat.inputPlaceholder.streamingPrefix')}${keybindingString ? `${tUI('chat.inputPlaceholder.streamingAddSelection').replace('{kb}', keybindingString)}` : ''}${tUI('chat.inputPlaceholder.streamingStop')}`
 					: `${tUI('chat.inputPlaceholder.mention')}${keybindingString ? `${tUI('chat.inputPlaceholder.addSelection').replace('{kb}', keybindingString)}` : ''}${tUI('chat.inputPlaceholder.enterInstructions')}`}
 			onChangeText={onChangeText}

@@ -316,6 +316,8 @@ export const translations = {
 	'chat.agent.greetingHint': { en: 'Describe the task in your own words. The agent edits files, runs commands and checks the result on its own.', ja: 'やってほしいことを自分の言葉で書いてください。エージェントがファイル編集・コマンド実行・結果の確認まで自分で進めます。' },
 	'chat.agent.placeholder': { en: 'e.g. "Build a simple to-do app and run it" or "Fix the failing tests"', ja: '例:「シンプルな TODO アプリを作って動かして」「落ちているテストを直して」' },
 	'chat.agent.placeholderStreaming': { en: 'The agent is working… Press Esc to stop', ja: 'エージェントが作業中です… 止めたいときは Esc' },
+	'chat.agent.placeholderAwaiting': { en: 'Waiting for your decision — choose in the card above', ja: '確認待ちです。上のカードで、どうするか選んでください' },
+	'chat.awaitingBadge': { en: 'Waiting for you', ja: '確認待ち' },
 	'chat.agent.suggestedTitle': { en: 'Tasks you can hand over', ja: 'たとえば、こんな仕事を任せられます' },
 	'chat.agent.suggested.explore': { en: 'Explore this project and explain its structure', ja: 'このプロジェクトを調べて、構成を説明して' },
 	'chat.agent.suggested.explore.hint': { en: 'The agent reads the code and reports back', ja: 'エージェントがコードを読んで報告します' },

@@ -4196,7 +4196,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 						flowRole: 'goal-loop',
 						mdFileName: reviewMdInfo?.mdFileName ?? 'REVIEW.md',
 						mdFilePath: reviewMdInfo?.mdFilePath ?? '',
-						mdContent: [unmetMd, lastVerdict.next ? `\n次にやること: ${lastVerdict.next}` : ''].join(''),
+						mdContent: [unmetMd, lastVerdict.next ? `\n\n**次にやること:** ${lastVerdict.next}` : ''].join(''),
 						sessionId,
 						completedTaskIndex: round - 1,
 						totalTasks: maxRounds,
