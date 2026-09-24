@@ -86,6 +86,7 @@ type SendChatParams_Internal = InternalCommonMessageParams & {
 	divisionMaxReviewerIterations?: number;
 	divisionMaxReviewIterations?: number;
 	divisionFlowApprovalMode?: boolean;
+	divisionGoalLoopMode?: 'auto' | 'confirm';
 	workspaceFolderPath?: string;
 }
 type SendFIMParams_Internal = InternalCommonMessageParams & { messages: LLMFIMMessage; separateSystemMessage: string | undefined; }
@@ -1173,6 +1174,15 @@ type OrchestrationState = {
 	totalSteps: number;
 	reviewerDone: boolean;
 	editedOutputs?: Array<{ mdFileName: string; mdContent: string }>;
+	/** 目標ループを「ラウンドごとに確認」で止めたときの続きの情報 */
+	goalLoop?: {
+		goal: DivisionGoal | null;
+		lastVerdict: DivisionVerdict;
+		lastReviewOutput: string;
+		round: number;
+		maxRounds: number;
+		producedFiles: [string, string][];
+	};
 };
 
 const orchestrationStatePath = (workspaceFolderPath: string): string =>
@@ -2811,7 +2821,8 @@ const buildPromptFromMessages = (messages: any[], separateSystemMessage?: string
 // ---------------------------------------------------------------------------
 
 type DivisionGoal = { goal: string; criteria: string[] };
-type DivisionVerdict = { achieved: boolean; unmet: string[]; next: string };
+type DivisionCriterionCheck = { criterion: string; met: boolean | null; note: string };
+type DivisionVerdict = { achieved: boolean; unmet: string[]; next: string; checks: DivisionCriterionCheck[] };
 
 const GOAL_SETTING_PROMPT = [
 	'あなたは AI チームのリーダーです。これからチームがユーザーのリクエストに取り組みます。',
@@ -2861,20 +2872,30 @@ const parseDivisionVerdict = (text: string, criteria: string[]): DivisionVerdict
 		next?: unknown;
 	} | null;
 	const next = obj && typeof obj.next === 'string' ? obj.next.trim() : '';
+	const entries = obj && Array.isArray(obj.criteria) ? obj.criteria : [];
+	// 達成条件ごとの照合結果。Reviewer が触れなかった条件は met: null (判定なし)。
+	const checks: DivisionCriterionCheck[] = criteria.map((criterion, n) => {
+		const e = entries.find(c => c?.index === n + 1);
+		return {
+			criterion,
+			met: typeof e?.met === 'boolean' ? e.met : null,
+			note: typeof e?.note === 'string' ? e.note.trim() : '',
+		};
+	});
 	if (obj && typeof obj.achieved === 'boolean') {
 		const unmet: string[] = [];
-		for (const c of Array.isArray(obj.criteria) ? obj.criteria : []) {
+		for (const c of entries) {
 			if (c?.met !== false) continue;
 			const idx = typeof c.index === 'number' ? c.index : NaN;
 			const label = criteria[idx - 1] ?? `条件 ${Number.isFinite(idx) ? idx : '?'}`;
 			unmet.push(typeof c.note === 'string' && c.note.trim() ? `${label} — ${c.note.trim()}` : label);
 		}
 		// achieved: true でも未達の条件が挙がっていれば未達として扱う (甘い判定で止めない)
-		return { achieved: obj.achieved && unmet.length === 0, unmet, next };
+		return { achieved: obj.achieved && unmet.length === 0, unmet, next, checks };
 	}
 	const verdictLine = text.split('\n').map(l => l.trim()).find(l => l.startsWith('判定')) ?? '';
 	const achieved = /合格/.test(verdictLine) && !/不合格/.test(verdictLine);
-	return { achieved, unmet: [], next };
+	return { achieved, unmet: [], next, checks };
 };
 
 // Division API の HTTP エラーを、チャットに出すユーザー向けの文言にする。
@@ -3481,11 +3502,14 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		// Phase 0: Leader が目標と達成条件を決める (承認モードの再開時は除く)
 		// =============================================
 		// 承認モードは 1 ステップずつ止めて確認するモードなので、ループさせず 1 ラウンドで終える。
-		const maxRounds = divisionFlowApprovalMode ? 1 : Math.max(1, Math.min(100, params.divisionMaxReviewerIterations ?? 5));
-		let goal: DivisionGoal | null = null;
-		let lastVerdict: DivisionVerdict | null = null;
-		let lastReviewOutput = '';
-		let roundsRun = 0;
+		// 「ラウンドごとに確認」で止めたあと、ユーザーが続行を選んだときの再開情報。
+		const goalLoopResume = isResuming ? resumeState?.goalLoop ?? null : null;
+		const maxRounds = goalLoopResume?.maxRounds
+			?? (divisionFlowApprovalMode ? 1 : Math.max(1, Math.min(100, params.divisionMaxReviewerIterations ?? 5)));
+		const confirmEachRound = params.divisionGoalLoopMode === 'confirm';
+		let goal: DivisionGoal | null = goalLoopResume?.goal ?? null;
+		let lastVerdict: DivisionVerdict | null = goalLoopResume?.lastVerdict ?? null;
+		let lastReviewOutput = goalLoopResume?.lastReviewOutput ?? '';
 		const baseInput = currentInput;
 
 		if (!isResuming) {
@@ -3512,6 +3536,10 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			} else {
 				appendText(`> ⚠️ 目標を設定できなかったため、リクエストをそのまま目標として進めます。\n\n`);
 			}
+		}
+
+		if (goalLoopResume) {
+			appendText(`▶️ 続行が選ばれたので、ラウンド ${goalLoopResume.round + 1} / ${maxRounds} から再開します。\n\n`);
 		}
 
 		// 各ラウンドで Leader・各ロール・Reviewer に渡す入力 (目標と前回の指摘を添える)。
@@ -3544,7 +3572,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		// ディスクではなく「エージェントが出した中身」を持つ。新規はそのまま、編集は
 		// SEARCH/REPLACE を直前の中身 (無ければディスク) に当てて求める。
 		// 前のラウンドのファイルも判定に要るので、ラウンドをまたいで持ち続ける。
-		const producedFiles = new Map<string, string>();
+		const producedFiles = new Map<string, string>(goalLoopResume?.producedFiles ?? []);
 		const recordProducedFiles = (ops: FileOperationItem[]): void => {
 			for (const op of ops) {
 				if (op.action === 'create' && typeof op.content === 'string') {
@@ -3563,8 +3591,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			}
 		};
 
-		for (let round = 1; ; round++) {
-			roundsRun = round;
+		for (let round = goalLoopResume ? goalLoopResume.round + 1 : 1; ; round++) {
 			if (round > 1) {
 				// 前のラウンドの成果物はファイルに書き出し済み。ファイル読み込みからやり直して最新の状態を見る。
 				projectContext = null;
@@ -3605,7 +3632,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					// レビュー指摘を自動添付するため、承認確定メッセージにも再度埋め込む。
 					const reviewEntry = taskOutputs.find(o => o.role === 'review');
 					if (reviewEntry?.output) {
-						appendText(`\n<!-- DIVISION_REVIEWER_BEGIN -->\n${reviewEntry.output}\n<!-- DIVISION_REVIEWER_END -->\n`);
+						appendText(`\n\n<!-- DIVISION_REVIEWER_BEGIN -->\n${reviewEntry.output}\n\n<!-- DIVISION_REVIEWER_END -->\n`);
 					}
 				} else {
 					appendText(`## 📋 FLOW（承認により再開）\n\n前回承認されたステップの続きから実行します（${resumeFromIndex + 1}/${totalSteps} ステップ目）。\n\n`);
@@ -4065,7 +4092,8 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			const REVIEWER_BEGIN = '<!-- DIVISION_REVIEWER_BEGIN -->';
 			const REVIEWER_END = '<!-- DIVISION_REVIEWER_END -->';
 
-			appendText(`\n${REVIEWER_BEGIN}\n`);
+			appendText(`\n\n${REVIEWER_BEGIN}\n`);
+			const reviewStartInFullText = fullText.length;
 
 			const reviewResult = await callDivisionTaskExecute(
 				endpointBase, projectId, 'review', reviewPrompt, controller.signal,
@@ -4075,7 +4103,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				workspaceFolderPath, routingOptions,
 			);
 
-			appendText(`\n${REVIEWER_END}\n`);
+			appendText(`\n\n${REVIEWER_END}\n`); // 前に空行がないと段落の一部として文字のまま表示される
 
 			let reviewMdInfo: { mdFileName: string; mdFilePath: string } | null = null;
 			if (reviewResult.error) {
@@ -4096,24 +4124,88 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				}
 			}
 
-			// --- 目標の判定 → 達成・上限・エラーなら抜け、未達なら次のラウンドへ ---
+			// --- 目標との照合: Reviewer の判定をレビューのカードの中に出し、次に進むかを決める ---
 			if (reviewResult.error || !reviewResult.output) {
-				if (goal) appendText(`\n---\n\n### 0. leader — ⚠️ レビューできなかったため終了\n\nReviewer の判定が得られなかったので、ここで止めます。\n\n`);
+				if (goal) appendText(`\n⚠️ Reviewer の判定が得られなかったため、ここで止めます。\n\n`);
 				break;
 			}
 			lastVerdict = parseDivisionVerdict(reviewResult.output, goal?.criteria ?? []);
-			if (lastVerdict.achieved || round >= maxRounds || controller.signal.aborted) break;
 			lastReviewOutput = reviewResult.output;
 
-		}
+			// 判定用の生 JSON は読みにくいので、照合表に置き換える
+			{
+				const reviewText = fullText.slice(reviewStartInFullText);
+				const jsonBlock = [...reviewText.matchAll(/```json[\s\S]*?```/g)].pop();
+				if (jsonBlock && jsonBlock.index !== undefined) {
+					const at = reviewStartInFullText + jsonBlock.index;
+					fullText = fullText.slice(0, at) + fullText.slice(at + jsonBlock[0].length);
+					onText({ fullText, fullReasoning: '' });
+				}
+			}
 
-		// =============================================
-		// 結果のまとめ
-		// =============================================
-		if (goal && lastVerdict) {
-			appendText(lastVerdict.achieved
-				? `\n---\n\n### 0. leader — 🎯 目標を達成しました（${roundsRun} ラウンド）\n\n**${goal.goal}**\n\n${goal.criteria.map((c, n) => `✅ ${n + 1}. ${c}`).join('\n\n')}\n\n`
-				: `\n---\n\n### 0. leader — ⚠️ 目標は未達のまま終了（${roundsRun} / ${maxRounds} ラウンド）\n\n**${goal.goal}**\n\n${lastVerdict.unmet.length > 0 ? `満たせていない条件:\n${lastVerdict.unmet.map(u => `- ${u}`).join('\n')}\n\n` : ''}上限に達したため止めました。続けるには、もう一度指示を送るか、設定の「Reviewer 最大試行回数」を増やしてください。\n\n`);
+			const hasNextRound = !lastVerdict.achieved && round < maxRounds && !controller.signal.aborted;
+			const pauseForConfirm = hasNextRound && confirmEachRound && !!workspaceFolderPath;
+			const checkLines = lastVerdict.checks.map((c, n) =>
+				`${c.met === true ? '✅' : c.met === false ? '❌' : '➖'} ${n + 1}. ${c.criterion}${c.note ? ` — ${c.note}` : ''}`);
+			appendText([
+				``,
+				`#### 🎯 目標との照合（ラウンド ${round}）`,
+				``,
+				...(goal ? [`**${goal.goal}**`, ``] : []),
+				...(checkLines.length > 0 ? [checkLines.join('\n\n'), ``] : []),
+				lastVerdict.achieved
+					? `**🎯 目標を達成しました**（${round} ラウンド目）`
+					: !hasNextRound
+						? `**⚠️ 上限の ${maxRounds} ラウンドに達したため終了します。** 続けるには、もう一度指示を送ってください。`
+						: pauseForConfirm
+							? `**⏸ 未達です。** 次のラウンドに進むか選んでください（${round} / ${maxRounds} ラウンド完了）。`
+							: `**🔁 未達のため、ラウンド ${round + 1} / ${maxRounds} に進みます。**`,
+				``,
+			].join('\n'));
+
+			if (!hasNextRound) break;
+
+			if (pauseForConfirm && workspaceFolderPath) {
+				writeOrchestrationState(workspaceFolderPath, {
+					approved: false,
+					workspaceFolderPath,
+					sessionId,
+					currentInput: baseInput,
+					tasks,
+					taskOutputs,
+					nextIndex: tasks.length,
+					totalSteps,
+					reviewerDone: false,
+					goalLoop: {
+						goal,
+						lastVerdict,
+						lastReviewOutput,
+						round,
+						maxRounds,
+						producedFiles: [...producedFiles.entries()],
+					},
+				});
+				const unmetMd = lastVerdict.unmet.length > 0
+					? `満たせていない条件:\n${lastVerdict.unmet.map(u => `- ${u}`).join('\n')}`
+					: '目標はまだ達成されていません。';
+				onFinalMessage({
+					fullText,
+					fullReasoning: '',
+					anthropicReasoning: null,
+					flowReview: {
+						flowRole: 'goal-loop',
+						mdFileName: reviewMdInfo?.mdFileName ?? 'REVIEW.md',
+						mdFilePath: reviewMdInfo?.mdFilePath ?? '',
+						mdContent: [unmetMd, lastVerdict.next ? `\n次にやること: ${lastVerdict.next}` : ''].join(''),
+						sessionId,
+						completedTaskIndex: round - 1,
+						totalTasks: maxRounds,
+					},
+				});
+				flushCommandRunsAfterFinalMessage();
+				return;
+			}
+
 		}
 
 		if (sessionId) activeServerSessionIds.delete(sessionId);

@@ -590,6 +590,8 @@ export const displayInfoOfCommitMessageLanguage = (lang: CommitMessageLanguage):
 	return '自動 (LLM に任せる)';
 }
 
+export type DivisionGoalLoopMode = 'auto' | 'confirm';
+
 // Orchestra 独自 UI (設定パネル・サイドバーチャットなど) の表示言語設定。
 export type UILanguage = 'en' | 'ja';
 export const uiLanguages: UILanguage[] = ['en', 'ja'];
@@ -637,6 +639,8 @@ export type GlobalSettings = {
 	// 生成するたびに一時停止し、ユーザーが承認 (または編集して承認 / 却下) するまで
 	// 次のステップに進まない。
 	divisionFlowApprovalMode: boolean;
+	/** 目標ループ: 'auto' = 達成まで自動で回す / 'confirm' = ラウンドごとに続けるか確認する */
+	divisionGoalLoopMode: DivisionGoalLoopMode;
 	// Orchestra 独自 UI (設定パネル・サイドバーチャットなど) の表示言語。
 	uiLanguage: UILanguage;
 	// Obsidian 連携 (Vault のフォルダ名を取り込み、Markdown をツールとして読む) の設定。
@@ -696,6 +700,7 @@ export const defaultGlobalSettings: GlobalSettings = {
 	maxReviewerIterations: 5, // 目標ループの最大ラウンド数 (1 ラウンド = Leader の計画 → 各ロール → Reviewer)
 	maxReviewIterations: 10,
 	divisionFlowApprovalMode: false,
+	divisionGoalLoopMode: 'auto',
 	uiLanguage: 'ja', // Orchestra の固定文言 (ホーム画面・チャット) は日本語なので、既定も日本語にそろえる
 	obsidian: defaultObsidianSettings,
 	kanban: defaultKanbanSettings,

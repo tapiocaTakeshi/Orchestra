@@ -33,6 +33,7 @@ export const sendLLMMessage = async ({
 	divisionMaxBriefGateIterations,
 	divisionMaxReviewerIterations,
 	divisionFlowApprovalMode,
+	divisionGoalLoopMode,
 	workspaceFolderPath,
 	takePendingInjection,
 }: SendLLMMessageParams,
@@ -119,7 +120,7 @@ export const sendLLMMessage = async ({
 		}
 		const { sendFIM, sendChat } = implementation
 		if (messagesType === 'chatMessages') {
-			await sendChat({ messages: messages_, onText, onFinalMessage, onError, onFileOperation, onCommandRun, settingsOfProvider, modelSelectionOptions, overridesOfModel, modelName, _setAborter, providerName, separateSystemMessage, chatMode, mcpTools, divisionRoleAssignments, divisionAutoRouting, divisionProjectId, divisionApiKey, divisionMaxBriefGateIterations, divisionMaxReviewerIterations, divisionFlowApprovalMode, workspaceFolderPath, takePendingInjection })
+			await sendChat({ messages: messages_, onText, onFinalMessage, onError, onFileOperation, onCommandRun, settingsOfProvider, modelSelectionOptions, overridesOfModel, modelName, _setAborter, providerName, separateSystemMessage, chatMode, mcpTools, divisionRoleAssignments, divisionAutoRouting, divisionProjectId, divisionApiKey, divisionMaxBriefGateIterations, divisionMaxReviewerIterations, divisionFlowApprovalMode, divisionGoalLoopMode, workspaceFolderPath, takePendingInjection })
 			return
 		}
 		if (messagesType === 'FIMMessage') {

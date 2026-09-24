@@ -358,6 +358,10 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 				readS.globalSettings.maxReviewerIterations = typeof legacyMaxReviewIterations === 'number' ? legacyMaxReviewIterations : defaultGlobalSettings.maxReviewerIterations;
 			}
 
+			// add divisionGoalLoopMode (目標ループを自動で回すか、ラウンドごとに確認するか)
+			if (readS.globalSettings.divisionGoalLoopMode === undefined) {
+				readS.globalSettings.divisionGoalLoopMode = defaultGlobalSettings.divisionGoalLoopMode;
+			}
 			// add divisionFlowApprovalMode feature
 			if (readS.globalSettings.divisionFlowApprovalMode === undefined) {
 				readS.globalSettings.divisionFlowApprovalMode = defaultGlobalSettings.divisionFlowApprovalMode;
