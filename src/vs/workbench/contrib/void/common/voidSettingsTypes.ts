@@ -693,7 +693,7 @@ export const defaultGlobalSettings: GlobalSettings = {
 	divisionRefreshToken: '',
 	isLoggedIn: false,
 	maxBriefGateIterations: 10,
-	maxReviewerIterations: 10,
+	maxReviewerIterations: 5, // 目標ループの最大ラウンド数 (1 ラウンド = Leader の計画 → 各ロール → Reviewer)
 	maxReviewIterations: 10,
 	divisionFlowApprovalMode: false,
 	uiLanguage: 'ja', // Orchestra の固定文言 (ホーム画面・チャット) は日本語なので、既定も日本語にそろえる
