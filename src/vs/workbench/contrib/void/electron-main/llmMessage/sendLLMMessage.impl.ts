@@ -15,6 +15,7 @@ import { fimComplete } from '@mistralai/mistralai/funcs/fimComplete.js';
 import { Tool as GeminiTool, FunctionDeclaration, GoogleGenAI, ThinkingConfig, Schema, Type } from '@google/genai';
 import { GoogleAuth } from 'google-auth-library'
 import * as fs from 'fs';
+import { spawn } from 'child_process';
 import * as path from 'path';
 /* eslint-enable */
 
@@ -1182,6 +1183,7 @@ type OrchestrationState = {
 		round: number;
 		maxRounds: number;
 		producedFiles: [string, string][];
+		lastCommandResults?: CommandRunResult[];
 	};
 };
 
@@ -2822,7 +2824,7 @@ const buildPromptFromMessages = (messages: any[], separateSystemMessage?: string
 
 type DivisionGoal = { goal: string; criteria: string[] };
 type DivisionCriterionCheck = { criterion: string; met: boolean | null; note: string };
-type DivisionVerdict = { achieved: boolean; unmet: string[]; next: string; checks: DivisionCriterionCheck[] };
+type DivisionVerdict = { achieved: boolean; unmet: string[]; next: string; checks: DivisionCriterionCheck[]; readable: boolean };
 
 const GOAL_SETTING_PROMPT = [
 	'あなたは AI チームのリーダーです。これからチームがユーザーのリクエストに取り組みます。',
@@ -2832,6 +2834,7 @@ const GOAL_SETTING_PROMPT = [
 	'- 目標は 1 文で、ユーザーが最終的に得たい状態を書く。',
 	'- 達成条件は 1〜6 個。成果物 (ファイルの内容・実行結果など) を見て、はい / いいえで判定できる具体的な文にする。',
 	'- 「品質が高い」のような判定できない条件や、ユーザーが求めていない作業は入れない。',
+	'- テストやビルドのように、コマンドの実行結果で確かめられるものは「npm test が成功する」のように書いてよい (エージェントが出したコマンドは各ラウンドの最後に実行され、結果が判定に使われる)。',
 	'- 出力は次の JSON だけにする (説明文やコードブロックの外の文章は書かない)。',
 	'',
 	'```json',
@@ -2891,12 +2894,101 @@ const parseDivisionVerdict = (text: string, criteria: string[]): DivisionVerdict
 			unmet.push(typeof c.note === 'string' && c.note.trim() ? `${label} — ${c.note.trim()}` : label);
 		}
 		// achieved: true でも未達の条件が挙がっていれば未達として扱う (甘い判定で止めない)
-		return { achieved: obj.achieved && unmet.length === 0, unmet, next, checks };
+		return { achieved: obj.achieved && unmet.length === 0, unmet, next, checks, readable: true };
 	}
 	const verdictLine = text.split('\n').map(l => l.trim()).find(l => l.startsWith('判定')) ?? '';
 	const achieved = /合格/.test(verdictLine) && !/不合格/.test(verdictLine);
-	return { achieved, unmet: [], next, checks };
+	// readable: 判定そのものが読み取れたか。読めなかったときは判定だけを頼み直す。
+	return { achieved, unmet: [], next, checks, readable: !!verdictLine };
 };
+
+// ---------------------------------------------------------------------------
+// ループ中のコマンド実行
+//
+// エージェントが出したコマンド (テストやビルドなど) を各ラウンドの最後に作業フォルダで
+// 実行し、結果を Reviewer の判定と次のラウンドの計画に使う。
+// ---------------------------------------------------------------------------
+
+type CommandRunResult = { command: string; exitCode: number | null; timedOut: boolean; output: string; durationMs: number };
+
+const COMMAND_TIMEOUT_MS = 120_000;
+const COMMAND_OUTPUT_CAP = 200_000;
+
+const runShellCommand = (command: string, cwd: string, signal: AbortSignal): Promise<CommandRunResult> =>
+	new Promise(resolve => {
+		const started = Date.now();
+		let output = '';
+		let timedOut = false;
+		let settled = false;
+		// detached: シェルとそこから起動された子 (npm → node など) を 1 つのプロセスグループにし、
+		// 打ち切るときにまとめて止める。シェルだけ止めると子が残り、出力パイプも閉じない。
+		const isWindows = process.platform === 'win32';
+		const child = spawn(command, { cwd, shell: true, env: process.env, detached: !isWindows });
+		const append = (chunk: Buffer) => {
+			if (output.length < COMMAND_OUTPUT_CAP) output += chunk.toString('utf8');
+		};
+		child.stdout?.on('data', append);
+		child.stderr?.on('data', append);
+		const killTree = (sig: NodeJS.Signals) => {
+			if (child.pid === undefined) return;
+			try {
+				if (isWindows) spawn('taskkill', ['/pid', String(child.pid), '/T', '/F']);
+				else process.kill(-child.pid, sig);
+			} catch { /* すでに終了している */ }
+		};
+		const kill = () => {
+			if (settled) return;
+			killTree('SIGTERM');
+			setTimeout(() => { if (!settled) killTree('SIGKILL'); }, 3000);
+		};
+		const timer = setTimeout(() => { timedOut = true; kill(); }, COMMAND_TIMEOUT_MS);
+		const onAbort = () => kill();
+		signal.addEventListener('abort', onAbort, { once: true });
+		const finish = (exitCode: number | null) => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timer);
+			signal.removeEventListener('abort', onAbort);
+			resolve({ command, exitCode, timedOut, output, durationMs: Date.now() - started });
+		};
+		child.on('error', err => { output += `\n${err.message}`; finish(null); });
+		child.on('close', code => finish(code));
+	});
+
+/**
+ * Coder の出力はエディタ側で適用・保存されるので、ディスクに反映されるまで少しかかる。
+ * コマンドが古いファイルに対して走らないよう、期待する中身がディスクに乗るまで待つ。
+ * 期限内に一致しなかったファイルを返す。
+ */
+const waitForFilesOnDisk = async (expected: Map<string, string>, timeoutMs: number, signal: AbortSignal): Promise<string[]> => {
+	const norm = (t: string) => t.replace(/\r\n/g, '\n').replace(/\s+$/, '');
+	const pending = () => [...expected].filter(([fp, body]) => {
+		const onDisk = safeReadText(fp, MAX_FILE_SIZE_BYTES);
+		return onDisk === null || norm(onDisk) !== norm(body);
+	}).map(([fp]) => fp);
+	const deadline = Date.now() + timeoutMs;
+	let left = pending();
+	while (left.length > 0 && Date.now() < deadline && !signal.aborted) {
+		await new Promise(r => setTimeout(r, 300));
+		left = pending();
+	}
+	return left;
+};
+
+const describeCommandResult = (r: CommandRunResult): string => {
+	const secs = (r.durationMs / 1000).toFixed(1);
+	if (r.timedOut) return `⏱ ${COMMAND_TIMEOUT_MS / 1000} 秒で打ち切り（サーバーの起動など、終わらないコマンドの可能性）`;
+	if (r.exitCode === 0) return `✅ 成功（${secs} 秒）`;
+	return `❌ 失敗（終了コード ${r.exitCode ?? '不明'}、${secs} 秒）`;
+};
+
+/** Reviewer や次のラウンドに渡す用。出力は末尾を中心に切り詰める。 */
+const renderCommandResultsForPrompt = (results: CommandRunResult[], maxOutputChars: number): string =>
+	results.map(r => {
+		const out = r.output.trim();
+		const shown = out.length > maxOutputChars ? `…(前略)…\n${out.slice(-maxOutputChars)}` : out;
+		return [`### $ ${r.command}`, describeCommandResult(r), '````text', shown || '(出力なし)', '````'].join('\n');
+	}).join('\n\n');
 
 // Division API の HTTP エラーを、チャットに出すユーザー向けの文言にする。
 // 401 は未ログイン (またはセッション切れ) なので、生の JSON ではなく次にやることを伝える。
@@ -3510,6 +3602,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		let goal: DivisionGoal | null = goalLoopResume?.goal ?? null;
 		let lastVerdict: DivisionVerdict | null = goalLoopResume?.lastVerdict ?? null;
 		let lastReviewOutput = goalLoopResume?.lastReviewOutput ?? '';
+		let lastCommandResults: CommandRunResult[] = goalLoopResume?.lastCommandResults ?? [];
 		const baseInput = currentInput;
 
 		if (!isResuming) {
@@ -3558,6 +3651,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					...(lastVerdict.unmet.length > 0 ? [`### 満たせていない条件`, ...lastVerdict.unmet.map(u => `- ${u}`)] : []),
 					...(lastVerdict.next ? [``, `### Reviewer が示した次にやること`, lastVerdict.next] : []),
 					``,
+					...(lastCommandResults.length > 0 ? [``, `### 前回のラウンドで実行したコマンドの結果`, renderCommandResultsForPrompt(lastCommandResults, 3000), ``] : []),
 					`### 前回のレビュー全文`,
 					truncateForContext(lastReviewOutput, MAX_CHARS_PER_CONTEXT),
 					``,
@@ -3592,6 +3686,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		};
 
 		for (let round = goalLoopResume ? goalLoopResume.round + 1 : 1; ; round++) {
+			const producedAtRoundStart = new Map(producedFiles);
 			if (round > 1) {
 				// 前のラウンドの成果物はファイルに書き出し済み。ファイル読み込みからやり直して最新の状態を見る。
 				projectContext = null;
@@ -3875,7 +3970,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 						`### 出力フォーマット (必須)`,
 						`- 既存ファイルの編集: SEARCH/REPLACE ブロック`,
 						`- 新規ファイル: ` + '```lang:path/to/file```' + ` ブロック`,
-						`- セットアップコマンド: ` + '```bash```' + ` ブロック`,
+						`- セットアップ・動作確認のコマンド (依存の追加、テスト実行など): ` + '```bash```' + ` ブロック。このラウンドの最後に作業フォルダで実行され、結果がレビューに使われる。サーバーの起動など終わらないコマンドは書かない`,
 						`- 探索系コマンド (find / ls / cat / grep / head / tail) は禁止。コンテキストは既に揃っています。`,
 						existingBlock,
 						``,
@@ -3998,6 +4093,30 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			}
 
 			// =============================================
+			// コマンド実行: このラウンドでエージェントが出したコマンドを作業フォルダで実行する
+			// (従来はフロー全体の終了後にターミナルで実行していた。結果を判定に使うため前倒しする)
+			// =============================================
+			lastCommandResults = [];
+			const roundCommands = workspaceFolderPath && !divisionFlowApprovalMode ? pendingCommandRuns.splice(0) : [];
+			if (roundCommands.length > 0 && workspaceFolderPath) {
+				appendText(`\n---\n\n### 0. terminal — コマンドの実行（${roundCommands.length} 件）\n\n`);
+				const changedThisRound = new Map([...producedFiles].filter(([fp, body]) => producedAtRoundStart.get(fp) !== body));
+				const notOnDisk = await waitForFilesOnDisk(changedThisRound, 15_000, controller.signal);
+				if (notOnDisk.length > 0) {
+					appendText(`> ⚠️ 次のファイルがまだディスクに書き込まれていない可能性があります: ${notOnDisk.map(fp => `\`${path.relative(workspaceFolderPath, fp)}\``).join(', ')}\n\n`);
+				}
+				for (const cmd of roundCommands) {
+					if (controller.signal.aborted) break;
+					appendText(`**$ ${cmd.command}**\n\n`);
+					const result = await runShellCommand(cmd.command, workspaceFolderPath, controller.signal);
+					lastCommandResults.push(result);
+					const out = result.output.trim();
+					const shown = out.length > 4000 ? `…(前略)…\n${out.slice(-4000)}` : out;
+					appendText(`${describeCommandResult(result)}\n\n` + (shown ? '````text\n' + shown + '\n````\n\n' : ''));
+				}
+			}
+
+			// =============================================
 			// Phase 3: Reviewer が目標の達成条件で判定する (未達なら次のラウンドへ)
 			// =============================================
 
@@ -4066,8 +4185,14 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				currentInput,
 				``,
 				...(writtenFilesBlock ? [writtenFilesBlock, ``] : []),
+				...(lastCommandResults.length > 0 ? [
+					`## コマンドの実行結果（このラウンドで実際に作業フォルダで実行したもの）`,
+					renderCommandResultsForPrompt(lastCommandResults, 6000),
+					``,
+				] : []),
 				`## 指示`,
 				`あなたはファイルを開いたりコマンドを実行したりできません。確認のための文章は書かず、添付の内容だけで判定してください。`,
+				...(lastCommandResults.length > 0 ? [`コマンドの実行結果 (成功・失敗と出力) も判定の根拠にしてください。失敗したコマンドがあれば、その原因と直し方を具体的に書いてください。`] : []),
 				`直前の assistant メッセージとして、Leader が分解した各タスクの出力 (${taskOutputs.length} 件) が添付されています。`,
 				goal
 					? `それら全体を、上の「Leader が設定した目標」と「達成条件」に照らして判定し、評価結果と改善提案を Markdown で返してください。`
@@ -4093,7 +4218,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			const REVIEWER_END = '<!-- DIVISION_REVIEWER_END -->';
 
 			appendText(`\n\n${REVIEWER_BEGIN}\n`);
-			const reviewStartInFullText = fullText.length;
+			let reviewStartInFullText = fullText.length;
 
 			const reviewResult = await callDivisionTaskExecute(
 				endpointBase, projectId, 'review', reviewPrompt, controller.signal,
@@ -4131,6 +4256,35 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			}
 			lastVerdict = parseDivisionVerdict(reviewResult.output, goal?.criteria ?? []);
 			lastReviewOutput = reviewResult.output;
+
+			// Reviewer が「ファイルを確認します」のように確認作業を始めて、判定を書かずに終わることがある。
+			// それを未達として 1 ラウンド丸ごとやり直すのは無駄なので、判定だけをもう一度頼む (1 回まで)。
+			if (!lastVerdict.readable && !controller.signal.aborted) {
+				appendText(`\n> ↻ Reviewer の判定が読み取れなかったため、判定だけをもう一度依頼します。\n`);
+				appendText(`\n\n${REVIEWER_BEGIN}\n`);
+				const retryStart = fullText.length;
+				const retry = await callDivisionTaskExecute(
+					endpointBase, projectId, 'review',
+					[
+						reviewPrompt,
+						``,
+						`## 重要`,
+						`前回の回答は、確認作業の文章だけで判定を含まないまま終わりました。確認は不要です (必要な内容はすべて上に添付済み)。`,
+						`1 行目に「判定: 合格」か「判定: 不合格」、続けて理由を短く、最後に指定の JSON を必ず出力してください。`,
+					].join('\n'),
+					controller.signal,
+					(chunk) => appendText(chunk),
+					divisionApiKey, sessionId,
+					withStackContext(reviewContextHistory),
+					workspaceFolderPath, routingOptions,
+				);
+				appendText(`\n\n${REVIEWER_END}\n`);
+				if (!retry.error && retry.output) {
+					lastVerdict = parseDivisionVerdict(retry.output, goal?.criteria ?? []);
+					lastReviewOutput = retry.output;
+					reviewStartInFullText = retryStart;
+				}
+			}
 
 			// 判定用の生 JSON は読みにくいので、照合表に置き換える
 			{
@@ -4183,6 +4337,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 						round,
 						maxRounds,
 						producedFiles: [...producedFiles.entries()],
+						lastCommandResults,
 					},
 				});
 				const unmetMd = lastVerdict.unmet.length > 0
