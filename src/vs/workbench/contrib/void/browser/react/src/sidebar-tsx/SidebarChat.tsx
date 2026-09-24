@@ -2434,6 +2434,7 @@ const flowRoleLabel: Record<string, string> = {
 	image: 'イメージ',
 	review: 'レビュー',
 	reviewer: 'レビュー',
+	terminal: 'コマンド',
 }
 
 type CollapsibleFlowCardProps = {
