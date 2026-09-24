@@ -3097,6 +3097,13 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			return role === 'file-search' || role === 'filesearch' || role === 'file_search'
 				|| role === 'file-searcher' || role === 'filesearcher';
 		};
+		// 画面に出すステップ番号。ファイル読み込みは AI ステップではないので 0 にし
+		// (レンダラは 0 番を「準備」として番号なしで描く)、AI ステップだけを 1 から数える。
+		// tasks.length を渡すと最後の Reviewer の番号になる。
+		const displayStepNumber = (index: number): number => {
+			if (index < tasks.length && isFileSearchRole(tasks[index].role)) return 0;
+			return tasks.slice(0, index + 1).filter(t => !isFileSearchRole(t.role)).length + (index >= tasks.length ? 1 : 0);
+		};
 		const isCoderLikeRole = (r: string): boolean => {
 			const role = (r || '').toLowerCase();
 			return role === 'coder' || role === 'coding' || role === 'code'
@@ -3224,8 +3231,8 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				tasks.unshift({
 					taskId: 'auto-filesearch',
 					role: 'filesearch',
-					title: 'ワークスペース全体の事前読み込み',
-					description: 'すべてのフォルダ・ファイルを走査し、後続エージェントに共有する',
+					title: 'ファイル読み込み',
+					description: '作業フォルダのファイルを読み込み、後続エージェントに共有する (AI は使わない)',
 				});
 			}
 
@@ -3248,13 +3255,21 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			totalSteps = tasks.length + 1;
 			taskOutputs = [];
 
-			appendText(`## 📋 FLOW\n\nLeader が以下の ${totalSteps} ステップのフローを作成しました。以降、各ロールの AI はこの順番通りに実行されます。\n\n`);
+			// ファイル読み込み (filesearch) は AI を使わない準備ステップなので、番号付きの
+			// AI ステップとは分けて表示する。
+			const aiStepCount = totalSteps - tasks.filter(t => isFileSearchRole(t.role)).length;
+			appendText(`## 📋 FLOW\n\n`);
+			if (tasks.some(t => isFileSearchRole(t.role))) {
+				appendText(`📂 **準備:** 作業フォルダのファイルを読み込み、各 AI に渡します（AI は使いません）\n\n`);
+			}
+			appendText(`Leader が以下の ${aiStepCount} ステップのフローを作成しました。以降、各ロールの AI はこの順番通りに実行されます。\n\n`);
 			for (let i = 0; i < tasks.length; i++) {
 				const t = tasks[i];
+				if (isFileSearchRole(t.role)) continue;
 				const depsPart = t.dependsOn && t.dependsOn.length > 0 ? ` _(依存: ${t.dependsOn.join(', ')})_` : '';
-				appendText(`${i + 1}. **${t.role}** — ${t.title || ''}${depsPart}\n`);
+				appendText(`${displayStepNumber(i)}. **${t.role}** — ${t.title || ''}${depsPart}\n`);
 			}
-			appendText(`${totalSteps}. **reviewer** — 最終レビュー\n`);
+			appendText(`${aiStepCount}. **reviewer** — 最終レビュー\n`);
 			if (divisionFlowApprovalMode) {
 				appendText(`\n> 🔒 **承認モード有効** — 各ステップの MD ファイルが完成するたびに一時停止し、あなたの承認を待ちます。\n`);
 			}
@@ -3498,7 +3513,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			drainInjections();
 			const task = tasks[i];
 			const role = (task.role || '').toLowerCase();
-			appendText(`\n---\n\n### ${i + 1}. ${task.role} — ${task.title || ''}\n\n`);
+			appendText(`\n---\n\n### ${displayStepNumber(i)}. ${task.role} — ${task.title || ''}\n\n`);
 
 			// File Search はローカル実装でワークスペース全件走査
 			if (isFileSearchRole(role)) {
@@ -3785,7 +3800,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		}
 
 		drainInjections();
-		appendText(`\n---\n\n### ${totalSteps}. reviewer — 最終レビュー\n\n`);
+		appendText(`\n---\n\n### ${displayStepNumber(tasks.length)}. reviewer — 最終レビュー\n\n`);
 
 		const reviewContextHistory: { role: 'user' | 'assistant'; content: string }[] = [];
 		{

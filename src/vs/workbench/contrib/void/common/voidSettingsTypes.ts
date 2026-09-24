@@ -648,16 +648,13 @@ export type GlobalSettings = {
 
 // Default role assignments for Division API
 // Ordered to match the Orchestra flow:
-// User → Leader → filesearch (wave1/pre) → (ideaman, search, research) (wave2)
-//   → (design, image, planner) (wave3) → (coder or writing) → review → User
+// User → Leader → (ideaman, search, research) → (design, image, planner)
+//   → (coder or writing) → review → User
 //
-// filesearch はワークスペース全件事前読み込みを担う wave1 として
-// **wave2 の情報収集系より前に単独実行** する。Coder 直前にも Leader Todos
-// に基づいた再走査の fallback があるが、通常はここで取得済みの FILE-SEARCH.md
-// を後続エージェントが使い回す。
+// ファイル読み込み (filesearch) はフローの最初に Orchestra がローカルで行う準備ステップで、
+// AI モデルを使わないのでロール割り当てには含めない (sendLLMMessage.impl.ts が自動で差し込む)。
 export const defaultRoleAssignments: RoleAssignment[] = [
 	{ role: 'leader', provider: 'openAI', model: 'gpt-5.2' },
-	{ role: 'filesearch', provider: 'openAI', model: 'gpt-5.2-instant' },
 	{ role: 'ideaman', provider: 'openAI', model: 'gpt-5.2' },
 	{ role: 'search', provider: 'openAI', model: 'gpt-5.2-instant' },
 	{ role: 'research', provider: 'perplexity', model: 'sonar-pro' },

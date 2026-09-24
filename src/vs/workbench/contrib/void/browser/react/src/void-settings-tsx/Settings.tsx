@@ -1199,7 +1199,6 @@ const DivisionSettings = () => {
 		'leader',
 		'ideaman',
 		'search',
-		'filesearch',
 		'research',
 		'design',
 		'image',
