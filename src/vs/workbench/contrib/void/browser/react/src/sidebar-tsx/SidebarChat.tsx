@@ -2416,9 +2416,10 @@ const flowRoleLabel: Record<string, string> = {
 	design: 'デザイン',
 	writing: 'ライティング',
 	ideaman: 'アイデア',
-	filesearch: 'ファイル検索',
+	filesearch: '準備・AI なし',
 	image: 'イメージ',
 	review: 'レビュー',
+	reviewer: 'レビュー',
 }
 
 type CollapsibleFlowCardProps = {
@@ -2550,7 +2551,9 @@ const splitMarkdownByTasks = (md: string): { preamble: string; tasks: AssistantT
 	let current: { taskNumber: number; role: string; title: string; bodyLines: string[] } | null = null
 	let inCodeFence = false
 	// `### N. role — title` (— は EM DASH U+2014)。タイトルは空のことがある。
-	const taskHeaderRe = /^###\s+(\d+)\.\s+([^—\n]+?)(?:\s+—\s*(.*))?\s*$/
+	// role は英字の slug、「—」は必須。これが緩いと、エージェントの回答中の
+	// `### 2. ファイル一覧` のような見出しまで別ステップのカードに割れてしまう。
+	const taskHeaderRe = /^###\s+(\d+)\.\s+([A-Za-z][\w-]*)\s+—\s*(.*?)\s*$/
 
 	const flush = () => {
 		if (!current) return
@@ -2735,7 +2738,7 @@ const CollapsibleAssistantResponse = ({
 					const sectionAutoFold = autoFold || (isStreaming && i !== lastIdx)
 					const titleNode = (
 						<span className='inline-flex items-center gap-1.5 min-w-0'>
-							<span className='text-[10px] text-void-fg-4 flex-shrink-0'>#{task.taskNumber}</span>
+							{task.taskNumber > 0 && <span className='text-[10px] text-void-fg-4 flex-shrink-0'>#{task.taskNumber}</span>}
 							<span className='truncate'>{task.title || roleLabel}</span>
 							<span className='text-[10px] text-void-fg-4 px-1.5 py-0.5 rounded bg-void-bg-3 leading-none flex-shrink-0'>
 								{roleLabel}
