@@ -120,6 +120,12 @@ const _modelsWithSwappedInNewModels = (options: { existingModels: VoidStatefulMo
 }
 
 
+const isJevModel = (model: ModelSelection) => {
+	if (model.providerName !== 'divisionAPI') return false
+	const modelId = model.modelName.split('/').pop()?.toLowerCase()
+	return modelId === 'jev'
+}
+
 export const modelFilterOfFeatureName: {
 	[featureName in FeatureName]: {
 		filter: (
@@ -128,12 +134,13 @@ export const modelFilterOfFeatureName: {
 		) => boolean;
 		emptyMessage: null | { message: string, priority: 'always' | 'fallback' }
 	} } = {
-	'Autocomplete': { filter: (o, opts) => getModelCapabilities(o.providerName, o.modelName, opts.overridesOfModel).supportsFIM, emptyMessage: { message: 'No models support FIM', priority: 'always' } },
+	'Autocomplete': { filter: (o, opts) => !isJevModel(o) && getModelCapabilities(o.providerName, o.modelName, opts.overridesOfModel).supportsFIM, emptyMessage: { message: 'No models support FIM', priority: 'always' } },
+	// JEV is the leader AI model. Chat is the leader AI selection; keep it out of every other role.
 	'Chat': { filter: o => true, emptyMessage: null, },
-	'Ctrl+K': { filter: o => true, emptyMessage: null, },
-	'Apply': { filter: o => true, emptyMessage: null, },
-	'SCM': { filter: o => true, emptyMessage: null, },
-	'ErrorFix': { filter: o => true, emptyMessage: null, },
+	'Ctrl+K': { filter: o => !isJevModel(o), emptyMessage: null, },
+	'Apply': { filter: o => !isJevModel(o), emptyMessage: null, },
+	'SCM': { filter: o => !isJevModel(o), emptyMessage: null, },
+	'ErrorFix': { filter: o => !isJevModel(o), emptyMessage: null, },
 }
 
 
