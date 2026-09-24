@@ -659,6 +659,8 @@ const VoidOnboardingContent = () => {
 	const accessor = useAccessor()
 	const voidSettingsService = accessor.get('IVoidSettingsService')
 	const voidMetricsService = accessor.get('IMetricsService')
+	const productService = accessor.get('IProductService')
+	const orchestraVersion = productService.voidVersion ?? productService.version
 
 	// Division サインインモーダルの表示状態
 	const [showLoginScreen, setShowLoginScreen] = useState(false);
@@ -789,7 +791,7 @@ const VoidOnboardingContent = () => {
 				<div className='flex flex-col items-center gap-8'>
 					<div className='flex flex-col items-center gap-2'>
 						<div className="text-5xl font-light text-center">{t('onboarding.welcome')}</div>
-						<div className="text-sm text-void-fg-3 opacity-80 text-center">Build 1.0.2 - DEBUG</div>
+						<div className="text-sm text-void-fg-3 opacity-80 text-center">v{orchestraVersion}</div>
 					</div>
 
 					{/* Slice of Void image */}

@@ -32,6 +32,18 @@ export const LoginScreen = ({ onClose }: { onClose: () => void }) => {
 		}
 	}, [isLoggedIn, onClose]);
 
+	// Esc でも閉じられるようにする (送信中は途中で閉じない)。
+	React.useEffect(() => {
+		const onKeyDown = (e: KeyboardEvent) => {
+			if (e.key === 'Escape' && !submitting) {
+				e.stopPropagation();
+				onClose();
+			}
+		};
+		window.addEventListener('keydown', onKeyDown, true);
+		return () => window.removeEventListener('keydown', onKeyDown, true);
+	}, [onClose, submitting]);
+
 	const switchMode = (next: AuthMode) => {
 		if (submitting || mode === next) return;
 		setMode(next);
@@ -124,6 +136,8 @@ export const LoginScreen = ({ onClose }: { onClose: () => void }) => {
 						onClick={onClose}
 						className="absolute top-4 right-4 text-void-fg-3 hover:text-void-fg-1 p-1 rounded-md transition-colors"
 						type="button"
+						aria-label="閉じる"
+						title="閉じる"
 					>
 						<X size={20} />
 					</button>

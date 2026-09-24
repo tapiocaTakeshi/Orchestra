@@ -2801,6 +2801,15 @@ const buildPromptFromMessages = (messages: any[], separateSystemMessage?: string
 
 
 
+// Division API の HTTP エラーを、チャットに出すユーザー向けの文言にする。
+// 401 は未ログイン (またはセッション切れ) なので、生の JSON ではなく次にやることを伝える。
+const divisionErrorMessage = (error: string): string => {
+	if (/^HTTP 401\b/.test(error)) {
+		return 'Division にログインしていないため、エージェントを実行できません。右上の「ログイン」からサインインしてください (ログイン済みの場合は、一度ログアウトしてから再度ログインしてください)。';
+	}
+	return `Division API エラー: ${error}`;
+};
+
 const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<void> => {
 	const {
 		messages,
@@ -2923,7 +2932,8 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			);
 
 			if (result.error) {
-				appendText(`\nError: ${result.error}\n`);
+				onError({ message: divisionErrorMessage(result.error), fullError: null });
+				return;
 			} else {
 				const output = result.output;
 				const codeBlockOpens = (output.match(/```/g) || []).length;
@@ -3186,9 +3196,8 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			);
 
 			if (leaderResult.error) {
-				appendText(`❌ **Task Create Error:** ${leaderResult.error}\n\n`);
-				onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null });
-				flushCommandRunsAfterFinalMessage();
+				// 進捗テキストは折りたたまれて「分析中...」のまま見えるので、エラーは onError で目に見える形で出す。
+				onError({ message: divisionErrorMessage(leaderResult.error), fullError: null });
 				return;
 			}
 

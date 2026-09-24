@@ -370,7 +370,7 @@ export const t = (key: TranslationKey, language: UILanguage): string => {
 
 export const useUILanguage = (): UILanguage => {
 	const settingsState = useSettingsState()
-	return settingsState.globalSettings.uiLanguage ?? 'en'
+	return settingsState.globalSettings.uiLanguage ?? 'ja'
 }
 
 export const useSetUILanguage = () => {

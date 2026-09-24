@@ -699,7 +699,7 @@ export const defaultGlobalSettings: GlobalSettings = {
 	maxReviewerIterations: 10,
 	maxReviewIterations: 10,
 	divisionFlowApprovalMode: false,
-	uiLanguage: 'en',
+	uiLanguage: 'ja', // Orchestra の固定文言 (ホーム画面・チャット) は日本語なので、既定も日本語にそろえる
 	obsidian: defaultObsidianSettings,
 	kanban: defaultKanbanSettings,
 }
