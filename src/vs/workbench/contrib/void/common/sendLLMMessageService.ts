@@ -35,7 +35,15 @@ export interface ILLMMessageService {
 	registerFileOperationHandler: (handler: (operations: FileOperationItem[]) => Promise<void>) => void;
 	registerCommandOperationHandler: (handler: (commands: CommandOperationItem[]) => Promise<void>) => void;
 	approveOrchestration: (editedOutputs?: Array<{ mdFileName: string; mdContent: string }>) => Promise<void>;
+	/**
+	 * Division API への GET / POST をメインプロセス経由で送る。レンダラーから直接 fetch すると
+	 * API が CORS に対応していないため失敗する。path は `/api/` で始まるものだけ。
+	 */
+	divisionApiRequest: (params: DivisionApiRequestParams) => Promise<DivisionApiResponse>;
 }
+
+export type DivisionApiRequestParams = { endpoint: string; accessToken: string; path: string; body?: unknown };
+export type DivisionApiResponse = { ok: boolean; status: number; data: any; error?: string };
 
 
 // open this file side by side with llmMessageChannel
@@ -319,6 +327,11 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 
 	registerCommandOperationHandler(handler: (commands: CommandOperationItem[]) => Promise<void>) {
 		this._commandOperationHandler = handler;
+	}
+
+	async divisionApiRequest(params: DivisionApiRequestParams): Promise<DivisionApiResponse> {
+		const res = await this.channel.call<DivisionApiResponse | undefined>('divisionApiRequest', params);
+		return res ?? { ok: false, status: 0, data: null, error: 'request failed' };
 	}
 
 	async approveOrchestration(editedOutputs?: Array<{ mdFileName: string; mdContent: string }>) {
