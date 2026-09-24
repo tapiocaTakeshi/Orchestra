@@ -18,6 +18,7 @@ import { IContextViewService, IContextMenuService } from '../../../../../../../p
 import { IFileService } from '../../../../../../../platform/files/common/files.js';
 import { IHoverService } from '../../../../../../../platform/hover/browser/hover.js';
 import { IThemeService } from '../../../../../../../platform/theme/common/themeService.js';
+import { IProductService } from '../../../../../../../platform/product/common/productService.js';
 import { ILLMMessageService } from '../../../../common/sendLLMMessageService.js';
 import { IRefreshModelService } from '../../../../../../../workbench/contrib/void/common/refreshModelService.js';
 import { IVoidSettingsService } from '../../../../../../../workbench/contrib/void/common/voidSettingsService.js';
@@ -313,6 +314,7 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IVoidUpdateService: accessor.get(IVoidUpdateService),
 		IOpenerService: accessor.get(IOpenerService),
 		IDialogService: accessor.get(IDialogService),
+		IProductService: accessor.get(IProductService),
 
 	} as const
 	return reactAccessor

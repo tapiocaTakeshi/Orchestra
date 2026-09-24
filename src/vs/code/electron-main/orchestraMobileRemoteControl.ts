@@ -197,7 +197,7 @@ export async function startOrchestraMobileRemoteControl(): Promise<void> {
 		try {
 			const path = new URL(req.url ?? '/', url).pathname;
 			if (req.method === 'OPTIONS') {
-				res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, X-Orchestra-Token, X-Division-Access-Token' });
+				res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, DELETE', 'Access-Control-Allow-Headers': 'Content-Type, X-Orchestra-Token, X-Division-Access-Token' });
 				res.end();
 				return;
 			}

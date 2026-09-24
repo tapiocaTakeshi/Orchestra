@@ -29,6 +29,13 @@ type RemoteSessionAuth = {
  * request from another device.
  */
 export const syncMobileRemoteSession = async (auth: RemoteSessionAuth | null): Promise<void> => {
+	// Every React bundle calls this on every settings change, so only send when
+	// the signed-in account actually changed. The key lives on globalThis because
+	// each bundle has its own copy of this module.
+	const key = auth ? `${auth.userId}\n${auth.accessToken}` : '';
+	const g = globalThis as { __orchestraMobileSessionKey?: string };
+	if (g.__orchestraMobileSessionKey === key) return;
+	g.__orchestraMobileSessionKey = key;
 	try {
 		await fetch('http://127.0.0.1:39231/api/internal/division-session', {
 			method: auth ? 'POST' : 'DELETE',
@@ -37,7 +44,8 @@ export const syncMobileRemoteSession = async (auth: RemoteSessionAuth | null): P
 		});
 	} catch {
 		// The gateway is unavailable in the browser/web build. Login itself must
-		// remain usable there, and the next desktop heartbeat will retry.
+		// remain usable there; forget the key so the next change retries.
+		g.__orchestraMobileSessionKey = undefined;
 	}
 };
 
