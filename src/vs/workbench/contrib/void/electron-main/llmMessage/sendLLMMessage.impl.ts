@@ -4063,6 +4063,10 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				}
 
 				const output = execResult.output || '';
+				if (!output.trim()) {
+					// 出力トークンの上限が小さすぎると、モデルが本文を書く前に打ち切られて空になる
+					appendText(`⚠️ ${task.role} の回答が空でした。「コスト調整」を使っている場合は、「回答の長さ」を長めにすると改善することがあります。\n\n`);
+				}
 				const fences = (output.match(/```/g) || []).length;
 				if (fences % 2 !== 0) appendText(`\n\`\`\`\n`);
 				appendText(`\n\n`);
@@ -4251,7 +4255,8 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 
 			// --- 目標との照合: Reviewer の判定をレビューのカードの中に出し、次に進むかを決める ---
 			if (reviewResult.error || !reviewResult.output) {
-				if (goal) appendText(`\n⚠️ Reviewer の判定が得られなかったため、ここで止めます。\n\n`);
+				// 目標の有無に関係なく、何も出さずに終わると「完了」なのか失敗なのか分からない
+				appendText(`\n⚠️ Reviewer から回答が得られなかったため、ここで止めます。${reviewResult.error ? '' : '「コスト調整」を使っている場合は、「回答の長さ」を長めにすると改善することがあります。'}\n\n`);
 				break;
 			}
 			lastVerdict = parseDivisionVerdict(reviewResult.output, goal?.criteria ?? []);

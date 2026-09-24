@@ -4,7 +4,7 @@ import { useAccessor } from '../util/services.js';
 
 type Policy = { minPerformance: number; maxCostUsd: number; maxOutputTokens: number };
 type Quote = { role: string; model: string; totalCostUsd: number };
-type Plan = { quotes: Quote[]; totalEstimateUsd: number };
+type Plan = { quotes: Quote[]; totalEstimateUsd: number; allocatorCostUsd: number };
 
 const DEFAULT_POLICY: Policy = { minPerformance: 70, maxCostUsd: 0.05, maxOutputTokens: 4096 };
 
@@ -177,7 +177,7 @@ export const AutoRouting = ({ endpoint, accessToken, refreshToken, policy, onCha
 				<PrimaryButton disabled={!canEstimate} onClick={() => run(async () => {
 					const key = quoteKey;
 					const data = await api('/api/routing/quote', { input, inputTokens: AMOUNT_STEPS[amountIdx], roles: ['leader', 'coder', 'review'], policy: draft });
-					if (latestQuoteKey.current === key) setPlan({ quotes: data?.quotes ?? [], totalEstimateUsd: Number(data?.totalEstimateUsd ?? 0) });
+					if (latestQuoteKey.current === key) setPlan({ quotes: data?.quotes ?? [], totalEstimateUsd: Number(data?.totalEstimateUsd ?? 0), allocatorCostUsd: Number(data?.allocatorCostUsd ?? 0) });
 				})}>{busy ? '計算中…' : '見積もる'}</PrimaryButton>
 				<span className="text-[10px] text-void-fg-4">見積もり自体にも少額の料金がかかります</span>
 			</div>
@@ -189,6 +189,7 @@ export const AutoRouting = ({ endpoint, accessToken, refreshToken, policy, onCha
 					<span>{roleLabel(q.role)}{q.model ? <span className="text-void-fg-4"> · {q.model}</span> : null}</span>
 					<span>{formatUsd(q.totalCostUsd)}</span>
 				</span>)}
+				{plan.allocatorCostUsd > 0 && <span className="text-[10px] text-void-fg-4">実行時は、ステップごとにモデルを選ぶ料金（1 回 約 {formatUsd(plan.allocatorCostUsd)}）が加わります。</span>}
 				<span className="text-[10px] text-void-fg-4">目安です。実際の料金は実行時の内容で決まります。</span>
 			</div>}
 		</div>
