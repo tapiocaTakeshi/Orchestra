@@ -5,7 +5,6 @@ import { useAccessor } from '../util/services.js';
 type Policy = { minPerformance: number; maxCostUsd: number; maxOutputTokens: number };
 type Quote = { role: string; model: string; totalCostUsd: number };
 type Plan = { quotes: Quote[]; totalEstimateUsd: number };
-type History = { id: string; createdAt: string; role: string; modelId: string; totalCostUsd: number };
 
 const DEFAULT_POLICY: Policy = { minPerformance: 70, maxCostUsd: 0.05, maxOutputTokens: 4096 };
 
@@ -32,7 +31,7 @@ const lengthLabel = (v: number) => v <= 1024 ? '短め' : v <= 4096 ? 'ふつう
 const ROLE_LABELS: Record<string, string> = {
 	leader: 'リーダー', coder: 'コーダー', review: 'レビュー', reviewer: 'レビュー', planner: 'プランナー',
 	search: '検索', searcher: '検索', research: 'リサーチ', researcher: 'リサーチ', design: 'デザイン', designer: 'デザイン',
-	writing: 'ライター', writer: 'ライター', ideaman: 'アイデア', image: '画像', imager: '画像', generate: 'チャット',
+	writing: 'ライター', writer: 'ライター', ideaman: 'アイデア', image: '画像', imager: '画像',
 };
 const roleLabel = (role: string) => ROLE_LABELS[role.toLowerCase()] ?? role;
 
@@ -66,12 +65,10 @@ const Slider = ({ label, valueText, hint, min, max, value, onChange, left, right
 // クラス名は className に直接書く (ビルド時の scope-tailwind は className の文字列しか書き換えない)
 const PrimaryButton = (props: React.ButtonHTMLAttributes<HTMLButtonElement>) =>
 	<button type="button" {...props} className="rounded px-2.5 py-1 text-xs bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] hover:bg-[var(--vscode-button-hoverBackground)] disabled:opacity-40 disabled:cursor-not-allowed" />;
-const SubtleButton = (props: React.ButtonHTMLAttributes<HTMLButtonElement>) =>
-	<button type="button" {...props} className="rounded border border-void-border-2 px-2 py-0.5 text-xs text-void-fg-2 hover:text-void-fg-1 hover:bg-void-bg-2 disabled:opacity-40 disabled:cursor-not-allowed" />;
 
-export const AutoRouting = ({ endpoint, accessToken, refreshToken, policy, onChange, prompt, compact = false }: {
+export const AutoRouting = ({ endpoint, accessToken, refreshToken, policy, onChange, prompt }: {
 	endpoint: string; accessToken: string; refreshToken: string; policy?: Policy;
-	onChange: (p: Policy | undefined) => void; prompt?: string; compact?: boolean;
+	onChange: (p: Policy | undefined) => void; prompt?: string;
 }) => {
 	const accessor = useAccessor();
 	const llmMessageService = accessor.get('ILLMMessageService');
@@ -92,10 +89,7 @@ export const AutoRouting = ({ endpoint, accessToken, refreshToken, policy, onCha
 	const input = prompt ?? ownInput;
 	const [amountIdx, setAmountIdx] = useState(1);
 	const [plan, setPlan] = useState<Plan | null>(null);
-	const [history, setHistory] = useState<History[] | null>(null);
-	const [cursor, setCursor] = useState<string | null>(null);
 	const [error, setError] = useState('');
-	const [notice, setNotice] = useState('');
 	const [busy, setBusy] = useState(false);
 	const [isPaid, setIsPaid] = useState<boolean | null>(null);
 
@@ -120,16 +114,9 @@ export const AutoRouting = ({ endpoint, accessToken, refreshToken, policy, onCha
 		return res.data;
 	};
 	const run = async (action: () => Promise<void>) => {
-		setBusy(true); setError(''); setNotice('');
+		setBusy(true); setError('');
 		try { await action(); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } finally { setBusy(false); }
 	};
-	const loadHistory = (more = false) => run(async () => {
-		const data = await api(`/api/routing/history${more && cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`);
-		const items: History[] = Array.isArray(data?.items) ? data.items : [];
-		setHistory(old => more && old ? [...old, ...items] : items);
-		setCursor(data?.nextCursor ?? null);
-	});
-
 	const costIdx = nearestIndex(COST_STEPS, draft.maxCostUsd);
 	const lengthIdx = nearestIndex(LENGTH_STEPS, draft.maxOutputTokens);
 	const canEstimate = isPaid === true && !!input.trim() && !busy;
@@ -206,33 +193,6 @@ export const AutoRouting = ({ endpoint, accessToken, refreshToken, policy, onCha
 			</div>}
 		</div>
 
-		{/* 利用履歴 (設定画面だけ) */}
-		{!compact && <div className="flex flex-col gap-2 border-t border-void-border-2 pt-3">
-			<div className="flex items-center justify-between">
-				<strong className="text-void-fg-1">最近の利用料金</strong>
-				<div className="flex gap-1">
-					<SubtleButton disabled={busy || !accessToken} onClick={() => loadHistory()}>{history ? '更新' : '表示する'}</SubtleButton>
-					<SubtleButton disabled={busy || !accessToken} onClick={() => run(async () => {
-						await api('/api/models/sync', {});
-						setPlan(null);
-						setNotice('モデルの料金表を最新にしました。');
-					})}>料金表を最新にする</SubtleButton>
-				</div>
-			</div>
-			{history && history.length === 0 && <span className="text-void-fg-4">まだ利用履歴はありません。</span>}
-			{history && history.length > 0 && <div className="flex flex-col divide-y divide-void-border-2 rounded border border-void-border-2">
-				{history.map(h => <div key={h.id} className="flex items-center justify-between gap-3 px-2 py-1.5">
-					<span className="flex flex-col min-w-0">
-						<span className="text-void-fg-2">{roleLabel(h.role)}{h.modelId ? <span className="text-void-fg-4"> · {h.modelId}</span> : null}</span>
-						<span className="text-[10px] text-void-fg-4">{new Date(h.createdAt).toLocaleString('ja-JP')}</span>
-					</span>
-					<span className="text-void-fg-1 shrink-0">{formatUsd(h.totalCostUsd)}</span>
-				</div>)}
-			</div>}
-			{history && cursor && <div><SubtleButton disabled={busy} onClick={() => loadHistory(true)}>さらに表示</SubtleButton></div>}
-		</div>}
-
-		{notice && <p role="status" className="text-void-fg-3">{notice}</p>}
 		{error && <p role="alert" className="text-red-400">{error}</p>}
 	</div>;
 };

@@ -3,7 +3,6 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { AutoRouting } from './AutoRouting.js';
 
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react'; // Added useRef import just in case it was missed, though likely already present
 import { ProviderName, SettingName, displayInfoOfSettingName, providerNames, VoidStatefulModelInfo, customSettingNamesOfProvider, RefreshableProviderName, refreshableProviderNames, displayInfoOfProviderName, nonlocalProviderNames, localProviderNames, GlobalSettingName, featureNames, displayInfoOfFeatureName, isProviderNameDisabled, FeatureName, hasDownloadButtonsOnModelsProviderNames, subTextMdOfProviderName, commitMessageLanguages, displayInfoOfCommitMessageLanguage, reasoningEfforts, reasoningEffortLabels, normalizeReasoningEffort } from '../../../../common/voidSettingsTypes.js'
@@ -1277,11 +1276,6 @@ const DivisionSettings = () => {
 
 	return (
 		<div className="flex flex-col gap-4">
-			<AutoRouting endpoint={settingsState.settingsOfProvider.divisionAPI.endpoint || 'https://api.division.he-ro.jp'}
-                accessToken={settingsState.globalSettings.divisionAccessToken}
-                refreshToken={settingsState.globalSettings.divisionRefreshToken}
-                policy={settingsState.globalSettings.divisionAutoRouting}
-                onChange={policy => voidSettingsService.setGlobalSetting('divisionAutoRouting', policy)} />
             {/* Orchestration loop iteration caps */}
 			<div className="flex flex-col gap-2 border border-void-border-2 bg-void-bg-2 rounded-sm px-3 py-2">
 				<div className="flex items-center justify-between gap-4">

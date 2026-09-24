@@ -5844,7 +5844,7 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 				{settingsState.modelSelectionOfFeature.Chat?.providerName !== 'divisionAPI'
 					? <p className='text-xs'>この条件はDivision API選択時に適用されます。</p> : null}
 				<AutoRouting
-					prompt={composerPrompt} compact
+					prompt={composerPrompt}
 					endpoint={settingsState.settingsOfProvider.divisionAPI.endpoint || 'https://api.division.he-ro.jp'}
 					accessToken={settingsState.globalSettings.divisionAccessToken}
 					refreshToken={settingsState.globalSettings.divisionRefreshToken}
