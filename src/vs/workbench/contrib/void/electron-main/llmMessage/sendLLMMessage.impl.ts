@@ -2807,6 +2807,15 @@ const divisionErrorMessage = (error: string): string => {
 	if (/^HTTP 401\b/.test(error)) {
 		return 'Division にログインしていないため、エージェントを実行できません。右上の「ログイン」からサインインしてください (ログイン済みの場合は、一度ログアウトしてから再度ログインしてください)。';
 	}
+	if (/^HTTP 402\b/.test(error)) {
+		return 'クレジットが不足しているため、エージェントを実行できません。設定の「プラン・支払い方法を管理」からクレジットを追加してください。';
+	}
+	if (/^HTTP 403\b/.test(error) && /Orchestra Plus/.test(error)) {
+		return 'エージェントの実行には Orchestra Plus プランが必要です。設定の「プラン・支払い方法を管理」からアップグレードしてください。';
+	}
+	if (/^HTTP 503\b/.test(error) && /Billing verification/.test(error)) {
+		return 'Division 側でプラン・クレジットの確認ができず、エージェントを実行できませんでした (サーバー側の一時的な問題です)。しばらくしてから再度お試しください。';
+	}
 	return `Division API エラー: ${error}`;
 };
 
