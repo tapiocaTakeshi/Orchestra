@@ -2559,6 +2559,9 @@ const splitMarkdownByTasks = (md: string): { preamble: string; tasks: AssistantT
 		if (!current) return
 		const body = current.bodyLines.join('\n')
 			.replace(/^\s*-{3,}\s*$/gm, '')   // 区切り行を取り除く
+			// Reviewer 出力の区切り (HTML コメント)。この描画では文字のまま出てしまうので消す。
+			// 次のメッセージへの自動添付は生のメッセージから読むので影響しない。
+			.replace(/<!-- DIVISION_REVIEWER_(?:BEGIN|END) -->/g, '')
 			.replace(/^\s+|\s+$/g, '')
 		tasks.push({
 			taskNumber: current.taskNumber,
@@ -4558,6 +4561,43 @@ const FlowReviewComponent = ({ chatMessage, isCheckpointGhost }: {
 		} catch (e) { console.error('Error rejecting flow review:', e) }
 	}, [chatThreadsService])
 
+	// 目標ループを「ラウンドごとに確認」にしているときの一時停止。続けるか止めるかだけを聞く。
+	if (chatMessage.flowRole === 'goal-loop') {
+		return (
+			<div className={`${isCheckpointGhost ? 'opacity-50 pointer-events-none' : ''} my-1.5 flex flex-col gap-1.5 rounded-md border border-void-border-2 bg-void-bg-2 px-3 py-2`}>
+				<div className='text-[12px] font-medium text-void-fg-1'>
+					🎯 目標はまだ達成されていません（ラウンド {currentIdx + 1} / {totalTasks} 完了）
+				</div>
+				<SmallProseWrapper>
+					<ChatMarkdownRender
+						string={chatMessage.mdContent}
+						chatMessageLocation={{ threadId: chatThreadsService.state.currentThreadId, messageIdx: 0 }}
+						isApplyEnabled={false}
+						isLinkDetectionEnabled={true}
+					/>
+				</SmallProseWrapper>
+				{status === 'pending' && (
+					<div className='flex gap-2 pt-1'>
+						<button
+							onClick={onApprove}
+							className='rounded px-2 py-1 text-[12px] bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] hover:bg-[var(--vscode-button-hoverBackground)] cursor-pointer'
+						>
+							次のラウンドへ進む
+						</button>
+						<button
+							onClick={onReject}
+							className='rounded px-2 py-1 text-[12px] text-void-fg-3 hover:text-void-fg-1 hover:bg-void-bg-3 cursor-pointer'
+						>
+							ここで止める
+						</button>
+					</div>
+				)}
+				{status === 'approved' && <div className='text-[11px] text-void-fg-4'>次のラウンドに進みました</div>}
+				{status === 'rejected' && <div className='text-[11px] text-void-fg-4'>ここで止めました</div>}
+			</div>
+		)
+	}
+
 	return (
 		<div className={`${isCheckpointGhost ? 'opacity-50 pointer-events-none' : ''} my-1.5`}>
 			{/* Accordion: 各フロー出力を 1 件ずつ折りたためる */}
@@ -5748,12 +5788,40 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 		/>
 
 		<div className='flex flex-col gap-2' onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
-			<button type='button' aria-expanded={showCostTuning}
-				className='self-start flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-void-bg-2'
-				onClick={() => { setComposerPrompt(textAreaRef.current?.value ?? ''); setShowCostTuning(v => !v); }}>
-				<SlidersHorizontal size={14} /> コスト調整
-				{settingsState.globalSettings.divisionAutoRouting ? '（有効）' : ''}
-			</button>
+			<div className='flex items-center gap-2 flex-wrap'>
+				<button type='button' aria-expanded={showCostTuning}
+					className='flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-void-bg-2'
+					onClick={() => { setComposerPrompt(textAreaRef.current?.value ?? ''); setShowCostTuning(v => !v); }}>
+					<SlidersHorizontal size={14} /> コスト調整
+					{settingsState.globalSettings.divisionAutoRouting ? '（有効）' : ''}
+				</button>
+				{/* 目標ループ: 未達のとき自動で次のラウンドへ進むか、ラウンドごとに確認するか */}
+				{settingsState.modelSelectionOfFeature.Chat?.providerName === 'divisionAPI' && (
+					<div className='flex items-center gap-1 text-xs' role='group' aria-label='目標ループの進め方'>
+						<span className='flex items-center gap-1 text-void-fg-3'><RotateCcw size={12} /> ループ</span>
+						<div className='flex rounded border border-void-border-2 overflow-hidden'>
+							{([
+								['auto', '自動', '目標を達成するまで、未達なら自動で次のラウンドに進みます'],
+								['confirm', '毎回確認', '未達のラウンドが終わるたびに止まり、続けるかを確認します'],
+							] as const).map(([mode, label, hint]) => {
+								const active = (settingsState.globalSettings.divisionGoalLoopMode ?? 'auto') === mode
+								return (
+									<button
+										key={mode}
+										type='button'
+										aria-pressed={active}
+										title={hint}
+										onClick={() => accessor.get('IVoidSettingsService').setGlobalSetting('divisionGoalLoopMode', mode)}
+										className={`px-2 py-0.5 transition-colors ${active ? 'bg-void-bg-3 text-void-fg-1' : 'text-void-fg-3 hover:text-void-fg-1 hover:bg-void-bg-2'}`}
+									>
+										{label}
+									</button>
+								)
+							})}
+						</div>
+					</div>
+				)}
+			</div>
 			{showCostTuning && <div className='max-h-80 overflow-auto'>
 				{settingsState.modelSelectionOfFeature.Chat?.providerName !== 'divisionAPI'
 					? <p className='text-xs'>この条件はDivision API選択時に適用されます。</p> : null}

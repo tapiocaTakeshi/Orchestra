@@ -172,6 +172,8 @@ export type SendLLMMessageParams = {
 	divisionMaxReviewIterations?: number;
 	// true の場合、各ロールの .md 出力ごとに一時停止してユーザーの承認を待つ（divisionAPI のみ使用）
 	divisionFlowApprovalMode?: boolean;
+	// 'confirm' の場合、目標が未達のラウンドが終わるたびに一時停止し、続けるかをユーザーに確認する
+	divisionGoalLoopMode?: 'auto' | 'confirm';
 	workspaceFolderPath?: string;
 	// main 側（channel）が注入する関数。IPC を越えないので BlockedMainLLMMessageParams に含める。
 	takePendingInjection?: () => string | null;
