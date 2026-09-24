@@ -1253,12 +1253,12 @@ const DivisionSettings = () => {
 	const maxBriefGateIterations = settingsState.globalSettings.maxBriefGateIterations;
 	const maxReviewerIterations = settingsState.globalSettings.maxReviewerIterations;
 	const [maxBriefGateIterationsInput, setMaxBriefGateIterationsInput] = useState<string>(String(maxBriefGateIterations ?? 10));
-	const [maxReviewerIterationsInput, setMaxReviewerIterationsInput] = useState<string>(String(maxReviewerIterations ?? 10));
+	const [maxReviewerIterationsInput, setMaxReviewerIterationsInput] = useState<string>(String(maxReviewerIterations ?? 5));
 	useEffect(() => {
 		setMaxBriefGateIterationsInput(String(settingsState.globalSettings.maxBriefGateIterations ?? 10));
 	}, [settingsState.globalSettings.maxBriefGateIterations]);
 	useEffect(() => {
-		setMaxReviewerIterationsInput(String(settingsState.globalSettings.maxReviewerIterations ?? 10));
+		setMaxReviewerIterationsInput(String(settingsState.globalSettings.maxReviewerIterations ?? 5));
 	}, [settingsState.globalSettings.maxReviewerIterations]);
 	const normalizeLoopCapInput = (raw: string) => {
 		const n = parseInt(raw, 10);
@@ -1308,7 +1308,7 @@ const DivisionSettings = () => {
 					<div className="flex flex-col">
 						<span className="text-xs text-void-fg-2 font-medium">Reviewer 最大試行回数</span>
 						<span className="text-[11px] text-void-fg-4">
-							Reviewer が不合格のときの再調査ループ上限。Todos 再生成ありで File Search → Coder/Writer に戻る回数を制御します（1〜100）。
+							Leader が決めた目標を Reviewer が達成と判定するまで繰り返す、最大ラウンド数です。1 ラウンドごとに Leader の計画 → 各ロール → Reviewer が走るので、増やすとクレジットの消費も増えます（1〜100）。
 						</span>
 					</div>
 					<input
