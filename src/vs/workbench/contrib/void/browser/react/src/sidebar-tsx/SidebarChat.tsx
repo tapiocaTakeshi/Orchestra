@@ -451,6 +451,7 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 
 	// エージェントモードではチャットモードの選択肢を出さない (常に 'agent')
 	const uiMode = useOrchestraUiMode()
+	const autoRoutingOn = !!useSettingsState().globalSettings.divisionAutoRouting
 
 	const handleFiles = useCallback((files: FileList | null) => {
 		if (!files) return
@@ -713,7 +714,10 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 							)}
 							<div className='flex items-center gap-1'>
 								<span className='text-void-fg-4 text-[10px] pointer-events-none'>モデル</span>
-								<ModelDropdown featureName={featureName} className='text-xs text-void-fg-3 bg-void-bg-1 rounded' />
+								{/* コスト調整が有効なら、モデルはステップごとに自動で選ばれる */}
+								{featureName === 'Chat' && autoRoutingOn
+									? <span className='text-xs text-void-fg-3 py-0.5 px-1' title='コスト調整の条件に合うモデルを、ステップごとに自動で選びます'>自動（コスト調整）</span>
+									: <ModelDropdown featureName={featureName} className='text-xs text-void-fg-3 bg-void-bg-1 rounded' />}
 							</div>
 						</div>
 					</div>
@@ -5841,15 +5845,20 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 				)}
 			</div>
 			{showCostTuning && <div className='max-h-80 overflow-auto'>
-				{settingsState.modelSelectionOfFeature.Chat?.providerName !== 'divisionAPI'
-					? <p className='text-xs'>この条件はDivision API選択時に適用されます。</p> : null}
 				<AutoRouting
 					prompt={composerPrompt}
 					endpoint={settingsState.settingsOfProvider.divisionAPI.endpoint || 'https://api.division.he-ro.jp'}
 					accessToken={settingsState.globalSettings.divisionAccessToken}
 					refreshToken={settingsState.globalSettings.divisionRefreshToken}
 					policy={settingsState.globalSettings.divisionAutoRouting}
-					onChange={policy => accessor.get('IVoidSettingsService').setGlobalSetting('divisionAutoRouting', policy)}
+					onChange={policy => {
+						const settings = accessor.get('IVoidSettingsService')
+						settings.setGlobalSetting('divisionAutoRouting', policy)
+						// コスト調整はモデルも自動で選ぶので、有効にしたらチャットを Division (自動割り当て) に切り替える
+						if (policy && settings.state.modelSelectionOfFeature.Chat?.providerName !== 'divisionAPI') {
+							settings.setModelSelectionOfFeature('Chat', { providerName: 'divisionAPI', modelName: 'division-orchestrator' })
+						}
+					}}
 				/>
 			</div>}
 		</div>

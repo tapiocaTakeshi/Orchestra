@@ -606,7 +606,11 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 	private _currentModelSelectionProps = (threadId: string) => {
 		// these settings should not change throughout the loop (eg anthropic breaks if you change its thinking mode and it's using tools)
 		const featureName: FeatureName = this._threadRunFeatureOverride[threadId] ?? 'Chat'
-		const modelSelection = this._settingsService.state.modelSelectionOfFeature[featureName]
+		const chosen = this._settingsService.state.modelSelectionOfFeature[featureName]
+		// コスト調整が有効なチャットは、モデルも Division がステップごとに自動で選ぶ
+		const modelSelection: typeof chosen = featureName === 'Chat' && this._settingsService.state.globalSettings.divisionAutoRouting
+			? { providerName: 'divisionAPI', modelName: 'division-orchestrator' }
+			: chosen
 		const modelSelectionOptions = modelSelection ? this._settingsService.state.optionsOfModelSelection[featureName][modelSelection.providerName]?.[modelSelection.modelName] : undefined
 		return { modelSelection, modelSelectionOptions }
 	}
