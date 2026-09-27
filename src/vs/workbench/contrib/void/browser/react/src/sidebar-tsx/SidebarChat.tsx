@@ -11,7 +11,7 @@ import './sidebar-chat-redesign.css';
 
 
 import { useAccessor, useChatThreadsState, useChatThreadsStreamState, useSettingsState, useActiveURI, useCommandBarState, useFullChatThreadsStreamState, useDivisionProjects, useDivisionProjectConfig, useIsDark, useOrchestraUpdateState, useOrchestraUiMode } from '../util/services.js';
-import { useTranslation } from '../util/i18n.js';
+import { TranslationKey, useTranslation } from '../util/i18n.js';
 import { OrchestraMark } from '../util/OrchestraMark.js';
 import { FloatingPortal } from '@floating-ui/react';
 import { DivisionProjectConfig } from '../../../divisionProjectService.js';
@@ -133,7 +133,7 @@ const IconArrowUp = ({ size, className = '' }: { size: number, className?: strin
 			xmlns="http://www.w3.org/2000/svg"
 		>
 			<path
-				fill="black"
+				fill="currentColor"
 				fillRule="evenodd"
 				clipRule="evenodd"
 				d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z"
@@ -147,8 +147,8 @@ const IconSquare = ({ size, className = '' }: { size: number, className?: string
 	return (
 		<svg
 			className={className}
-			stroke="black"
-			fill="black"
+			stroke="currentColor"
+			fill="currentColor"
 			strokeWidth="0"
 			viewBox="0 0 24 24"
 			width={size}
@@ -446,6 +446,7 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 }) => {
 	const accessor = useAccessor()
 	const chatThreadService = accessor.get('IChatThreadService')
+	const { t: tUI } = useTranslation()
 	const fileInputRef = useRef<HTMLInputElement>(null)
 	const [isDragOver, setIsDragOver] = useState(false)
 
@@ -520,13 +521,14 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 	const onDragOver = useCallback((e: React.DragEvent) => {
 		e.preventDefault()
 		e.stopPropagation()
-		console.log('[DnD] onDragOver fired, types:', Array.from(e.dataTransfer?.types || []))
 		setIsDragOver(true)
 	}, [])
 
 	const onDragLeave = useCallback((e: React.DragEvent) => {
 		e.preventDefault()
 		e.stopPropagation()
+		// 子要素 (入力欄など) に入ったときにも dragleave は来る。そこで消すとオーバーレイがちらつくので、本当に外へ出たときだけ消す。
+		if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) return
 		setIsDragOver(false)
 	}, [])
 
@@ -536,26 +538,6 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 		setIsDragOver(false)
 
 		const dt = e.dataTransfer
-		console.log('[DnD] onDrop fired')
-		console.log('[DnD] types:', Array.from(dt.types || []))
-		console.log('[DnD] files count:', dt.files?.length)
-		for (const type of Array.from(dt.types || [])) {
-			try {
-				const data = dt.getData(type)
-				console.log(`[DnD] data for '${type}':`, data?.substring(0, 200))
-			} catch (e) {
-				console.log(`[DnD] error reading '${type}':`, e)
-			}
-		}
-		if (dt.files) {
-			for (let i = 0; i < dt.files.length; i++) {
-				const f = dt.files[i]
-				const nativePath = (typeof (globalThis as any).vscode?.webUtils?.getPathForFile === 'function')
-					? (globalThis as any).vscode.webUtils.getPathForFile(f)
-					: undefined
-				console.log(`[DnD] file[${i}]:`, f.name, 'type:', f.type, 'size:', f.size, 'nativePath:', nativePath)
-			}
-		}
 		let handled = false
 
 		// 1. Try VS Code internal CodeEditors format (files dragged from editor tabs)
@@ -645,7 +627,7 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 				<div className='absolute inset-0 z-10 flex items-center justify-center bg-gradient-to-br from-blue-500/15 to-blue-600/10 backdrop-blur-[2px] border-2 border-dashed border-blue-400 rounded-lg pointer-events-none animate-in fade-in duration-150'>
 					<div className='flex items-center gap-2 text-blue-200 text-sm font-semibold px-3 py-1.5 bg-blue-500/20 rounded-full border border-blue-400/40 shadow-lg'>
 						<Paperclip size={16} className='animate-pulse' />
-						ここにファイルをドロップ
+						{tUI('chat.dropFiles')}
 					</div>
 				</div>
 			)}
@@ -708,15 +690,15 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 							{featureName === 'Chat' && uiMode !== 'agent' && <ChatModeDropdown className='text-xs text-void-fg-3 bg-void-bg-1 border border-void-border-2 rounded py-0.5 px-1' />}
 							{featureName === 'Chat' && (
 								<div className='flex items-center gap-1'>
-									<span className='text-void-fg-4 text-[10px] pointer-events-none'>プロジェクト</span>
+									<span className='text-void-fg-4 text-[10px] pointer-events-none'>{tUI('chat.project')}</span>
 									<DivisionProjectDropdown className='text-xs text-void-fg-3 bg-void-bg-1 border border-void-border-2 rounded py-0.5 px-1' />
 								</div>
 							)}
 							<div className='flex items-center gap-1'>
-								<span className='text-void-fg-4 text-[10px] pointer-events-none'>モデル</span>
+								<span className='text-void-fg-4 text-[10px] pointer-events-none'>{tUI('chat.model')}</span>
 								{/* コスト調整が有効なら、モデルはステップごとに自動で選ばれる */}
 								{featureName === 'Chat' && autoRoutingOn
-									? <span className='text-xs text-void-fg-3 py-0.5 px-1' title='コスト調整の条件に合うモデルを、ステップごとに自動で選びます'>自動（コスト調整）</span>
+									? <span className='text-xs text-void-fg-3 py-0.5 px-1' title={tUI('chat.model.autoByCost.hint')}>{tUI('chat.model.autoByCost')}</span>
 									: <ModelDropdown featureName={featureName} className='text-xs text-void-fg-3 bg-void-bg-1 rounded' />}
 							</div>
 						</div>
@@ -732,8 +714,9 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 							className='p-1 rounded cursor-pointer text-void-fg-3 hover:text-void-fg-1 hover:bg-void-bg-2 transition-colors duration-150'
 							onClick={() => fileInputRef.current?.click()}
 							data-tooltip-id='void-tooltip'
-							data-tooltip-content='Attach image'
+							data-tooltip-content={tUI('chat.attachImage')}
 							data-tooltip-place='top'
+							aria-label={tUI('chat.attachImage')}
 						>
 							<Paperclip size={16} className='stroke-[1.5]' />
 						</button>
@@ -778,21 +761,21 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement>
 const DEFAULT_BUTTON_SIZE = 22;
+// 送信・停止ボタンは文字色と背景色を反転させた丸にする。白で固定するとライトテーマで背景に埋もれるため、テーマの色から作る。
 export const ButtonSubmit = ({ className, disabled, ...props }: ButtonProps & Required<Pick<ButtonProps, 'disabled'>>) => {
-
+	const { t: tUI } = useTranslation()
 	return <button
 		type='button'
 		className={`rounded-full flex-shrink-0 flex-grow-0 flex items-center justify-center
 			transition-all duration-200 ease-out
 			${disabled
-				? 'bg-vscode-disabled-fg cursor-default opacity-50'
-				: 'bg-gradient-to-br from-white via-white to-zinc-200 cursor-pointer shadow-[0_2px_8px_rgba(255,255,255,0.25),inset_0_1px_0_rgba(255,255,255,0.8)] hover:shadow-[0_4px_14px_rgba(255,255,255,0.4),inset_0_1px_0_rgba(255,255,255,0.9)] hover:scale-[1.06] active:scale-95'
+				? 'bg-[color-mix(in_srgb,var(--void-fg-1)_12%,transparent)] text-void-fg-3 cursor-default'
+				: 'bg-void-fg-1 text-void-bg-1 cursor-pointer shadow-[0_2px_8px_color-mix(in_srgb,var(--void-fg-1)_25%,transparent)] hover:shadow-[0_4px_14px_color-mix(in_srgb,var(--void-fg-1)_40%,transparent)] hover:scale-[1.06] active:scale-95'
 			}
 			${className}
 		`}
-		// data-tooltip-id='void-tooltip'
-		// data-tooltip-content={'Send'}
-		// data-tooltip-place='left'
+		aria-label={tUI('chat.send')}
+		aria-disabled={disabled}
 		{...props}
 	>
 		<IconArrowUp size={DEFAULT_BUTTON_SIZE} className="stroke-[2] p-[2px]" />
@@ -811,18 +794,22 @@ const AwaitingUserBadge = () => {
 }
 
 export const ButtonStop = ({ className, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => {
+	const { t: tUI } = useTranslation()
 	return <button
 		className={`rounded-full flex-shrink-0 flex-grow-0 cursor-pointer flex items-center justify-center
-			bg-gradient-to-br from-white via-white to-zinc-200
-			shadow-[0_2px_8px_rgba(255,255,255,0.25),inset_0_1px_0_rgba(255,255,255,0.8)]
-			hover:shadow-[0_4px_14px_rgba(255,255,255,0.4)]
+			bg-void-fg-1 text-void-bg-1
+			shadow-[0_2px_8px_color-mix(in_srgb,var(--void-fg-1)_25%,transparent)]
+			hover:shadow-[0_4px_14px_color-mix(in_srgb,var(--void-fg-1)_40%,transparent)]
 			hover:scale-[1.06] active:scale-95
 			transition-all duration-200 ease-out
 			relative
-			before:absolute before:inset-0 before:rounded-full before:animate-pulse before:bg-white/10 before:pointer-events-none
 			${className}
 		`}
 		type='button'
+		aria-label={tUI('chat.stop')}
+		data-tooltip-id='void-tooltip'
+		data-tooltip-content={tUI('chat.stop')}
+		data-tooltip-place='top'
 		{...props}
 	>
 		<IconSquare size={DEFAULT_BUTTON_SIZE} className="stroke-[3] p-[7px] relative z-10" />
@@ -832,6 +819,7 @@ export const ButtonStop = ({ className, ...props }: ButtonHTMLAttributes<HTMLBut
 // 「キューに追加」ボタン。 ストリーミング中だけ Stop と並んで表示される。
 // 見た目は ButtonSubmit と区別したいので、白い丸ではなく枠線+リスト追加アイコンの中性的なボタンにする。
 export const ButtonQueueAdd = ({ className, disabled, ...props }: ButtonProps & Required<Pick<ButtonProps, 'disabled'>>) => {
+	const { t: tUI } = useTranslation()
 	return <button
 		type='button'
 		className={`rounded-full flex-shrink-0 flex-grow-0 flex items-center justify-center
@@ -845,8 +833,9 @@ export const ButtonQueueAdd = ({ className, disabled, ...props }: ButtonProps & 
 			${className ?? ''}
 		`}
 		data-tooltip-id='void-tooltip'
-		data-tooltip-content='キューに追加 (生成中の応答が終わったら自動送信)'
+		data-tooltip-content={tUI('chat.queueAdd')}
 		data-tooltip-place='top'
+		aria-label={tUI('chat.queueAdd')}
 		disabled={disabled}
 		{...props}
 	>
@@ -858,6 +847,7 @@ export const ButtonQueueAdd = ({ className, disabled, ...props }: ButtonProps & 
 // of Submit/Stop while editing a past message. Matches the size & shape of
 // ButtonSubmit / ButtonStop so the layout stays consistent.
 export const ButtonRevert = ({ className, onClick, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => {
+	const { t: tUI } = useTranslation()
 	return <button
 		type='button'
 		{...props}
@@ -876,8 +866,9 @@ export const ButtonRevert = ({ className, onClick, ...props }: ButtonHTMLAttribu
 			onClick?.(e)
 		}}
 		data-tooltip-id='void-tooltip'
-		data-tooltip-content='ここに戻す（チャットとコードを巻き戻し）'
+		data-tooltip-content={tUI('chat.revert')}
 		data-tooltip-place='top'
+		aria-label={tUI('chat.revert')}
 	>
 		<RotateCcw size={12} className='stroke-[2]' />
 	</button>
@@ -894,6 +885,7 @@ const scrollToBottom = (divRef: { current: HTMLElement | null }) => {
 
 
 const ScrollToBottomContainer = ({ children, className, style, scrollContainerRef }: { children: React.ReactNode, className?: string, style?: React.CSSProperties, scrollContainerRef: React.MutableRefObject<HTMLDivElement | null> }) => {
+	const { t: tUI } = useTranslation()
 	const [isAtBottom, setIsAtBottom] = useState(true); // Start at bottom
 
 	const divRef = scrollContainerRef
@@ -1003,6 +995,7 @@ const ScrollToBottomContainer = ({ children, className, style, scrollContainerRe
 			{/* Cursor-style floating scroll-to-bottom pill */}
 			{!isAtBottom && (
 				<button
+					type='button'
 					onClick={jumpToBottom}
 					className='absolute bottom-3 left-1/2 -translate-x-1/2 z-10
 						h-7 px-2.5 rounded-full
@@ -1013,12 +1006,9 @@ const ScrollToBottomContainer = ({ children, className, style, scrollContainerRe
 						shadow-[0_4px_14px_-4px_rgba(0,0,0,0.4)]
 						hover:border-void-border-1
 						transition-all duration-150 ease-out'
-					data-tooltip-id='void-tooltip'
-					data-tooltip-content='Scroll to bottom'
-					data-tooltip-place='top'
 				>
 					<ChevronDown size={13} className='text-void-fg-2' />
-					<span className='font-medium tracking-tight'>Jump to latest</span>
+					<span className='font-medium tracking-tight'>{tUI('chat.jumpToLatest')}</span>
 				</button>
 			)}
 		</div>
@@ -5145,10 +5135,10 @@ const ORCHESTRA_THEME_NAMES: Record<OrchestraThemeMode, string> = {
 	dark: 'Orchestra Dark',
 	sunRed: 'Sun Red',
 }
-const ORCHESTRA_THEME_LABELS: Record<OrchestraThemeMode, string> = {
-	light: 'ライト',
-	dark: 'ダーク',
-	sunRed: 'サンレッド',
+const ORCHESTRA_THEME_LABEL_KEYS: Record<OrchestraThemeMode, TranslationKey> = {
+	light: 'theme.light',
+	dark: 'theme.dark',
+	sunRed: 'theme.sunRed',
 }
 const ORCHESTRA_THEME_ORDER: OrchestraThemeMode[] = ['light', 'dark', 'sunRed']
 
@@ -5161,6 +5151,8 @@ export const detectOrchestraTheme = (currentName: string | undefined): Orchestra
 
 export const OrchestraThemeSwitcher = ({ compact }: { compact?: boolean }) => {
 	const accessor = useAccessor()
+	const { t: tUI } = useTranslation()
+	const labelOf = (mode: OrchestraThemeMode) => tUI(ORCHESTRA_THEME_LABEL_KEYS[mode])
 	const configurationService = accessor.get('IConfigurationService') as any
 	// VS Code 設定が変更されたら再描画したいので useState + listener
 	const initialName = (configurationService.getValue('workbench.colorTheme') as string | undefined) ?? ''
@@ -5190,10 +5182,13 @@ export const OrchestraThemeSwitcher = ({ compact }: { compact?: boolean }) => {
 	if (compact) {
 		// サイドバーヘッダー用: 1 ボタン (アイコンだけ) で次のテーマへサイクル切替。
 		const nextMode = ORCHESTRA_THEME_ORDER[(ORCHESTRA_THEME_ORDER.indexOf(current) + 1) % ORCHESTRA_THEME_ORDER.length]
+		const cycleLabel = tUI('theme.cycle').replace('{current}', labelOf(current)).replace('{next}', labelOf(nextMode))
 		return (
 			<button
+				type='button'
 				onClick={() => apply(nextMode)}
-				title={`テーマ: ${ORCHESTRA_THEME_LABELS[current]} → ${ORCHESTRA_THEME_LABELS[nextMode]}`}
+				title={cycleLabel}
+				aria-label={cycleLabel}
 				className='text-void-fg-3 hover:text-void-fg-1 transition-colors p-1 rounded-md hover:bg-void-bg-3'
 			>
 				{iconOf(current)}
@@ -5209,15 +5204,17 @@ export const OrchestraThemeSwitcher = ({ compact }: { compact?: boolean }) => {
 					<button
 						key={mode}
 						onClick={() => apply(mode)}
+						type='button'
+						aria-pressed={isActive}
 						className={`flex items-center gap-1.5 px-2 py-1 text-[12px] rounded transition-colors ${
 							isActive
 								? 'bg-void-bg-3 text-void-fg-1 shadow-sm'
 								: 'text-void-fg-3 hover:text-void-fg-1 hover:bg-void-bg-3/60'
 						}`}
-						title={ORCHESTRA_THEME_LABELS[mode]}
+						title={labelOf(mode)}
 					>
 						{iconOf(mode)}
-						<span>{ORCHESTRA_THEME_LABELS[mode]}</span>
+						<span>{labelOf(mode)}</span>
 					</button>
 				)
 			})}
@@ -5318,25 +5315,45 @@ const SidebarHeader = ({ onLoginClick }: { onLoginClick: () => void }) => {
 	const commandService = accessor.get('ICommandService') as ICommandService
 	const settingsService = accessor.get('IVoidSettingsService')
 	const settingsState = useSettingsState()
+	const dialogService = accessor.get('IDialogService')
 	const isLoggedIn = settingsState.globalSettings.isLoggedIn
 	const { t: tHeader } = useTranslation()
+
+	const onSignOut = async () => {
+		const { confirmed } = await dialogService.confirm({
+			message: tHeader('chat.header.signOutConfirm'),
+			detail: tHeader('chat.header.signOutConfirmDetail'),
+			primaryButton: tHeader('general.account.signOut'),
+		})
+		if (!confirmed) return
+		settingsService.setGlobalSetting('isLoggedIn', false)
+		settingsService.setGlobalSetting('divisionUserId', '')
+		settingsService.setGlobalSetting('divisionUserEmail', '')
+		settingsService.setGlobalSetting('divisionAccessToken', '')
+		settingsService.setGlobalSetting('divisionRefreshToken', '')
+		settingsService.setGlobalSetting('divisionApiKey', '')
+	}
 
 	return (
 		<div className="shrink-0 px-4 pt-2 pb-1.5 border-b border-void-border-3/60 bg-gradient-to-b from-void-bg-1 to-transparent">
 			<div className="flex items-center justify-end gap-2">
 
 				<button
+					type='button'
 					onClick={() => commandService.executeCommand(VOID_TOGGLE_KANBAN_ACTION_ID)}
 					className="text-void-fg-3 hover:text-void-fg-1 transition-colors p-1 rounded-md hover:bg-void-bg-3"
 					title={tHeader('chat.header.kanban')}
+					aria-label={tHeader('chat.header.kanban')}
 				>
 					<ClipboardCheck size={14} />
 				</button>
 
 				<button
+					type='button'
 					onClick={() => commandService.executeCommand(ORCHESTRA_UI_TOGGLE_MODE_ACTION_ID)}
 					className="text-void-fg-3 hover:text-void-fg-1 transition-colors p-1 rounded-md hover:bg-void-bg-3"
 					title={tHeader('chat.header.uiMode')}
+					aria-label={tHeader('chat.header.uiMode')}
 				>
 					<Bot size={14} />
 				</button>
@@ -5345,31 +5362,28 @@ const SidebarHeader = ({ onLoginClick }: { onLoginClick: () => void }) => {
 
 				{!isLoggedIn ? (
 					<button
+						type='button'
 						onClick={onLoginClick}
-						className="text-[11px] font-medium px-2 py-0.5 rounded bg-white text-black hover:bg-zinc-200 transition-colors"
+						className="text-[11px] font-medium px-2 py-0.5 rounded bg-void-fg-1 text-void-bg-1 hover:opacity-85 transition-opacity"
 					>
-						ログイン
+						{tHeader('general.account.logIn')}
 					</button>
 				) : (
 					<button
-						onClick={() => {
-							settingsService.setGlobalSetting('isLoggedIn', false)
-							settingsService.setGlobalSetting('divisionUserId', '')
-							settingsService.setGlobalSetting('divisionUserEmail', '')
-							settingsService.setGlobalSetting('divisionAccessToken', '')
-							settingsService.setGlobalSetting('divisionRefreshToken', '')
-							settingsService.setGlobalSetting('divisionApiKey', '')
-						}}
+						type='button'
+						onClick={onSignOut}
 						className="text-[11px] font-medium px-2 py-0.5 rounded text-void-fg-3 hover:text-void-fg-1 transition-colors"
 					>
-						サインアウト
+						{tHeader('general.account.signOut')}
 					</button>
 				)}
 
 				<button
+					type='button'
 					onClick={() => commandService.executeCommand(VOID_OPEN_SETTINGS_ACTION_ID)}
 					className="text-void-fg-3 hover:text-void-fg-1 hover:rotate-45 transition-all duration-300 ease-out p-1 rounded-md hover:bg-void-bg-3"
 					title={tHeader('chat.header.settings')}
+					aria-label={tHeader('chat.header.settings')}
 				>
 					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
 						<circle cx="12" cy="12" r="3" />
@@ -5395,21 +5409,22 @@ const MessageQueueList = ({
 	onRemove: (id: string) => void
 	onClear: () => void
 }) => {
+	const { t: tUI } = useTranslation()
 	if (items.length === 0) return null
 	return (
 		<div className='mb-1 rounded-md border border-void-border-2 bg-void-bg-2/70 overflow-hidden'>
 			<div className='flex items-center gap-1.5 px-2 py-1 border-b border-void-border-2/60'>
 				<ListPlus className='h-3 w-3 text-void-fg-3 flex-shrink-0' />
 				<span className='text-[11px] text-void-fg-2 font-medium flex-1'>
-					キュー <span className='text-void-fg-4'>({items.length})</span>
+					{tUI('chat.queue.title')} <span className='text-void-fg-4'>({items.length})</span>
 				</span>
 				<button
 					type='button'
 					onClick={onClear}
 					className='text-[10px] text-void-fg-4 hover:text-void-fg-1 transition-colors px-1 py-0.5 rounded hover:bg-void-bg-3'
-					title='すべてキャンセル'
+					title={tUI('chat.queue.clearHint')}
 				>
-					すべて削除
+					{tUI('chat.queue.clear')}
 				</button>
 			</div>
 			<ul className='divide-y divide-void-border-2/40 max-h-[140px] overflow-y-auto'>
@@ -5427,12 +5442,12 @@ const MessageQueueList = ({
 								className='text-[12px] text-void-fg-2 truncate flex-1 min-w-0'
 								title={item.text}
 							>
-								{preview || '(空のメッセージ)'}
+								{preview || tUI('chat.queue.empty')}
 							</span>
 							{selCount > 0 && (
 								<span
 									className='text-[10px] text-void-fg-4 px-1 py-0.5 rounded bg-void-bg-3 border border-void-border-2 flex-shrink-0'
-									title={`${selCount} 件の選択を含む`}
+									title={tUI('chat.queue.selections').replace('{count}', String(selCount))}
 								>
 									+{selCount}
 								</span>
@@ -5441,7 +5456,8 @@ const MessageQueueList = ({
 								type='button'
 								onClick={() => onRemove(item.id)}
 								className='p-0.5 rounded text-void-fg-4 hover:text-void-fg-1 hover:bg-void-bg-3 transition-colors flex-shrink-0'
-								title='このキューを削除'
+								title={tUI('chat.queue.remove')}
+								aria-label={tUI('chat.queue.remove')}
 							>
 								<X className='h-3 w-3' />
 							</button>
@@ -5736,7 +5752,7 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 				showDismiss={true}
 			/>
 
-			<WarningBox className='text-sm my-2 mx-4' onClick={() => { commandService.executeCommand(VOID_OPEN_SETTINGS_ACTION_ID) }} text='Open settings' />
+			<WarningBox className='text-sm my-2 mx-4' onClick={() => { commandService.executeCommand(VOID_OPEN_SETTINGS_ACTION_ID) }} text={tUI('chat.openSettings')} />
 		</div>
 
 
@@ -5814,17 +5830,17 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 				<button type='button' aria-expanded={showCostTuning}
 					className='flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-void-bg-2'
 					onClick={() => { setComposerPrompt(textAreaRef.current?.value ?? ''); setShowCostTuning(v => !v); }}>
-					<SlidersHorizontal size={14} /> コスト調整
-					{settingsState.globalSettings.divisionAutoRouting ? '（有効）' : ''}
+					<SlidersHorizontal size={14} /> {tUI('chat.costTuning')}
+					{settingsState.globalSettings.divisionAutoRouting ? tUI('chat.costTuning.on') : ''}
 				</button>
 				{/* 目標ループ: 未達のとき自動で次のラウンドへ進むか、ラウンドごとに確認するか */}
 				{settingsState.modelSelectionOfFeature.Chat?.providerName === 'divisionAPI' && (
-					<div className='flex items-center gap-1 text-xs' role='group' aria-label='目標ループの進め方'>
-						<span className='flex items-center gap-1 text-void-fg-3'><RotateCcw size={12} /> ループ</span>
+					<div className='flex items-center gap-1 text-xs' role='group' aria-label={tUI('chat.loop.label')}>
+						<span className='flex items-center gap-1 text-void-fg-3'><RotateCcw size={12} /> {tUI('chat.loop')}</span>
 						<div className='flex rounded border border-void-border-2 overflow-hidden'>
 							{([
-								['auto', '自動', '目標を達成するまで、未達なら自動で次のラウンドに進みます'],
-								['confirm', '毎回確認', '未達のラウンドが終わるたびに止まり、続けるかを確認します'],
+								['auto', tUI('chat.loop.auto'), tUI('chat.loop.auto.hint')],
+								['confirm', tUI('chat.loop.confirm'), tUI('chat.loop.confirm.hint')],
 							] as const).map(([mode, label, hint]) => {
 								const active = (settingsState.globalSettings.divisionGoalLoopMode ?? 'auto') === mode
 								return (
@@ -5968,12 +5984,12 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 
 		{Object.keys(chatThreadsState.allThreads).length > 1 ? // show if there are threads
 			<ErrorBoundary>
-				<SectionLabel label='過去のチャット' />
+				<SectionLabel label={tUI('chat.pastChats')} />
 				<PastThreadsList />
 			</ErrorBoundary>
 			:
 			<ErrorBoundary>
-				<SectionLabel label={isAgentUi ? tUI('chat.agent.suggestedTitle') : 'おすすめの質問'} />
+				<SectionLabel label={isAgentUi ? tUI('chat.agent.suggestedTitle') : tUI('chat.suggestedTitle')} />
 				{initiallySuggestedPromptsHTML}
 			</ErrorBoundary>
 		}
