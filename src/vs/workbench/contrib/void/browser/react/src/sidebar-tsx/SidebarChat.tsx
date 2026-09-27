@@ -13,7 +13,7 @@ import './sidebar-chat-redesign.css';
 import { useAccessor, useChatThreadsState, useChatThreadsStreamState, useSettingsState, useActiveURI, useCommandBarState, useFullChatThreadsStreamState, useDivisionProjects, useDivisionProjectConfig, useIsDark, useOrchestraUpdateState, useOrchestraUiMode } from '../util/services.js';
 import { TranslationKey, useTranslation } from '../util/i18n.js';
 import { OrchestraMark } from '../util/OrchestraMark.js';
-import { FloatingPortal } from '@floating-ui/react';
+import { autoUpdate, flip, FloatingPortal, offset, shift, size, useFloating } from '@floating-ui/react';
 import { DivisionProjectConfig } from '../../../divisionProjectService.js';
 import { ScrollType } from '../../../../../../../editor/common/editorCommon.js';
 
@@ -5289,12 +5289,13 @@ const OrchestraUpdateBanner: React.FC = () => {
 
 // 入力欄の下段に並ぶ小さな操作ボタン (モデルなどの設定・コスト調整・ループ)。
 // active はその機能が有効なこと、expanded は押して開いたパネルが出ていることを示す。
-const ComposerChip = ({ icon, label, title, active, expanded, onClick }: {
+const ComposerChip = ({ icon, label, title, active, expanded, hasPopup, onClick }: {
 	icon: React.ReactNode
 	label: string
 	title: string
 	active?: boolean
 	expanded?: boolean
+	hasPopup?: boolean // 押すとドロップダウンが開く (右端に ▾ を出す)
 	onClick: () => void
 }) => (
 	<button
@@ -5302,6 +5303,7 @@ const ComposerChip = ({ icon, label, title, active, expanded, onClick }: {
 		onClick={(e) => { e.stopPropagation(); onClick() }}
 		title={title}
 		aria-expanded={expanded}
+		aria-haspopup={hasPopup ? 'dialog' : undefined}
 		className={`flex items-center gap-1 px-1.5 py-1 rounded-md text-[11px] whitespace-nowrap transition-colors ${active || expanded
 			? 'text-void-fg-1 bg-[color-mix(in_srgb,var(--void-fg-1)_8%,transparent)]'
 			: 'text-void-fg-3 hover:text-void-fg-1 hover:bg-[color-mix(in_srgb,var(--void-fg-1)_6%,transparent)]'
@@ -5310,8 +5312,106 @@ const ComposerChip = ({ icon, label, title, active, expanded, onClick }: {
 		{icon}
 		<span>{label}</span>
 		{active && <span className='w-1.5 h-1.5 rounded-full bg-[var(--vscode-charts-green)]' aria-hidden='true' />}
+		{hasPopup && <ChevronDown size={11} className={`opacity-70 transition-transform ${expanded ? 'rotate-180' : ''}`} aria-hidden='true' />}
 	</button>
 )
+
+// コスト調整は、チップから開くドロップダウンにする。入力欄の中に広げると欄が押し広げられ、書いている文面が隠れるため。
+// パネルはワークベンチの中に描画する (body 直下だと、テーマの色の CSS 変数が届かない)。
+const CostTuningDropdown = ({ isOpen, setIsOpen, prompt, onOpen }: {
+	isOpen: boolean
+	setIsOpen: (open: boolean) => void
+	prompt: string
+	onOpen: () => void
+}) => {
+	const accessor = useAccessor()
+	const settingsState = useSettingsState()
+	const { t: tUI } = useTranslation()
+	const policy = settingsState.globalSettings.divisionAutoRouting
+
+	const { refs, floatingStyles } = useFloating({
+		open: isOpen,
+		placement: 'top-start',
+		strategy: 'fixed',
+		middleware: [
+			offset(6),
+			flip({ padding: 8 }),
+			shift({ padding: 8 }),
+			size({
+				padding: 8,
+				apply({ availableHeight, elements }) {
+					elements.floating.style.maxHeight = `${Math.max(160, availableHeight)}px`
+				},
+			}),
+		],
+		whileElementsMounted: autoUpdate,
+	})
+
+	// 外側のクリックと Esc で閉じる
+	useEffect(() => {
+		if (!isOpen) return
+		const onMouseDown = (e: MouseEvent) => {
+			const target = e.target as Node
+			if (refs.floating.current?.contains(target)) return
+			if ((refs.reference.current as HTMLElement | null)?.contains(target)) return
+			setIsOpen(false)
+		}
+		const onKeyDown = (e: globalThis.KeyboardEvent) => {
+			if (e.key === 'Escape') { e.stopPropagation(); setIsOpen(false) }
+		}
+		document.addEventListener('mousedown', onMouseDown, true)
+		document.addEventListener('keydown', onKeyDown, true)
+		return () => {
+			document.removeEventListener('mousedown', onMouseDown, true)
+			document.removeEventListener('keydown', onKeyDown, true)
+		}
+	}, [isOpen, refs.floating, refs.reference, setIsOpen])
+
+	const portalRoot = isOpen ? ((refs.reference.current as HTMLElement | null)?.closest('.monaco-workbench') as HTMLElement | null) : null
+
+	return <>
+		<span ref={refs.setReference} className='inline-flex'>
+			<ComposerChip
+				icon={<Coins size={12} />}
+				label={`${tUI('chat.costTuning')}: ${tUI(policy ? 'chat.costTuning.on' : 'chat.costTuning.off')}`}
+				title={tUI('chat.costTuning')}
+				active={!!policy}
+				expanded={isOpen}
+				hasPopup
+				onClick={() => { if (!isOpen) onOpen(); setIsOpen(!isOpen) }}
+			/>
+		</span>
+		{isOpen && (
+			<FloatingPortal root={portalRoot}>
+				<div className='@@void-scope'>
+					<div
+						ref={refs.setFloating}
+						role='dialog'
+						aria-label={tUI('chat.costTuning')}
+						style={{ ...floatingStyles, zIndex: 1000 }}
+						className='w-[340px] max-w-[calc(100vw-16px)] overflow-y-auto rounded-md bg-void-bg-1 text-void-fg-1 shadow-[0_8px_28px_rgba(0,0,0,0.35)]'
+					>
+						<AutoRouting
+							prompt={prompt}
+							endpoint={settingsState.settingsOfProvider.divisionAPI.endpoint || 'https://api.division.he-ro.jp'}
+							accessToken={settingsState.globalSettings.divisionAccessToken}
+							refreshToken={settingsState.globalSettings.divisionRefreshToken}
+							policy={policy}
+							onChange={newPolicy => {
+								const settings = accessor.get('IVoidSettingsService')
+								settings.setGlobalSetting('divisionAutoRouting', newPolicy)
+								// コスト調整はモデルも自動で選ぶので、有効にしたらチャットを Division (自動割り当て) に切り替える
+								if (newPolicy && settings.state.modelSelectionOfFeature.Chat?.providerName !== 'divisionAPI') {
+									settings.setModelSelectionOfFeature('Chat', { providerName: 'divisionAPI', modelName: 'division-orchestrator' })
+								}
+							}}
+						/>
+					</div>
+				</div>
+			</FloatingPortal>
+		)}
+	</>
+}
 
 // 「キューに追加」されたユーザーメッセージのリスト表示。
 // 入力欄の真上に出して、現在の応答が終わると上から順に自動送信される旨をユーザーに示す。
@@ -5725,13 +5825,11 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 			/>
 		) : undefined}
 		toolbarSlot={<>
-			<ComposerChip
-				icon={<Coins size={12} />}
-				label={tUI('chat.costTuning')}
-				title={tUI('chat.costTuning')}
-				active={!!settingsState.globalSettings.divisionAutoRouting}
-				expanded={showCostTuning}
-				onClick={() => { setComposerPrompt(textAreaRef.current?.value ?? ''); setShowCostTuning(v => !v) }}
+			<CostTuningDropdown
+				isOpen={showCostTuning}
+				setIsOpen={setShowCostTuning}
+				prompt={composerPrompt}
+				onOpen={() => setComposerPrompt(textAreaRef.current?.value ?? '')}
 			/>
 			{/* 目標ループ: 未達のとき自動で次のラウンドへ進むか、ラウンドごとに確認するか。押すたびに切り替わる */}
 			{settingsState.modelSelectionOfFeature.Chat?.providerName === 'divisionAPI' && (() => {
@@ -5765,29 +5863,6 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 			multiline={true}
 		/>
 
-		{showCostTuning && (
-			<div
-				className='mt-1.5 max-h-80 overflow-auto rounded-lg border border-void-border-2 bg-void-bg-2 p-2'
-				onClick={e => e.stopPropagation()}
-				onKeyDown={e => e.stopPropagation()}
-			>
-				<AutoRouting
-					prompt={composerPrompt}
-					endpoint={settingsState.settingsOfProvider.divisionAPI.endpoint || 'https://api.division.he-ro.jp'}
-					accessToken={settingsState.globalSettings.divisionAccessToken}
-					refreshToken={settingsState.globalSettings.divisionRefreshToken}
-					policy={settingsState.globalSettings.divisionAutoRouting}
-					onChange={policy => {
-						const settings = accessor.get('IVoidSettingsService')
-						settings.setGlobalSetting('divisionAutoRouting', policy)
-						// コスト調整はモデルも自動で選ぶので、有効にしたらチャットを Division (自動割り当て) に切り替える
-						if (policy && settings.state.modelSelectionOfFeature.Chat?.providerName !== 'divisionAPI') {
-							settings.setModelSelectionOfFeature('Chat', { providerName: 'divisionAPI', modelName: 'division-orchestrator' })
-						}
-					}}
-				/>
-			</div>
-		)}
 	</VoidChatArea>
 
 

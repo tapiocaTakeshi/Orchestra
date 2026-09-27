@@ -325,6 +325,8 @@ export const translations = {
 	'chat.model.autoByCost': { en: 'Auto (cost tuning)', ja: '自動（コスト調整）' },
 	'chat.model.autoByCost.hint': { en: 'Picks a model that fits the cost tuning for each step', ja: 'コスト調整の条件に合うモデルを、ステップごとに自動で選びます' },
 	'chat.costTuning': { en: 'Cost tuning', ja: 'コスト調整' },
+	'chat.costTuning.on': { en: 'On', ja: 'オン' },
+	'chat.costTuning.off': { en: 'Off', ja: 'オフ' },
 	'chat.loop': { en: 'Loop', ja: 'ループ' },
 	'chat.loop.auto': { en: 'Auto', ja: '自動' },
 	'chat.loop.auto.hint': { en: 'Moves on to the next round automatically until the goal is reached', ja: '目標を達成するまで、未達なら自動で次のラウンドに進みます' },
