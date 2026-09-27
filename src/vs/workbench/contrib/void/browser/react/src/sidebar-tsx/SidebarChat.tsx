@@ -679,13 +679,13 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 				style={{ borderTop: '1px solid color-mix(in srgb, var(--void-border-2) 60%, transparent)' }}
 			>
 				{!showModelDropdown && (
-					<div className='flex items-center flex-wrap gap-0.5 min-w-0'>
+					<div className='flex items-center flex-wrap gap-0.5 min-w-0 flex-1'>
 						{leftSlot}
 						{toolbarSlot}
 					</div>
 				)}
 				{showModelDropdown && (
-					<div className='flex flex-col gap-y-1'>
+					<div className='flex flex-col gap-y-1 min-w-0 flex-1'>
 						<ReasoningOptionSlider featureName={featureName} />
 
 						<div className='flex items-center flex-wrap gap-x-2 gap-y-1 text-nowrap '>
@@ -709,7 +709,7 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 					</div>
 				)}
 
-				<div className="flex items-center gap-2">
+				<div className="flex items-center gap-2 shrink-0">
 
 					{/* Attachment button */}
 					{showSelections && (
@@ -790,7 +790,7 @@ export const ButtonSubmit = ({ className, disabled, ...props }: ButtonProps & Re
 const AwaitingUserBadge = () => {
 	const { t: tUI } = useTranslation()
 	return (
-		<span className='flex items-center gap-1.5 rounded-full border border-void-border-2 px-2 py-0.5 text-[11px] text-void-fg-2 select-none' role='status'>
+		<span className='flex items-center gap-1.5 rounded-full border border-void-border-2 px-2 py-0.5 text-[11px] text-void-fg-2 whitespace-nowrap select-none' role='status'>
 			<span className='inline-block w-1.5 h-1.5 rounded-full bg-[var(--vscode-charts-yellow)]' />
 			{tUI('chat.awaitingBadge')}
 		</span>
