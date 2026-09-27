@@ -25,15 +25,14 @@ import { BlockCode, TextAreaFns, VoidCustomDropdownBox, VoidInputBox2, VoidSlide
 import { AutoRouting } from '../void-settings-tsx/AutoRouting.js';
 import { ModelDropdown, } from '../void-settings-tsx/ModelDropdown.js';
 import { PastThreadsList } from './SidebarThreadSelector.js';
-import { VOID_CTRL_L_ACTION_ID, VOID_TOGGLE_KANBAN_ACTION_ID } from '../../../actionIDs.js';
+import { ORCHESTRA_CHAT_SHOW_LOGIN_COMMAND_ID, VOID_CTRL_L_ACTION_ID } from '../../../actionIDs.js';
 import { VOID_OPEN_SETTINGS_ACTION_ID } from '../../../voidSettingsPane.js';
-import { ORCHESTRA_UI_TOGGLE_MODE_ACTION_ID } from '../../../orchestraUiModeTypes.js';
 // import { VOID_OPEN_ROLE_OUTPUT_ACTION_ID } from '../../../roleOutputPane.js';
 import { AgentRole, ChatMode, displayInfoOfProviderName, contextTags, contextTagGroups, FeatureName, isFeatureNameDisabled, RoleAssignment } from '../../../../../../../workbench/contrib/void/common/voidSettingsTypes.js';
-import { ICommandService } from '../../../../../../../platform/commands/common/commands.js';
+import { CommandsRegistry, ICommandService } from '../../../../../../../platform/commands/common/commands.js';
 import { WarningBox } from '../void-settings-tsx/WarningBox.js';
 import { getModelCapabilities, getIsReasoningEnabledState } from '../../../../common/modelCapabilities.js';
-import { AlertTriangle, File, Ban, Check, ChevronDown, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text, Image as ImageIcon, Paperclip, Palette, Blocks, SendHorizontal, Code, Package, RotateCcw, Loader2, ListPlus, Sun, Moon, Flame, ClipboardCheck, CornerUpLeft, Download as DownloadIcon, ExternalLink as ExternalLinkIcon, Bot, Hammer, FlaskConical, SlidersHorizontal } from 'lucide-react';
+import { AlertTriangle, File, Ban, Check, ChevronDown, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text, Image as ImageIcon, Paperclip, Palette, Blocks, SendHorizontal, Code, Package, RotateCcw, Loader2, ListPlus, Sun, Moon, Flame, ClipboardCheck, CornerUpLeft, Download as DownloadIcon, ExternalLink as ExternalLinkIcon, Bot, SlidersHorizontal, Coins, Repeat, LogIn } from 'lucide-react';
 import { ChatMessage, CheckpointEntry, StagingSelectionItem, ToolMessage } from '../../../../common/chatThreadServiceTypes.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, ToolName, LintErrorItem, ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsServiceTypes.js';
 import { CopyButton, EditToolAcceptRejectButtonsHTML, IconShell1, JumpToFileButton, JumpToTerminalButton, StatusIndicator, StatusIndicatorForApplyButton, useApplyStreamState, useEditToolStreamState } from '../markdown/ApplyBlockHoverButtons.js';
@@ -400,6 +399,8 @@ interface VoidChatAreaProps {
 	showModelDropdown?: boolean;
 	// showModelDropdown=false のとき、モデル選択の代わりに左下へ置くもの (エージェントモードの「モデルなどの設定」ボタンなど)
 	leftSlot?: React.ReactNode;
+	// 下段のモデル選択の隣に並べる小さな操作 (コスト調整・ループの進め方など)。入力欄を 2 段に収めるため、専用の行は作らない。
+	toolbarSlot?: React.ReactNode;
 	showSelections?: boolean;
 	showProspectiveSelections?: boolean;
 	loadingIcon?: React.ReactNode;
@@ -436,6 +437,7 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 	className = '',
 	showModelDropdown = true,
 	leftSlot,
+	toolbarSlot,
 	showSelections = false,
 	showProspectiveSelections = false,
 	selections,
@@ -673,14 +675,15 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 
 			{/* Bottom row */}
 			<div
-				className='flex flex-row justify-between items-end gap-1 p-1.5 rounded-lg -mx-1 mb-[-4px] mt-1'
-				style={{
-					background: 'linear-gradient(180deg, color-mix(in srgb, var(--void-bg-3) 40%, transparent) 0%, color-mix(in srgb, var(--void-bg-3) 70%, transparent) 100%)',
-					backdropFilter: 'blur(8px)',
-					border: '1px solid color-mix(in srgb, var(--void-border-2) 40%, transparent)',
-				}}
+				className='flex flex-row justify-between items-end gap-1 pt-1.5 mt-1.5'
+				style={{ borderTop: '1px solid color-mix(in srgb, var(--void-border-2) 60%, transparent)' }}
 			>
-				{!showModelDropdown && (leftSlot ?? <div />)}
+				{!showModelDropdown && (
+					<div className='flex items-center flex-wrap gap-0.5 min-w-0'>
+						{leftSlot}
+						{toolbarSlot}
+					</div>
+				)}
 				{showModelDropdown && (
 					<div className='flex flex-col gap-y-1'>
 						<ReasoningOptionSlider featureName={featureName} />
@@ -701,6 +704,7 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 									? <span className='text-xs text-void-fg-3 py-0.5 px-1' title={tUI('chat.model.autoByCost.hint')}>{tUI('chat.model.autoByCost')}</span>
 									: <ModelDropdown featureName={featureName} className='text-xs text-void-fg-3 bg-void-bg-1 rounded' />}
 							</div>
+							{toolbarSlot}
 						</div>
 					</div>
 				)}
@@ -1879,7 +1883,7 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 			<VoidInputBox2
 				enableAtToMention
 				ref={setTextAreaRef}
-				className='min-h-[81px] max-h-[500px] px-0.5'
+				className='min-h-[81px] max-h-[500px] px-0.5 !bg-transparent'
 				placeholder="Edit your message..."
 				onChangeText={(text) => setIsDisabled(!text)}
 				onFocus={() => {
@@ -1900,8 +1904,8 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 		ref={stickyRef}
 		data-orchestra-enter="user"
 		className={`
-        group relative w-full max-w-full rounded-lg overflow-hidden mb-1.5
-        ${mode === 'edit' ? 'pl-0 pr-0 py-0' : 'pl-2.5 pr-7 py-1'}
+        group relative overflow-hidden mb-1.5
+        ${mode === 'edit' ? 'w-full max-w-full rounded-lg pl-0 pr-0 py-0' : 'ml-auto mt-3 w-fit max-w-[88%] rounded-2xl rounded-tr-md pl-3 pr-7 py-1.5'}
 
         ${isCheckpointGhost && !isMsgAfterCheckpoint ? 'opacity-50 pointer-events-none' : ''}
     `}
@@ -1910,28 +1914,18 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 		// やめた。 通常フローに戻し、1 枚ずつ縦に並ぶシンプル表示にする。
 		// stickyRef は sticky-stack コンテキストに残しているが、もはや何も pin
 		// されないため depth は常に -1 で、stackTransform 等は無効化される。
-		style={{
-			maxHeight: mode === 'display' ? '3.6em' : undefined,
-			background: mode === 'display'
-				? 'color-mix(in srgb, var(--void-bg-1) 88%, transparent)'
-				: 'color-mix(in srgb, var(--void-bg-1) 94%, transparent)',
-			backdropFilter: 'blur(10px) saturate(130%)',
-			WebkitBackdropFilter: 'blur(10px) saturate(130%)',
+		style={mode === 'display' ? {
+			maxHeight: '4.2em',
+			background: 'color-mix(in srgb, var(--void-fg-1) 8%, var(--void-bg-2))',
+			border: '1px solid color-mix(in srgb, var(--void-fg-1) 10%, transparent)',
+			transition: 'background-color 200ms ease',
+		} : {
+			background: 'color-mix(in srgb, var(--void-bg-1) 94%, transparent)',
 			border: '1px solid color-mix(in srgb, var(--void-border-3) 80%, transparent)',
-			boxShadow: '0 1px 2px 0 rgba(0,0,0,0.18), 0 0 0 1px color-mix(in srgb, var(--void-fg-1) 2%, transparent) inset',
-			transition: 'background-color 200ms ease, box-shadow 200ms ease',
 		}}
 		onMouseEnter={() => setIsHovered(true)}
 		onMouseLeave={() => setIsHovered(false)}
 	>
-		{/* Cursor-style subtle left accent strip on the sticky header */}
-		{mode === 'display' && (
-			<span
-				aria-hidden
-				className="pointer-events-none absolute left-0 top-1 bottom-1 w-[2px] rounded-full"
-				style={{ background: 'color-mix(in srgb, var(--void-fg-3) 55%, transparent)' }}
-			/>
-		)}
 		<div
 			className={`
             text-left max-w-full
@@ -2495,7 +2489,7 @@ const CollapsibleFlowCard = ({
 			<div
 				className={`overflow-hidden transition-all duration-150 ${isOpen ? 'opacity-100' : 'max-h-0 opacity-0'}`}
 			>
-				<div className='px-2 py-1 border-t border-void-border-2/60'>
+				<div className='px-2 py-1 border-t border-[color-mix(in_srgb,var(--void-border-2)_60%,transparent)]'>
 					{children}
 				</div>
 			</div>
@@ -2702,7 +2696,7 @@ const StaticCollapsibleCard = ({
 			<div
 				className={`overflow-hidden transition-all duration-150 ${isOpen ? 'opacity-100' : 'max-h-0 opacity-0'}`}
 			>
-				<div className='px-2 py-1 border-t border-void-border-2/60'>
+				<div className='px-2 py-1 border-t border-[color-mix(in_srgb,var(--void-border-2)_60%,transparent)]'>
 					{children}
 				</div>
 			</div>
@@ -5149,7 +5143,7 @@ export const detectOrchestraTheme = (currentName: string | undefined): Orchestra
 	return 'dark'
 }
 
-export const OrchestraThemeSwitcher = ({ compact }: { compact?: boolean }) => {
+export const OrchestraThemeSwitcher = () => {
 	const accessor = useAccessor()
 	const { t: tUI } = useTranslation()
 	const labelOf = (mode: OrchestraThemeMode) => tUI(ORCHESTRA_THEME_LABEL_KEYS[mode])
@@ -5177,23 +5171,6 @@ export const OrchestraThemeSwitcher = ({ compact }: { compact?: boolean }) => {
 		if (mode === 'light') return <Sun className='w-3.5 h-3.5' />
 		if (mode === 'dark') return <Moon className='w-3.5 h-3.5' />
 		return <Flame className='w-3.5 h-3.5' />
-	}
-
-	if (compact) {
-		// サイドバーヘッダー用: 1 ボタン (アイコンだけ) で次のテーマへサイクル切替。
-		const nextMode = ORCHESTRA_THEME_ORDER[(ORCHESTRA_THEME_ORDER.indexOf(current) + 1) % ORCHESTRA_THEME_ORDER.length]
-		const cycleLabel = tUI('theme.cycle').replace('{current}', labelOf(current)).replace('{next}', labelOf(nextMode))
-		return (
-			<button
-				type='button'
-				onClick={() => apply(nextMode)}
-				title={cycleLabel}
-				aria-label={cycleLabel}
-				className='text-void-fg-3 hover:text-void-fg-1 transition-colors p-1 rounded-md hover:bg-void-bg-3'
-			>
-				{iconOf(current)}
-			</button>
-		)
 	}
 
 	return (
@@ -5310,92 +5287,31 @@ const OrchestraUpdateBanner: React.FC = () => {
 }
 
 
-const SidebarHeader = ({ onLoginClick }: { onLoginClick: () => void }) => {
-	const accessor = useAccessor()
-	const commandService = accessor.get('ICommandService') as ICommandService
-	const settingsService = accessor.get('IVoidSettingsService')
-	const settingsState = useSettingsState()
-	const dialogService = accessor.get('IDialogService')
-	const isLoggedIn = settingsState.globalSettings.isLoggedIn
-	const { t: tHeader } = useTranslation()
-
-	const onSignOut = async () => {
-		const { confirmed } = await dialogService.confirm({
-			message: tHeader('chat.header.signOutConfirm'),
-			detail: tHeader('chat.header.signOutConfirmDetail'),
-			primaryButton: tHeader('general.account.signOut'),
-		})
-		if (!confirmed) return
-		settingsService.setGlobalSetting('isLoggedIn', false)
-		settingsService.setGlobalSetting('divisionUserId', '')
-		settingsService.setGlobalSetting('divisionUserEmail', '')
-		settingsService.setGlobalSetting('divisionAccessToken', '')
-		settingsService.setGlobalSetting('divisionRefreshToken', '')
-		settingsService.setGlobalSetting('divisionApiKey', '')
-	}
-
-	return (
-		<div className="shrink-0 px-4 pt-2 pb-1.5 border-b border-void-border-3/60 bg-gradient-to-b from-void-bg-1 to-transparent">
-			<div className="flex items-center justify-end gap-2">
-
-				<button
-					type='button'
-					onClick={() => commandService.executeCommand(VOID_TOGGLE_KANBAN_ACTION_ID)}
-					className="text-void-fg-3 hover:text-void-fg-1 transition-colors p-1 rounded-md hover:bg-void-bg-3"
-					title={tHeader('chat.header.kanban')}
-					aria-label={tHeader('chat.header.kanban')}
-				>
-					<ClipboardCheck size={14} />
-				</button>
-
-				<button
-					type='button'
-					onClick={() => commandService.executeCommand(ORCHESTRA_UI_TOGGLE_MODE_ACTION_ID)}
-					className="text-void-fg-3 hover:text-void-fg-1 transition-colors p-1 rounded-md hover:bg-void-bg-3"
-					title={tHeader('chat.header.uiMode')}
-					aria-label={tHeader('chat.header.uiMode')}
-				>
-					<Bot size={14} />
-				</button>
-
-				<OrchestraThemeSwitcher compact />
-
-				{!isLoggedIn ? (
-					<button
-						type='button'
-						onClick={onLoginClick}
-						className="text-[11px] font-medium px-2 py-0.5 rounded bg-void-fg-1 text-void-bg-1 hover:opacity-85 transition-opacity"
-					>
-						{tHeader('general.account.logIn')}
-					</button>
-				) : (
-					<button
-						type='button'
-						onClick={onSignOut}
-						className="text-[11px] font-medium px-2 py-0.5 rounded text-void-fg-3 hover:text-void-fg-1 transition-colors"
-					>
-						{tHeader('general.account.signOut')}
-					</button>
-				)}
-
-				<button
-					type='button'
-					onClick={() => commandService.executeCommand(VOID_OPEN_SETTINGS_ACTION_ID)}
-					className="text-void-fg-3 hover:text-void-fg-1 hover:rotate-45 transition-all duration-300 ease-out p-1 rounded-md hover:bg-void-bg-3"
-					title={tHeader('chat.header.settings')}
-					aria-label={tHeader('chat.header.settings')}
-				>
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-						<circle cx="12" cy="12" r="3" />
-						<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-					</svg>
-				</button>
-				</div>
-			</div>
-		
-	)
-}
-
+// 入力欄の下段に並ぶ小さな操作ボタン (モデルなどの設定・コスト調整・ループ)。
+// active はその機能が有効なこと、expanded は押して開いたパネルが出ていることを示す。
+const ComposerChip = ({ icon, label, title, active, expanded, onClick }: {
+	icon: React.ReactNode
+	label: string
+	title: string
+	active?: boolean
+	expanded?: boolean
+	onClick: () => void
+}) => (
+	<button
+		type='button'
+		onClick={(e) => { e.stopPropagation(); onClick() }}
+		title={title}
+		aria-expanded={expanded}
+		className={`flex items-center gap-1 px-1.5 py-1 rounded-md text-[11px] whitespace-nowrap transition-colors ${active || expanded
+			? 'text-void-fg-1 bg-[color-mix(in_srgb,var(--void-fg-1)_8%,transparent)]'
+			: 'text-void-fg-3 hover:text-void-fg-1 hover:bg-[color-mix(in_srgb,var(--void-fg-1)_6%,transparent)]'
+			}`}
+	>
+		{icon}
+		<span>{label}</span>
+		{active && <span className='w-1.5 h-1.5 rounded-full bg-[var(--vscode-charts-green)]' aria-hidden='true' />}
+	</button>
+)
 
 // 「キューに追加」されたユーザーメッセージのリスト表示。
 // 入力欄の真上に出して、現在の応答が終わると上から順に自動送信される旨をユーザーに示す。
@@ -5413,7 +5329,7 @@ const MessageQueueList = ({
 	if (items.length === 0) return null
 	return (
 		<div className='mb-1 rounded-md border border-void-border-2 bg-void-bg-2/70 overflow-hidden'>
-			<div className='flex items-center gap-1.5 px-2 py-1 border-b border-void-border-2/60'>
+			<div className='flex items-center gap-1.5 px-2 py-1 border-b border-[color-mix(in_srgb,var(--void-border-2)_60%,transparent)]'>
 				<ListPlus className='h-3 w-3 text-void-fg-3 flex-shrink-0' />
 				<span className='text-[11px] text-void-fg-2 font-medium flex-1'>
 					{tUI('chat.queue.title')} <span className='text-void-fg-4'>({items.length})</span>
@@ -5427,7 +5343,7 @@ const MessageQueueList = ({
 					{tUI('chat.queue.clear')}
 				</button>
 			</div>
-			<ul className='divide-y divide-void-border-2/40 max-h-[140px] overflow-y-auto'>
+			<ul className='divide-y divide-[color-mix(in_srgb,var(--void-border-2)_40%,transparent)] max-h-[140px] overflow-y-auto'>
 				{items.map((item, idx) => {
 					const oneLine = item.text.replace(/\s+/g, ' ').trim()
 					const preview = oneLine.length > 80 ? oneLine.slice(0, 80) + '…' : oneLine
@@ -5489,6 +5405,11 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 
 	// threads state
 	const [showLoginScreen, setShowLoginScreen] = useState(false);
+	// チャットのタイトルバーの「ログイン」はここに届く (sidebarActions.ts)
+	useEffect(() => {
+		const disposable = CommandsRegistry.registerCommand(ORCHESTRA_CHAT_SHOW_LOGIN_COMMAND_ID, () => setShowLoginScreen(true))
+		return () => disposable.dispose()
+	}, [])
 
 	const chatThreadsState = useChatThreadsState()
 
@@ -5796,20 +5717,39 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 		onClickAnywhere={() => { textAreaRef.current?.focus() }}
 		showModelDropdown={!isAgentUi || showAdvancedInAgentUi}
 		leftSlot={isAgentUi ? (
-			<button
-				type='button'
-				onClick={(e) => { e.stopPropagation(); setShowAdvancedInAgentUi(true) }}
-				className='flex items-center gap-1 px-1.5 py-1 rounded text-[11px] text-void-fg-4 hover:text-void-fg-1 hover:bg-void-bg-2 transition-colors'
+			<ComposerChip
+				icon={<SlidersHorizontal size={12} />}
+				label={tUI('chat.agent.advanced')}
 				title={tUI('chat.agent.advanced')}
-			>
-				<SlidersHorizontal size={12} />
-				<span>{tUI('chat.agent.advanced')}</span>
-			</button>
+				onClick={() => setShowAdvancedInAgentUi(true)}
+			/>
 		) : undefined}
+		toolbarSlot={<>
+			<ComposerChip
+				icon={<Coins size={12} />}
+				label={tUI('chat.costTuning')}
+				title={tUI('chat.costTuning')}
+				active={!!settingsState.globalSettings.divisionAutoRouting}
+				expanded={showCostTuning}
+				onClick={() => { setComposerPrompt(textAreaRef.current?.value ?? ''); setShowCostTuning(v => !v) }}
+			/>
+			{/* 目標ループ: 未達のとき自動で次のラウンドへ進むか、ラウンドごとに確認するか。押すたびに切り替わる */}
+			{settingsState.modelSelectionOfFeature.Chat?.providerName === 'divisionAPI' && (() => {
+				const loopMode = settingsState.globalSettings.divisionGoalLoopMode ?? 'auto'
+				return (
+					<ComposerChip
+						icon={<Repeat size={12} />}
+						label={`${tUI('chat.loop')}: ${tUI(loopMode === 'auto' ? 'chat.loop.auto' : 'chat.loop.confirm')}`}
+						title={`${tUI(loopMode === 'auto' ? 'chat.loop.auto.hint' : 'chat.loop.confirm.hint')}\n${tUI('chat.loop.toggleHint')}`}
+						onClick={() => accessor.get('IVoidSettingsService').setGlobalSetting('divisionGoalLoopMode', loopMode === 'auto' ? 'confirm' : 'auto')}
+					/>
+				)
+			})()}
+		</>}
 	>
 		<VoidInputBox2
 			enableAtToMention
-			className={`min-h-[81px] px-0.5 py-0.5`}
+			className={`min-h-[81px] px-0.5 py-0.5 !bg-transparent`}
 			placeholder={isAgentUi
 				? (isRunning === 'awaiting_user' ? tUI('chat.agent.placeholderAwaiting') : isRunning ? tUI('chat.agent.placeholderStreaming') : tUI('chat.agent.placeholder'))
 				: isRunning === 'awaiting_user'
@@ -5825,42 +5765,12 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 			multiline={true}
 		/>
 
-		<div className='flex flex-col gap-2' onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
-			<div className='flex items-center gap-2 flex-wrap'>
-				<button type='button' aria-expanded={showCostTuning}
-					className='flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-void-bg-2'
-					onClick={() => { setComposerPrompt(textAreaRef.current?.value ?? ''); setShowCostTuning(v => !v); }}>
-					<SlidersHorizontal size={14} /> {tUI('chat.costTuning')}
-					{settingsState.globalSettings.divisionAutoRouting ? tUI('chat.costTuning.on') : ''}
-				</button>
-				{/* 目標ループ: 未達のとき自動で次のラウンドへ進むか、ラウンドごとに確認するか */}
-				{settingsState.modelSelectionOfFeature.Chat?.providerName === 'divisionAPI' && (
-					<div className='flex items-center gap-1 text-xs' role='group' aria-label={tUI('chat.loop.label')}>
-						<span className='flex items-center gap-1 text-void-fg-3'><RotateCcw size={12} /> {tUI('chat.loop')}</span>
-						<div className='flex rounded border border-void-border-2 overflow-hidden'>
-							{([
-								['auto', tUI('chat.loop.auto'), tUI('chat.loop.auto.hint')],
-								['confirm', tUI('chat.loop.confirm'), tUI('chat.loop.confirm.hint')],
-							] as const).map(([mode, label, hint]) => {
-								const active = (settingsState.globalSettings.divisionGoalLoopMode ?? 'auto') === mode
-								return (
-									<button
-										key={mode}
-										type='button'
-										aria-pressed={active}
-										title={hint}
-										onClick={() => accessor.get('IVoidSettingsService').setGlobalSetting('divisionGoalLoopMode', mode)}
-										className={`px-2 py-0.5 transition-colors ${active ? 'bg-void-bg-3 text-void-fg-1' : 'text-void-fg-3 hover:text-void-fg-1 hover:bg-void-bg-2'}`}
-									>
-										{label}
-									</button>
-								)
-							})}
-						</div>
-					</div>
-				)}
-			</div>
-			{showCostTuning && <div className='max-h-80 overflow-auto'>
+		{showCostTuning && (
+			<div
+				className='mt-1.5 max-h-80 overflow-auto rounded-lg border border-void-border-2 bg-void-bg-2 p-2'
+				onClick={e => e.stopPropagation()}
+				onKeyDown={e => e.stopPropagation()}
+			>
 				<AutoRouting
 					prompt={composerPrompt}
 					endpoint={settingsState.settingsOfProvider.divisionAPI.endpoint || 'https://api.division.he-ro.jp'}
@@ -5876,32 +5786,27 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 						}
 					}}
 				/>
-			</div>}
-		</div>
+			</div>
+		)}
 	</VoidChatArea>
 
 
 	const isLandingPage = previousMessages.length === 0
 
 
-	// エージェントモードの例は、表示する短い文 (text) と実際に送る指示文 (prompt) を分ける。
-	// 「作って」で終わらせず、動作確認や再実行・報告まで含めた指示にして、エージェントが最後まで自走できるようにする。
-	const suggestedPrompts: { text: string; icon: React.ReactNode; hint: string; prompt?: string }[] = isAgentUi ? [
-		{ text: tUI('chat.agent.suggested.explore'), icon: <Folder size={14} />, hint: tUI('chat.agent.suggested.explore.hint'), prompt: tUI('chat.agent.suggested.explore.prompt') },
-		{ text: tUI('chat.agent.suggested.build'), icon: <Hammer size={14} />, hint: tUI('chat.agent.suggested.build.hint'), prompt: tUI('chat.agent.suggested.build.prompt') },
-		{ text: tUI('chat.agent.suggested.fix'), icon: <FlaskConical size={14} />, hint: tUI('chat.agent.suggested.fix.hint'), prompt: tUI('chat.agent.suggested.fix.prompt') },
-	] : [
+	// 上級者モードだけで出す例。エージェントモードの例はホーム画面 (editorGroupWatermark.ts) にまとめてあり、チャットでは重ねて出さない。
+	const suggestedPrompts: { text: string; icon: React.ReactNode; hint: string }[] = [
 		{ text: tUI('chat.suggested.summarize'), icon: <Folder size={14} />, hint: tUI('chat.suggested.summarize.hint') },
 		{ text: tUI('chat.suggested.types'), icon: <Info size={14} />, hint: tUI('chat.suggested.types.hint') },
 		{ text: tUI('chat.suggested.voidrules'), icon: <CirclePlus size={14} />, hint: tUI('chat.suggested.voidrules.hint') },
 	]
 
 	const initiallySuggestedPromptsHTML = <div className='flex flex-col gap-2 w-full select-none'>
-		{suggestedPrompts.map(({ text, icon, hint, prompt }, index) => (
+		{suggestedPrompts.map(({ text, icon, hint }, index) => (
 			<button
 				key={index}
 				type='button'
-				onClick={() => onSubmit(prompt ?? text)}
+				onClick={() => onSubmit(text)}
 				className='group relative w-full text-left rounded-lg overflow-hidden
 					border border-void-border-2 hover:border-[color-mix(in_srgb,var(--vscode-focusBorder)_50%,var(--void-border-1)_50%)]
 					bg-gradient-to-br from-void-bg-2 to-[color-mix(in_srgb,var(--void-bg-2)_92%,var(--vscode-focusBorder)_8%)]
@@ -5971,6 +5876,22 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 		{isAgentUi && (
 			<div className='pt-2 text-[11px] text-void-fg-4 select-none'>{tUI('chat.agent.tip')}</div>
 		)}
+		{!settingsState.globalSettings.isLoggedIn && (
+			<div className='mt-4 flex items-center gap-3 rounded-xl border border-void-border-2 bg-void-bg-2 px-3 py-2.5'>
+				<LogIn size={16} className='shrink-0 text-void-fg-3' />
+				<div className='flex-1 min-w-0'>
+					<div className='text-[12px] font-medium text-void-fg-1'>{tUI('chat.login.title')}</div>
+					<div className='text-[11px] text-void-fg-3'>{tUI('chat.login.hint')}</div>
+				</div>
+				<button
+					type='button'
+					onClick={() => setShowLoginScreen(true)}
+					className='shrink-0 px-2.5 py-1 rounded-md text-[11px] font-medium bg-void-fg-1 text-void-bg-1 hover:opacity-85 transition-opacity'
+				>
+					{tUI('general.account.logIn')}
+				</button>
+			</div>
+		)}
 	</div>
 
 	const landingPageContent = <div
@@ -5987,9 +5908,9 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 				<SectionLabel label={tUI('chat.pastChats')} />
 				<PastThreadsList />
 			</ErrorBoundary>
-			:
+			: !isAgentUi &&
 			<ErrorBoundary>
-				<SectionLabel label={isAgentUi ? tUI('chat.agent.suggestedTitle') : tUI('chat.suggestedTitle')} />
+				<SectionLabel label={tUI('chat.suggestedTitle')} />
 				{initiallySuggestedPromptsHTML}
 			</ErrorBoundary>
 		}
@@ -6027,7 +5948,6 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 	return (
 		<div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', overflow: 'hidden' }}>
 			<SidebarChatGlobalStyles />
-			<SidebarHeader onLoginClick={() => setShowLoginScreen(true)} />
 			<OrchestraUpdateBanner />
 			{showLoginScreen && <LoginScreen onClose={() => setShowLoginScreen(false)} />}
 			<div style={{ flex: '1 1 0', minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>

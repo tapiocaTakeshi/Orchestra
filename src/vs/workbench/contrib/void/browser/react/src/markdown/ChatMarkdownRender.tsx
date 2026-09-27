@@ -354,7 +354,7 @@ const RenderToken = ({ token, inPTag, codeURI, chatMessageLocation, tokenIdx, ..
 						<tr>
 							{t.header.map((h, hIdx: number) => (
 								<th key={hIdx}>
-									{h.text}
+									<ChatMarkdownRender chatMessageLocation={chatMessageLocation} string={h.text} inPTag={true} codeURI={codeURI} {...options} />
 								</th>
 							))}
 						</tr>
@@ -364,7 +364,7 @@ const RenderToken = ({ token, inPTag, codeURI, chatMessageLocation, tokenIdx, ..
 							<tr key={rowIdx}>
 								{row.map((r, rIdx: number) => (
 									<td key={rIdx} >
-										{r.text}
+										<ChatMarkdownRender chatMessageLocation={chatMessageLocation} string={r.text} inPTag={true} codeURI={codeURI} {...options} />
 									</td>
 								))}
 							</tr>

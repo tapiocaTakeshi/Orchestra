@@ -37,3 +37,6 @@ export const VOID_KANBAN_ADD_TASK_ACTION_ID = 'void.kanban.addTask'
 export const VOID_KANBAN_RUN_NEXT_ACTION_ID = 'void.kanban.runNext'
 export const VOID_KANBAN_TOGGLE_AUTO_RUN_ACTION_ID = 'void.kanban.toggleAutoRun'
 export const VOID_KANBAN_CANCEL_ACTION_ID = 'void.kanban.cancelCurrent'
+
+// チャットのタイトルバーの「ログイン」から、サイドバーのログイン画面を開く。サイドバーの React 側がマウント中だけ登録する。
+export const ORCHESTRA_CHAT_SHOW_LOGIN_COMMAND_ID = 'orchestra.chat.showLogin'
