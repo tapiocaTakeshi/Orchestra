@@ -852,7 +852,7 @@ const VoidOnboardingContent = () => {
 						<div className="w-full text-left">
 							<h4 className="text-void-fg-3 mb-2">Choose your theme</h4>
 							<p className="text-xs text-void-fg-4 mb-3">
-								エディタ全体の配色を選んでください。Sun Red は暖色寄りのサンセット系カラーです。後から「歯車 → Settings → Theme」、またはサイドバー右上のアイコンでいつでも変更できます。
+								エディタ全体の配色を選んでください。Sun Red は暖色寄りのサンセット系カラーです。後から「歯車 → Settings → Theme」、またはチャット上部の「…」メニューからいつでも変更できます。
 							</p>
 							<div className="flex justify-center">
 								<OrchestraThemeSwitcher />

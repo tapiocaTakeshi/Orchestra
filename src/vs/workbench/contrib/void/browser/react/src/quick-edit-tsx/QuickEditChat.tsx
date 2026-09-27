@@ -107,7 +107,7 @@ export const QuickEditChat = ({
 			onClickAnywhere={() => { textAreaRef.current?.focus() }}
 		>
 			<VoidInputBox2
-				className='px-1'
+				className='px-1 !bg-transparent'
 				initValue={initText}
 				ref={useCallback((r: HTMLTextAreaElement | null) => {
 					textAreaRef.current = r
