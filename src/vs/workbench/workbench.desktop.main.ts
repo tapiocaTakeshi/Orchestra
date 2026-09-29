@@ -126,6 +126,9 @@ import './contrib/issue/electron-sandbox/process.contribution.js';
 // Remote
 import './contrib/remote/electron-sandbox/remote.contribution.js';
 
+// Orchestra Mobile remote control
+import './contrib/void/electron-sandbox/remoteControl.contribution.js';
+
 // Terminal
 import './contrib/terminal/electron-sandbox/terminal.contribution.js';
 

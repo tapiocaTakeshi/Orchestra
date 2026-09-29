@@ -25,8 +25,8 @@ random, persists across restarts, and must be kept private.
 Both devices must be on the same trusted LAN. iOS needs the Local Network
 permission and Android needs the app's local-network access enabled.
 
-The server exposes:
-
-- `GET /api/ping` for discovery
-- `GET /api/state` for authenticated connection verification
-- `POST /api/commands/run` for Orchestra command palette commands
+The server answers `GET /api/ping` itself and forwards every other authenticated
+`/api/*` request to the open Orchestra window, which drives the agent chat, the
+Kanban board, Division projects, commands and workspace files. See
+[REMOTE-CONTROL.md](./REMOTE-CONTROL.md) for the full endpoint list and the
+settings that restrict what a phone may do.
