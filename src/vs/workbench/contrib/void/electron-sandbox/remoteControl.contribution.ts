@@ -27,9 +27,12 @@ import { IEditorService } from '../../../services/editor/common/editorService.js
 import { IChatThreadService } from '../browser/chatThreadServiceInterface.js';
 import { DivisionProjectConfig, IDivisionProjectService } from '../browser/divisionProjectService.js';
 import { IKanbanService } from '../browser/kanbanService.js';
+import { IRemoteSessionSyncService, RemoteGatewayStatus } from '../browser/remoteSessionSyncService.js';
 import { ChatMessage } from '../common/chatThreadServiceTypes.js';
 import { defaultKanbanSettings, KanbanColumn, KanbanTask } from '../common/kanbanServiceTypes.js';
 import {
+	REMOTE_CONTROL_IPC_ANNOUNCE,
+	REMOTE_CONTROL_IPC_COPY_PAIRING_LINK,
 	REMOTE_CONTROL_IPC_READY,
 	REMOTE_CONTROL_IPC_REQUEST,
 	REMOTE_CONTROL_IPC_RESPONSE,
@@ -45,6 +48,7 @@ import {
 	RemoteDivisionState,
 	RemoteFileEntry,
 	RemoteIdeInfo,
+	RemoteSessionInfo,
 	RemoteThreadSummary,
 } from '../common/remoteControlTypes.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
@@ -128,8 +132,14 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 		@IWorkspaceContextService private readonly _workspaceContextService: IWorkspaceContextService,
 		@IEditorService private readonly _editorService: IEditorService,
 		@IProductService private readonly _productService: IProductService,
+		@IRemoteSessionSyncService private readonly _remoteSessionSyncService: IRemoteSessionSyncService,
 	) {
 		super();
+
+		this._register(this._remoteSessionSyncService.setGateway({
+			announce: () => ipcRenderer.invoke(REMOTE_CONTROL_IPC_ANNOUNCE) as Promise<RemoteGatewayStatus>,
+			copyPairingLink: async () => { await ipcRenderer.invoke(REMOTE_CONTROL_IPC_COPY_PAIRING_LINK); },
+		}));
 
 		// スナップショットの revision。どれかが変わったら進め、モバイルはこれで再描画を判断する
 		const bump = () => { this._revision++; };
@@ -139,6 +149,7 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 		this._register(this._divisionProjectService.onDidChangeProject(bump));
 		this._register(this._settingsService.onDidChangeState(bump));
 		this._register(this._workspaceContextService.onDidChangeWorkspaceFolders(bump));
+		this._register(this._remoteSessionSyncService.onDidChangeSync(bump));
 
 		this._registerRoutes();
 
@@ -358,12 +369,12 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 			const message = requireString(input.message, 'message');
 			const requestedThreadId = optionalString(input.threadId);
 			if (input.newThread === true) {
-				this._chatThreadService.openNewThread();
-			} else if (requestedThreadId && requestedThreadId !== this._chatThreadService.state.currentThreadId) {
+				this._openNewThread();
+			} else if (requestedThreadId && requestedThreadId !== this._remoteThreadId()) {
 				this._requireThread(requestedThreadId);
-				this._chatThreadService.switchToThread(requestedThreadId);
+				this._switchThread(requestedThreadId);
 			}
-			const threadId = this._chatThreadService.state.currentThreadId;
+			const threadId = this._remoteThreadId();
 			const running = this._chatThreadService.streamState[threadId]?.isRunning;
 			if (running) {
 				throw new HttpError(409, 'agent_busy', running === 'awaiting_user'
@@ -381,13 +392,13 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 		});
 		this._route('POST', '/api/chat/new', () => {
 			chat();
-			this._chatThreadService.openNewThread();
+			this._openNewThread();
 			return this._chatState();
 		});
 		this._route('POST', '/api/chat/threads/:id', ([threadId]) => {
 			chat();
 			this._requireThread(threadId);
-			this._chatThreadService.switchToThread(threadId);
+			this._switchThread(threadId);
 			return this._chatState();
 		});
 		this._route('POST', '/api/chat/approve', (_, { body }) => {
@@ -453,6 +464,7 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 			kanban: this._kanbanState(),
 			chat: this._chatState(),
 			threads: this._threads(),
+			remoteSession: this._remoteSessionInfo(),
 			revision: this._revision,
 			generatedAt: Date.now(),
 		};
@@ -504,8 +516,35 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 			.filter(p => p.models.length > 0);
 	}
 
+	/**
+	 * モバイルのチャットが向くスレッド。`/remote-control` で同期中ならそのスレッド、
+	 * そうでなければデスクトップで開いているスレッド。
+	 */
+	private _remoteThreadId(): string {
+		const synced = this._remoteSessionSyncService.synced;
+		if (synced && this._chatThreadService.state.allThreads[synced.threadId]) return synced.threadId;
+		return this._chatThreadService.state.currentThreadId;
+	}
+
+	/** 同期中はデスクトップの表示を動かさず、モバイルの向き先だけ変える */
+	private _switchThread(threadId: string): void {
+		if (this._remoteSessionSyncService.synced) this._remoteSessionSyncService.retarget(threadId);
+		else this._chatThreadService.switchToThread(threadId);
+	}
+
+	private _openNewThread(): void {
+		this._chatThreadService.openNewThread();
+		if (this._remoteSessionSyncService.synced) this._remoteSessionSyncService.retarget(this._chatThreadService.state.currentThreadId);
+	}
+
+	private _remoteSessionInfo(): RemoteSessionInfo | null {
+		const synced = this._remoteSessionSyncService.synced;
+		if (!synced || !this._chatThreadService.state.allThreads[synced.threadId]) return null;
+		return { threadId: synced.threadId, title: this._threadTitle(synced.threadId), syncedAt: synced.syncedAt };
+	}
+
 	private _chatState(): RemoteChatState {
-		const threadId = this._chatThreadService.state.currentThreadId;
+		const threadId = this._remoteThreadId();
 		const thread = this._chatThreadService.state.allThreads[threadId];
 		const stream = this._chatThreadService.streamState[threadId];
 		const messages = (thread?.messages ?? []).map(m => this._toRemoteMessage(m)).filter((m): m is RemoteChatMessage => !!m);
@@ -555,16 +594,18 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 			.filter((t): t is NonNullable<typeof t> => !!t && t.messages.length > 0)
 			.sort((a, b) => b.lastModified.localeCompare(a.lastModified))
 			.slice(0, MAX_THREADS)
-			.map(t => {
-				const firstUser = t.messages.find(m => m.role === 'user');
-				const title = firstUser?.role === 'user' ? (firstUser.displayContent || firstUser.content).trim().split('\n')[0] : '';
-				return {
-					threadId: t.id,
-					title: truncate(title || '(無題)', 80),
-					lastModified: t.lastModified,
-					messageCount: t.messages.length,
-				};
-			});
+			.map(t => ({
+				threadId: t.id,
+				title: this._threadTitle(t.id),
+				lastModified: t.lastModified,
+				messageCount: t.messages.length,
+			}));
+	}
+
+	private _threadTitle(threadId: string): string {
+		const firstUser = this._chatThreadService.state.allThreads[threadId]?.messages.find(m => m.role === 'user');
+		const title = firstUser?.role === 'user' ? (firstUser.displayContent || firstUser.content).trim().split('\n')[0] : '';
+		return truncate(title || '(無題)', 80);
 	}
 
 	// -----------------------------------------------------------------------
@@ -596,7 +637,7 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 	}
 
 	private _threadIdFrom(body: unknown): string {
-		const threadId = optionalString(asObject(body).threadId) || this._chatThreadService.state.currentThreadId;
+		const threadId = optionalString(asObject(body).threadId) || this._remoteThreadId();
 		this._requireThread(threadId);
 		return threadId;
 	}
