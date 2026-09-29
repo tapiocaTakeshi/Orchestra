@@ -19,6 +19,10 @@ export const REMOTE_CONTROL_PROTOCOL_VERSION = 1;
 export const REMOTE_CONTROL_IPC_READY = 'vscode:orchestraRemote:ready';
 export const REMOTE_CONTROL_IPC_REQUEST = 'vscode:orchestraRemote:request';
 export const REMOTE_CONTROL_IPC_RESPONSE = 'vscode:orchestraRemote:response';
+/** invoke: RemoteSession をすぐ更新して RemoteGatewayStatus を返す (`/remote-control` 用) */
+export const REMOTE_CONTROL_IPC_ANNOUNCE = 'vscode:orchestraRemote:announce';
+/** invoke: ペアリングリンクをクリップボードへコピーする */
+export const REMOTE_CONTROL_IPC_COPY_PAIRING_LINK = 'vscode:orchestraRemote:copyPairingLink';
 
 export type RemoteControlHttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 
@@ -79,6 +83,14 @@ export type RemoteThreadSummary = {
 	title: string;
 	lastModified: string;
 	messageCount: number;
+};
+
+/** `/remote-control` で同期中のスレッド。GET /api/state の remoteSession */
+export type RemoteSessionInfo = {
+	threadId: string;
+	title: string;
+	/** 同期した時刻 (ms)。変わったらモバイルは「同期された」と知らせる */
+	syncedAt: number;
 };
 
 export type RemoteDivisionProject = {

@@ -7,7 +7,7 @@ import { createServer, IncomingMessage, Server, ServerResponse } from 'http';
 import { hostname, networkInterfaces } from 'os';
 import { promises as fs } from 'fs';
 import { join } from '../../base/common/path.js';
-import { app, BrowserWindow, IpcMainEvent, WebContents } from 'electron';
+import { app, BrowserWindow, clipboard, IpcMainEvent, WebContents } from 'electron';
 import { validatedIpcMain } from '../../base/parts/ipc/electron-main/ipcMain.js';
 
 const PORT = 39231;
@@ -27,6 +27,8 @@ const MAX_BODY_BYTES = 1024 * 1024;
 const IPC_READY = 'vscode:orchestraRemote:ready';
 const IPC_REQUEST = 'vscode:orchestraRemote:request';
 const IPC_RESPONSE = 'vscode:orchestraRemote:response';
+const IPC_ANNOUNCE = 'vscode:orchestraRemote:announce';
+const IPC_COPY_PAIRING_LINK = 'vscode:orchestraRemote:copyPairingLink';
 const ALLOWED_METHODS = new Set(['GET', 'POST', 'PATCH', 'DELETE']);
 
 type PairingInfo = { version: number; url: string; token: string; pairingLink: string; remoteSessionId: string; remoteSessionOwner?: string };
@@ -36,6 +38,8 @@ let server: Server | undefined;
 let pairing: PairingInfo | undefined;
 let account: DivisionAccount | undefined;
 let heartbeat: ReturnType<typeof setInterval> | undefined;
+/** Why the LAN server is not listening, shown in the chat reply to `/remote-control`. */
+let listenError: string | undefined;
 
 type WorkbenchResponse = { id: string; status: number; body: unknown };
 type PendingRequest = { webContentsId: number; resolve: (response: WorkbenchResponse) => void };
@@ -175,7 +179,7 @@ async function publishRemoteSession(): Promise<void> {
 		body: JSON.stringify({
 			id: pairing.remoteSessionId,
 			userId: account.userId,
-			deviceLabel: `${app.getName()} · ${hostname()}`,
+			deviceLabel: deviceLabel(),
 			lanUrl: pairing.url,
 			token: pairing.token,
 			protocolVersion: PROTOCOL_VERSION,
@@ -183,6 +187,37 @@ async function publishRemoteSession(): Promise<void> {
 		}),
 	});
 	if (!response.ok) throw new Error(`RemoteSession publish failed (HTTP ${response.status})`);
+}
+
+function deviceLabel(): string {
+	return `${app.getName()} · ${hostname()}`;
+}
+
+/** Mirrors RemoteGatewayStatus in vs/workbench/contrib/void/browser/remoteSessionSyncService.ts. */
+type GatewayStatus = { listening: boolean; url: string; deviceLabel: string; accountEmail: string | null; published: boolean; error?: string };
+
+/**
+ * `/remote-control` in the chat: republish the RemoteSession right away instead of
+ * waiting for the next heartbeat, so the phone finds this desktop immediately.
+ */
+async function announce(): Promise<GatewayStatus> {
+	const status: GatewayStatus = {
+		listening: !!server?.listening,
+		url: pairing?.url ?? '',
+		deviceLabel: deviceLabel(),
+		accountEmail: account ? (account.email || account.userId) : null,
+		published: false,
+	};
+	if (!status.listening) return { ...status, error: listenError };
+	if (!account || !pairing) return status;
+	if (pairing.url.includes('127.0.0.1')) return { ...status, error: 'この PC が LAN に繋がっていません' };
+	try {
+		await publishRemoteSession();
+		startHeartbeat();
+		return { ...status, published: true };
+	} catch (error) {
+		return { ...status, error: error instanceof Error ? error.message : String(error) };
+	}
 }
 
 function startHeartbeat(): void {
@@ -259,6 +294,8 @@ export async function startOrchestraMobileRemoteControl(): Promise<void> {
 	// Register before any await so a window that finishes loading early still gets counted.
 	validatedIpcMain.on(IPC_READY, onWorkbenchReady);
 	validatedIpcMain.on(IPC_RESPONSE, onWorkbenchResponse);
+	validatedIpcMain.handle(IPC_ANNOUNCE, announce);
+	validatedIpcMain.handle(IPC_COPY_PAIRING_LINK, async () => { if (pairing) clipboard.writeText(pairing.pairingLink); });
 	app.on('browser-window-focus', onWindowFocus);
 	const url = `http://${lanAddress()}:${PORT}`;
 	let token = randomBytes(32).toString('base64url');
@@ -335,10 +372,18 @@ export async function startOrchestraMobileRemoteControl(): Promise<void> {
 		}
 	});
 
-	await new Promise<void>((resolve, reject) => {
-		server!.once('error', reject);
-		server!.listen(PORT, '0.0.0.0', () => { server!.off('error', reject); resolve(); });
-	});
+	try {
+		await new Promise<void>((resolve, reject) => {
+			server!.once('error', reject);
+			server!.listen(PORT, '0.0.0.0', () => { server!.off('error', reject); resolve(); });
+		});
+		listenError = undefined;
+	} catch (error) {
+		listenError = (error as NodeJS.ErrnoException)?.code === 'EADDRINUSE'
+			? `ポート ${PORT} が別のアプリで使われています`
+			: error instanceof Error ? error.message : String(error);
+		throw error;
+	}
 }
 
 export async function stopOrchestraMobileRemoteControl(): Promise<void> {
@@ -349,6 +394,8 @@ export async function stopOrchestraMobileRemoteControl(): Promise<void> {
 	pairing = undefined;
 	validatedIpcMain.removeListener(IPC_READY, onWorkbenchReady);
 	validatedIpcMain.removeListener(IPC_RESPONSE, onWorkbenchResponse);
+	validatedIpcMain.removeHandler(IPC_ANNOUNCE);
+	validatedIpcMain.removeHandler(IPC_COPY_PAIRING_LINK);
 	app.removeListener('browser-window-focus', onWindowFocus);
 	for (const [id, pending] of pendingRequests) pending.resolve({ id, status: 503, body: { error: 'shutting_down' } });
 	pendingRequests.clear();

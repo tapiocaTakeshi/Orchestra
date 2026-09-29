@@ -42,6 +42,7 @@ import { RawMCPToolCall } from '../common/mcpServiceTypes.js';
 import { ISkillService } from '../common/skillService.js';
 import { IObsidianService } from '../common/obsidianService.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
+import { IRemoteSessionSyncService, parseRemoteControlCommand, RemoteControlCommand, RemoteGatewayStatus } from './remoteSessionSyncService.js';
 
 
 // related to retrying when LLM message has error
@@ -161,6 +162,23 @@ A checkpoint appears before every LLM message, and before every user message (be
 
 export type UserMessageType = ChatMessage & { role: 'user' }
 export type UserMessageState = UserMessageType['state']
+/** `/remote-control` の返信に載せる接続の案内。トークンは LLM に渡る履歴に残さないので書かない */
+const describeRemoteGateway = (status: RemoteGatewayStatus | undefined): string[] => {
+	if (!status) return ['このアプリではリモートコントロールを使えません (デスクトップ版の Orchestra が必要です)。'];
+	if (!status.listening) return [`リモートコントロールのサーバーが起動していません${status.error ? ` (${status.error})` : ''}。Orchestra を再起動してください。`];
+	if (!status.accountEmail) return ['Division アカウントにログインすると、Orchestra Mobile の「見つかったデバイス」に出るようになります。'];
+	const lines = [
+		'',
+		'スマホで開くには:',
+		`1. Orchestra Mobile に ${status.accountEmail} でログインする`,
+		`2. 「見つかったデバイス」から「${status.deviceLabel}」を選ぶ (接続済みならそのままこのチャットに切り替わります)`,
+	];
+	if (!status.published) {
+		lines.push('', `※ 接続先の登録に失敗しました${status.error ? ` (${status.error})` : ''}。見つからないときは、通知の「ペアリングリンクをコピー」からリンクを送って手入力で接続してください。`);
+	}
+	return lines;
+};
+
 const defaultMessageState: UserMessageState = {
 	stagingSelections: [],
 	isBeingEdited: false,
@@ -340,6 +358,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		@ISkillService private readonly _skillService: ISkillService,
 		@IObsidianService private readonly _obsidianService: IObsidianService,
 		@IEditorService private readonly _editorService: IEditorService,
+		@IRemoteSessionSyncService private readonly _remoteSessionSyncService: IRemoteSessionSyncService,
 	) {
 		super()
 		this.state = { allThreads: {}, currentThreadId: null as unknown as string } // default state
@@ -1500,9 +1519,52 @@ We only need to do it for files that were edited since `from`, ie files between 
 	}
 
 
+	private async _runRemoteControlCommand(threadId: string, userMessage: string, command: RemoteControlCommand) {
+		let reply: string;
+		try {
+			if (command.action === 'stop') {
+				this._remoteSessionSyncService.stop();
+				reply = 'Orchestra Mobile との同期を止めました。モバイルはこれまで通り、デスクトップで開いているチャットを表示します。';
+			} else if (command.action === 'status') {
+				const synced = this._remoteSessionSyncService.synced;
+				const status = await this._remoteSessionSyncService.status();
+				const syncedLine = synced
+					? (synced.threadId === threadId ? 'このチャットを Orchestra Mobile と同期しています。' : '別のチャットを Orchestra Mobile と同期しています。')
+					: 'Orchestra Mobile と同期しているチャットはありません。';
+				reply = [syncedLine, ...describeRemoteGateway(status)].join('\n');
+			} else {
+				const status = await this._remoteSessionSyncService.sync(threadId);
+				reply = ['このチャットを Orchestra Mobile と同期しました。', ...describeRemoteGateway(status)].join('\n');
+				if (status?.listening) {
+					this._notificationService.prompt(Severity.Info, 'このチャットを Orchestra Mobile と同期しました。', [{
+						label: 'ペアリングリンクをコピー',
+						run: () => { void this._remoteSessionSyncService.copyPairingLink(); },
+					}]);
+				}
+			}
+		} catch (e) {
+			reply = `リモートコントロールの設定に失敗しました: ${e instanceof Error ? e.message : String(e)}`;
+		}
+
+		// 実行中のスレッドに差し込むと表示が崩れるので、そのときは通知だけにする
+		if (this.streamState[threadId]?.isRunning) {
+			this._notificationService.info(reply);
+			return;
+		}
+		this._addMessageToThread(threadId, { role: 'user', content: userMessage, displayContent: userMessage, selections: null, state: defaultMessageState });
+		this._addMessageToThread(threadId, { role: 'assistant', displayContent: reply, reasoning: '', anthropicReasoning: null });
+	}
+
 	async addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId, featureNameOverride }: { userMessage: string, _chatSelections?: StagingSelectionItem[], threadId: string, featureNameOverride?: FeatureName }) {
 		const thread = this.state.allThreads[threadId];
 		if (!thread) return
+
+		// `/remote-control` は LLM に送らず、このスレッドを Orchestra Mobile と同期する
+		const remoteControlCommand = parseRemoteControlCommand(userMessage);
+		if (remoteControlCommand) {
+			await this._runRemoteControlCommand(threadId, userMessage, remoteControlCommand);
+			return;
+		}
 
 		// === Division orchestration が直前ターンで Reviewer 出力を埋め込んでいれば、
 		// それを次のユーザーメッセージに自動 prepend する (一度きりの自動添付)。
