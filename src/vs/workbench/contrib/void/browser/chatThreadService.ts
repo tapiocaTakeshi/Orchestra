@@ -1534,8 +1534,13 @@ We only need to do it for files that were edited since `from`, ie files between 
 				reply = [syncedLine, ...describeRemoteGateway(status)].join('\n');
 			} else {
 				const status = await this._remoteSessionSyncService.sync(threadId);
-				reply = ['このチャットを Orchestra Mobile と同期しました。', ...describeRemoteGateway(status)].join('\n');
-				if (status?.listening) {
+				// サーバーが止まっている・未ログインのときに「同期しました」とだけ言うと、繋がると誤解される
+				const reachable = !!status?.listening && !!status.accountEmail;
+				const headline = reachable
+					? 'このチャットを Orchestra Mobile と同期しました。'
+					: 'このチャットを Orchestra Mobile との同期先にしましたが、まだスマホからは接続できません。';
+				reply = [headline, ...describeRemoteGateway(status)].join('\n');
+				if (reachable) {
 					this._notificationService.prompt(Severity.Info, 'このチャットを Orchestra Mobile と同期しました。', [{
 						label: 'ペアリングリンクをコピー',
 						run: () => { void this._remoteSessionSyncService.copyPairingLink(); },
