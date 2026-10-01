@@ -22,7 +22,7 @@
 	--o-green: #89d185;
 	--o-yellow: #cca700;
 	--o-red: #d8283b;
-	font-family: 'Noto Sans JP', 'Inter', system-ui, sans-serif;
+	font-family: 'Noto Sans JP', 'Inter', 'Noto Color Emoji', system-ui, sans-serif;
 	color: var(--o-fg);
 	font-size: 13px;
 	line-height: 1.5;
@@ -114,6 +114,8 @@
 .o-chip.on { color: var(--o-fg); background: rgba(236, 230, 222, .08); }
 .o-send { width: 24px; height: 24px; border-radius: 50%; background: var(--o-fg); color: var(--o-input); display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(236, 230, 222, .25); flex: none; }
 .o-send svg { width: 13px; height: 13px; }
+.o-queue { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--o-line-2); color: var(--o-fg-3); display: flex; align-items: center; justify-content: center; flex: none; }
+.o-queue svg { width: 12px; height: 12px; }
 .o-waiting { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 999px; font-size: 11px; color: var(--o-fg); border: 1px solid var(--o-line); }
 
 /* ---------------------------------------------------------------- editor code */

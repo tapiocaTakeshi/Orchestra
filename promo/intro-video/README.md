@@ -70,6 +70,20 @@ pixels, and drawing `t` without having drawn earlier frames must work too
 | `c.code(lines)` | syntax-coloured editor lines |
 | `c.icon(name, size)` | lucide icons used by the UI |
 
+Story-level helpers in `lib/story.js` (shared by several scenes):
+
+| helper | what it gives you |
+|---|---|
+| `ORC.k` | shared constants: `GOAL`, `COND1/2`, `REQUEST`, `TASKS`, `PREP`, `CMD`, `FAIL_POS`, `TOKENS`, `P_ROBOT`, `COLORS` |
+| `c.textAt(text, {x, baseline, size, weight, color, family, align, gold, red, parent})` | text whose alphabetic baseline lands exactly on `baseline`; `{el, chars, width}` |
+| `c.captionLines(lines, {x, baselines, size, gold})` | stacked caption lines; `{els, chars}` for `c.reveal/hide` |
+| `c.footnote(text, {x, baseline, align})` | 20px muted fine print |
+| `c.goalToken({x, y, size, label, mono})` | goal token; `.set('empty'|'met'|'unmet', k)` |
+| `c.comet()` | the gold baton; `.draw(k, [x0, y0], [x1, y1], lift)` |
+| `c.stamp(el, t, at)`, `c.shake(t, at, dur, amp)` | stamp-in and shake helpers |
+
+Fonts are loaded before `build()` runs, so a scene may measure text there.
+
 ## Look and feel
 
 - Palette: noir backgrounds `#0e0c0b` / `#131110` / `#1a1716`, ivory text `#ece6de` /

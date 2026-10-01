@@ -248,13 +248,17 @@
 	async function boot() {
 		const stage = document.getElementById('stage');
 		const total = layout();
+		// Load every font face before building, so build() can measure text.
+		await Promise.all([...document.fonts].map(f => f.load().catch(() => null)));
+		await document.fonts.ready;
 		for (const it of timeline) {
 			it.root = u.h('div', { class: 'scene', 'data-scene': it.id });
 			stage.appendChild(it.root);
+			// Scenes are laid out while visible so measurements work, then hidden by seek().
+			it.root.style.display = 'block';
 			it.state = it.def.build(it.root) || {};
+			it.root.style.display = 'none';
 		}
-		// Load every font face up front and make sure all images are decoded.
-		await Promise.all([...document.fonts].map(f => f.load().catch(() => null)));
 		await document.fonts.ready;
 		await Promise.all([...document.images].map(img => img.decode().catch(() => null)));
 		ORC.total = total;

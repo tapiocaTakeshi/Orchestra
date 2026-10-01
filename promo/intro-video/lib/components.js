@@ -29,6 +29,7 @@
 		search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
 		layout: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/>',
 		play: '<polygon points="6 3 20 12 6 21 6 3"/>',
+		listPlus: '<path d="M11 12H3M16 6H3M16 18H3M18 9v6M21 12h-6"/>',
 		target: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
 	};
 	function icon(name, size = 14, extra = {}) {
@@ -213,7 +214,7 @@
 		return h('div', { class: 'abs o-ui', style: { zoom: String(zoom), ...style } });
 	}
 
-	function ideWindow({ width = 1200, height = 720, title = 'todo-app — Orchestra', chatWidth = '40%', running = false } = {}) {
+	function ideWindow({ width = 1200, height = 720, title = '', chatWidth = '40%', running = false } = {}) {
 		const tbIcons = h('div', { class: 'o-tb-icons' }, icon('file'), icon('terminal'), icon('bot'), running ? icon('stop') : null, icon('wrench'));
 		const titlebar = h('div', { class: 'o-titlebar' }, h('div', { class: 'o-traffic' }, h('i'), h('i'), h('i')), h('div', { class: 'o-title', text: title }), tbIcons);
 		const editor = h('div', { class: 'o-editor' });
@@ -257,8 +258,9 @@
 		]).map(c => h('span', { class: `o-chip${c.on ? ' on' : ''}` }, icon(c.icon, 12), c.text, c.dot ? h('i', { class: 'o-dot green' }) : null, c.caret ? h('span', { style: { fontSize: '11px' }, text: '▾' }) : null));
 		const send = h('span', { class: 'o-send' }, icon('arrowUp', 13, { 'stroke-width': 2.6 }));
 		const stop = h('span', { class: 'o-send', style: { display: 'none' } }, h('i', { style: { width: '8px', height: '8px', borderRadius: '2px', background: '#1a1716', display: 'block' } }));
+		const queue = h('span', { class: 'o-queue', style: { display: 'none' } }, icon('listPlus', 12));
 		const waiting = h('span', { class: 'o-waiting', style: { display: 'none' } }, h('i', { class: 'o-dot yellow' }), '確認待ち');
-		const right = h('div', { class: 'row', style: { gap: '8px', color: '#877c72' } }, icon('paperclip', 16), send, stop, waiting);
+		const right = h('div', { class: 'row', style: { gap: '8px', color: '#877c72' } }, icon('paperclip', 16), queue, send, stop, waiting);
 		const el = h('div', { class: 'o-composer' }, input, h('div', { class: 'o-comp-row' }, h('div', { class: 'o-chips' }, ...chipEls), right));
 		function setText(str, caret = true, state = 'idle') {
 			input.textContent = '';
@@ -270,11 +272,12 @@
 			if (caret) { input.appendChild(h('i', { class: 'o-caret' })); }
 			send.style.display = state === 'idle' ? 'flex' : 'none';
 			stop.style.display = state === 'running' ? 'flex' : 'none';
+			queue.style.display = state === 'running' ? 'flex' : 'none';
 			waiting.style.display = state === 'waiting' ? 'inline-flex' : 'none';
 			el.classList.toggle('focus', caret);
 		}
 		setText('', false);
-		return { el, input, send, chips: chipEls, setText };
+		return { el, input, send, stop, queue, chips: chipEls, setText };
 	}
 
 	function bubble(text) { return h('div', { class: 'o-bubble', text }); }

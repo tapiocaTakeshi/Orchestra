@@ -22,9 +22,9 @@
 	--red-deep: #5e0b16;
 	--ok: #89d185;
 	--warn: #cca700;
-	--jp: 'Noto Sans JP', 'Inter', sans-serif;
-	--en: 'Inter', 'Noto Sans JP', sans-serif;
-	--mono: 'JetBrains Mono', 'Noto Sans JP', monospace;
+	--jp: 'Noto Sans JP', 'Inter', 'Noto Color Emoji', sans-serif;
+	--en: 'Inter', 'Noto Sans JP', 'Noto Color Emoji', sans-serif;
+	--mono: 'JetBrains Mono', 'Noto Sans JP', 'Noto Color Emoji', monospace;
 }
 
 * { box-sizing: border-box; }
