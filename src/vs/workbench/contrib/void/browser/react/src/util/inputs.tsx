@@ -26,6 +26,7 @@ import { extractSearchReplaceBlocks, ExtractedSearchReplaceBlock } from '../../.
 import { IAccessibilitySignalService } from '../../../../../../../platform/accessibilitySignal/browser/accessibilitySignalService.js';
 import { IEditorProgressService } from '../../../../../../../platform/progress/common/progress.js';
 import { detectLanguage } from '../../../../common/helpers/languageHelpers.js';
+import { ChatSlashCommand, matchChatSlashCommands } from '../../../../common/chatSlashCommands.js';
 
 
 // type guard
@@ -422,6 +423,8 @@ type InputBox2Props = {
 	placeholder: string;
 	multiline: boolean;
 	enableAtToMention?: boolean;
+	/** `/` から始めて打ったときに、チャットのコマンド (/remote-control など) の候補を出す */
+	enableSlashCommands?: boolean;
 	fnsRef?: { current: null | TextAreaFns };
 	className?: string;
 	onChangeText?: (value: string) => void;
@@ -430,7 +433,7 @@ type InputBox2Props = {
 	onBlur?: (e: React.FocusEvent<HTMLTextAreaElement>) => void;
 	onChangeHeight?: (newHeight: number) => void;
 }
-export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(function X({ initValue, placeholder, multiline, enableAtToMention, fnsRef, className, onKeyDown, onFocus, onBlur, onChangeText }, ref) {
+export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(function X({ initValue, placeholder, multiline, enableAtToMention, enableSlashCommands, fnsRef, className, onKeyDown, onFocus, onBlur, onChangeText }, ref) {
 
 
 	// mirrors whatever is in ref
@@ -438,6 +441,16 @@ export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fun
 
 	const chatThreadService = accessor.get('IChatThreadService')
 	const languageService = accessor.get('ILanguageService')
+
+	// @ のメニューと / のメニューが共有する配色。8b1f42a で色の定義が別のドロップダウンの中へ移り、
+	// ここから参照できなくなって (ReferenceError)、@ を打つとチャットごと落ちていた。
+	const isDark = useIsDark()
+	const portalDropdownColors = isDark ? darkPortalDropdownColors : lightPortalDropdownColors
+	const portalDropdownBackgroundStyle = {
+		background: portalDropdownColors.background,
+		backgroundColor: portalDropdownColors.background,
+		opacity: 1,
+	} satisfies React.CSSProperties
 
 	const textAreaRef = useRef<HTMLTextAreaElement | null>(null)
 	const selectedOptionRef = useRef<HTMLDivElement>(null);
@@ -778,6 +791,79 @@ export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fun
 	// logic for @ to mention ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
+	// logic for /command suggestions vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+	// @ のメニューとは独立している (あちらはファイルをたどる状態を持つため、混ぜると壊れやすい)。
+	const [slashText, setSlashText] = useState('')
+	const [slashIdx, setSlashIdx] = useState(0)
+	const [slashDismissed, setSlashDismissed] = useState(false)
+	const slashOptions: ChatSlashCommand[] = useMemo(
+		() => (enableSlashCommands && !slashDismissed ? matchChatSlashCommands(slashText) : []),
+		[enableSlashCommands, slashDismissed, slashText]
+	)
+	const isSlashMenuOpen = slashOptions.length > 0 && !isMenuOpen
+	const activeSlashIdx = Math.min(slashIdx, Math.max(0, slashOptions.length - 1))
+
+	const onSlashTextChange = useCallback((value: string) => {
+		setSlashText(value)
+		setSlashIdx(0)
+		setSlashDismissed(false)
+	}, [])
+
+	const {
+		x: slashX, y: slashY, strategy: slashStrategy, refs: slashRefs,
+	} = useFloating({
+		open: isSlashMenuOpen,
+		placement: 'top-start', // 入力欄はチャットの下端にあるので、上に出す
+		middleware: [
+			offset({ mainAxis: gapPx }),
+			flip({ boundary: document.body, padding: 8 }),
+			shift({ boundary: document.body, padding: 8 }),
+		],
+		whileElementsMounted: autoUpdate,
+		strategy: 'fixed',
+	})
+
+	const applySlashOption = (option: ChatSlashCommand) => {
+		const textarea = textAreaRef.current
+		if (!textarea) return
+		textarea.value = option.name
+		textarea.focus()
+		textarea.setSelectionRange(option.name.length, option.name.length)
+		onChangeText?.(textarea.value)
+		onSlashTextChange(textarea.value)
+		adjustHeight()
+	}
+
+	/** メニューが操作を使ったら true。Enter は、補完が要るときだけ使い、入力が完成していれば送信に回す */
+	const onSlashKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): boolean => {
+		if (!isSlashMenuOpen || e.nativeEvent.isComposing) return false
+		const active = slashOptions[activeSlashIdx]
+		if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+			e.preventDefault()
+			const step = e.key === 'ArrowDown' ? 1 : -1
+			setSlashIdx((activeSlashIdx + step + slashOptions.length) % slashOptions.length)
+			return true
+		}
+		if (e.key === 'Tab' && !e.shiftKey) {
+			e.preventDefault()
+			applySlashOption(active)
+			return true
+		}
+		if (e.key === 'Enter' && !e.shiftKey && active.name !== e.currentTarget.value.trim().toLowerCase()) {
+			e.preventDefault()
+			applySlashOption(active)
+			return true
+		}
+		if (e.key === 'Escape') {
+			e.preventDefault()
+			e.stopPropagation()
+			setSlashDismissed(true)
+			return true
+		}
+		return false
+	}
+	// logic for /command suggestions ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 	const [isEnabled, setEnabled] = useState(true)
 
 	const adjustHeight = useCallback(() => {
@@ -800,11 +886,12 @@ export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fun
 			if (!r) return
 			r.value = val
 			onChangeText?.(r.value)
+			onSlashTextChange(r.value)
 			adjustHeight()
 		},
 		enable: () => { setEnabled(true) },
 		disable: () => { setEnabled(false) },
-	}), [onChangeText, adjustHeight])
+	}), [onChangeText, onSlashTextChange, adjustHeight])
 
 
 
@@ -824,12 +911,13 @@ export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fun
 					fnsRef.current = fns
 
 				refs.setReference(r)
+				slashRefs.setReference(r)
 
 				textAreaRef.current = r
 				if (typeof ref === 'function') ref(r)
 				else if (ref) ref.current = r
 				adjustHeight()
-			}, [fnsRef, fns, setEnabled, adjustHeight, ref, refs])}
+			}, [fnsRef, fns, setEnabled, adjustHeight, ref, refs, slashRefs])}
 
 			onFocus={onFocus}
 			onBlur={onBlur}
@@ -857,8 +945,9 @@ export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fun
 				const r = textAreaRef.current
 				if (!r) return
 				onChangeText?.(r.value)
+				onSlashTextChange(r.value)
 				adjustHeight()
-			}, [onChangeText, adjustHeight])}
+			}, [onChangeText, onSlashTextChange, adjustHeight])}
 
 			onKeyDown={useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
 
@@ -866,6 +955,8 @@ export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fun
 					onMenuKeyDown(e)
 					return;
 				}
+
+				if (onSlashKeyDown(e)) return;
 
 				if (e.key === 'Backspace') { // TODO allow user to undo this.
 					if (!e.currentTarget.value || (e.currentTarget.selectionStart === 0 && e.currentTarget.selectionEnd === 0)) { // if there is no text or cursor is at position 0, remove a selection
@@ -883,11 +974,55 @@ export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fun
 					if (!shouldAddNewline) e.preventDefault(); // prevent newline from being created
 				}
 				onKeyDown?.(e)
-			}, [onKeyDown, onMenuKeyDown, multiline])}
+			}, [onKeyDown, onMenuKeyDown, onSlashKeyDown, multiline])}
 
 			rows={1}
 			placeholder={placeholder}
 		/>
+		{isSlashMenuOpen && (
+			<FloatingPortal>
+				<div className="@@void-scope" style={portalDropdownBackgroundStyle}>
+					<div
+						ref={slashRefs.setFloating}
+						role="listbox"
+						className="border-void-border-3 bg-void-bg-2-alt border rounded shadow-lg flex flex-col overflow-hidden"
+						style={{
+							position: slashStrategy,
+							top: slashY ?? 0,
+							left: slashX ?? 0,
+							zIndex: 100000,
+							background: portalDropdownColors.background,
+							backgroundColor: portalDropdownColors.background,
+							color: portalDropdownColors.foreground,
+							borderColor: portalDropdownColors.border,
+							minWidth: 280,
+							maxWidth: refs.reference.current instanceof HTMLElement ? refs.reference.current.offsetWidth : undefined,
+						}}
+						onWheel={(e) => e.stopPropagation()}
+					>
+						{slashOptions.map((o, oIdx) => (
+							<div
+								key={o.name}
+								role="option"
+								aria-selected={oIdx === activeSlashIdx}
+								className="flex items-baseline gap-3 px-3 py-1 cursor-pointer text-nowrap"
+								style={{
+									background: oIdx === activeSlashIdx ? portalDropdownColors.activeBackground : portalDropdownColors.background,
+									backgroundColor: oIdx === activeSlashIdx ? portalDropdownColors.activeBackground : portalDropdownColors.background,
+									color: oIdx === activeSlashIdx ? portalDropdownColors.activeForeground : portalDropdownColors.foreground,
+								}}
+								// mousedown で選ぶ: click だと先にテキストエリアの blur が起きてメニューが消える
+								onMouseDown={(e) => { e.preventDefault(); applySlashOption(o) }}
+								onMouseMove={() => setSlashIdx(oIdx)}
+							>
+								<span>{o.name}</span>
+								<span className="opacity-60 text-sm overflow-hidden text-ellipsis">{o.description}</span>
+							</div>
+						))}
+					</div>
+				</div>
+			</FloatingPortal>
+		)}
 		{/* <div>{`idx ${optionIdx}`}</div> */}
 		{isMenuOpen && (
 			<FloatingPortal>

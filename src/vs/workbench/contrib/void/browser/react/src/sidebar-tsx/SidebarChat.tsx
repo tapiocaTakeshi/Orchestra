@@ -5847,6 +5847,7 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 	>
 		<VoidInputBox2
 			enableAtToMention
+			enableSlashCommands
 			className={`min-h-[81px] px-0.5 py-0.5 !bg-transparent`}
 			placeholder={isAgentUi
 				? (isRunning === 'awaiting_user' ? tUI('chat.agent.placeholderAwaiting') : isRunning ? tUI('chat.agent.placeholderStreaming') : tUI('chat.agent.placeholder'))
