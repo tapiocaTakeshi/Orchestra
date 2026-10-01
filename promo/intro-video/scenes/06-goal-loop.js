@@ -257,6 +257,10 @@
 			strip.appendChild(zb);
 			view.appendChild(strip);
 			S.strip = strip;
+			// Whip blur: sRGB like CSS blur(), anisotropic so the scroll can carry motion blur.
+			S.mblur = svg('feGaussianBlur', { stdDeviation: '0 0' });
+			root.appendChild(svg('svg', { width: 0, height: 0, style: { position: 'absolute', left: '0', top: '0' } },
+				svg('defs', {}, svg('filter', { id: 'gl06-mblur', x: '-5%', y: '-10%', width: '110%', height: '120%', 'color-interpolation-filters': 'sRGB' }, S.mblur))));
 			S.col = col;
 
 			const mkCard = (opts, ownLoader = true) => {
@@ -485,13 +489,26 @@
 
 			// ==================================================== COLUMN
 			const g = u.p(t, GLIDE, GLIDE_DUR, ease.inOutCubic);
-			const ffK = u.p(t, FF, FF_DUR, ease.inOutCubic);
+			const ffP = u.p(t, FF, FF_DUR);
+			const ffK = ease.inOutCubic(ffP);
 			const X = u.lerp(HAND.x, COL_X, g);
 			const Y = u.lerp(HAND.y, S.Y1, g) - FF_DIST * ffK;
 			const sc = u.lerp(HAND.z / Z, 1, g);
 			S.strip.style.transform = `translate(${X.toFixed(3)}px, ${Y.toFixed(3)}px) scale(${sc.toFixed(5)})`;
-			const blur = FF_BLUR * u.env(t, FF, .25, FF + FF_DUR - .35, .35, ease.outSine);
-			S.strip.style.filter = blur > .05 ? `blur(${blur.toFixed(2)}px)` : 'none';
+			// Whip blur: 3 px for the whole fast-forward, eased in and out with zero slope so the column
+			// settles at 4.6 without snapping into focus. The peak speed (d inOutCubic / dp = 3) is
+			// ~55 px/frame, so a vertical motion blur (180° shutter: a box of half the per-frame travel
+			// ≈ Gaussian σ .145·v) is added on top, or the bars would strobe/alias.
+			const dv = ffP <= 0 || ffP >= 1 ? 0 : ffP < .5 ? 12 * ffP * ffP : 3 * (2 - 2 * ffP) ** 2;
+			const bIso = FF_BLUR * Math.min(u.p(t, FF, .25, ease.inOutSine), 1 - u.p(t, FF + FF_DUR - .5, .5, ease.inOutSine));
+			const bY = Math.hypot(bIso, .145 * (FF_DIST / FF_DUR) * dv / ORC.FPS);
+			if (bY > .05) {
+				S.mblur.setAttribute('stdDeviation', `${bIso.toFixed(2)} ${bY.toFixed(2)}`);
+				S.strip.style.filter = 'url(#gl06-mblur)';
+			} else {
+				S.mblur.setAttribute('stdDeviation', '0 0');
+				S.strip.style.filter = 'none';
+			}
 			S.col.style.width = px(u.lerp(HAND.w, COL_W, g));
 			// Visible band: wide open while matching 05, then soft-edged at y 100–940.
 			const mA = u.lerp(-FADE, VIEW[0], g), mD = u.lerp(1080 + FADE, VIEW[1], g);

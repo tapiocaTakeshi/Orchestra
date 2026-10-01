@@ -142,6 +142,9 @@
 
 			// ======================================================== TODO ILLUSTRATION (not product UI)
 			S.appWrap = h('div', { class: 'fill' });
+			// Attach before c.textAt measures: on a detached parent its baseline probe reads 0 and
+			// the label would land 18px low (baseline 340, on the card's top edge).
+			root.appendChild(S.appWrap);
 			const appLabel = c.textAt('できあがったアプリ（イメージ）', { x: APP_BOX.x, baseline: 322, size: 20, weight: 500, color: C.muted, letterSpacing: '0', shadow: false, parent: S.appWrap });
 			S.appLabel = appLabel.el;
 			const card = h('div', { class: 'abs', style: { left: px(APP_BOX.x), top: px(APP_BOX.y), width: px(APP_BOX.w), height: px(APP_BOX.h), background: '#1a1716', border: '1px solid #262120', borderRadius: '20px', boxShadow: '0 30px 80px rgba(0,0,0,.5)', padding: '38px 44px', overflow: 'hidden', fontFamily: 'var(--jp)' } });
@@ -167,7 +170,6 @@
 			S.items = [item('買い物', false), item('メール返信', false), item('散歩', true)];
 			card.append(title, input, list);
 			S.appWrap.appendChild(card);
-			root.appendChild(S.appWrap);
 
 			// ======================================================== HEADLINE (the product's success line, set large)
 			// 「**🎯 目標を達成しました**（2 ラウンド目）」: bold part 900 84px ivory, parenthetical 700 56px gold.
