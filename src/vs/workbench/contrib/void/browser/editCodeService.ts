@@ -15,6 +15,7 @@ import { findDiffs } from './helpers/findDiffs.js';
 import { EndOfLinePreference, IModelDecorationOptions, ITextModel } from '../../../../editor/common/model.js';
 import { IRange } from '../../../../editor/common/core/range.js';
 import { IModelService } from '../../../../editor/common/services/model.js';
+import { IFileService } from '../../../../platform/files/common/files.js';
 import { IUndoRedoElement, IUndoRedoService, UndoRedoElementType } from '../../../../platform/undoRedo/common/undoRedo.js';
 import { RenderOptions } from '../../../../editor/browser/widget/diffEditor/components/diffEditorViewZones/renderLines.js';
 // import { IModelService } from '../../../../editor/common/services/model.js';
@@ -159,6 +160,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
 
 	// URI <--> model
 	diffAreasOfURI: Record<string, Set<string> | undefined> = {}; // uri -> diffareaId
+	private readonly _agentCreatedFiles = new Set<string>() // fsPath。エージェントが新規作成したファイル (markFileCreatedByAgent)
 
 	diffAreaOfId: Record<string, DiffArea> = {}; // diffareaId -> diffArea
 	diffOfId: Record<string, Diff> = {}; // diffid -> diff (redundant with diffArea._diffOfId)
@@ -193,7 +195,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
 		@INotificationService private readonly _notificationService: INotificationService,
 		// @ICommandService private readonly _commandService: ICommandService,
 		@IVoidSettingsService private readonly _settingsService: IVoidSettingsService,
-		// @IFileService private readonly _fileService: IFileService,
+		@IFileService private readonly _fileService: IFileService,
 		@IVoidModelService private readonly _voidModelService: IVoidModelService,
 		@IConvertToLLMMessageService private readonly _convertToLLMMessageService: IConvertToLLMMessageService,
 	) {
@@ -2110,7 +2112,10 @@ class EditCodeService extends Disposable implements IEditCodeService {
 					this._revertDiffZone(diffArea)
 					this._deleteDiffZone(diffArea)
 				}
-				else if (behavior === 'accept') this._deleteDiffZone(diffArea)
+				else if (behavior === 'accept') {
+					this._deleteDiffZone(diffArea)
+					this._agentCreatedFiles.delete(uri.fsPath) // 受け入れたので、もう使い捨てのファイルではない
+				}
 			}
 			else if (diffArea.type === 'CtrlKZone' && removeCtrlKs) {
 				this._deleteCtrlKZone(diffArea)
@@ -2126,6 +2131,35 @@ class EditCodeService extends Disposable implements IEditCodeService {
 			await onFinishEdit()
 		} catch (e) {
 			console.warn(`[EditCodeService] onFinishEdit (save) failed silently for ${uri.toString()}:`, e)
+		}
+
+		if (behavior === 'reject') await this._deleteAgentCreatedFileIfEmpty(uri)
+	}
+
+	markFileCreatedByAgent(uri: URI) {
+		this._agentCreatedFiles.add(uri.fsPath)
+	}
+
+	/**
+	 * エージェントが新規作成したファイルの変更をすべて拒否すると、中身は作成時の「空」に戻るだけでファイルは残る。
+	 * 空のファイルを残さないよう、差分がもう無く内容が空なら削除する。
+	 */
+	private async _deleteAgentCreatedFileIfEmpty(uri: URI) {
+		if (!this._agentCreatedFiles.has(uri.fsPath)) return
+
+		// 他の差分がまだ残っているなら、ユーザーはまだ判断の途中
+		const diffareaids = this.diffAreasOfURI[uri.fsPath]
+		if ([...(diffareaids ?? [])].some(id => this.diffAreaOfId[id]?.type === 'DiffZone')) return
+
+		try {
+			const content = this._modelService.getModel(uri)?.getValue(EndOfLinePreference.LF)
+				?? (await this._fileService.readFile(uri)).value.toString()
+			if (content.trim() !== '') return // 空でなければユーザーの内容 (または受け入れた内容) なので残す
+
+			this._agentCreatedFiles.delete(uri.fsPath)
+			await this._fileService.del(uri, { useTrash: false })
+		} catch (e) {
+			console.warn(`[EditCodeService] failed to remove the empty agent-created file ${uri.toString()}:`, e)
 		}
 	}
 
@@ -2209,6 +2243,8 @@ class EditCodeService extends Disposable implements IEditCodeService {
 		} catch (e) {
 			console.warn(`[EditCodeService] acceptDiff onFinishEdit failed silently for ${uri.toString()}:`, e)
 		}
+
+		this._agentCreatedFiles.delete(uri.fsPath) // 受け入れたので、もう使い捨てのファイルではない
 
 	}
 
@@ -2310,6 +2346,8 @@ class EditCodeService extends Disposable implements IEditCodeService {
 		} catch (e) {
 			console.warn(`[EditCodeService] rejectDiff onFinishEdit failed silently for ${uri.toString()}:`, e)
 		}
+
+		await this._deleteAgentCreatedFileIfEmpty(uri)
 
 	}
 
