@@ -439,6 +439,16 @@ export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fun
 	const chatThreadService = accessor.get('IChatThreadService')
 	const languageService = accessor.get('ILanguageService')
 
+	// @ のメニューが使う配色。8b1f42a で色の定義が別のドロップダウンの中へ移り、
+	// ここから参照できなくなって (ReferenceError)、@ を打つとチャットごと落ちていた。
+	const isDark = useIsDark()
+	const portalDropdownColors = isDark ? darkPortalDropdownColors : lightPortalDropdownColors
+	const portalDropdownBackgroundStyle = {
+		background: portalDropdownColors.background,
+		backgroundColor: portalDropdownColors.background,
+		opacity: 1,
+	} satisfies React.CSSProperties
+
 	const textAreaRef = useRef<HTMLTextAreaElement | null>(null)
 	const selectedOptionRef = useRef<HTMLDivElement>(null);
 	const [isMenuOpen, _setIsMenuOpen] = useState(false); // the @ to mention menu
