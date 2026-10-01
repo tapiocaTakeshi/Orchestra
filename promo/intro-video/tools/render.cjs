@@ -6,6 +6,10 @@
 //   node tools/render.cjs sheet  --scene 03-leader [--every 0.5] [--out out/sheets]
 //   node tools/render.cjs timeline
 //
+// stills/sheet load only --scene (other scenes may not exist yet) unless --global
+// is given, which renders through the full timeline to show transitions.
+// --only a,b restricts any mode to those scenes.
+//
 // A page error or console error aborts the render: a broken scene must never
 // silently produce blank frames.
 'use strict';
@@ -52,13 +56,13 @@ function serve() {
 	});
 }
 
-async function openPage(browser, base) {
+async function openPage(browser, base, only) {
 	const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
 	const errors = [];
 	page.on('pageerror', e => errors.push(`pageerror: ${e.stack || e}`));
 	page.on('console', m => { if (m.type() === 'error') { errors.push(`console: ${m.text()}`); } });
 	page.on('requestfailed', r => { if (!r.url().endsWith('music.wav')) { errors.push(`requestfailed: ${r.url()}`); } });
-	await page.goto(`${base}/index.html?render=1`);
+	await page.goto(`${base}/index.html?render=1${only ? `&only=${encodeURIComponent(only)}` : ''}`);
 	await page.waitForFunction(() => window.__ready || window.__error, null, { timeout: 60000 });
 	const err = await page.evaluate(async () => { if (window.__error) { return window.__error; } try { await window.__ready; return null; } catch (e) { return String(e.stack || e); } });
 	if (err) { errors.push(err); }
@@ -80,8 +84,8 @@ async function writeFrame(stream, buf) {
 	if (!stream.write(buf)) { await new Promise(r => stream.once('drain', r)); }
 }
 
-async function renderSegment(browser, base, from, to, outFile, label) {
-	const page = await openPage(browser, base);
+async function renderSegment(browser, base, from, to, outFile, label, only) {
+	const page = await openPage(browser, base, only);
 	const enc = ffmpeg(['-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-', '-c:v', 'libx264', '-preset', 'medium', '-crf', '15', '-pix_fmt', 'yuv420p', '-r', String(FPS), '-movflags', '+faststart', outFile], { stdin: true });
 	const t0 = Date.now();
 	for (let f = from; f < to; f++) {
@@ -108,7 +112,8 @@ async function main() {
 	const browsers = [];
 	const launch = async () => { const b = await chromium.launch({ args: ['--font-render-hinting=none', '--disable-lcd-text', '--force-color-profile=srgb'] }); browsers.push(b); return b; };
 	try {
-		const probe = await openPage(await launch(), base);
+		const only = args.only || (mode !== 'video' && mode !== 'timeline' && args.scene && !args.global ? args.scene : '');
+		const probe = await openPage(await launch(), base, only);
 		const timeline = await probe.evaluate(() => ORC.timeline());
 		const total = await probe.evaluate(() => ORC.total);
 
@@ -169,7 +174,7 @@ async function main() {
 				if (a >= b) { break; }
 				const file = path.join(segDir, `seg-${w}.mp4`);
 				segs.push(file);
-				jobs.push((async () => renderSegment(w === 0 ? browsers[0] : await launch(), base, a, b, file, `w${w}`))());
+				jobs.push((async () => renderSegment(w === 0 ? browsers[0] : await launch(), base, a, b, file, `w${w}`, only))());
 			}
 			const t0 = Date.now();
 			await Promise.all(jobs);

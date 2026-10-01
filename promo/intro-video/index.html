@@ -7,6 +7,7 @@
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="fonts/fonts.css">
 <link rel="stylesheet" href="lib/base.css">
+<link rel="stylesheet" href="lib/ui.css">
 <script src="lib/core.js"></script>
 <script src="lib/components.js"></script>
 <script src="scenes/manifest.js"></script>
@@ -26,6 +27,11 @@
 	const render = params.has('render');
 	document.documentElement.classList.toggle('render', render);
 
+	// ?only=a,b restricts the timeline to those scenes (build and check one scene alone).
+	if (params.get('only')) {
+		const keep = params.get('only').split(',');
+		ORC.manifest = ORC.manifest.filter(id => keep.includes(id));
+	}
 	// Load scene scripts in manifest order.
 	for (const id of ORC.manifest) {
 		await new Promise((resolve, reject) => {
