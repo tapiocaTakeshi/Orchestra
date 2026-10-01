@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orchestra Intro Video</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="fonts/fonts.css">
+<link rel="stylesheet" href="lib/base.css">
+<script src="lib/core.js"></script>
+<script src="lib/components.js"></script>
+<script src="scenes/manifest.js"></script>
+</head>
+<body>
+<div id="viewport"><div id="stage"></div></div>
+<div id="controls" hidden>
+	<button id="play" type="button">▶</button>
+	<input id="scrub" type="range" min="0" max="1000" value="0">
+	<span id="clock">0.00</span>
+	<select id="jump"></select>
+	<audio id="music" preload="auto"></audio>
+</div>
+<script>
+(async () => {
+	const params = new URLSearchParams(location.search);
+	const render = params.has('render');
+	document.documentElement.classList.toggle('render', render);
+
+	// Load scene scripts in manifest order.
+	for (const id of ORC.manifest) {
+		await new Promise((resolve, reject) => {
+			const s = document.createElement('script');
+			s.src = `scenes/${id}.js`;
+			s.onload = resolve;
+			s.onerror = () => reject(new Error(`failed to load scenes/${id}.js`));
+			document.head.appendChild(s);
+		});
+	}
+	window.__ready = ORC.boot();
+	const total = await window.__ready;
+
+	const only = params.get('scene');
+	const at = parseFloat(params.get('t') || '0');
+	if (only) { ORC.seekScene(only, at); } else { ORC.seek(at); }
+	if (render) { return; }
+
+	// ---- interactive preview player (not used when rendering)
+	const fit = () => {
+		const s = Math.min(innerWidth / ORC.W, (innerHeight - 56) / ORC.H);
+		document.getElementById('stage').style.transform = `scale(${s})`;
+		document.getElementById('viewport').style.height = `${ORC.H * s}px`;
+		document.getElementById('viewport').style.width = `${ORC.W * s}px`;
+	};
+	addEventListener('resize', fit);
+	fit();
+	const controls = document.getElementById('controls');
+	controls.hidden = false;
+	const play = document.getElementById('play');
+	const scrub = document.getElementById('scrub');
+	const clock = document.getElementById('clock');
+	const jump = document.getElementById('jump');
+	const music = document.getElementById('music');
+	music.src = 'out/music.wav';
+	for (const it of ORC.timeline()) {
+		jump.appendChild(Object.assign(document.createElement('option'), { value: it.start, textContent: `${it.id} (${it.start.toFixed(1)}s)` }));
+	}
+	let T = at, playing = false, last = 0;
+	const show = () => {
+		ORC.seek(T);
+		scrub.value = String(Math.round(T / total * 1000));
+		clock.textContent = `${T.toFixed(2)} / ${total.toFixed(1)}s`;
+	};
+	const setPlaying = on => {
+		playing = on;
+		play.textContent = on ? '❚❚' : '▶';
+		if (on) { music.currentTime = T; music.play().catch(() => {}); last = performance.now(); requestAnimationFrame(tick); } else { music.pause(); }
+	};
+	const tick = now => {
+		if (!playing) { return; }
+		T = music.readyState >= 2 && !music.paused ? music.currentTime : T + (now - last) / 1000;
+		last = now;
+		if (T >= total) { T = total; setPlaying(false); }
+		show();
+		requestAnimationFrame(tick);
+	};
+	play.onclick = () => { if (T >= total) { T = 0; } setPlaying(!playing); };
+	scrub.oninput = () => { T = scrub.value / 1000 * total; music.currentTime = T; show(); };
+	jump.onchange = () => { T = parseFloat(jump.value); music.currentTime = T; show(); };
+	addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); play.onclick(); } });
+	show();
+})().catch(err => {
+	document.body.insertAdjacentHTML('beforeend', `<pre style="color:#f66;position:fixed;top:0;left:0;z-index:99;white-space:pre-wrap">${err.stack || err}</pre>`);
+	window.__error = String(err.stack || err);
+});
+</script>
+</body>
+</html>

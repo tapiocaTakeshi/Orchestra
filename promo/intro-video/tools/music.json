@@ -1,0 +1,22 @@
+{
+	"bpm": 120,
+	"duration": 76,
+	"progression": [
+		["A2", ["A3", "C4", "E4"]],
+		["F2", ["F3", "A3", "C4"]],
+		["C3", ["G3", "C4", "E4"]],
+		["G2", ["G3", "B3", "D4"]]
+	],
+	"sections": [
+		{"start": 0, "end": 8, "kind": "intro"},
+		{"start": 8, "end": 24, "kind": "build"},
+		{"start": 24, "end": 48, "kind": "main"},
+		{"start": 48, "end": 56, "kind": "break"},
+		{"start": 56, "end": 70, "kind": "main"},
+		{"start": 70, "end": 76, "kind": "outro"}
+	],
+	"hits": [8, 24, 56],
+	"risers": [[20, 24], [52, 56]],
+	"ending": 70,
+	"final": ["A2", ["A3", "C4", "E4", "B4"]]
+}
