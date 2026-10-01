@@ -15,7 +15,8 @@
 	// ------------------------------------------------------------ timing (scene seconds)
 	// Beat A
 	const COMP_IN = .6;                          // composer settles while the fade-in plays
-	const CAP_A = .2, CAP_A_OUT = 3.75;
+	const COMP_FADE = .3, COMP_FADE_DUR = .3;    // ...but stays hidden until the 07 -> 08 fade (0–.45) has nearly landed
+	const CAP_A = .45, CAP_A_OUT = 3.75;         // after the fade, so it never crosses 07's layout
 	const CUR_IN = .05, CUR_IN_DUR = .25;
 	const MOVE1 = .3, CLICK1 = .6;               // cursor -> cost chip, click
 	// Spec: the cursor moves to the toggle over 1.0–1.2. That is ~870 px in 6 frames (a
@@ -38,9 +39,11 @@
 	const PHONE = 4.5, PHONE_DUR = .5;
 	const ARC = 4.4, ARC_DUR = .35;            // the link reaches out as the reply says 同期しました
 	const PILL_LAN = 4.6, PILL_IMG = 4.75, PILL_DUR = .35;
-	const PKT_OUT = 5.0, PKT_BACK = 6.25, HOP = .25, HOP_MOVE = .1, HOPS = 4;
-	const TAP = 6.0, TYPE_DUR = .2, SEND = 6.25;
-	const BUB2 = 7.25, STATUS = 7.6;
+	// Two hops each way, so most of the beat goes to the result (the phone's request in the
+	// PC chat and the Leader starting a new run) rather than to the packet's travel.
+	const PKT_OUT = 5.0, PKT_BACK = 5.75, HOP = .25, HOP_MOVE = .1, HOPS = 2;
+	const TAP = 5.5, TYPE_DUR = .2, SEND = 5.75;   // tap as the packet reaches the phone (global 67.0)
+	const BUB2 = 6.25, STATUS = 6.75;              // bubble as the packet reaches the PC; ~1.35 s before DIM
 	const DIM = 7.6, DIM_DUR = .4, DIM_MAX = .7;
 
 	// ------------------------------------------------------------ layout (screen px)
@@ -87,7 +90,7 @@
 		if (k <= 0 || k >= 1) { return 0; }
 		return k < .25 ? ease.outCubic(k / .25) : 1 - ease.inOutSine((k - .25) / .75);
 	};
-	// Packet progress along the arc: rests at 0, .25, .5, .75, 1 and hops (HOP_MOVE) to land
+	// Packet progress along the arc: rests at 0, 1/HOPS, ..., 1 and hops (HOP_MOVE) to land
 	// exactly on start + HOP·j — discrete steps, like polling.
 	const hopK = (t, start) => {
 		let k = 0;
@@ -365,7 +368,7 @@
 				bar(L, P.y + 242, 232, 12),
 				bar(L, P.y + 266, 156, 12),
 			];
-			S.newBar = bar(R - 152, P.y + 296, 152, 28, user);              // ダークモードにも対応して (sent at 6.25)
+			S.newBar = bar(R - 152, P.y + 296, 152, 28, user);              // ダークモードにも対応して (sent at SEND)
 			S.input = h('div', { class: 'abs', style: { left: px(L - 4), top: px(TAP_AT[1] - 24), width: px(R - L + 8), height: '48px', borderRadius: '24px', background: '#1a1716', border: '1px solid #3a3330', boxSizing: 'border-box' } });
 			S.typed = h('i', { class: 'abs', style: { left: '22px', top: '18px', height: '10px', width: '0', borderRadius: '5px', background: '#877c72', display: 'block' } });
 			S.sendDot = h('i', { class: 'abs', style: { right: '7px', top: '7px', width: '32px', height: '32px', borderRadius: '50%', background: '#3a3330', display: 'block' } });
@@ -422,7 +425,7 @@
 
 			// composer settles in under the fade
 			const ck = u.p(t, 0, COMP_IN, ease.outCubic);
-			tf(S.wrapA, { y: 16 * (1 - ck) });
+			tf(S.wrapA, { y: 16 * (1 - ck), o: u.p(t, COMP_FADE, COMP_FADE_DUR, ease.outCubic) });
 
 			// panel open / close
 			const openK = u.p(t, OPEN, OPEN_DUR, ease.outCubic);
@@ -531,8 +534,8 @@
 			tf(S.pillLan, { s: .92 + .08 * ease.outBack(u.p(t, PILL_LAN, PILL_DUR)), o: lanK });
 			tf(S.pillImg, { y: 6 * (1 - u.p(t, PILL_IMG, PILL_DUR, ease.outCubic)), o: u.p(t, PILL_IMG, PILL_DUR, ease.outCubic) });
 
-			// packet: PC -> phone (5.0–6.0), phone -> PC (6.25–7.25), discrete polling hops
-			// At the phone (6.0–6.25) the outgoing packet fades out while the return one fades in;
+			// packet: PC -> phone (5.0–5.5), phone -> PC (5.75–6.25), discrete polling hops
+			// At the phone (5.5–5.75) the outgoing packet fades out while the return one fades in;
 			// draw whichever is brighter, so the handover never blinks to nothing for a frame.
 			let pkt = null;
 			for (const [start, dir] of [[PKT_OUT, 1], [PKT_BACK, -1]]) {
@@ -561,14 +564,14 @@
 			}
 			S.pillLan.style.borderColor = mixHex('#3a3330', C.gold, lanGlow);
 			S.pillLan.style.boxShadow = `0 8px 24px rgba(0,0,0,.45), 0 0 ${(22 * lanGlow).toFixed(1)}px rgba(198,167,105,${(.4 * lanGlow).toFixed(3)})`;
-			// arrival rings (phone at 6.0, PC at 7.25)
+			// arrival rings (phone at 5.5, PC at 6.25)
 			[PKT_OUT, PKT_BACK].forEach((st, i) => {
 				const ak = u.p(t, st + HOP * HOPS, .45, ease.outCubic);
 				S.arrive[i].setAttribute('r', (4 + 22 * ak).toFixed(2));
 				S.arrive[i].setAttribute('opacity', (ak > 0 && ak < 1 ? .7 * (1 - ak) : 0).toFixed(3));
 			});
 
-			// phone: tap at 6.0, abstract text fills the input, sent at 6.25
+			// phone: tap at 5.5, abstract text fills the input, sent at 5.75
 			const tk = u.p(t, TAP, .45, ease.outCubic);
 			S.tapRing.setAttribute('r', (50 * tk).toFixed(2));
 			S.tapRing.setAttribute('opacity', (tk > 0 && tk < 1 ? .5 * (1 - tk) : 0).toFixed(3));

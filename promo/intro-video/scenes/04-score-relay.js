@@ -399,7 +399,7 @@
 			root.appendChild(capLayer);
 			const kicker = c.textAt('LEADER', { x: 120, baseline: 150, size: 20, weight: 600, family: 'var(--en)', color: C.gold, letterSpacing: '.32em', shadow: false, parent: capLayer });
 			const cap1 = c.captionLines(['指揮者が、', '楽譜を書く。'], { gold: ['楽譜'] });
-			const cap2 = c.captionLines(['専門の AI が、', '順番に奏でる。'], { gold: ['順番に'] });
+			const cap2 = c.captionLines(['専門の AI が、', '順番に奏でる。'], { gold: ['順番'] });
 			const cap3 = c.captionLines(['書いたら、', 'テストも走らせる。'], { gold: ['テスト'] });
 			for (const cp of [cap1, cap2, cap3]) { capLayer.append(...cp.els); }
 			S.kicker = kicker;
@@ -681,7 +681,7 @@
 
 			// ---------------------------------------------------- captions
 			const [cap1, cap2, cap3] = S.caps;
-			c.cycle(S.kicker.chars, t, CAP1, CAP1_OUT);
+			c.cycle(S.kicker.chars, t, -1, CAP1_OUT); // already on screen from 03; carried across the cut
 			c.cycle(cap1.chars, t, CAP1, CAP1_OUT);
 			c.cycle(cap2.chars, t, CAP2, CAP2_OUT);
 			c.reveal(cap3.chars, t, CAP3);

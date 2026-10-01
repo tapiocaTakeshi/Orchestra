@@ -490,6 +490,11 @@
 		c.cycle(S.capA2.chars, t, 1.9, T_SNAP, { out: hideOpts });
 		c.reveal(S.capB1.chars, t, 6.4);
 		c.reveal(S.capB2.chars, t, 8.6);
+		// Past the scene end (only seen under 02's fade-in) the captions clear by 12.25,
+		// before 02's caption starts at 12.30, so the two never overlap.
+		const capO = 1 - u.p(t, 12.0, .25, ease.inOutSine);
+		S.capLayer.style.opacity = String(capO);
+		S.capLayer.style.visibility = capO > .001 ? 'visible' : 'hidden';
 	}
 
 	function drawPartB(t, S) {

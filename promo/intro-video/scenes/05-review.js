@@ -1,4 +1,5 @@
-// 05-review — global 40.0–48.0 (MAIN). Transition in: zoom (04 pushes into the command card).
+// 05-review — global 40.0–48.0 (MAIN). Transition in: fade (04 has pushed into the command card;
+// this scene's column dissolves in exactly on top of it, so the push continues in one direction).
 // The callback to 01: npm test fails at exactly the spot of the pain scene's
 // 「✕ テスト失敗」 (FAIL_POS), but nobody calls the human. The Reviewer then checks
 // the result against the goal, condition by condition, and the two goal tokens
@@ -19,18 +20,19 @@
 	const BAR_W = 4, BAR_GAP = 8;  // annotation bar (screen px)
 	// 04's last frame (its CMD_CARD_END / Z1 / Z0): the command card's top-left in screen px, its
 	// on-screen zoom and the CSS zoom it is laid out at (its width and sub-pixel offsets are
-	// measured from a replica in build()). Under the incoming zoom transition the column is held
-	// exactly on top of that card, so the crossfade never doubles it, then eases into this
-	// scene's FAIL_POS framing before the result lands at 1.0.
+	// measured from a replica in build()). The incoming 'fade' leaves 04 untransformed and opaque
+	// underneath, so the column is held exactly on top of that card (the crossfade never doubles
+	// it), then eases into this scene's FAIL_POS framing before the result lands at 1.0. A 'zoom'
+	// transition would shrink 04 to .94 under the column and reverse 04's push at the cut.
 	const HAND = { x: 851, y: 110, z: 2.1, zoomCss: 1.8 };
-	const TR = .45, TR_S = 1.08, TR_OUT = .94; // core's 'zoom' transition: length, incoming / outgoing scale
 
 	// ------------------------------------------------------------ timing (scene seconds)
-	const SETTLE = .4, SETTLE_END = .95; // hand-off framing → 05 framing (zoom 1.97 → 2.2, ≤ 1.35×/s)
+	const SETTLE = .4, SETTLE_END = .95; // hand-off framing → 05 framing (zoom 2.1 → 2.2, one direction)
 	const RESULT = 1.0, STAMP = .18, RES_GROW = .1, SHAKE = .3, BAR = .3;
 	const GHOST = .6;
 	const TAIL = [1.1, 1.2, 1.3], TAIL_GROW = .1, TAIL_FADE = .2;
 	const CAP = 1.6;
+	const CAP_OUT = 7.5;
 	const COLLAPSE = 1.8, COLLAPSE_DUR = .25;
 	const SLIDE = 1.8, SLIDE_DUR = .4;
 	const REV = 2.0, RISE = .42, WAIT_END = 2.4;
@@ -56,12 +58,13 @@
 		{ kind: 'v', mark: '❌', n: 2, crit: K.COND2, note: '終了コード 1（1 件失敗）' },
 		{ kind: 'b', html: '🔁 未達のため、ラウンド 2 / 5 に進みます。' },
 	];
-	const TAIL_LINES = ['FAIL  app.test.js', '  ✕ 完了したタスクを削除できる', 'Tests: 1 failed, 2 passed'];
+	// The failing test lies outside COND1, which the Reviewer marks ✅ two seconds later.
+	const TAIL_LINES = ['FAIL  app.test.js', '  ✕ 再読み込み後もタスクが残る', 'Tests: 1 failed, 2 passed'];
 
 	ORC.register({
 		id: '05-review',
 		duration: 8,
-		transition: 'zoom',
+		transition: 'fade',
 
 		build(root) {
 			const S = {};
@@ -216,11 +219,9 @@
 			S.backdrop.draw(t);
 
 			// ---------------------------------------------------- column camera
-			// Hand-off: while the root scales 1.08 → 1 and 04 scales 1 → .94 (both about the
-			// frame centre), keep the card on 04's card: screen = C + (P04 + 2.1·p − C)·sOut.
-			const kT = u.clamp(t / TR);
-			const r = u.lerp(1, TR_OUT, ease.inOutCubic(kT)) / u.lerp(TR_S, 1, ease.outCubic(kT));
-			const hx = 960 + (HAND.x - 960) * r, hy = 540 + (HAND.y - 540) * r, hs = HAND.z / Z * r;
+			// Hand-off: 04 holds still under the fade, so the column sits exactly on 04's card
+			// (top-left HAND.x / HAND.y at on-screen zoom 2.1) until SETTLE.
+			const hx = HAND.x, hy = HAND.y, hs = HAND.z / Z;
 			const b = u.p(t, SETTLE, SETTLE_END - SETTLE, ease.inOutCubic);
 			S.col.style.width = px(u.lerp(S.fix.w, COL_W, b));
 			const fixK = 1 - b; // sub-pixel registration onto 04's card, gone by SETTLE_END
@@ -323,9 +324,14 @@
 			const go = t < RESULT ? 0 : .4 * (1 - u.p(t, RESULT + .06, GHOST - .06, ease.inQuad));
 			u.tf(S.ghost, { o: go, blur: 8 * gb });
 
-			// ---------------------------------------------------- captions (hold to the end)
+			// ---------------------------------------------------- captions
+			// Held until just before the cut, then cleared so 06's ring does not dissolve in on
+			// top of them; the goal tokens stay, since 06 carries them on.
 			c.reveal(S.kicker.chars, t, CAP);
 			c.reveal(S.cap.chars, t, CAP);
+			const capO = 1 - u.p(t, CAP_OUT, .45, ease.inOutSine);
+			S.kicker.el.parentNode.style.opacity = String(capO);
+			S.next.el.style.opacity = String(nk * capO);
 		},
 	});
 

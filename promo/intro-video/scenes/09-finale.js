@@ -15,10 +15,13 @@
 	const LAUNCH = .35, LAUNCH_DUR = .15;         // its arrowheads launch
 	const SHEEN = [.08, .12], SHEEN_DUR = .5;     // the #fff4f5 highlight runs once per strand, behind the draw head
 	const CHORD = .5;                             // global 70.0, FINAL CHORD
+	// Bloom, logo and tagline attack one frame-step early (local .47) so the 70.000 frame
+	// itself carries the hit (69.967 stays dark). The mark dissolve stays on CHORD.
+	const HIT = CHORD - .03;
 	const DISSOLVE_DUR = .5;                      // mark: opacity 1 -> 0, scale 1 -> 1.1
 	const LOGO_DUR = .8, LOGO_FADE = .4;          // logo: scale .85 -> 1, rotate -24 -> 0 (outBack), opacity 0 -> .95
-	const BLOOM_ATTACK = .07, BLOOM_DUR = .8;     // bloom: pulse to .8, decays to .3 by CHORD + .8
-	const TAG = .6;                               // tagline per-character reveal
+	const BLOOM_ATTACK = .07, BLOOM_DUR = .8;     // bloom: pulse to .8, decays to .3 by HIT + .8
+	const TAG = HIT;                              // tagline per-character reveal, on the chord
 	const WORD = 1.2, WORD_DUR = .6;              // wordmark
 	const FOOT = 1.5, FOOT_DUR = .6;              // footnote
 	const KICK = 1.6, KICK_DUR = .5;              // kicker
@@ -211,12 +214,12 @@
 			u.tf(S.markWrap, { s: u.lerp(1, 1.1, ease.outCubic(dk)), o: reveal > 0 ? 1 - ease.inOutSine(dk) : 0, blur: 6 * ease.inQuad(dk) });
 
 			// ---------------------------------------------------- chord: bloom + ring logo settle
-			const atk = u.p(t, CHORD, BLOOM_ATTACK, ease.outCubic);
-			const dec = u.p(t, CHORD + BLOOM_ATTACK, BLOOM_DUR - BLOOM_ATTACK, ease.outCubic);
-			const bloomO = t < CHORD ? 0 : atk < 1 ? .8 * atk : u.lerp(.8, .3, dec);
-			u.tf(S.bloom, { s: u.lerp(.85, 1, ease.outCubic(u.p(t, CHORD, BLOOM_DUR))), o: bloomO });
-			const lk = ease.outBack(u.p(t, CHORD, LOGO_DUR));
-			u.tf(S.logo, { s: u.lerp(.85, 1, lk), r: u.lerp(-24, 0, lk) + spin(t), o: .95 * u.p(t, CHORD, LOGO_FADE, ease.outCubic) });
+			const atk = u.p(t, HIT, BLOOM_ATTACK, ease.outCubic);
+			const dec = u.p(t, HIT + BLOOM_ATTACK, BLOOM_DUR - BLOOM_ATTACK, ease.outCubic);
+			const bloomO = t < HIT ? 0 : atk < 1 ? .8 * atk : u.lerp(.8, .3, dec);
+			u.tf(S.bloom, { s: u.lerp(.85, 1, ease.outCubic(u.p(t, HIT, BLOOM_DUR))), o: bloomO });
+			const lk = ease.outBack(u.p(t, HIT, LOGO_DUR));
+			u.tf(S.logo, { s: u.lerp(.85, 1, lk), r: u.lerp(-24, 0, lk) + spin(t), o: .95 * u.p(t, HIT, LOGO_FADE, ease.outCubic) });
 
 			// ---------------------------------------------------- type (fixed layout)
 			c.reveal(S.tagChars, t, TAG);
