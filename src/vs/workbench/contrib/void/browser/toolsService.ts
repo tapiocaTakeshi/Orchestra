@@ -401,6 +401,8 @@ export class ToolsService implements IToolsService {
 					await fileService.createFolder(uri)
 				else {
 					await fileService.createFile(uri)
+					// 変更を拒否して空に戻ったとき、空のファイルを残さず消せるように覚えておく
+					editCodeService.markFileCreatedByAgent(uri)
 				}
 				return { result: {} }
 			},
