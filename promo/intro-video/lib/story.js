@@ -44,11 +44,13 @@
 		mark(red, 'red-grad');
 		const probe = h('span', { style: { display: 'inline-block', width: '0', height: '0', verticalAlign: 'baseline' } });
 		el.appendChild(probe);
-		(parent || document.getElementById('stage')).appendChild(el);
+		// Measure where layout is live: an unattached parent would report zero sizes.
+		const measureIn = parent && parent.isConnected ? parent : document.getElementById('stage');
+		measureIn.appendChild(el);
 		const base = probe.offsetTop;
 		const w = el.offsetWidth;
 		probe.remove();
-		if (!parent) { el.remove(); }
+		if (parent) { parent.appendChild(el); } else { el.remove(); }
 		const left = align === 'center' ? x - w / 2 : align === 'right' ? x - w : x;
 		el.style.left = `${left}px`;
 		el.style.top = `${baseline - base}px`;

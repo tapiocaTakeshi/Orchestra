@@ -142,6 +142,11 @@
 				const d = pathFor(phase, sides[i]);
 				for (const p of [backs[i], fronts[i], lights[i]]) { p.setAttribute('d', d); }
 				const dash = reveal >= 1 ? 'none' : '100 100';
+				// A zero-length dash still paints its round caps as dots, so hide unrevealed strands.
+				const shown = reveal > .001 ? 'visible' : 'hidden';
+				backs[i].setAttribute('visibility', shown);
+				fronts[i].setAttribute('visibility', shown);
+				lights[i].setAttribute('visibility', shown);
 				backs[i].setAttribute('stroke-dasharray', dash);
 				fronts[i].setAttribute('stroke-dasharray', dash);
 				backs[i].setAttribute('stroke-dashoffset', 100 * (1 - reveal));
@@ -167,7 +172,11 @@
 		const glowB = h('div', { class: 'abs', style: { width: '1300px', height: '1000px', right: '-380px', bottom: '-520px', borderRadius: '50%', background: 'radial-gradient(closest-side, rgba(198,167,105,.07), transparent)' } });
 		const grid = h('div', { class: 'fill', style: { opacity: .5, backgroundImage: 'linear-gradient(rgba(236,230,222,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(236,230,222,.025) 1px, transparent 1px)', backgroundSize: '80px 80px', maskImage: 'radial-gradient(70% 70% at 50% 50%, #000 0%, transparent 100%)', WebkitMaskImage: 'radial-gradient(70% 70% at 50% 50%, #000 0%, transparent 100%)' } });
 		const vignette = h('div', { class: 'fill', style: { background: 'radial-gradient(130% 100% at 50% 50%, transparent 55%, rgba(0,0,0,.55) 100%)' } });
-		el.append(base, glowA, glowB, grid, vignette);
+		// Static film grain dithers the dark gradients so they do not band after 8-bit encoding.
+		const grain = svg('svg', { width: 1920, height: 1080, style: { position: 'absolute', left: '0', top: '0', opacity: '.045', mixBlendMode: 'screen' } },
+			svg('filter', { id: `grain${++markSeq}` }, svg('feTurbulence', { type: 'fractalNoise', baseFrequency: .9, numOctaves: 2, seed: 7 }), svg('feColorMatrix', { type: 'saturate', values: 0 })));
+		grain.appendChild(svg('rect', { width: 1920, height: 1080, filter: `url(#grain${markSeq})` }));
+		el.append(base, glowA, glowB, grid, vignette, grain);
 		return {
 			el,
 			draw(t) {

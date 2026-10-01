@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Renders the intro video frame by frame with headless Chromium.
 //
-//   node tools/render.cjs video  [--workers 3] [--from 0] [--to 75] [--out out/orchestra-intro.mp4]
+//   node tools/render.cjs video  [--workers 3] [--from 0] [--to 75] [--out out/orchestra-intro.mp4] [--crf 14] [--keep-frames] [--no-audio]
 //   node tools/render.cjs stills --scene 03-leader [--times 0.5,2,4 | --every 1] [--out out/stills]
 //   node tools/render.cjs sheet  --scene 03-leader [--every 0.5] [--out out/sheets]
 //   node tools/render.cjs timeline
@@ -84,13 +84,13 @@ async function writeFrame(stream, buf) {
 	if (!stream.write(buf)) { await new Promise(r => stream.once('drain', r)); }
 }
 
-async function renderSegment(browser, base, from, to, outFile, label, only) {
+// Render frames [from, to) to numbered JPEGs in dir.
+async function renderFrames(browser, base, from, to, dir, label, only) {
 	const page = await openPage(browser, base, only);
-	const enc = ffmpeg(['-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-', '-c:v', 'libx264', '-preset', 'medium', '-crf', '15', '-pix_fmt', 'yuv420p', '-r', String(FPS), '-movflags', '+faststart', outFile], { stdin: true });
 	const t0 = Date.now();
 	for (let f = from; f < to; f++) {
 		await page.evaluate(T => ORC.seek(T), f / FPS);
-		await writeFrame(enc.stdin, await page.screenshot({ type: 'jpeg', quality: 96 }));
+		await page.screenshot({ type: 'jpeg', quality: 97, path: path.join(dir, `${String(f).padStart(5, '0')}.jpg`) });
 		if ((f - from) % 150 === 0) {
 			page.assertClean();
 			const done = f - from;
@@ -98,8 +98,6 @@ async function renderSegment(browser, base, from, to, outFile, label, only) {
 		}
 	}
 	page.assertClean();
-	enc.stdin.end();
-	await enc.done;
 	await page.close();
 }
 
@@ -164,32 +162,32 @@ async function main() {
 			const to = Math.round(parseFloat(args.to || total) * FPS);
 			const workers = Math.max(1, parseInt(args.workers || 3, 10));
 			const out = path.resolve(ROOT, args.out || 'out/orchestra-intro.mp4');
-			const segDir = path.resolve(ROOT, 'out/segments');
-			fs.mkdirSync(segDir, { recursive: true });
+			// Workers write frames to disk; one encoder pass then gives uniform quality
+			// (encoding per-worker segments shows quality steps at the joins).
+			const frameDir = path.resolve(ROOT, 'out', `frames-${path.basename(out, path.extname(out))}`);
+			fs.rmSync(frameDir, { recursive: true, force: true });
+			fs.mkdirSync(frameDir, { recursive: true });
 			const per = Math.ceil((to - from) / workers);
-			const segs = [];
 			const jobs = [];
 			for (let w = 0; w < workers; w++) {
 				const a = from + w * per, b = Math.min(to, a + per);
 				if (a >= b) { break; }
-				const file = path.join(segDir, `seg-${w}.mp4`);
-				segs.push(file);
-				jobs.push((async () => renderSegment(w === 0 ? browsers[0] : await launch(), base, a, b, file, `w${w}`, only))());
+				jobs.push((async () => renderFrames(w === 0 ? browsers[0] : await launch(), base, a, b, frameDir, `w${w}`, only))());
 			}
 			const t0 = Date.now();
 			await Promise.all(jobs);
-			const list = path.join(segDir, 'list.txt');
-			fs.writeFileSync(list, segs.map(s => `file '${s}'`).join('\n'));
-			const silent = path.join(segDir, 'silent.mp4');
-			await ffmpeg(['-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', silent]).done;
 			const music = path.resolve(ROOT, args.music || 'out/music.wav');
+			const len = (to - from) / FPS;
+			const withAudio = fs.existsSync(music) && !args['no-audio'];
 			fs.mkdirSync(path.dirname(out), { recursive: true });
-			if (fs.existsSync(music) && !args['no-audio']) {
-				const len = (to - from) / FPS;
-				await ffmpeg(['-i', silent, '-ss', String(from / FPS), '-i', music, '-map', '0:v', '-map', '1:a', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '256k', '-af', `afade=t=out:st=${Math.max(0, len - 1.5)}:d=1.5`, '-t', String(len), '-movflags', '+faststart', out]).done;
-			} else {
-				fs.copyFileSync(silent, out);
-			}
+			await ffmpeg([
+				'-framerate', String(FPS), '-start_number', String(from), '-i', path.join(frameDir, '%05d.jpg'),
+				...(withAudio ? ['-ss', String(from / FPS), '-i', music] : []),
+				'-map', '0:v', ...(withAudio ? ['-map', '1:a', '-c:a', 'aac', '-b:a', '256k', '-af', `afade=t=out:st=${Math.max(0, len - 1.5)}:d=1.5`] : []),
+				'-c:v', 'libx264', '-preset', 'slow', '-crf', String(args.crf || 14), '-pix_fmt', 'yuv420p', '-r', String(FPS),
+				'-t', String(len), '-movflags', '+faststart', out,
+			]).done;
+			if (!args['keep-frames']) { fs.rmSync(frameDir, { recursive: true, force: true }); }
 			console.log(`${out}  (${((to - from) / FPS).toFixed(1)}s, rendered in ${((Date.now() - t0) / 1000).toFixed(0)}s)`);
 		} else {
 			throw new Error(`unknown mode ${mode}`);
@@ -200,4 +198,6 @@ async function main() {
 	}
 }
 
-main().catch(e => { console.error(e.message || e); process.exit(1); });
+if (require.main === module) {
+	main().catch(e => { console.error(e.message || e); process.exit(1); });
+}

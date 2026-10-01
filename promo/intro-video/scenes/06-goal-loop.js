@@ -414,6 +414,12 @@
 
 			// Same reasoning as 05: per-glyph will-change makes rasterization depend on draw order.
 			for (const ch of root.querySelectorAll('.ch')) { ch.style.willChange = 'auto'; }
+			// The role badges are the only text on an opaque background (#0e0c0b). Chromium keeps such
+			// text in its own composited layer (to preserve LCD text), which splits the masked column into
+			// layers whose rasters are then reused at stale sub-pixel offsets: 1.8 drawn after 0.9 differed
+			// from 1.8 drawn fresh by up to 64 levels. At .99 alpha (visually identical: < .05 level) the
+			// whole scene stays in one layer and every frame rasterizes from scratch.
+			for (const r of root.querySelectorAll('.o-role')) { r.style.background = 'rgba(14, 12, 11, .99)'; }
 			return S;
 		},
 

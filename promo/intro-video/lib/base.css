@@ -37,7 +37,7 @@ html.render, html.render body { width: 1920px; height: 1080px; overflow: hidden;
 
 #viewport { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
 #stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; overflow: hidden; background: var(--bg); }
-.scene { position: absolute; inset: 0; overflow: hidden; display: none; background: var(--bg); will-change: transform, opacity; }
+.scene { position: absolute; inset: 0; overflow: hidden; display: none; background: var(--bg); }
 
 #controls { display: flex; align-items: center; gap: 12px; font: 13px var(--en); color: #aaa; }
 #controls[hidden] { display: none; }
@@ -54,7 +54,9 @@ html.render, html.render body { width: 1920px; height: 1080px; overflow: hidden;
 .jp { font-family: var(--jp); }
 .en { font-family: var(--en); }
 .mono { font-family: var(--mono); }
-.ch { display: inline-block; white-space: pre; will-change: transform, opacity; }
+/* No will-change here: a promoted layer keeps the raster of the sub-pixel position it
+   was first drawn at, which would make pixels depend on the order frames are drawn. */
+.ch { display: inline-block; white-space: pre; }
 .nowrap { white-space: nowrap; }
 
 /* Type scale (1080p) */

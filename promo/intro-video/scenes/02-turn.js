@@ -46,8 +46,10 @@
 	// at that same live shape, so the hand-over to c.mark at 2.6 is seamless.
 	const phaseAt = t => (2 * Math.PI * t) / G.CYCLE;
 
-	// Tangle: two 240-point threads, P_i = M_i + A_i·N_i (screen px).
-	const N = 240, CHUNK = 8, NCH = Math.ceil((N - 1) / CHUNK);
+	// Tangle: two 240-point threads, P_i = M_i + A_i·N_i (screen px). Drawn in 4-point
+	// chunks (~21 px on screen): colour and weight step per chunk, and at 4 points the step
+	// stays at ~2/255 even where the wave is steepest (8 points gave visible ~4/255 bands).
+	const N = 240, CHUNK = 4, NCH = Math.ceil((N - 1) / CHUNK);
 	const KNOT = { x0: 210, x1: 1710, y0: 300, y1: 640 };
 	const GREY = '#8a92a3', THREAD_W = 1.5;
 	// The raw scribble overshoots the knot box (±240 px against a 170 px half-height), so it
@@ -164,9 +166,12 @@
 		//   greyBack  the grey thread at the back's weight, fading out
 		//   front     red gradient, depth-masked, with aura  (c.mark's front strand)
 		//   greyFront the grey thread at the front's weight, depth-masked, fading out
-		// Interior chunk ends are butt-capped: round caps would overlap and bead where the
-		// stroke is translucent. The outer ends are round, as in c.mark.
-		const chunk = (stroke, j) => svg('path', { fill: 'none', stroke, 'stroke-linejoin': 'round', 'stroke-linecap': j === 0 || j === NCH - 1 ? 'round' : 'butt' });
+		// Every chunk is butt-capped: a round cap overlaps its neighbour and beads where the
+		// stroke is translucent (a path's caps apply to both of its ends, so even the end
+		// chunks' inner caps did). The two outer ends get c.mark's round caps as separate
+		// semicircle fills that meet the stroke's butt end without overlapping it.
+		const chunk = stroke => svg('path', { fill: 'none', stroke, 'stroke-linejoin': 'round', 'stroke-linecap': 'butt' });
+		const cap = paint => svg('path', { fill: paint, stroke: 'none' });
 		const backG = svg('g'), greyBackG = svg('g');
 		sv.append(backG, greyBackG);
 		S.threads = [-1, 1].map((side, si) => {
@@ -174,17 +179,17 @@
 			const frontG = svg('g', { mask: `url(#p02-m${id})`, filter: 'url(#p02-glow)' });
 			const greyFrontG = svg('g', { mask: `url(#p02-m${id})` });
 			const L = { back: [], greyBack: [], front: [], greyFront: [] };
+			const paints = { back: 'url(#p02-fade)', greyBack: GREY, front: 'url(#p02-fade)', greyFront: GREY };
+			const groups = { back: backG, greyBack: greyBackG, front: frontG, greyFront: greyFrontG };
+			const caps = {};
 			for (let j = 0; j < NCH; j++) {
-				L.back.push(chunk('url(#p02-fade)', j));
-				L.greyBack.push(chunk(GREY, j));
-				L.front.push(chunk('url(#p02-fade)', j));
-				L.greyFront.push(chunk(GREY, j));
+				for (const k of Object.keys(L)) { L[k].push(chunk(paints[k])); }
 			}
-			backG.append(...L.back);
-			greyBackG.append(...L.greyBack);
-			frontG.append(...L.front);
-			greyFrontG.append(...L.greyFront);
-			return { side, L, frontG, greyFrontG };
+			for (const k of Object.keys(L)) {
+				caps[k] = [cap(paints[k]), cap(paints[k])]; // [start, end]
+				groups[k].append(...L[k], ...caps[k]);
+			}
+			return { side, L, caps, frontG, greyFrontG };
 		});
 		for (const th of S.threads) { sv.appendChild(th.frontG); }
 		for (const th of S.threads) { sv.appendChild(th.greyFrontG); }
@@ -248,6 +253,18 @@
 	}
 
 	// ------------------------------------------------------------ threads
+	// Round line cap of radius r at end point P, bulging away from its neighbour Q (the
+	// Catmull-Rom end tangent is P - Q), as two quarter-circle Béziers closed by the diameter.
+	function capPath(P, Q, r) {
+		let tx = P[0] - Q[0], ty = P[1] - Q[1];
+		const l = Math.hypot(tx, ty) || 1;
+		tx /= l; ty /= l;
+		const nx = -ty, ny = tx, q = .5523 * r;
+		const n = v => v.toFixed(3);
+		const A = [P[0] + nx * r, P[1] + ny * r], B = [P[0] + tx * r, P[1] + ty * r], C = [P[0] - nx * r, P[1] - ny * r];
+		return `M${n(A[0])},${n(A[1])} C${n(A[0] + tx * q)},${n(A[1] + ty * q)} ${n(B[0] + nx * q)},${n(B[1] + ny * q)} ${n(B[0])},${n(B[1])}` +
+			` C${n(B[0] - nx * q)},${n(B[1] - ny * q)} ${n(C[0] + tx * q)},${n(C[1] + ty * q)} ${n(C[0])},${n(C[1])} Z`;
+	}
 	function drawThreads(t, S) {
 		const thin = THREAD_W / SC; // 1.5 screen px in mark units
 		for (const th of S.threads) {
@@ -257,16 +274,26 @@
 				const d = crPath(pts, s, e);
 				const k = 1 - amt[Math.round((s + e) / 2)]; // settled share of this chunk
 				const wb = lerp(thin, G.BACK, k), wf = lerp(thin, G.STROKE, k);
-				const set = (p, w, o) => {
-					p.style.display = o > .001 ? 'inline' : 'none';
+				// Outer ends only: the semicircle cap at this chunk's free end.
+				const end = j === 0 ? 0 : j === NCH - 1 ? 1 : -1;
+				const P = end === 0 ? pts[0] : pts[N - 1], Q = end === 0 ? pts[1] : pts[N - 2];
+				const set = (layer, w, o) => {
+					const p = th.L[layer][j], vis = o > .001 ? 'inline' : 'none';
+					p.style.display = vis;
 					p.setAttribute('d', d);
 					p.setAttribute('stroke-width', w.toFixed(4));
 					p.setAttribute('stroke-opacity', o.toFixed(4));
+					if (end >= 0) {
+						const cp = th.caps[layer][end];
+						cp.style.display = vis;
+						cp.setAttribute('d', capPath(P, Q, w / 2));
+						cp.setAttribute('fill-opacity', o.toFixed(4));
+					}
 				};
-				set(th.L.back[j], wb, .5 * k);
-				set(th.L.greyBack[j], wb, 1 - k);
-				set(th.L.front[j], wf, k);
-				set(th.L.greyFront[j], wf, 1 - k);
+				set('back', wb, .5 * k);
+				set('greyBack', wb, 1 - k);
+				set('front', wf, k);
+				set('greyFront', wf, 1 - k);
 			}
 		}
 		// The depth mask slides with the weave exactly as c.mark's does.

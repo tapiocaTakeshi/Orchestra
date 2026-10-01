@@ -171,6 +171,9 @@
 
 	// Composite the incoming scene (k: 0 -> 1) over the outgoing one.
 	function applyTransition(type, k, inRoot, outRoot) {
+		// Land exactly on full opacity for the last frames, so the cut out of the
+		// transition does not shift the whole frame's brightness by a level.
+		if (k > .985) { k = 1; }
 		const e = ease.inOutCubic(k);
 		inRoot.style.clipPath = '';
 		inRoot.style.filter = '';
