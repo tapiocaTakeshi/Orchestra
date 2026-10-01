@@ -55,6 +55,12 @@ export interface IEditCodeService {
 	diffAreasOfURI: Record<string, Set<string> | undefined>;
 	diffOfId: Record<string, Diff>;
 
+	/**
+	 * エージェントが新規作成したファイルとして覚える。そのファイルの変更をすべて拒否して中身が空に戻ったら、
+	 * 空のファイルを残さず削除する。一部でも受け入れたファイルは覚えるのをやめる。
+	 */
+	markFileCreatedByAgent(uri: URI): void;
+
 	acceptOrRejectAllDiffAreas(opts: { uri: URI, removeCtrlKs: boolean, behavior: 'reject' | 'accept', _addToHistory?: boolean }): void;
 	acceptDiff({ diffid }: { diffid: number }): void;
 	rejectDiff({ diffid }: { diffid: number }): void;
