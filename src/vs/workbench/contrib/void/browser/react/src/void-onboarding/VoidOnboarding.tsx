@@ -3,10 +3,11 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAccessor, useIsDark, useSettingsState } from '../util/services.js';
 import { Brain, Check, ChevronRight, DollarSign, ExternalLink, Lock, X, Code, FileText, Search, Palette, Lightbulb, Folder, Globe, Image as ImageIcon, CheckCircle, PenLine } from 'lucide-react';
 import { displayInfoOfProviderName, ProviderName, providerNames, localProviderNames, featureNames, FeatureName, isFeatureNameDisabled, AgentRole, RoleAssignment } from '../../../../common/voidSettingsTypes.js';
+import { roleModelOptionsOfProvider } from '../../../../common/divisionModelCatalog.js';
 import { ChatMarkdownRender } from '../markdown/ChatMarkdownRender.js';
 import { OllamaSetupInstructions, OneClickSwitchButton, SettingsForProvider, ModelDump } from '../void-settings-tsx/Settings.js';
 import { ColorScheme } from '../../../../../../../platform/theme/common/theme.js';
@@ -300,23 +301,28 @@ const RoleSelector = ({
 	const [selectedProvider, setSelectedProvider] = useState<ProviderName>(currentAssignment?.provider || 'openAI');
 	const [selectedModel, setSelectedModel] = useState<string>(currentAssignment?.model || '');
 
-	// Get available models for selected provider
-	const availableModels = settingsState.settingsOfProvider[selectedProvider]?.models || [];
+	// Get available models for selected provider (起動時に Division API から取得した最新のモデル一覧)
+	const providerModels = useMemo(
+		() => roleModelOptionsOfProvider(settingsState.settingsOfProvider, selectedProvider),
+		[settingsState.settingsOfProvider, selectedProvider]
+	);
+	// 一覧に無い (Division 側で廃止された等) 設定値も、実際の値として表示しておく
+	const availableModels = selectedModel && !providerModels.includes(selectedModel) ? [selectedModel, ...providerModels] : providerModels;
 
 	// Update selected model when provider changes
 	useEffect(() => {
-		if (availableModels.length > 0 && !selectedModel) {
-			const firstModel = availableModels[0].modelName;
+		if (providerModels.length > 0 && !selectedModel) {
+			const firstModel = providerModels[0];
 			setSelectedModel(firstModel);
 			onAssignmentChange(selectedProvider, firstModel);
 		}
-	}, [selectedProvider, availableModels]);
+	}, [selectedProvider, providerModels]);
 
 	const handleProviderChange = (provider: ProviderName) => {
 		setSelectedProvider(provider);
-		const providerModels = settingsState.settingsOfProvider[provider]?.models || [];
-		if (providerModels.length > 0) {
-			const firstModel = providerModels[0].modelName;
+		const modelsOfProvider = roleModelOptionsOfProvider(settingsState.settingsOfProvider, provider);
+		if (modelsOfProvider.length > 0) {
+			const firstModel = modelsOfProvider[0];
 			setSelectedModel(firstModel);
 			onAssignmentChange(provider, firstModel);
 		}
@@ -358,8 +364,8 @@ const RoleSelector = ({
 						<option>No models available</option>
 					) : (
 						availableModels.map(model => (
-							<option key={model.modelName} value={model.modelName}>
-								{model.modelName}
+							<option key={model} value={model}>
+								{model}
 							</option>
 						))
 					)}
