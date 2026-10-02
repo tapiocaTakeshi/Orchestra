@@ -11,6 +11,7 @@ import { RefreshableProviderName, refreshableProviderNames, SettingsOfProvider }
 import { DivisionAPIModelResponse, OllamaModelResponse, OpenaiCompatibleModelResponse } from './sendLLMMessageTypes.js';
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
+import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 
 
 
@@ -134,6 +135,11 @@ export class RefreshModelService extends Disposable implements IRefreshModelServ
 		// on mount (when get init settings state), and if a relevant feature flag changes, start refreshing models
 		voidSettingsService.waitForInitState.then(() => {
 			initializeAutoPollingAndOnChange()
+			// Division プロジェクトのロール別モデル選択は Division API `/api/models` の一覧を使うので、
+			// 自動更新がオフでも起動時に毎回 1 度は最新の一覧を取りに行く (オンなら上で取得済み)。
+			if (!voidSettingsService.state.globalSettings.autoRefreshModels) {
+				this.startRefreshingModels('divisionAPI', autoOptions)
+			}
 			this._register(
 				voidSettingsService.onDidChangeState((type) => { if (typeof type === 'object' && type[1] === 'autoRefreshModels') initializeAutoPollingAndOnChange() })
 			)
@@ -249,4 +255,14 @@ export class RefreshModelService extends Disposable implements IRefreshModelServ
 }
 
 registerSingleton(IRefreshModelService, RefreshModelService, InstantiationType.Eager);
+
+
+// Eager でもサービスは最初に使われるまで生成されないので、起動時に生成して
+// Division API のモデル一覧を取得させる。
+class RefreshModelsOnStartupContribution implements IWorkbenchContribution {
+	static readonly ID = 'workbench.contrib.void.refreshModelsOnStartup'
+	constructor(@IRefreshModelService _refreshModelService: IRefreshModelService) { }
+}
+
+registerWorkbenchContribution2(RefreshModelsOnStartupContribution.ID, RefreshModelsOnStartupContribution, WorkbenchPhase.AfterRestored);
 

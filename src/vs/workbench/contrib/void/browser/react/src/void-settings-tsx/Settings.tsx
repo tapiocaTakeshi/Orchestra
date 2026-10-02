@@ -18,7 +18,8 @@ import { os } from '../../../../common/helpers/systemInfo.js'
 import { IconLoading, OrchestraThemeSwitcher } from '../sidebar-tsx/SidebarChat.js'
 import { ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsServiceTypes.js'
 import Severity from '../../../../../../../base/common/severity.js'
-import { defaultModelsOfProvider, getModelCapabilities, modelOverrideKeys, ModelOverrides } from '../../../../common/modelCapabilities.js';
+import { getModelCapabilities, modelOverrideKeys, ModelOverrides } from '../../../../common/modelCapabilities.js';
+import { roleModelOptionsOfProvider } from '../../../../common/divisionModelCatalog.js';
 import { TransferEditorType, TransferFilesInfo } from '../../../extensionTransferTypes.js';
 import { MCPServer } from '../../../../common/mcpServiceTypes.js';
 import { useMCPServiceState, useSkillServiceState } from '../util/services.js';
@@ -1220,11 +1221,9 @@ const DivisionSettings = () => {
 		review: 'Reviewer',
 	};
 
-	const getModelsForProvider = (pn: import('../../../../common/voidSettingsTypes.js').ProviderName) => {
-		const rt = settingsState.settingsOfProvider[pn]?.models || [];
-		if (rt.length > 0) return rt.map(m => m.modelName);
-		return [...(defaultModelsOfProvider[pn] || [])];
-	};
+	// 選択肢は起動時に Division API から取得した最新のモデル一覧
+	const getModelsForProvider = (pn: import('../../../../common/voidSettingsTypes.js').ProviderName) =>
+		roleModelOptionsOfProvider(settingsState.settingsOfProvider, pn);
 
 	const updateProjectRole = (project: any, role: string, field: 'provider' | 'model' | 'effort', value: string) => {
 		const agents = project.agents || [];
@@ -1447,8 +1446,10 @@ const DivisionSettings = () => {
 								{allRoles.map(role => {
 									const assignment = agents.find((ra: any) => ra.role === role);
 									const currentProvider = assignment?.provider || 'openAI';
-									const models = getModelsForProvider(currentProvider as any);
-									const currentModel = assignment?.model || models[0] || '';
+									const providerModels = getModelsForProvider(currentProvider as any);
+									const currentModel = assignment?.model || providerModels[0] || '';
+									// 一覧に無い (Division 側で廃止された等) 設定値も、実際の値として表示しておく
+									const models = currentModel && !providerModels.includes(currentModel) ? [currentModel, ...providerModels] : providerModels;
 
 									return (
 										<div key={role} style={{

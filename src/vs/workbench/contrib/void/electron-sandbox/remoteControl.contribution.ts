@@ -29,6 +29,7 @@ import { DivisionProjectConfig, IDivisionProjectService } from '../browser/divis
 import { IKanbanService } from '../browser/kanbanService.js';
 import { IRemoteSessionSyncService, RemoteGatewayStatus } from '../browser/remoteSessionSyncService.js';
 import { ChatMessage } from '../common/chatThreadServiceTypes.js';
+import { divisionModelNamesByProvider } from '../common/divisionModelCatalog.js';
 import { defaultKanbanSettings, KanbanColumn, KanbanTask } from '../common/kanbanServiceTypes.js';
 import {
 	REMOTE_CONTROL_IPC_ANNOUNCE,
@@ -508,10 +509,14 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 
 	private _providerModels(): { provider: string; models: string[] }[] {
 		const settingsOfProvider = this._settingsService.state.settingsOfProvider;
+		// Division API が扱うプロバイダは、起動時に Division API から取得した最新のモデル一覧を返す
+		const divisionModels = divisionModelNamesByProvider(settingsOfProvider);
 		return providerNames
 			.map(provider => ({
 				provider,
-				models: (settingsOfProvider[provider]?.models ?? []).filter(m => !m.isHidden).map(m => m.modelName),
+				models: divisionModels[provider]?.length
+					? divisionModels[provider]
+					: (settingsOfProvider[provider]?.models ?? []).filter(m => !m.isHidden).map(m => m.modelName),
 			}))
 			.filter(p => p.models.length > 0);
 	}
