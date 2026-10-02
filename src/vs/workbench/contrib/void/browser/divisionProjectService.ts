@@ -16,8 +16,9 @@ import { IFileService } from '../../../../platform/files/common/files.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
-import { AgentRole, defaultRoleAssignments, displayInfoOfProviderName, normalizeReasoningEffort, ProviderName, providerNames, ReasoningEffort, RoleAssignment } from '../common/voidSettingsTypes.js';
+import { AgentRole, defaultRoleAssignments, displayInfoOfProviderName, normalizeReasoningEffort, ProviderName, providerNames, ReasoningEffort, RoleAssignment, RoleProvider } from '../common/voidSettingsTypes.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
+import { divisionProviderIdOfRoleProvider } from '../common/divisionModelCatalog.js';
 import * as dom from '../../../../base/browser/dom.js';
 
 
@@ -430,7 +431,7 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 			const normProvider = normalizeProviderName(rawProvider);
 
 			const role: AgentRole = (normRole ?? rawRole) as AgentRole;
-			const provider: ProviderName = (normProvider ?? rawProvider) as ProviderName;
+			const provider: RoleProvider = normProvider ?? rawProvider;
 
 			if (rawRole !== role || rawProvider !== provider) changed = true;
 
@@ -635,14 +636,15 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 				...(ownerId ? { ownerId } : {}),
 			})));
 
-			// Collect unique roles and providers across all projects.
+			// Collect unique roles across all projects.
 			// Provider は Supabase 側の CHECK 制約に合わせて canonical id（小文字）で扱う。
+			// Provider テーブル自体は Division が管理する (Orchestra はそこから一覧を取るだけで書き込まない)。
 			// RoleAssignment は (projectId, roleId, providerId) を主キーにしているため、
 			// 同一エージェントが重複登録されているケースは前段でデデュープして
 			// "ON CONFLICT DO UPDATE command cannot affect row a second time" を防ぐ。
 			const roleSet = new Map<string, { slug: string; name: string }>();
-			const providerSet = new Map<string, { name: string; displayName: string; apiType: string }>();
 			const roleAssignmentRowMap = new Map<string, Record<string, unknown>>();
+			const divisionProviders = this.voidSettingsService.state.globalSettings.divisionProviders;
 			const skippedProviders = new Set<string>();
 
 			for (const project of projects) {
@@ -651,7 +653,9 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 					const agentRole = normalizeAgentRole(agent.role);
 					if (!agentRole) continue; // 不明なロールは同期しない
 					const roleSlug = AGENT_ROLE_TO_SUPABASE_ID[agentRole] ?? agentRole;
-					const providerSupabaseId = toSupabaseProviderId(agent.provider);
+					// Orchestra のプロバイダ名 → Supabase id。 Orchestra に無い Division のプロバイダ (例: typesafe) は
+					// Division API から取得したプロバイダ一覧の id をそのまま使う。
+					const providerSupabaseId = toSupabaseProviderId(agent.provider) ?? divisionProviderIdOfRoleProvider(agent.provider, divisionProviders);
 					if (!providerSupabaseId) {
 						skippedProviders.add(String(agent.provider));
 						continue; // CHECK 制約に通らないプロバイダは Supabase 同期対象外
@@ -661,19 +665,6 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 						roleSet.set(roleSlug, {
 							slug: roleSlug,
 							name: roleSlug.charAt(0).toUpperCase() + roleSlug.slice(1),
-						});
-					}
-
-					if (!providerSet.has(providerSupabaseId)) {
-						const canonicalProviderName = normalizeProviderName(agent.provider) as ProviderName | null;
-						let displayName = providerSupabaseId;
-						if (canonicalProviderName) {
-							try { displayName = displayInfoOfProviderName(canonicalProviderName).title; } catch { /* keep id */ }
-						}
-						providerSet.set(providerSupabaseId, {
-							name: displayName,
-							displayName,
-							apiType: providerSupabaseId,
 						});
 					}
 
@@ -706,25 +697,14 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 				updatedAt: now,
 			})));
 
-			// 3) Upsert Providers
-			await this._supabaseUpsert('Provider', [...providerSet.entries()].map(([id, p]) => ({
-				id,
-				name: p.name,
-				displayName: p.displayName,
-				apiBaseUrl: '',
-				apiType: p.apiType,
-				modelId: '',
-				updatedAt: now,
-			})));
-
-			// 4) Upsert RoleAssignments
+			// 3) Upsert RoleAssignments
 			// 1 行ずつ送る。まとめて送ると、サーバーの Role に無いロール (例: filesearch) が 1 つでも
 			// あると外部キー違反で全行が失敗し、leader の割り当てまで入らずタスク作成できなくなる。
 			await Promise.all(roleAssignmentRows.map(row => this._supabaseUpsert('RoleAssignment', [row])));
 
 			console.log(`[DivisionProjectService] Supabase sync OK — ${projects.length} project(s), ${roleAssignmentRows.length} assignment(s)`);
 
-			// 5) Fetch and store the Division API key for the active project
+			// 4) Fetch and store the Division API key for the active project
 			await this._fetchAndStoreDivisionApiKey();
 		} catch (e) {
 			console.error('[DivisionProjectService] Supabase sync error:', e);
@@ -896,9 +876,10 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 				providerRaw = maps.providerIdToName.get(a.providerId)!;
 			}
 
-			// 別名・表示名で汚れていた場合に備えて最後に正規化する。
+			// 別名・表示名で汚れていた場合に備えて最後に正規化する。 Orchestra に無いプロバイダ (例: typesafe) は
+			// 表示名 (TypeSafe API) ではなく Division のプロバイダ id のまま持つ。
 			const role = (normalizeAgentRole(roleRaw) ?? roleRaw) as AgentRole;
-			const provider = (normalizeProviderName(providerRaw) ?? providerRaw) as ProviderName;
+			const provider: RoleProvider = normalizeProviderName(providerRaw) ?? normalizeProviderName(a.providerId) ?? a.providerId;
 
 			return { role, provider, model, ...(effort ? { effort } : {}) };
 		});

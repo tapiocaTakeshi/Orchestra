@@ -253,6 +253,8 @@ export type OpenaiCompatibleModelResponse = {
 
 export type DivisionAPIModelResponse = {
 	name: string;
+	// `<providerId>/<modelId>` 形式のモデルについて、Division API が返すプロバイダの表示名
+	providerDisplayName?: string;
 }
 
 

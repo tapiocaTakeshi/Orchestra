@@ -19,7 +19,7 @@ import { IconLoading, OrchestraThemeSwitcher } from '../sidebar-tsx/SidebarChat.
 import { ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsServiceTypes.js'
 import Severity from '../../../../../../../base/common/severity.js'
 import { getModelCapabilities, modelOverrideKeys, ModelOverrides } from '../../../../common/modelCapabilities.js';
-import { roleModelOptionsOfProvider, roleProviderOptions } from '../../../../common/divisionModelCatalog.js';
+import { displayNameOfRoleProvider, roleModelOptionsOfProvider, roleProviderOptions } from '../../../../common/divisionModelCatalog.js';
 import { TransferEditorType, TransferFilesInfo } from '../../../extensionTransferTypes.js';
 import { MCPServer } from '../../../../common/mcpServiceTypes.js';
 import { useMCPServiceState, useSkillServiceState } from '../util/services.js';
@@ -793,7 +793,7 @@ export const AutoDetectLocalModelsToggle = () => {
 				metricsService.capture('Click', { action: 'Autorefresh Toggle', settingName, enabled: newVal })
 			}}
 		/>}
-		text={`Automatically detect local providers and models (${refreshableProviderNames.map(providerName => displayInfoOfProviderName(providerName).title).join(', ')}).`}
+		text={`Automatically detect local providers and models (${refreshableProviderNames.filter(providerName => providerName !== 'divisionAPI').map(providerName => displayInfoOfProviderName(providerName).title).join(', ')}).`}
 	/>
 
 
@@ -1223,12 +1223,10 @@ const DivisionSettings = () => {
 	};
 
 	// 選択肢は起動時に Division API から取得した、Supabase で isEnabled = true のプロバイダ / モデルのみ
-	const roleProviders = roleProviderOptions(settingsState.settingsOfProvider);
-	const getModelsForProvider = (pn: import('../../../../common/voidSettingsTypes.js').ProviderName) =>
-		roleModelOptionsOfProvider(settingsState.settingsOfProvider, pn);
-	const providerTitle = (pn: string) => {
-		try { return displayInfoOfProviderName(pn as any).title; } catch { return pn; }
-	};
+	const divisionProviders = settingsState.globalSettings.divisionProviders;
+	const roleProviders = roleProviderOptions(settingsState.settingsOfProvider, divisionProviders);
+	const getModelsForProvider = (provider: string) =>
+		roleModelOptionsOfProvider(settingsState.settingsOfProvider, divisionProviders, provider);
 
 	const updateProjectRole = (project: any, role: string, field: 'provider' | 'model' | 'effort', value: string) => {
 		const agents = project.agents || [];
@@ -1246,7 +1244,7 @@ const DivisionSettings = () => {
 			updated.push(applyField({ role: role as any, provider: field === 'provider' ? value as any : 'openAI', model: field === 'model' ? value : '' }));
 		}
 		if (field === 'provider') {
-			const models = getModelsForProvider(value as any);
+			const models = getModelsForProvider(value);
 			updated = updated.map((ra: any) => ra.role === role ? { ...ra, model: models[0] || '' } : ra);
 		}
 		divisionProjectService.save({ ...project, agents: updated });
@@ -1451,10 +1449,10 @@ const DivisionSettings = () => {
 								{allRoles.map(role => {
 									const assignment = agents.find((ra: any) => ra.role === role);
 									const currentProvider = assignment?.provider || 'openAI';
-									const models = getModelsForProvider(currentProvider as any);
+									const models = getModelsForProvider(currentProvider);
 									const currentModel = assignment?.model || models[0] || '';
 									// 保存済みの値が無効 (isEnabled = false) でも実際の値として表示はするが、選び直せないようにする
-									const isProviderDisabled = !roleProviders.includes(currentProvider as any);
+									const isProviderDisabled = !roleProviders.some(o => o.value === currentProvider);
 									const isModelDisabled = !!currentModel && !models.includes(currentModel);
 
 									return (
@@ -1475,10 +1473,10 @@ const DivisionSettings = () => {
 												}}
 											>
 												{isProviderDisabled && (
-													<option value={currentProvider} disabled>{providerTitle(currentProvider)} {t('division.roleOptionDisabled')}</option>
+													<option value={currentProvider} disabled>{displayNameOfRoleProvider(currentProvider, divisionProviders)} {t('division.roleOptionDisabled')}</option>
 												)}
-												{roleProviders.map(pn => (
-													<option key={pn} value={pn}>{displayInfoOfProviderName(pn).title}</option>
+												{roleProviders.map(o => (
+													<option key={o.divisionProviderId} value={o.value}>{o.displayName}</option>
 												))}
 											</select>
 											<select

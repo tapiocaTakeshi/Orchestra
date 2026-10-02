@@ -6,8 +6,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAccessor, useIsDark, useSettingsState } from '../util/services.js';
 import { Brain, Check, ChevronRight, DollarSign, ExternalLink, Lock, X, Code, FileText, Search, Palette, Lightbulb, Folder, Globe, Image as ImageIcon, CheckCircle, PenLine } from 'lucide-react';
-import { displayInfoOfProviderName, ProviderName, providerNames, localProviderNames, featureNames, FeatureName, isFeatureNameDisabled, AgentRole, RoleAssignment } from '../../../../common/voidSettingsTypes.js';
-import { roleModelOptionsOfProvider, roleProviderOptions } from '../../../../common/divisionModelCatalog.js';
+import { displayInfoOfProviderName, ProviderName, providerNames, localProviderNames, featureNames, FeatureName, isFeatureNameDisabled, AgentRole, RoleAssignment, RoleProvider } from '../../../../common/voidSettingsTypes.js';
+import { displayNameOfRoleProvider, roleModelOptionsOfProvider, roleProviderOptions } from '../../../../common/divisionModelCatalog.js';
 import { ChatMarkdownRender } from '../markdown/ChatMarkdownRender.js';
 import { OllamaSetupInstructions, OneClickSwitchButton, SettingsForProvider, ModelDump } from '../void-settings-tsx/Settings.js';
 import { ColorScheme } from '../../../../../../../platform/theme/common/theme.js';
@@ -295,25 +295,26 @@ const RoleSelector = ({
 	description: string;
 	icon: any;
 	currentAssignment: RoleAssignment | undefined;
-	onAssignmentChange: (provider: ProviderName, model: string) => void;
+	onAssignmentChange: (provider: RoleProvider, model: string) => void;
 }) => {
 	const settingsState = useSettingsState();
-	const [selectedProvider, setSelectedProvider] = useState<ProviderName>(currentAssignment?.provider || 'openAI');
+	const [selectedProvider, setSelectedProvider] = useState<RoleProvider>(currentAssignment?.provider || 'openAI');
 	const [selectedModel, setSelectedModel] = useState<string>(currentAssignment?.model || '');
 
 	const { t } = useTranslation();
 
-	// 選択肢は起動時に Division API から取得した、Supabase で isEnabled = true のプロバイダ / モデルのみ
+	// 選択肢は Division API から取得した、Supabase で isEnabled = true のプロバイダ / モデルのみ
+	const divisionProviders = settingsState.globalSettings.divisionProviders;
 	const roleProviders = useMemo(
-		() => roleProviderOptions(settingsState.settingsOfProvider),
-		[settingsState.settingsOfProvider]
+		() => roleProviderOptions(settingsState.settingsOfProvider, divisionProviders),
+		[settingsState.settingsOfProvider, divisionProviders]
 	);
 	const providerModels = useMemo(
-		() => roleModelOptionsOfProvider(settingsState.settingsOfProvider, selectedProvider),
-		[settingsState.settingsOfProvider, selectedProvider]
+		() => roleProviders.find(o => o.value === selectedProvider)?.models ?? [],
+		[roleProviders, selectedProvider]
 	);
 	// 保存済みの値が無効 (isEnabled = false) でも実際の値として表示はするが、選び直せないようにする
-	const isProviderDisabled = !roleProviders.includes(selectedProvider);
+	const isProviderDisabled = !roleProviders.some(o => o.value === selectedProvider);
 	const isModelDisabled = !!selectedModel && !providerModels.includes(selectedModel);
 
 	// Update selected model when provider changes
@@ -325,9 +326,9 @@ const RoleSelector = ({
 		}
 	}, [selectedProvider, providerModels]);
 
-	const handleProviderChange = (provider: ProviderName) => {
+	const handleProviderChange = (provider: RoleProvider) => {
 		setSelectedProvider(provider);
-		const modelsOfProvider = roleModelOptionsOfProvider(settingsState.settingsOfProvider, provider);
+		const modelsOfProvider = roleModelOptionsOfProvider(settingsState.settingsOfProvider, divisionProviders, provider);
 		if (modelsOfProvider.length > 0) {
 			const firstModel = modelsOfProvider[0];
 			setSelectedModel(firstModel);
@@ -352,17 +353,17 @@ const RoleSelector = ({
 			<div className="flex gap-2">
 				<select
 					value={selectedProvider}
-					onChange={(e) => handleProviderChange(e.target.value as ProviderName)}
+					onChange={(e) => handleProviderChange(e.target.value)}
 					className="px-3 py-2 bg-void-bg-3 border border-void-border-2 rounded text-sm"
 				>
 					{isProviderDisabled && (
 						<option value={selectedProvider} disabled>
-							{displayInfoOfProviderName(selectedProvider).title} {t('division.roleOptionDisabled')}
+							{displayNameOfRoleProvider(selectedProvider, divisionProviders)} {t('division.roleOptionDisabled')}
 						</option>
 					)}
-					{roleProviders.map(pn => (
-						<option key={pn} value={pn}>
-							{displayInfoOfProviderName(pn).title}
+					{roleProviders.map(o => (
+						<option key={o.divisionProviderId} value={o.value}>
+							{o.displayName}
 						</option>
 					))}
 				</select>
@@ -431,7 +432,7 @@ const RoleAssignmentPage = ({
 		review: CheckCircle,
 	};
 
-	const handleAssignmentChange = (role: AgentRole, provider: ProviderName, model: string) => {
+	const handleAssignmentChange = (role: AgentRole, provider: RoleProvider, model: string) => {
 		const newAssignments = settingsState.globalSettings.roleAssignments.map(a =>
 			a.role === role ? { role, provider, model } : a
 		);
