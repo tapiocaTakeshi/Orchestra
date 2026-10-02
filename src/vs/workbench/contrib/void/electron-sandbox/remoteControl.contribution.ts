@@ -508,16 +508,10 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 	}
 
 	private _providerModels(): { provider: string; models: string[] }[] {
-		const settingsOfProvider = this._settingsService.state.settingsOfProvider;
-		// Division API が扱うプロバイダは、起動時に Division API から取得した最新のモデル一覧を返す
-		const divisionModels = divisionModelNamesByProvider(settingsOfProvider);
+		// ロールに選べるのは、起動時に Division API から取得した Supabase で isEnabled = true のモデルのみ
+		const divisionModels = divisionModelNamesByProvider(this._settingsService.state.settingsOfProvider);
 		return providerNames
-			.map(provider => ({
-				provider,
-				models: divisionModels[provider]?.length
-					? divisionModels[provider]
-					: (settingsOfProvider[provider]?.models ?? []).filter(m => !m.isHidden).map(m => m.modelName),
-			}))
+			.map(provider => ({ provider, models: divisionModels[provider] ?? [] }))
 			.filter(p => p.models.length > 0);
 	}
 
