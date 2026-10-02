@@ -476,17 +476,19 @@ const _openaiCompatibleList = async ({ onSuccess: onSuccess_, onError: onError_,
 // modelName として返す。 こうすると後段 (callDivisionGenerateStream) で provider と
 // model を分離して `/api/generate/stream` に正しく投げられる。
 //
+// provider の displayName も providerDisplayName として添える (ロール割り当てのプロバイダ選択肢に使う)。
+//
 // 後方互換として、他の構造 (data.models[], data.data[], 文字列等) も受け付ける。
 //   - models[] / data[] 直下の entry は providerId 不明なので modelId だけ返す。
 //   - 文字列 entry はそのまま使う。
-const getDivisionAPIModelNames = (data: any): string[] => {
-	const orderedNames: string[] = []
+const getDivisionAPIModels = (data: any): DivisionAPIModelResponse[] => {
+	const orderedModels: DivisionAPIModelResponse[] = []
 	const seen = new Set<string>()
-	const push = (name: string) => {
+	const push = (name: string, providerDisplayName?: string) => {
 		const trimmed = name.trim()
 		if (!trimmed || seen.has(trimmed)) return
 		seen.add(trimmed)
-		orderedNames.push(trimmed)
+		orderedModels.push(providerDisplayName ? { name: trimmed, providerDisplayName } : { name: trimmed })
 	}
 	push('division-orchestrator')
 
@@ -506,7 +508,7 @@ const getDivisionAPIModelNames = (data: any): string[] => {
 			if (single) push(single)
 			return
 		}
-		const p = provider as { id?: unknown; name?: unknown; apiType?: unknown; models?: unknown }
+		const p = provider as { id?: unknown; name?: unknown; displayName?: unknown; apiType?: unknown; models?: unknown }
 		// providerId は id > apiType > name の優先で決定。 すべて欠けるなら "" 扱い。
 		const providerId = (
 			(typeof p.id === 'string' && p.id.trim()) ? p.id.trim()
@@ -514,11 +516,17 @@ const getDivisionAPIModelNames = (data: any): string[] => {
 					: (typeof p.name === 'string' && p.name.trim()) ? p.name.trim()
 						: ''
 		)
+		const providerDisplayName = (
+			(typeof p.displayName === 'string' && p.displayName.trim()) ? p.displayName.trim()
+				: (typeof p.name === 'string' && p.name.trim()) ? p.name.trim()
+					: providerId
+		)
 		if (Array.isArray(p.models)) {
 			for (const m of p.models) {
 				const modelId = pickModelId(m)
 				if (!modelId) continue
-				push(providerId ? `${providerId}/${modelId}` : modelId)
+				if (providerId) push(`${providerId}/${modelId}`, providerDisplayName)
+				else push(modelId)
 			}
 		} else {
 			// 配下に models[] が無い provider entry は model として扱う後方互換
@@ -543,7 +551,7 @@ const getDivisionAPIModelNames = (data: any): string[] => {
 		}
 	}
 
-	return orderedNames
+	return orderedModels
 }
 
 const divisionAPIList = async ({ onSuccess: onSuccess_, onError: onError_, settingsOfProvider, divisionApiKey }: ListParams_Internal<DivisionAPIModelResponse>) => {
@@ -568,7 +576,7 @@ const divisionAPIList = async ({ onSuccess: onSuccess_, onError: onError_, setti
 		}
 
 		const data = await response.json()
-		const models = getDivisionAPIModelNames(data).map(name => ({ name }))
+		const models = getDivisionAPIModels(data)
 		if (models.length === 0) {
 			const msg = 'Division API /api/models response did not contain any models.'
 			console.warn('[DivisionAPI]', msg, { url, data })

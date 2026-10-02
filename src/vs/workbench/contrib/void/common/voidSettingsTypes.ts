@@ -571,11 +571,22 @@ export const normalizeReasoningEffort = (value: unknown): ReasoningEffort | unde
 	return (reasoningEfforts as readonly string[]).includes(v) ? v as ReasoningEffort : undefined;
 };
 
+// ロールのプロバイダは Division API のプロバイダ一覧から選ぶ。 Orchestra が知っている
+// プロバイダはその ProviderName (openAI, gemini, ...)、知らないものは Division のプロバイダ ID
+// (例: typesafe) のまま保存する。
+export type RoleProvider = ProviderName | (string & {});
+
 export type RoleAssignment = {
 	role: AgentRole;
-	provider: ProviderName;
+	provider: RoleProvider;
 	model: string;
 	effort?: ReasoningEffort;
+};
+
+// Division API `/api/models` が返すプロバイダ (Supabase の Provider テーブルで isEnabled = true のもの)
+export type DivisionProviderInfo = {
+	id: string; // Supabase の Provider.id (例: openai, google, typesafe)
+	displayName: string;
 };
 
 // AI コミットメッセージ生成の出力言語設定。
@@ -620,6 +631,8 @@ export type GlobalSettings = {
 	roleAssignments: RoleAssignment[];
 	divisionProjectId: string;
 	divisionAutoRouting?: { minPerformance: number; maxCostUsd: number; maxOutputTokens: number };
+	// Division API から取得したプロバイダ一覧 (ロール割り当ての選択肢)。refreshModelService が常に更新する。
+	divisionProviders: DivisionProviderInfo[];
 	divisionApiKey: string;
 	// Supabase 認証セッション（Division API のキーを引くために使用）
 	divisionUserId: string;
@@ -690,6 +703,7 @@ export const defaultGlobalSettings: GlobalSettings = {
 	autoAcceptLLMChanges: false,
 	roleAssignments: defaultRoleAssignments,
 	divisionProjectId: '',
+	divisionProviders: [],
 	divisionApiKey: '',
 	divisionUserId: '',
 	divisionUserEmail: '',

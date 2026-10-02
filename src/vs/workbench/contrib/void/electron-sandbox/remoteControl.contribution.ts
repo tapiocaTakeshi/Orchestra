@@ -29,7 +29,7 @@ import { DivisionProjectConfig, IDivisionProjectService } from '../browser/divis
 import { IKanbanService } from '../browser/kanbanService.js';
 import { IRemoteSessionSyncService, RemoteGatewayStatus } from '../browser/remoteSessionSyncService.js';
 import { ChatMessage } from '../common/chatThreadServiceTypes.js';
-import { divisionModelNamesByProvider } from '../common/divisionModelCatalog.js';
+import { roleProviderOptions } from '../common/divisionModelCatalog.js';
 import { defaultKanbanSettings, KanbanColumn, KanbanTask } from '../common/kanbanServiceTypes.js';
 import {
 	REMOTE_CONTROL_IPC_ANNOUNCE,
@@ -53,7 +53,7 @@ import {
 	RemoteThreadSummary,
 } from '../common/remoteControlTypes.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
-import { AgentRole, ProviderName, providerNames, RoleAssignment } from '../common/voidSettingsTypes.js';
+import { AgentRole, providerNames, RoleAssignment } from '../common/voidSettingsTypes.js';
 
 Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).registerConfiguration({
 	id: 'orchestraRemoteControl',
@@ -507,12 +507,14 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 		};
 	}
 
-	private _providerModels(): { provider: string; models: string[] }[] {
-		// ロールに選べるのは、起動時に Division API から取得した Supabase で isEnabled = true のモデルのみ
-		const divisionModels = divisionModelNamesByProvider(this._settingsService.state.settingsOfProvider);
-		return providerNames
-			.map(provider => ({ provider, models: divisionModels[provider] ?? [] }))
-			.filter(p => p.models.length > 0);
+	private _roleProviderOptions() {
+		const { settingsOfProvider, globalSettings } = this._settingsService.state;
+		return roleProviderOptions(settingsOfProvider, globalSettings.divisionProviders);
+	}
+
+	private _providerModels(): { provider: string; displayName: string; models: string[] }[] {
+		// ロールに選べるのは、Division API から取得した Supabase で isEnabled = true のプロバイダ / モデルのみ
+		return this._roleProviderOptions().map(o => ({ provider: o.value, displayName: o.displayName, models: o.models }));
 	}
 
 	/**
@@ -649,13 +651,15 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 
 	private _parseAgents(raw: unknown): RoleAssignment[] | undefined {
 		if (!Array.isArray(raw)) return undefined;
+		// Orchestra のプロバイダ名に加えて、Division のプロバイダ (例: typesafe) も受け付ける
+		const knownProviders = new Set<string>([...providerNames, ...this._roleProviderOptions().map(o => o.value)]);
 		return raw.map((entry, i) => {
 			const a = asObject(entry);
 			const provider = requireString(a.provider, `agents[${i}].provider`);
-			if (!(providerNames as string[]).includes(provider)) throw new HttpError(400, 'invalid_request', `agents[${i}].provider: unknown provider ${provider}`);
+			if (!knownProviders.has(provider)) throw new HttpError(400, 'invalid_request', `agents[${i}].provider: unknown provider ${provider}`);
 			return {
 				role: requireString(a.role, `agents[${i}].role`) as AgentRole,
-				provider: provider as ProviderName,
+				provider,
 				model: requireString(a.model, `agents[${i}].model`),
 			};
 		});

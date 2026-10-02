@@ -7,7 +7,7 @@ import { IVoidSettingsService } from './voidSettingsService.js';
 import { ILLMMessageService } from './sendLLMMessageService.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { Disposable, IDisposable } from '../../../../base/common/lifecycle.js';
-import { RefreshableProviderName, refreshableProviderNames, SettingsOfProvider } from './voidSettingsTypes.js';
+import { DivisionProviderInfo, RefreshableProviderName, refreshableProviderNames, SettingsOfProvider } from './voidSettingsTypes.js';
 import { DivisionAPIModelResponse, OllamaModelResponse, OpenaiCompatibleModelResponse } from './sendLLMMessageTypes.js';
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
@@ -56,6 +56,10 @@ const REFRESH_INTERVAL = 5_000
 
 const autoOptions = { enableProviderOnSuccess: true, doNotFire: true }
 
+// Division API のプロバイダ / モデル一覧は Division プロジェクトのロール割り当ての選択肢なので、
+// ローカルモデルの自動検出 (autoRefreshModels) の設定に関わらず常に取得・更新し続ける。
+const isAlwaysRefreshed = (providerName: RefreshableProviderName) => providerName === 'divisionAPI'
+
 // element-wise equals
 function eq<T>(a: T[], b: T[]): boolean {
 	if (a.length !== b.length) return false
@@ -95,9 +99,9 @@ export class RefreshModelService extends Disposable implements IRefreshModelServ
 			disposables.forEach(d => d.dispose())
 			disposables.clear()
 
-			if (!voidSettingsService.state.globalSettings.autoRefreshModels) return
-
+			const autoRefreshModels = voidSettingsService.state.globalSettings.autoRefreshModels
 			for (const providerName of refreshableProviderNames) {
+				if (!autoRefreshModels && !isAlwaysRefreshed(providerName)) continue
 
 				// const { '_didFillInProviderSettings': enabled } = this.voidSettingsService.state.settingsOfProvider[providerName]
 				this.startRefreshingModels(providerName, autoOptions)
@@ -135,11 +139,6 @@ export class RefreshModelService extends Disposable implements IRefreshModelServ
 		// on mount (when get init settings state), and if a relevant feature flag changes, start refreshing models
 		voidSettingsService.waitForInitState.then(() => {
 			initializeAutoPollingAndOnChange()
-			// Division プロジェクトのロール別モデル選択は Division API `/api/models` の一覧を使うので、
-			// 自動更新がオフでも起動時に毎回 1 度は最新の一覧を取りに行く (オンなら上で取得済み)。
-			if (!voidSettingsService.state.globalSettings.autoRefreshModels) {
-				this.startRefreshingModels('divisionAPI', autoOptions)
-			}
 			this._register(
 				voidSettingsService.onDidChangeState((type) => { if (typeof type === 'object' && type[1] === 'autoRefreshModels') initializeAutoPollingAndOnChange() })
 			)
@@ -163,7 +162,7 @@ export class RefreshModelService extends Disposable implements IRefreshModelServ
 		this._setRefreshState(providerName, 'refreshing', options)
 
 		const autoPoll = () => {
-			if (this.voidSettingsService.state.globalSettings.autoRefreshModels) {
+			if (isAlwaysRefreshed(providerName) || this.voidSettingsService.state.globalSettings.autoRefreshModels) {
 				// resume auto-polling
 				const timeoutId = setTimeout(() => this.startRefreshingModels(providerName, autoOptions), REFRESH_INTERVAL)
 				this._setTimeoutId(providerName, timeoutId)
@@ -206,6 +205,19 @@ export class RefreshModelService extends Disposable implements IRefreshModelServ
 							isHidden: false,
 						}))
 					)
+
+					// プロバイダの並び順と表示名もロール割り当ての選択肢として保存する (変わったときだけ)
+					const divisionProviders: DivisionProviderInfo[] = []
+					for (const model of models as DivisionAPIModelResponse[]) {
+						const idx = model.name.indexOf('/')
+						if (idx <= 0) continue
+						const id = model.name.slice(0, idx)
+						if (divisionProviders.some(p => p.id === id)) continue
+						divisionProviders.push({ id, displayName: model.providerDisplayName || id })
+					}
+					if (JSON.stringify(divisionProviders) !== JSON.stringify(this.voidSettingsService.state.globalSettings.divisionProviders)) {
+						this.voidSettingsService.setGlobalSetting('divisionProviders', divisionProviders)
+					}
 				}
 				else {
 					this.voidSettingsService.setAutodetectedModels(
