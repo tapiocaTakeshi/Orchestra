@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAccessor, useIsDark, useSettingsState } from '../util/services.js';
 import { Brain, Check, ChevronRight, DollarSign, ExternalLink, Lock, X, Code, FileText, Search, Palette, Lightbulb, Folder, Globe, Image as ImageIcon, CheckCircle, PenLine } from 'lucide-react';
 import { displayInfoOfProviderName, ProviderName, providerNames, localProviderNames, featureNames, FeatureName, isFeatureNameDisabled, AgentRole, RoleAssignment } from '../../../../common/voidSettingsTypes.js';
-import { roleModelOptionsOfProvider } from '../../../../common/divisionModelCatalog.js';
+import { roleModelOptionsOfProvider, roleProviderOptions } from '../../../../common/divisionModelCatalog.js';
 import { ChatMarkdownRender } from '../markdown/ChatMarkdownRender.js';
 import { OllamaSetupInstructions, OneClickSwitchButton, SettingsForProvider, ModelDump } from '../void-settings-tsx/Settings.js';
 import { ColorScheme } from '../../../../../../../platform/theme/common/theme.js';
@@ -301,13 +301,20 @@ const RoleSelector = ({
 	const [selectedProvider, setSelectedProvider] = useState<ProviderName>(currentAssignment?.provider || 'openAI');
 	const [selectedModel, setSelectedModel] = useState<string>(currentAssignment?.model || '');
 
-	// Get available models for selected provider (起動時に Division API から取得した最新のモデル一覧)
+	const { t } = useTranslation();
+
+	// 選択肢は起動時に Division API から取得した、Supabase で isEnabled = true のプロバイダ / モデルのみ
+	const roleProviders = useMemo(
+		() => roleProviderOptions(settingsState.settingsOfProvider),
+		[settingsState.settingsOfProvider]
+	);
 	const providerModels = useMemo(
 		() => roleModelOptionsOfProvider(settingsState.settingsOfProvider, selectedProvider),
 		[settingsState.settingsOfProvider, selectedProvider]
 	);
-	// 一覧に無い (Division 側で廃止された等) 設定値も、実際の値として表示しておく
-	const availableModels = selectedModel && !providerModels.includes(selectedModel) ? [selectedModel, ...providerModels] : providerModels;
+	// 保存済みの値が無効 (isEnabled = false) でも実際の値として表示はするが、選び直せないようにする
+	const isProviderDisabled = !roleProviders.includes(selectedProvider);
+	const isModelDisabled = !!selectedModel && !providerModels.includes(selectedModel);
 
 	// Update selected model when provider changes
 	useEffect(() => {
@@ -348,7 +355,12 @@ const RoleSelector = ({
 					onChange={(e) => handleProviderChange(e.target.value as ProviderName)}
 					className="px-3 py-2 bg-void-bg-3 border border-void-border-2 rounded text-sm"
 				>
-					{providerNames.map(pn => (
+					{isProviderDisabled && (
+						<option value={selectedProvider} disabled>
+							{displayInfoOfProviderName(selectedProvider).title} {t('division.roleOptionDisabled')}
+						</option>
+					)}
+					{roleProviders.map(pn => (
 						<option key={pn} value={pn}>
 							{displayInfoOfProviderName(pn).title}
 						</option>
@@ -358,12 +370,17 @@ const RoleSelector = ({
 					value={selectedModel}
 					onChange={(e) => handleModelChange(e.target.value)}
 					className="px-3 py-2 bg-void-bg-3 border border-void-border-2 rounded text-sm min-w-[200px]"
-					disabled={availableModels.length === 0}
+					disabled={providerModels.length === 0}
 				>
-					{availableModels.length === 0 ? (
-						<option>No models available</option>
+					{isModelDisabled && (
+						<option value={selectedModel} disabled>
+							{selectedModel} {t('division.roleOptionDisabled')}
+						</option>
+					)}
+					{providerModels.length === 0 ? (
+						!isModelDisabled && <option>No models available</option>
 					) : (
-						availableModels.map(model => (
+						providerModels.map(model => (
 							<option key={model} value={model}>
 								{model}
 							</option>

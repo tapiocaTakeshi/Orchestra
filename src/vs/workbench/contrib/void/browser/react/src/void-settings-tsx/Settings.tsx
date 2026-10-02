@@ -19,7 +19,7 @@ import { IconLoading, OrchestraThemeSwitcher } from '../sidebar-tsx/SidebarChat.
 import { ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsServiceTypes.js'
 import Severity from '../../../../../../../base/common/severity.js'
 import { getModelCapabilities, modelOverrideKeys, ModelOverrides } from '../../../../common/modelCapabilities.js';
-import { roleModelOptionsOfProvider } from '../../../../common/divisionModelCatalog.js';
+import { roleModelOptionsOfProvider, roleProviderOptions } from '../../../../common/divisionModelCatalog.js';
 import { TransferEditorType, TransferFilesInfo } from '../../../extensionTransferTypes.js';
 import { MCPServer } from '../../../../common/mcpServiceTypes.js';
 import { useMCPServiceState, useSkillServiceState } from '../util/services.js';
@@ -1147,6 +1147,7 @@ const DivisionSettings = () => {
 	const voidSettingsService = accessor.get('IVoidSettingsService');
 	const projects = useDivisionProjects();
 	const settingsState = useSettingsState();
+	const { t } = useTranslation();
 
 	const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
 	const [allUpdateStatus, setAllUpdateStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -1221,9 +1222,13 @@ const DivisionSettings = () => {
 		review: 'Reviewer',
 	};
 
-	// 選択肢は起動時に Division API から取得した最新のモデル一覧
+	// 選択肢は起動時に Division API から取得した、Supabase で isEnabled = true のプロバイダ / モデルのみ
+	const roleProviders = roleProviderOptions(settingsState.settingsOfProvider);
 	const getModelsForProvider = (pn: import('../../../../common/voidSettingsTypes.js').ProviderName) =>
 		roleModelOptionsOfProvider(settingsState.settingsOfProvider, pn);
+	const providerTitle = (pn: string) => {
+		try { return displayInfoOfProviderName(pn as any).title; } catch { return pn; }
+	};
 
 	const updateProjectRole = (project: any, role: string, field: 'provider' | 'model' | 'effort', value: string) => {
 		const agents = project.agents || [];
@@ -1446,10 +1451,11 @@ const DivisionSettings = () => {
 								{allRoles.map(role => {
 									const assignment = agents.find((ra: any) => ra.role === role);
 									const currentProvider = assignment?.provider || 'openAI';
-									const providerModels = getModelsForProvider(currentProvider as any);
-									const currentModel = assignment?.model || providerModels[0] || '';
-									// 一覧に無い (Division 側で廃止された等) 設定値も、実際の値として表示しておく
-									const models = currentModel && !providerModels.includes(currentModel) ? [currentModel, ...providerModels] : providerModels;
+									const models = getModelsForProvider(currentProvider as any);
+									const currentModel = assignment?.model || models[0] || '';
+									// 保存済みの値が無効 (isEnabled = false) でも実際の値として表示はするが、選び直せないようにする
+									const isProviderDisabled = !roleProviders.includes(currentProvider as any);
+									const isModelDisabled = !!currentModel && !models.includes(currentModel);
 
 									return (
 										<div key={role} style={{
@@ -1468,7 +1474,10 @@ const DivisionSettings = () => {
 													fontSize: '10px', color: 'var(--void-fg-2)', flex: '0 0 100px',
 												}}
 											>
-												{providerNames.map(pn => (
+												{isProviderDisabled && (
+													<option value={currentProvider} disabled>{providerTitle(currentProvider)} {t('division.roleOptionDisabled')}</option>
+												)}
+												{roleProviders.map(pn => (
 													<option key={pn} value={pn}>{displayInfoOfProviderName(pn).title}</option>
 												))}
 											</select>
@@ -1481,6 +1490,10 @@ const DivisionSettings = () => {
 													fontSize: '10px', color: 'var(--void-fg-2)', flex: 1, minWidth: 0,
 												}}
 											>
+												{isModelDisabled && (
+													<option value={currentModel} disabled>{currentModel} {t('division.roleOptionDisabled')}</option>
+												)}
+												{!currentModel && models.length === 0 && <option value=''>No models available</option>}
 												{models.map(m => (
 													<option key={m} value={m}>{m}</option>
 												))}

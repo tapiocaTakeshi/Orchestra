@@ -82,6 +82,8 @@ export const translations = {
 	// Settings - Division / MCP / Updates section headers
 	'division.title': { en: 'Division', ja: 'Division' },
 	'division.subtitle': { en: 'Manage your Division projects and role assignments.', ja: 'Division プロジェクトとロール割り当てを管理します。' },
+	// ロールに保存済みだが Division で無効 (isEnabled = false) のプロバイダ / モデルに付ける
+	'division.roleOptionDisabled': { en: '(disabled)', ja: '（無効）' },
 	'mcp.title': { en: 'MCP', ja: 'MCP' },
 	'mcp.addServer': { en: 'Add MCP Server', ja: 'MCP サーバーを追加' },
 	'skills.title': { en: 'Skills', ja: 'スキル' },

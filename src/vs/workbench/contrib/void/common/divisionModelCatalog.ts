@@ -2,14 +2,14 @@
  *  Division Model Catalog
  *  Division プロジェクトのロール割り当てで選べるモデル一覧。
  *
- *  ロールのモデルは Division API がそのまま実行するので、選択肢は Division API
- *  `/api/models` が返す最新の一覧を使う。 refreshModelService が起動時に取得して
+ *  ロールのモデルは Division API がそのまま実行するので、選べるのは Division API
+ *  `/api/models` が返すもの = Supabase の Model / Provider テーブルで isEnabled = true の
+ *  ものだけにする。 refreshModelService が起動時に取得して
  *  `settingsOfProvider.divisionAPI.models` に `<providerId>/<modelId>` 形式で保存して
  *  いるので、それを Orchestra のプロバイダ名ごとに振り分けて返す。
  *--------------------------------------------------------------------------------------*/
 
-import { defaultModelsOfProvider } from './modelCapabilities.js';
-import { ProviderName, SettingsOfProvider } from './voidSettingsTypes.js';
+import { ProviderName, providerNames, SettingsOfProvider } from './voidSettingsTypes.js';
 
 // Division API の provider.id → Orchestra の ProviderName
 const PROVIDER_NAME_OF_DIVISION_PROVIDER_ID: Record<string, ProviderName> = {
@@ -37,15 +37,12 @@ export const divisionModelNamesByProvider = (settingsOfProvider: SettingsOfProvi
 	return result;
 };
 
-/**
- * ロール割り当てのモデル選択肢。 Division API の一覧があればそれを使い、
- * まだ取得できていない (オフラインの初回起動など) / Division が扱わないプロバイダでは
- * これまで通りプロバイダ設定のモデル一覧 → 組み込みの既定一覧にフォールバックする。
- */
-export const roleModelOptionsOfProvider = (settingsOfProvider: SettingsOfProvider, providerName: ProviderName): string[] => {
-	const fromDivision = divisionModelNamesByProvider(settingsOfProvider)[providerName];
-	if (fromDivision && fromDivision.length > 0) return fromDivision;
-	const fromProvider = settingsOfProvider[providerName]?.models ?? [];
-	if (fromProvider.length > 0) return fromProvider.map(m => m.modelName);
-	return [...(defaultModelsOfProvider[providerName] ?? [])];
+/** ロール割り当てで選べるプロバイダ = 有効なモデルを 1 つ以上持つもの (providerNames の順) */
+export const roleProviderOptions = (settingsOfProvider: SettingsOfProvider): ProviderName[] => {
+	const byProvider = divisionModelNamesByProvider(settingsOfProvider);
+	return providerNames.filter(p => (byProvider[p]?.length ?? 0) > 0);
 };
+
+/** ロール割り当てで選べるモデル (未取得・Division が扱わないプロバイダでは空) */
+export const roleModelOptionsOfProvider = (settingsOfProvider: SettingsOfProvider, providerName: ProviderName): string[] =>
+	divisionModelNamesByProvider(settingsOfProvider)[providerName] ?? [];
