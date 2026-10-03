@@ -1023,8 +1023,8 @@ const FLOW_ROLE_TO_FILENAME: Record<string, string> = {
 	'leader': 'LEADER.md',
 	'coder': 'CODER.md',
 	'coding': 'CODER.md',
-	'design': 'DESIGNER.md',
-	'designer': 'DESIGNER.md',
+	'design': 'DESIGN.md',
+	'designer': 'DESIGN.md',
 	'search': 'SEARCH.md',
 	'searcher': 'SEARCH.md',
 	'file-search': 'FILE-SEARCH.md',
@@ -1856,7 +1856,7 @@ const callDivisionTaskExecute = async (
 // Local file search: scan the workspace and return matching files with their contents.
 // Used to enrich the file-search task output with actual file contents from the user's workspace.
 //
-// `.division` は Orchestra が Division API の中間成果物 (*.md / DESIGNER.md) を
+// `.division` は Orchestra が Division API の中間成果物 (*.md) を
 // 書き出す作業フォルダなので、file-searcher が本体プロジェクトのファイルではなく
 // 自分が書いた中間 MD を読み込んでしまうのを防ぐため常に除外する。
 const IGNORED_DIRS = new Set([
