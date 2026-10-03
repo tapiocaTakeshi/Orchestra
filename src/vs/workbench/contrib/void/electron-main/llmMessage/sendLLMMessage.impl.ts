@@ -1631,6 +1631,42 @@ const parseContextRoutes = (output: string): { task: number; context: string[] }
 	}
 };
 
+type DivisionLeaderTask = { taskId: string; role: string; title: string; input?: string; output?: string; provider?: string; dependsOn?: string[]; description?: string; reason?: string; mode?: string; context?: string[] };
+
+// `/api/tasks/create` は保存した Task 行をそのまま返す。各行の ID は `id` (`taskId` は無い) で、
+// `dependsOn` は Leader が振った 0 始まりのタスク番号。フローは `taskId` でタスクを引き、
+// `dependsOn` に taskId が入っている前提なので、ここで揃える。揃えないと全タスクのキーが
+// `undefined` になり、トポロジカルソートで最後の 1 件以外 (designer や file-searcher) が消える。
+// 既に `taskId` と taskId の `dependsOn` を持つ形はそのまま通す。
+const normalizeDivisionLeaderTasks = (rawTasks: unknown): DivisionLeaderTask[] => {
+	const list: any[] = Array.isArray(rawTasks) ? rawTasks.filter(t => t && typeof t === 'object') : [];
+	const usedIds = new Set<string>();
+	const taskIds = list.map((t, i) => {
+		const candidate = [t.taskId, t.id].find(v => (typeof v === 'string' && v.trim()) || typeof v === 'number');
+		let id = candidate !== undefined ? String(candidate).trim() : `task-${i}`;
+		if (usedIds.has(id)) id = `${id}-${i}`;
+		usedIds.add(id);
+		return id;
+	});
+	// dependsOn の数値は Leader が振ったタスク番号 (= orderIndex)。並び順ではなく番号で引く。
+	const taskIdOfIndex = new Map<number, string>();
+	list.forEach((t, i) => taskIdOfIndex.set(Number.isInteger(t.orderIndex) ? t.orderIndex : i, taskIds[i]));
+	const knownIds = new Set(taskIds);
+	return list.map((t, i) => {
+		const deps: unknown[] = Array.isArray(t.dependsOn) ? t.dependsOn : [];
+		const dependsOn = deps
+			.map(d => {
+				if (typeof d === 'number') return taskIdOfIndex.get(d);
+				if (typeof d !== 'string') return undefined;
+				const dep = d.trim();
+				if (knownIds.has(dep)) return dep;
+				return /^\d+$/.test(dep) ? taskIdOfIndex.get(Number(dep)) : undefined;
+			})
+			.filter((d): d is string => !!d && d !== taskIds[i]);
+		return { ...t, taskId: taskIds[i], role: String(t.role ?? ''), title: String(t.title ?? ''), dependsOn: [...new Set(dependsOn)] };
+	});
+};
+
 const callDivisionTaskCreate = async (
 	endpointBase: string,
 	projectId: string,
@@ -1642,7 +1678,7 @@ const callDivisionTaskCreate = async (
 	routingOptions?: DivisionRoutingOptions,
 ): Promise<{
 	sessionId: string;
-	tasks: { taskId: string; role: string; title: string; input?: string; output?: string; provider?: string; dependsOn?: string[]; description?: string; reason?: string; mode?: string; context?: string[] }[];
+	tasks: DivisionLeaderTask[];
 	finalRole: string;
 	error?: string;
 }> => {
@@ -1678,7 +1714,7 @@ const callDivisionTaskCreate = async (
 		const data = await response.json();
 		return {
 			sessionId: data.sessionId || '',
-			tasks: data.tasks || [],
+			tasks: normalizeDivisionLeaderTasks(data.tasks),
 			finalRole: data.finalRole || 'coder',
 			error: data.error,
 		};
@@ -3761,9 +3797,21 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				if (sessionId) activeServerSessionIds.add(sessionId);
 
 				// Reviewer はサーバ側ではなく最後にローカルで一括実行する。
+				// 外した Reviewer に依存していたタスク (例: レビュー指摘の修正) は、Reviewer の依存先を引き継ぐ。
 				const EXCLUDED_ROLES = new Set(['review', 'reviewer']);
-				tasks = (leaderResult.tasks as DivisionTask[])
-					.filter(t => !EXCLUDED_ROLES.has((t.role || '').toLowerCase()));
+				const leaderTasks = leaderResult.tasks as DivisionTask[];
+				const excludedDeps = new Map(leaderTasks
+					.filter(t => EXCLUDED_ROLES.has((t.role || '').toLowerCase()))
+					.map(t => [t.taskId, t.dependsOn || []] as const));
+				const keptDepsOf = (deps: string[], seen: Set<string> = new Set()): string[] => deps.flatMap(dep => {
+					if (!excludedDeps.has(dep)) return [dep];
+					if (seen.has(dep)) return [];
+					seen.add(dep);
+					return keptDepsOf(excludedDeps.get(dep)!, seen);
+				});
+				tasks = leaderTasks
+					.filter(t => !excludedDeps.has(t.taskId))
+					.map(t => ({ ...t, dependsOn: [...new Set(keptDepsOf(t.dependsOn || []))] }));
 
 				// Coder/Writer が file-search の出力を確実に参照できるよう、Leader が
 				// filesearch タスクを生成しなかった場合は先頭に自動挿入する。
@@ -3806,7 +3854,12 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				for (let i = 0; i < tasks.length; i++) {
 					const t = tasks[i];
 					if (isFileSearchRole(t.role)) continue;
-					const depsPart = t.dependsOn && t.dependsOn.length > 0 ? ` _(依存: ${t.dependsOn.join(', ')})_` : '';
+					// 依存先は taskId ではなく、このフローでのステップ番号で示す (準備の file-search や除外した reviewer は省く)
+					const depSteps = (t.dependsOn || [])
+						.map(dep => tasks.findIndex(x => x.taskId === dep))
+						.filter(idx => idx >= 0 && !isFileSearchRole(tasks[idx].role))
+						.map(idx => displayStepNumber(idx));
+					const depsPart = depSteps.length > 0 ? ` _(依存: ${depSteps.join(', ')})_` : '';
 					appendText(`${displayStepNumber(i)}. **${t.role}** — ${t.title || ''}${depsPart}\n`);
 				}
 				appendText(`${aiStepCount}. **reviewer** — 最終レビュー\n`);
