@@ -1023,8 +1023,8 @@ const FLOW_ROLE_TO_FILENAME: Record<string, string> = {
 	'leader': 'LEADER.md',
 	'coder': 'CODER.md',
 	'coding': 'CODER.md',
-	'design': 'DESIGN.md',
-	'designer': 'DESIGN.md',
+	'design': 'DESIGN.html',
+	'designer': 'DESIGN.html',
 	'search': 'SEARCH.md',
 	'searcher': 'SEARCH.md',
 	'file-search': 'FILE-SEARCH.md',
@@ -1046,6 +1046,18 @@ const FLOW_ROLE_TO_FILENAME: Record<string, string> = {
 	'image': 'IMAGE.md',
 };
 
+// The designer answers with a self-contained HTML design doc, usually inside a
+// ```html block (v0 may also return it as a named file). Keep just the document so
+// DESIGN.html opens in a browser; plain text is wrapped so the file still renders.
+const toDesignHtml = (content: string): string => {
+	const fenced = content.match(/```html[^\n]*\n([\s\S]*?)\n```/i);
+	if (fenced) return fenced[1].trim() + '\n';
+	const doc = content.match(/<!DOCTYPE html[\s\S]*<\/html>/i);
+	if (doc) return doc[0] + '\n';
+	const escaped = content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+	return `<!DOCTYPE html>\n<html lang="ja">\n<head><meta charset="utf-8"><title>DESIGN</title></head>\n<body><pre style="white-space:pre-wrap;font:14px/1.6 system-ui,sans-serif;max-width:860px;margin:2rem auto;padding:0 1rem">${escaped}</pre></body>\n</html>\n`;
+};
+
 const saveFlowResultAsMd = (
 	workspaceFolderPath: string,
 	role: string,
@@ -1062,7 +1074,10 @@ const saveFlowResultAsMd = (
 
 	try {
 		fs.mkdirSync(divisionDir, { recursive: true });
-		if (append && fs.existsSync(filePath)) {
+		if (filename.endsWith('.html')) {
+			// Appending with a Markdown rule would break the document, so always replace it.
+			fs.writeFileSync(filePath, toDesignHtml(content), 'utf-8');
+		} else if (append && fs.existsSync(filePath)) {
 			const existing = fs.readFileSync(filePath, 'utf-8');
 			fs.writeFileSync(filePath, existing + '\n\n---\n\n' + content, 'utf-8');
 		} else {
@@ -3340,6 +3355,19 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			if (index < tasks.length && isFileSearchRole(tasks[index].role)) return 0;
 			return tasks.slice(0, index + 1).filter(t => !isFileSearchRole(t.role)).length + (index >= tasks.length ? 1 : 0);
 		};
+		// The designer's latest DESIGN.html on disk. It outlives a round, so later rounds
+		// that do not re-run the designer still hand it to the coder.
+		const MAX_DESIGN_DOC_CHARS = 60_000;
+		const readDesignDoc = (): string => {
+			if (!workspaceFolderPath) return '';
+			try {
+				const doc = fs.readFileSync(path.join(workspaceFolderPath, '.division', 'DESIGN.html'), 'utf-8').trim();
+				return doc.length > MAX_DESIGN_DOC_CHARS ? truncateForContext(doc, MAX_DESIGN_DOC_CHARS) : doc;
+			} catch {
+				return '';
+			}
+		};
+
 		const isCoderLikeRole = (r: string): boolean => {
 			const role = (r || '').toLowerCase();
 			return role === 'coder' || role === 'coding' || role === 'code'
@@ -3759,7 +3787,8 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					if (!edited) return o;
 					if (workspaceFolderPath && o.mdFileName) {
 						try {
-							fs.writeFileSync(path.join(workspaceFolderPath, '.division', o.mdFileName), edited.mdContent, 'utf-8');
+							const body = o.mdFileName.endsWith('.html') ? toDesignHtml(edited.mdContent) : edited.mdContent;
+							fs.writeFileSync(path.join(workspaceFolderPath, '.division', o.mdFileName), body, 'utf-8');
 						} catch (_e) { /* ignore */ }
 					}
 					return { ...o, output: edited.mdContent };
@@ -3997,12 +4026,13 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				const isDesigner = role === 'design' || role === 'designer';
 				const taskInstruction = isDesigner
 					? [
-						`直前の assistant メッセージに先行タスクの出力が添付されています（ある場合）。それを踏まえ、ユーザー要求を視覚化した **Markdown 形式のデザインドキュメント** を作成してください。`,
+						`直前の assistant メッセージに先行タスクの出力が添付されています（ある場合）。それを踏まえ、ユーザー要求を視覚化した **DESIGN.html（ブラウザで開けるデザインシステム文書）** を作成してください。`,
 						``,
 						`### 出力要件`,
-						`- 出力は Markdown のみ（HTML コードブロックは使わないでください）。`,
-						`- 見出し・箇条書き・表を使い、画面構成 / レイアウト / 配色・タイポグラフィ / コンポーネント一覧を具体的に記述してください。`,
-						`- ワイヤーフレームが必要な場合は ASCII アートまたは Mermaid 記法で表現してください。`,
+						`- 出力は \`\`\`html コードブロック 1 つだけ（\`<!DOCTYPE html>\` から始まる完結した 1 ファイル）。前置き・後書きは書かないでください。`,
+						`- インラインの <style> だけで完結させ、React / Next.js / Tailwind / ビルド工程 / 外部画像は使わないでください。`,
+						`- トークンは :root の CSS 変数（--color-* / --font-* / --space-* / --radius-* / --shadow-*）で定義し、文書自体もそのトークンで装飾してください。`,
+						`- 配色スウォッチ、タイポグラフィ見本、ボタン等コンポーネントの実物、主要画面のワイヤーフレームを HTML で描き、それぞれに値と理由を添えてください。`,
 						`- 実装コードではなく、後続の coder エージェントがそのまま実装に使える**デザイン仕様書**が目的です。`,
 					].join('\n')
 					: `直前の assistant メッセージに先行タスクの出力が添付されています（ある場合）。それを参考に、あなたの担当タスクを遂行してください。出力は Markdown 形式で、後続エージェントが直接利用できるよう具体的・網羅的にまとめてください。`;
@@ -4026,7 +4056,23 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 							`上記ファイルは既に存在します。SEARCH/REPLACE 形式で**差分編集**してください。新規作成ブロックで同じパスを上書きしないでください。`,
 						].join('\n')
 						: '';
+					// designer の DESIGN.html は全文を指示に入れる。先行出力の受け渡し (chatHistory) は
+					// 8,000 文字で切り詰められ、Division API の /api/tasks/execute 側でも渡っていないため、
+					// ここに入れないと coder はデザインを見ないまま実装する。
+					const designDoc = readDesignDoc();
+					const designBlock = designDoc
+						? [
+							``,
+							`### デザイン仕様 (.division/DESIGN.html) — 必ずこの通りに実装すること`,
+							`- :root の CSS 変数（色・フォント・余白・角丸・影）は名前と値をそのまま使う。独自の色や変数を作らない。`,
+							`- セクション構成・ワイヤーフレーム・コンポーネントの見た目と状態・レスポンシブの規則に従う。`,
+							'```html',
+							designDoc,
+							'```',
+						].join('\n')
+						: '';
 					extraCoderBlock = [
+						designBlock,
 						``,
 						`### 出力フォーマット (必須)`,
 						`- 既存ファイルの編集: SEARCH/REPLACE ブロック`,
