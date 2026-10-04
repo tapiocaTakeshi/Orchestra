@@ -1049,9 +1049,26 @@ const FLOW_ROLE_TO_FILENAME: Record<string, string> = {
 // The designer answers with a self-contained HTML design doc, usually inside a
 // ```html block (v0 may also return it as a named file). Keep just the document so
 // DESIGN.html opens in a browser; plain text is wrapped so the file still renders.
+// Some models (e.g. Kimi) answer with a write_file tool call instead, which Division
+// relays as {"tool":"write_file","args":{"path":"DESIGN.html","content":"<!DOCTYPE html>…"}}.
+const htmlFromToolCall = (content: string): string | null => {
+	const candidates = [...content.matchAll(/```json[^\n]*\n([\s\S]*?)\n```/gi)].map(m => m[1]);
+	candidates.push(content.trim());
+	for (const raw of candidates) {
+		try {
+			const call = JSON.parse(raw) as { args?: { content?: unknown }; arguments?: { content?: unknown } };
+			const body = call?.args?.content ?? call?.arguments?.content;
+			if (typeof body === 'string' && /<!DOCTYPE html|<html[\s>]/i.test(body)) return body.trim() + '\n';
+		} catch { /* not a tool call */ }
+	}
+	return null;
+};
+
 const toDesignHtml = (content: string): string => {
 	const fenced = content.match(/```html[^\n]*\n([\s\S]*?)\n```/i);
 	if (fenced) return fenced[1].trim() + '\n';
+	const fromTool = htmlFromToolCall(content);
+	if (fromTool) return fromTool;
 	const doc = content.match(/<!DOCTYPE html[\s\S]*<\/html>/i);
 	if (doc) return doc[0] + '\n';
 	const escaped = content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
