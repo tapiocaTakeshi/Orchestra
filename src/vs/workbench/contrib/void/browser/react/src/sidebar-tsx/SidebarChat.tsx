@@ -690,7 +690,7 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 
 						<div className='flex items-center flex-wrap gap-x-2 gap-y-1 text-nowrap '>
 							{/* エージェントモードではチャットモードは常に「エージェント」なので選ばせない (上級者モードでは従来どおり) */}
-							{featureName === 'Chat' && uiMode !== 'agent' && <ChatModeDropdown className='text-xs text-void-fg-3 bg-void-bg-1 border border-void-border-2 rounded py-0.5 px-1' />}
+							{featureName === 'Chat' && uiMode === 'pro' && <ChatModeDropdown className='text-xs text-void-fg-3 bg-void-bg-1 border border-void-border-2 rounded py-0.5 px-1' />}
 							{featureName === 'Chat' && (
 								<div className='flex items-center gap-1'>
 									<span className='text-void-fg-4 text-[10px] pointer-events-none'>{tUI('chat.project')}</span>
@@ -5498,7 +5498,8 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 
 	// エージェントモード: チャットを「エージェントへの指示欄」として見せ、モデル選択などの細かい行は「モデルなどの設定」を押すまで畳む
 	const uiMode = useOrchestraUiMode()
-	const isAgentUi = uiMode === 'agent'
+	// クラウドエージェントモードではチャット自体が隠れているが、見た目はエージェントモードと同じにしておく
+	const isAgentUi = uiMode !== 'pro'
 	const [showAdvancedInAgentUi, setShowAdvancedInAgentUi] = useState(false)
 	const isAutonomous = isAgentUi && !!settingsState.globalSettings.autoApprove.edits && !!settingsState.globalSettings.autoApprove.terminal
 	// ----- HIGHER STATE -----

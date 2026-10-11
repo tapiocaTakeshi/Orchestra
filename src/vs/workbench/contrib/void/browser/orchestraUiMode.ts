@@ -17,11 +17,17 @@
 //
 // 「上級者モード (pro)」に切り替えると、IDE の部品が通常の VS Code と同じ形で戻る。
 //
+// 「クラウドエージェントモード (cloud)」は、クラウドで動くエージェントだけを扱う画面 (Cursor の Agents 画面のような形)。
+// エージェントモードと同じく IDE 的な部品を隠したうえで、サイドバー・パネル・右のチャット (補助バー) を閉じ、
+// エディタ領域いっぱいにクラウドエージェントのパネル (cloudAgentsPane.ts) を出す。
+// このモードのあいだ、右のチャットは「強制非表示」: ショートカットや他のコマンドで開かれても、すぐに隠し直す。
+// 別のモードに切り替えると、チャットと (入る前に開いていた) サイドバー・パネルを戻す。
+//
 // 見た目の切替は「設定の既定値の上書き (configuration defaults)」で、ユーザーの settings.json には
 // 何も書き込まない。隠している部品も、ユーザーが settings.json で明示的に値を書いていれば
 // そちらが優先される (既定値より常にユーザー設定が強い)。
 
-import { Disposable } from '../../../../base/common/lifecycle.js';
+import { Disposable, DisposableStore } from '../../../../base/common/lifecycle.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 import Severity from '../../../../base/common/severity.js';
@@ -38,6 +44,7 @@ import { KeybindingWeight } from '../../../../platform/keybinding/common/keybind
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { IWorkbenchLayoutService, Parts } from '../../../services/layout/browser/layoutService.js';
 import { IViewsService } from '../../../services/views/common/viewsService.js';
+import { GroupsArrangement, IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
 import { VOID_OPEN_SIDEBAR_ACTION_ID, VOID_VIEW_CONTAINER_ID } from './sidebarPane.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { VIEWLET_ID as EXPLORER_VIEWLET_ID } from '../../files/common/files.js';
@@ -49,6 +56,7 @@ import {
 	ORCHESTRA_AGENT_AWAITING_CONTEXT_KEY,
 	ORCHESTRA_UI_SET_AGENT_MODE_ACTION_ID,
 	ORCHESTRA_UI_SET_PRO_MODE_ACTION_ID,
+	ORCHESTRA_UI_SET_CLOUD_MODE_ACTION_ID,
 	ORCHESTRA_UI_TOGGLE_MODE_ACTION_ID,
 	ORCHESTRA_UI_TOGGLE_FILES_ACTION_ID,
 	ORCHESTRA_UI_TOGGLE_TERMINAL_ACTION_ID,
@@ -57,9 +65,12 @@ import {
 	ORCHESTRA_AGENT_SHOW_PENDING_ACTION_ID,
 	ORCHESTRA_CHAT_SEND_PROMPT_ACTION_ID,
 	OrchestraUiMode,
+	parseOrchestraUiMode,
 } from './orchestraUiModeTypes.js';
 import { IChatThreadService } from './chatThreadServiceInterface.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
+import { ICloudAgentService } from './cloudAgentServiceInterface.js';
+import { CLOUD_AGENTS_OPEN_ACTION_ID } from '../common/cloudAgentTypes.js';
 
 
 // ---------------------------------------------------------------------------------------
@@ -78,13 +89,14 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 	properties: {
 		[ORCHESTRA_UI_MODE_SETTING]: {
 			type: 'string',
-			enum: ['agent', 'pro'],
+			enum: ['agent', 'cloud', 'pro'],
 			enumDescriptions: [
 				localize('orchestraUi.mode.agent', "エージェントモード: AI エージェントに作業を任せる画面。チャットとホーム画面が中心で、アクティビティバー・ステータスバー・ミニマップなど IDE 的な部品を隠します。"),
+				localize('orchestraUi.mode.cloud', "クラウドエージェントモード: クラウドで動くエージェントの一覧・会話・変更だけを、エディタ領域いっぱいに表示します。右のチャットは常に隠れます。"),
 				localize('orchestraUi.mode.pro', "上級者モード: VS Code と同じ IDE の表示に戻します。"),
 			],
 			default: 'agent',
-			description: localize('orchestraUi.mode', "Orchestra の見た目。AI に任せて進めるなら「エージェントモード」、自分でもコードを触るなら「上級者モード」がおすすめです。"),
+			description: localize('orchestraUi.mode', "Orchestra の見た目。AI に任せて進めるなら「エージェントモード」、クラウドで何本も並列に任せるなら「クラウドエージェントモード」、自分でもコードを触るなら「上級者モード」がおすすめです。"),
 		},
 	},
 });
@@ -94,6 +106,7 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 // エージェントモードで上書きする既定値
 // ---------------------------------------------------------------------------------------
 
+// クラウドエージェントモードでも同じものを使う (IDE 的な部品を隠す点は同じ)。
 // これらは「既定値」であって「ユーザー設定」ではない。ユーザーが settings.json に同じキーを
 // 書いていればそちらが勝つので、エージェントモードのままミニマップだけ戻す、といったことも可能。
 const AGENT_MODE_DEFAULTS: IConfigurationDefaults = {
@@ -142,9 +155,9 @@ function applyAgentModeDefaults(enable: boolean): void {
 applyAgentModeDefaults(true);
 
 
-// 'pro' 以外は全部エージェントモード扱い (未設定・不正値・旧名の 'simple' を含む)。
+// 'pro' / 'cloud' 以外は全部エージェントモード扱い (未設定・不正値・旧名の 'simple' を含む)。
 export function getOrchestraUiMode(configurationService: IConfigurationService): OrchestraUiMode {
-	return configurationService.getValue<string>(ORCHESTRA_UI_MODE_SETTING) === 'pro' ? 'pro' : 'agent';
+	return parseOrchestraUiMode(configurationService.getValue<string>(ORCHESTRA_UI_MODE_SETTING));
 }
 
 
@@ -192,7 +205,8 @@ class OrchestraUiModeContribution extends Disposable implements IWorkbenchContri
 	private sync(): void {
 		const mode = getOrchestraUiMode(this.configurationService);
 		this.modeContextKey.set(mode);
-		applyAgentModeDefaults(mode === 'agent');
+		// クラウドエージェントモードも IDE 的な部品は隠す (エージェントモードと同じ既定値)
+		applyAgentModeDefaults(mode !== 'pro');
 	}
 }
 registerWorkbenchContribution2(OrchestraUiModeContribution.ID, OrchestraUiModeContribution, WorkbenchPhase.BlockStartup);
@@ -246,6 +260,169 @@ class OrchestraAgentModeFirstRun extends Disposable implements IWorkbenchContrib
 	}
 }
 registerWorkbenchContribution2(OrchestraAgentModeFirstRun.ID, OrchestraAgentModeFirstRun, WorkbenchPhase.AfterRestored);
+
+
+// クラウドエージェントモードのレイアウト。
+//
+// 入ったとき (切り替えたとき・起動時にクラウドエージェントモードだったとき):
+//   - 右のチャット (補助バー)・サイドバー・パネルを閉じる
+//   - クラウドエージェントのパネルをエディタ領域に開き、エディタグループが複数あればそのグループを最大化する
+//   - このモードのあいだは、補助バーやチャットが表示されたらすぐに隠し直す (強制非表示)
+// 出たとき (エージェントモード / 上級者モードへ):
+//   - チャットを戻し、入る前に開いていたサイドバー・パネルも戻す。最大化したグループは元に戻す
+class OrchestraCloudModeLayout extends Disposable implements IWorkbenchContribution {
+	static readonly ID = 'workbench.contrib.orchestraCloudModeLayout';
+	/** 入る前のサイドバー・パネルの表示状態 (ワークスペースごと。再起動をまたいでも出るときに戻せるように) */
+	private static readonly SAVED_LAYOUT_KEY = 'orchestra.ui.cloudMode.savedLayout';
+
+	private mode: OrchestraUiMode;
+	/** クラウドエージェントモードのあいだだけ持つリスナー (強制非表示) */
+	private readonly cloudListeners = this._register(new DisposableStore());
+	private rehideScheduled = false;
+	/** このクラスがグループを最大化したか (出るときにだけ戻す。ユーザーが自分で最大化したものは触らない) */
+	private maximizedByUs = false;
+
+	constructor(
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IWorkbenchLayoutService private readonly layoutService: IWorkbenchLayoutService,
+		@IViewsService private readonly viewsService: IViewsService,
+		@IEditorGroupsService private readonly editorGroupsService: IEditorGroupsService,
+		@ICommandService private readonly commandService: ICommandService,
+		@IStorageService private readonly storageService: IStorageService,
+	) {
+		super();
+		this.mode = getOrchestraUiMode(this.configurationService);
+		if (this.mode === 'cloud') {
+			// 起動時: 前回の「入る前のレイアウト」は残したまま (上書きすると、出るときに戻せなくなる)
+			this.enter(false);
+		}
+		this._register(this.configurationService.onDidChangeConfiguration(e => {
+			if (!e.affectsConfiguration(ORCHESTRA_UI_MODE_SETTING)) {
+				return;
+			}
+			const prev = this.mode;
+			const next = getOrchestraUiMode(this.configurationService);
+			if (prev === next) {
+				return;
+			}
+			this.mode = next;
+			if (next === 'cloud') {
+				this.enter(true);
+			} else if (prev === 'cloud') {
+				this.leave();
+			}
+		}));
+	}
+
+	private enter(saveLayout: boolean): void {
+		if (saveLayout) {
+			const saved = {
+				sidebar: this.layoutService.isVisible(Parts.SIDEBAR_PART),
+				panel: this.layoutService.isVisible(Parts.PANEL_PART),
+			};
+			this.storageService.store(OrchestraCloudModeLayout.SAVED_LAYOUT_KEY, JSON.stringify(saved), StorageScope.WORKSPACE, StorageTarget.MACHINE);
+		}
+
+		try {
+			this.hideChat();
+			this.layoutService.setPartHidden(true, Parts.SIDEBAR_PART);
+			this.layoutService.setPartHidden(true, Parts.PANEL_PART);
+		} catch (err) {
+			console.warn('[Orchestra] クラウドエージェントモードのレイアウトに失敗しました', err);
+		}
+
+		// 強制非表示: 補助バーが表示された / チャットのビューが表示されたら、すぐに隠し直す。
+		// レイアウトの更新の途中で呼ばれるので、その場では触らず、今の処理が終わった直後 (マイクロタスク) に隠す。
+		this.cloudListeners.clear();
+		this.cloudListeners.add(this.layoutService.onDidChangePartVisibility(() => {
+			if (this.layoutService.isVisible(Parts.AUXILIARYBAR_PART)) {
+				this.scheduleRehide();
+			}
+		}));
+		this.cloudListeners.add(this.viewsService.onDidChangeViewContainerVisibility(e => {
+			if (e.id === VOID_VIEW_CONTAINER_ID && e.visible) {
+				this.scheduleRehide();
+			}
+		}));
+
+		void this.openCloudPane();
+	}
+
+	private leave(): void {
+		this.cloudListeners.clear();
+
+		let saved: { sidebar?: boolean; panel?: boolean } = {};
+		try {
+			saved = JSON.parse(this.storageService.get(OrchestraCloudModeLayout.SAVED_LAYOUT_KEY, StorageScope.WORKSPACE, '{}')) ?? {};
+		} catch {
+			saved = {};
+		}
+		this.storageService.remove(OrchestraCloudModeLayout.SAVED_LAYOUT_KEY, StorageScope.WORKSPACE);
+
+		try {
+			if (this.maximizedByUs && this.editorGroupsService.mainPart.hasMaximizedGroup()) {
+				this.editorGroupsService.toggleMaximizeGroup();
+			}
+			this.maximizedByUs = false;
+			// チャット (= エージェントへの指示欄) を戻す
+			this.layoutService.setPartHidden(false, Parts.AUXILIARYBAR_PART);
+			void this.viewsService.openViewContainer(VOID_VIEW_CONTAINER_ID);
+			if (saved.sidebar) {
+				this.layoutService.setPartHidden(false, Parts.SIDEBAR_PART);
+			}
+			if (saved.panel) {
+				this.layoutService.setPartHidden(false, Parts.PANEL_PART);
+			}
+		} catch (err) {
+			console.warn('[Orchestra] レイアウトを元に戻せませんでした', err);
+		}
+	}
+
+	private hideChat(): void {
+		if (this.viewsService.isViewContainerVisible(VOID_VIEW_CONTAINER_ID)) {
+			// ユーザーがチャットのビューを補助バー以外 (サイドバーなど) へ動かしていても閉じる
+			this.viewsService.closeViewContainer(VOID_VIEW_CONTAINER_ID);
+		}
+		if (this.layoutService.isVisible(Parts.AUXILIARYBAR_PART)) {
+			this.layoutService.setPartHidden(true, Parts.AUXILIARYBAR_PART);
+		}
+	}
+
+	private scheduleRehide(): void {
+		if (this.rehideScheduled) {
+			return;
+		}
+		this.rehideScheduled = true;
+		queueMicrotask(() => {
+			this.rehideScheduled = false;
+			if (this.mode !== 'cloud') {
+				return;
+			}
+			try {
+				this.hideChat();
+			} catch (err) {
+				console.warn('[Orchestra] チャットを隠せませんでした', err);
+			}
+		});
+	}
+
+	private async openCloudPane(): Promise<void> {
+		try {
+			await this.commandService.executeCommand(CLOUD_AGENTS_OPEN_ACTION_ID);
+			if (this.mode !== 'cloud') {
+				return;
+			}
+			// エディタを分割していたら、クラウドエージェントのグループだけを見せる
+			if (this.editorGroupsService.count > 1 && !this.editorGroupsService.mainPart.hasMaximizedGroup()) {
+				this.editorGroupsService.arrangeGroups(GroupsArrangement.MAXIMIZE, this.editorGroupsService.activeGroup);
+				this.maximizedByUs = true;
+			}
+		} catch (err) {
+			console.warn('[Orchestra] クラウドエージェントのパネルを開けませんでした', err);
+		}
+	}
+}
+registerWorkbenchContribution2(OrchestraCloudModeLayout.ID, OrchestraCloudModeLayout, WorkbenchPhase.AfterRestored);
 
 
 // エージェントの稼働状況をコンテキストキーに流す。
@@ -306,26 +483,38 @@ registerWorkbenchContribution2(OrchestraAgentActivityContribution.ID, OrchestraA
 // コマンド
 // ---------------------------------------------------------------------------------------
 
-const isAgentMode = ContextKeyExpr.equals(ORCHESTRA_UI_MODE_CONTEXT_KEY, 'agent');
-const isProMode = ContextKeyExpr.equals(ORCHESTRA_UI_MODE_CONTEXT_KEY, 'pro');
+export const isAgentMode = ContextKeyExpr.equals(ORCHESTRA_UI_MODE_CONTEXT_KEY, 'agent');
+export const isProMode = ContextKeyExpr.equals(ORCHESTRA_UI_MODE_CONTEXT_KEY, 'pro');
+export const isCloudMode = ContextKeyExpr.equals(ORCHESTRA_UI_MODE_CONTEXT_KEY, 'cloud');
+const isNotAgentMode = ContextKeyExpr.notEquals(ORCHESTRA_UI_MODE_CONTEXT_KEY, 'agent');
+const isNotProMode = ContextKeyExpr.notEquals(ORCHESTRA_UI_MODE_CONTEXT_KEY, 'pro');
+const isNotCloudMode = ContextKeyExpr.notEquals(ORCHESTRA_UI_MODE_CONTEXT_KEY, 'cloud');
 const isAgentRunning = ContextKeyExpr.equals(ORCHESTRA_AGENT_RUNNING_CONTEXT_KEY, true);
 const isAgentAwaiting = ContextKeyExpr.equals(ORCHESTRA_AGENT_AWAITING_CONTEXT_KEY, true);
 
+// ServicesAccessor は await をまたいで使えないので、サービスは最初にまとめて取る。
 async function setUiMode(accessor: ServicesAccessor, mode: OrchestraUiMode): Promise<void> {
 	const configurationService = accessor.get(IConfigurationService);
 	const notificationService = accessor.get(INotificationService);
 	const settingsService = accessor.get(IVoidSettingsService);
+	const commandService = accessor.get(ICommandService);
 	if (getOrchestraUiMode(configurationService) === mode) {
+		// 既にクラウドエージェントモード: パネルを前面に出すだけ (閉じていたら開き直す)
+		if (mode === 'cloud') {
+			await commandService.executeCommand(CLOUD_AGENTS_OPEN_ACTION_ID);
+		}
 		return;
 	}
 	// 既定値が agent なので、agent に戻すときは undefined を書いてユーザー設定から消す。
+	// レイアウト (チャットを隠す・戻す、パネルを開く) は OrchestraCloudModeLayout が設定の変化を見て行う。
 	await configurationService.updateValue(ORCHESTRA_UI_MODE_SETTING, mode === 'agent' ? undefined : mode, ConfigurationTarget.USER);
 	if (mode === 'agent') {
 		await applyAgentModeBehaviour(settingsService);
 	}
-	notificationService.info(mode === 'agent'
-		? localize('orchestraUi.switchedToAgent', "エージェントモードに切り替えました。やってほしいことを伝えるだけで、エージェントがファイル編集やコマンド実行まで進めます。")
-		: localize('orchestraUi.switchedToPro', "上級者モードに切り替えました。IDE の全ての部品が表示されます。「Orchestra: エージェントモードに戻す」でいつでも戻せます。"));
+	notificationService.info(
+		mode === 'agent' ? localize('orchestraUi.switchedToAgent', "エージェントモードに切り替えました。やってほしいことを伝えるだけで、エージェントがファイル編集やコマンド実行まで進めます。")
+			: mode === 'cloud' ? localize('orchestraUi.switchedToCloud', "クラウドエージェントモードに切り替えました。クラウドで動くエージェントの一覧と会話だけを表示します (右のチャットは隠れます)。タイトルバーの 🤖 でエージェントモードに戻せます。")
+				: localize('orchestraUi.switchedToPro', "上級者モードに切り替えました。IDE の全ての部品が表示されます。「Orchestra: エージェントモードに戻す」でいつでも戻せます。"));
 }
 
 registerAction2(class extends Action2 {
@@ -336,7 +525,7 @@ registerAction2(class extends Action2 {
 			category: localize2('orchestraUi.category', "Orchestra"),
 			f1: true,
 			icon: Codicon.tools,
-			precondition: isAgentMode,
+			precondition: isNotProMode,
 		});
 	}
 	run(accessor: ServicesAccessor) {
@@ -352,11 +541,32 @@ registerAction2(class extends Action2 {
 			category: localize2('orchestraUi.category', "Orchestra"),
 			f1: true,
 			icon: Codicon.robot,
-			precondition: isProMode,
+			precondition: isNotAgentMode,
 		});
 	}
 	run(accessor: ServicesAccessor) {
 		return setUiMode(accessor, 'agent');
+	}
+});
+
+registerAction2(class extends Action2 {
+	constructor() {
+		super({
+			id: ORCHESTRA_UI_SET_CLOUD_MODE_ACTION_ID,
+			title: localize2('orchestraUi.setCloud', "Orchestra: クラウドエージェントモードに切り替える"),
+			category: localize2('orchestraUi.category', "Orchestra"),
+			f1: true,
+			icon: Codicon.cloud,
+		});
+	}
+	async run(accessor: ServicesAccessor, options?: unknown): Promise<void> {
+		const cloudAgentService = accessor.get(ICloudAgentService);
+		await setUiMode(accessor, 'cloud');
+		// ホーム画面の「クラウドで並列に任せる」などから: 「新しいエージェント」の入力欄を開く
+		if (options && typeof options === 'object' && (options as { newAgent?: unknown }).newAgent === true) {
+			cloudAgentService.select(null);
+			cloudAgentService.requestFocusForm();
+		}
 	}
 });
 
@@ -374,6 +584,7 @@ registerAction2(class extends Action2 {
 		});
 	}
 	run(accessor: ServicesAccessor) {
+		// エージェント ⇄ 上級者。クラウドエージェントモードからはエージェントモードへ戻る
 		const mode = getOrchestraUiMode(accessor.get(IConfigurationService));
 		return setUiMode(accessor, mode === 'agent' ? 'pro' : 'agent');
 	}
@@ -439,6 +650,8 @@ registerAction2(class extends Action2 {
 			category: localize2('orchestraUi.category', "Orchestra"),
 			f1: true,
 			icon: Codicon.robot,
+			// クラウドエージェントモードではチャットを強制的に隠しているので、開けないようにしておく
+			precondition: isNotCloudMode,
 			menu: { id: MenuId.TitleBar, group: 'navigation', order: 3, when: isAgentMode },
 		});
 	}
@@ -513,14 +726,29 @@ registerAction2(class extends Action2 {
 });
 
 
-// タイトルバーの一番右: 上級者モードへ / エージェントモードへ。
+// タイトルバーの右側: ☁ クラウドエージェントモードへ (5) / 🤖 エージェントモードへ (8) / 🔧 上級者モードへ (9)。
+// 今のモード以外へのボタンだけを出す。クラウドエージェントモードの ☁ は「パネルを前面に出す」(cloudAgentsPane.ts)。
+registerAction2(class extends Action2 {
+	constructor() {
+		super({
+			id: 'orchestra.ui.titleBar.switchToCloud',
+			title: localize2('orchestraUi.titleBar.toCloud', "クラウドエージェントモードに切り替える"),
+			icon: Codicon.cloud,
+			menu: { id: MenuId.TitleBar, group: 'navigation', order: 5, when: isNotCloudMode },
+		});
+	}
+	run(accessor: ServicesAccessor) {
+		return setUiMode(accessor, 'cloud');
+	}
+});
+
 registerAction2(class extends Action2 {
 	constructor() {
 		super({
 			id: 'orchestra.ui.titleBar.switchToPro',
 			title: localize2('orchestraUi.titleBar.toPro', "上級者モード (IDE 表示) に切り替える"),
 			icon: Codicon.tools,
-			menu: { id: MenuId.TitleBar, group: 'navigation', order: 9, when: isAgentMode },
+			menu: { id: MenuId.TitleBar, group: 'navigation', order: 9, when: isNotProMode },
 		});
 	}
 	run(accessor: ServicesAccessor) {
@@ -534,7 +762,7 @@ registerAction2(class extends Action2 {
 			id: 'orchestra.ui.titleBar.switchToAgent',
 			title: localize2('orchestraUi.titleBar.toAgent', "エージェントモードに戻す"),
 			icon: Codicon.robot,
-			menu: { id: MenuId.TitleBar, group: 'navigation', order: 9, when: isProMode },
+			menu: { id: MenuId.TitleBar, group: 'navigation', order: 8, when: isNotAgentMode },
 		});
 	}
 	run(accessor: ServicesAccessor) {
