@@ -263,6 +263,8 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 	private _listLoadedOnce = false;
 	/** 401 を受けたら、トークンが変わるまでポーリングを止める */
 	private _authFailedToken: string | null = null;
+	/** Division に 401 で弾かれた認証情報 (ログインし直すまで使わない) */
+	private readonly _rejectedTokens = new Set<string>();
 	private _lastToken = '';
 	/** 作成直後のセッション (一覧 API にまだ出てこなくても消さない) → 作成時刻 */
 	private readonly _recentlyCreated = new Map<string, number>();
@@ -294,7 +296,7 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		super();
 		this._main = ProxyChannel.toService<ICloudAgentMainService>(mainProcessService.getChannel(CLOUD_AGENT_CHANNEL_NAME));
 
-		this._lastToken = this._token();
+		this._lastToken = this._tokenSignature();
 		this._state = { ...this._state, isLoggedIn: this._isLoggedIn(), workspaceName: this._workspaceFolder()?.name ?? null, githubPick: this._loadGitHubPick() };
 
 		this._register(this._settingsService.onDidChangeState(() => this._onSettingsChanged()));
@@ -327,9 +329,25 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		this._setState({ changesById: { ...this._state.changesById, [id]: { ...prev, ...partial } } });
 	}
 
-	private _token(): string {
+	/**
+	 * 使える可能性のある認証情報を優先順に並べる。
+	 * ログイン時に保存した長期の API キーが Division に登録されていないアカウントがある (401 になる) ので、
+	 * その場合は Supabase の JWT へ順に切り替える。
+	 */
+	private _candidateTokens(): string[] {
 		const g = this._settingsService.state.globalSettings;
-		return g.divisionUserApiKey || g.divisionAccessToken || g.divisionApiKey || '';
+		return [...new Set([g.divisionUserApiKey, g.divisionAccessToken, g.divisionApiKey].filter((t): t is string => !!t))];
+	}
+
+	/** 認証情報の組み合わせ (ログインし直し・アカウント切り替えの検出用) */
+	private _tokenSignature(): string {
+		return this._candidateTokens().join('\n');
+	}
+
+	/** 401 で弾かれたものを除いた、いま使うべき認証情報 */
+	private _token(): string {
+		const candidates = this._candidateTokens();
+		return candidates.find(t => !this._rejectedTokens.has(t)) ?? candidates[0] ?? '';
 	}
 
 	private _isLoggedIn(): boolean {
@@ -345,10 +363,11 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 	}
 
 	private _onSettingsChanged() {
-		const token = this._token();
+		const signature = this._tokenSignature();
 		const isLoggedIn = this._isLoggedIn();
-		const tokenChanged = token !== this._lastToken;
-		this._lastToken = token;
+		const tokenChanged = signature !== this._lastToken;
+		this._lastToken = signature;
+		if (tokenChanged) this._rejectedTokens.clear();
 
 		if (!isLoggedIn) {
 			if (this._state.isLoggedIn || this._state.sessions.length) {
@@ -417,20 +436,25 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 	// -----------------------------------------------------------------------
 
 	private async _request(method: 'GET' | 'POST', path: string, body?: unknown, timeoutMs?: number): Promise<CloudAgentResponse> {
-		const token = this._token();
-		if (!token) return { ok: false, status: 401, data: null, error: 'not logged in' };
-		let res: CloudAgentResponse | undefined;
-		try {
-			res = await this._main.request({ endpoint: this._endpoint(), token, method, path, body: method === 'POST' ? (body ?? {}) : undefined, timeoutMs: timeoutMs ?? DEFAULT_TIMEOUT_MS });
-		} catch (e) {
-			res = { ok: false, status: 0, data: null, error: e instanceof Error ? e.message : String(e) };
+		if (!this._token()) return { ok: false, status: 401, data: null, error: 'not logged in' };
+		for (;;) {
+			const token = this._token();
+			let res: CloudAgentResponse | undefined;
+			try {
+				res = await this._main.request({ endpoint: this._endpoint(), token, method, path, body: method === 'POST' ? (body ?? {}) : undefined, timeoutMs: timeoutMs ?? DEFAULT_TIMEOUT_MS });
+			} catch (e) {
+				res = { ok: false, status: 0, data: null, error: e instanceof Error ? e.message : String(e) };
+			}
+			res = res ?? { ok: false, status: 0, data: null, error: 'request failed' };
+			if (res.status !== 401) return res;
+			// この認証情報は使えない。次の候補があればそれで試し直す
+			this._rejectedTokens.add(token);
+			if (this._candidateTokens().every(t => this._rejectedTokens.has(t))) {
+				// どれも通らない: ログインし直す (認証情報が変わる) までポーリングしない
+				this._authFailedToken = this._tokenSignature();
+				return res;
+			}
 		}
-		res = res ?? { ok: false, status: 0, data: null, error: 'request failed' };
-		if (res.status === 401) {
-			// トークンが変わる (ログインし直す) までポーリングしない
-			this._authFailedToken = token;
-		}
-		return res;
 	}
 
 	private _sessionPath(id: string, suffix = '') {
@@ -465,7 +489,7 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 	}
 
 	private _canPoll(): boolean {
-		return this._isLoggedIn() && this._authFailedToken !== this._token();
+		return this._isLoggedIn() && this._authFailedToken !== this._tokenSignature();
 	}
 
 	private async _pollList() {
