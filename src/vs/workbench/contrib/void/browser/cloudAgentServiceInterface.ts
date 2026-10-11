@@ -34,6 +34,8 @@ export type CloudChangesState = {
 	changes?: CloudChange[];
 	patch?: string;
 	patchTruncated?: boolean;
+	/** 変更ファイルが多すぎて、サーバーが一覧の一部だけを返した (サーバーが changesTruncated を付けたとき) */
+	changesTruncated?: boolean;
 	error?: string;
 	applying?: boolean;
 	lastApply?: CloudApplyResult;

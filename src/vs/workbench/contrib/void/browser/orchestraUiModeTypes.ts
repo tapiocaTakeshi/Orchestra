@@ -3,13 +3,22 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-// Orchestra の表示モード (エージェント / 上級者) に関する ID 群。
+// Orchestra の表示モード (エージェント / クラウドエージェント / 上級者) に関する ID 群。
 // 実装は orchestraUiMode.ts。React 側やウォーターマーク側から import の順序を気にせず
 // 参照できるよう、ID だけをこのファイルに切り出している (actionIDs.ts と同じ理由)。
 
 // 'agent': エージェントモード。AI エージェントに作業を任せる画面。IDE 的な部品は隠す。
+// 'cloud': クラウドエージェントモード。クラウドで動くエージェントの一覧・会話・変更だけを出す画面
+//          (Cursor の Agents 画面のような形)。右のチャット (手元のエージェント) は強制的に隠す。
 // 'pro':   上級者モード。VS Code と同じ IDE の表示。
-export type OrchestraUiMode = 'agent' | 'pro';
+export type OrchestraUiMode = 'agent' | 'cloud' | 'pro';
+
+/**
+ * 設定値 → 表示モード。'pro' / 'cloud' 以外 (未設定・不正値・旧名の 'simple' を含む) はすべてエージェントモード。
+ * orchestraUiMode.ts・React (services.ts)・ウォーターマーク・sidebarPane.ts で同じ解釈にするため、ここに置く。
+ */
+export const parseOrchestraUiMode = (raw: unknown): OrchestraUiMode =>
+	raw === 'pro' ? 'pro' : raw === 'cloud' ? 'cloud' : 'agent';
 
 export const ORCHESTRA_UI_MODE_SETTING = 'orchestra.ui.mode';
 export const ORCHESTRA_UI_MODE_CONTEXT_KEY = 'orchestra.uiMode';
@@ -21,6 +30,8 @@ export const ORCHESTRA_AGENT_AWAITING_CONTEXT_KEY = 'orchestra.agentAwaitingUser
 
 export const ORCHESTRA_UI_SET_AGENT_MODE_ACTION_ID = 'orchestra.ui.setAgentMode';
 export const ORCHESTRA_UI_SET_PRO_MODE_ACTION_ID = 'orchestra.ui.setProMode';
+// クラウドエージェントモードに切り替える。引数 { newAgent: true } なら「新しいエージェント」の入力欄を開く
+export const ORCHESTRA_UI_SET_CLOUD_MODE_ACTION_ID = 'orchestra.ui.setCloudMode';
 export const ORCHESTRA_UI_TOGGLE_MODE_ACTION_ID = 'orchestra.ui.toggleMode';
 
 export const ORCHESTRA_UI_TOGGLE_FILES_ACTION_ID = 'orchestra.ui.toggleFiles';

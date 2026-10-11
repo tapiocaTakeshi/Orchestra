@@ -817,6 +817,7 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 			changes,
 			patch: typeof res.data?.patch === 'string' ? res.data.patch : '',
 			patchTruncated: !!res.data?.patchTruncated,
+			changesTruncated: !!res.data?.changesTruncated,
 			error: undefined,
 		});
 	}

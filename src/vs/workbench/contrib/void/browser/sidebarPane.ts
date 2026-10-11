@@ -44,6 +44,7 @@ import { ServicesAccessor } from '../../../../editor/browser/editorExtensions.js
 import { IViewsService } from '../../../services/views/common/viewsService.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
+import { ORCHESTRA_UI_MODE_SETTING, parseOrchestraUiMode } from './orchestraUiModeTypes.js';
 
 // compare against search.contribution.ts and debug.contribution.ts, scm.contribution.ts (source control)
 
@@ -158,6 +159,9 @@ registerAction2(class extends Action2 {
 		})
 	}
 	run(accessor: ServicesAccessor): void {
+		// Orchestra: クラウドエージェントモードではチャットを強制的に隠している (orchestraUiMode.ts) ので開かない。
+		// 起動時の SidebarStartContribution もここを通るので、起動直後にチャットが一瞬出ることもない。
+		if (parseOrchestraUiMode(accessor.get(IConfigurationService).getValue(ORCHESTRA_UI_MODE_SETTING)) === 'cloud') return;
 		const viewsService = accessor.get(IViewsService)
 		viewsService.openViewContainer(VOID_VIEW_CONTAINER_ID);
 	}

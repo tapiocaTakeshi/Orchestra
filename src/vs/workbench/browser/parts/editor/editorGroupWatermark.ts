@@ -29,12 +29,15 @@ import { VOID_CTRL_K_ACTION_ID, VOID_CTRL_L_ACTION_ID } from '../../../contrib/v
 import {
 	ORCHESTRA_CHAT_SEND_PROMPT_ACTION_ID,
 	ORCHESTRA_UI_MODE_SETTING,
+	ORCHESTRA_UI_SET_AGENT_MODE_ACTION_ID,
+	ORCHESTRA_UI_SET_CLOUD_MODE_ACTION_ID,
 	ORCHESTRA_UI_SET_PRO_MODE_ACTION_ID,
 	ORCHESTRA_UI_TOGGLE_FILES_ACTION_ID,
 	ORCHESTRA_UI_TOGGLE_TERMINAL_ACTION_ID,
+	parseOrchestraUiMode,
 } from '../../../contrib/void/browser/orchestraUiModeTypes.js';
 import { VIEWLET_ID as REMOTE_EXPLORER_VIEWLET_ID } from '../../../contrib/remote/browser/remoteExplorer.js';
-import { CLOUD_AGENTS_NEW_ACTION_ID } from '../../../contrib/void/common/cloudAgentTypes.js';
+import { CLOUD_AGENTS_NEW_ACTION_ID, CLOUD_AGENTS_OPEN_ACTION_ID } from '../../../contrib/void/common/cloudAgentTypes.js';
 /* eslint-enable */
 
 // interface WatermarkEntry {
@@ -168,10 +171,14 @@ export class EditorGroupWatermark extends Disposable {
 
 
 
-	// Orchestra: エージェントモードかどうか。エージェントモードでは Void 由来のショートカット表ではなく、
-	// 「エージェントに何をさせるか」のホーム画面 (renderAgentHome) を出す。
+	// Orchestra: エージェントモード (またはクラウドエージェントモード) かどうか。この 2 つでは Void 由来の
+	// ショートカット表ではなく、「エージェントに何をさせるか」のホーム画面 (renderAgentHome) を出す。
 	private isAgentMode(): boolean {
-		return this.configurationService.getValue<string>(ORCHESTRA_UI_MODE_SETTING) !== 'pro';
+		return parseOrchestraUiMode(this.configurationService.getValue<string>(ORCHESTRA_UI_MODE_SETTING)) !== 'pro';
+	}
+
+	private isCloudMode(): boolean {
+		return parseOrchestraUiMode(this.configurationService.getValue<string>(ORCHESTRA_UI_MODE_SETTING)) === 'cloud';
 	}
 
 	private render(): void {
@@ -368,6 +375,30 @@ export class EditorGroupWatermark extends Disposable {
 
 		const home = append(box, $('.orchestra-home__body'));
 
+		// クラウドエージェントモードでパネルを閉じたとき: チャットは隠れているので、パネルへ戻る入口だけを出す
+		if (this.isCloudMode()) {
+			const heading = append(home, $('.orchestra-home__heading'));
+			append(heading, $('h1.orchestra-home__title')).textContent = 'クラウドエージェントモード';
+			append(heading, $('p.orchestra-home__subtitle')).textContent = 'クラウドのサンドボックスでエージェントを動かし、いくつでも並列に任せられます。一覧・会話・変更はクラウドエージェントのパネルで確認できます。';
+			const actions = append(home, $('.orchestra-home__actions'));
+			const open = append(actions, $('button.orchestra-home__button.orchestra-home__button--primary'));
+			open.textContent = 'クラウドエージェントを開く';
+			open.onclick = run(CLOUD_AGENTS_OPEN_ACTION_ID);
+			const newAgent = append(actions, $('button.orchestra-home__button'));
+			newAgent.textContent = '新しいエージェント';
+			newAgent.onclick = run(CLOUD_AGENTS_NEW_ACTION_ID);
+			const toAgent = append(actions, $('button.orchestra-home__button'));
+			toAgent.textContent = 'エージェントモードに戻す';
+			toAgent.onclick = run(ORCHESTRA_UI_SET_AGENT_MODE_ACTION_ID);
+			const footer = append(home, $('p.orchestra-home__footer'));
+			append(footer, $('span')).textContent = '自分でもコードを編集したい方は ';
+			const pro = append(footer, $('button.orchestra-home__link'));
+			pro.textContent = '上級者モード (IDE 表示)';
+			pro.onclick = run(ORCHESTRA_UI_SET_PRO_MODE_ACTION_ID);
+			append(footer, $('span')).textContent = ' に切り替えられます。';
+			return;
+		}
+
 		// 見出し
 		const heading = append(home, $('.orchestra-home__heading'));
 		append(heading, $('h1.orchestra-home__title')).textContent = hasFolder
@@ -459,11 +490,12 @@ export class EditorGroupWatermark extends Disposable {
 			const chat = append(actions, $('button.orchestra-home__button.orchestra-home__button--primary'));
 			chat.textContent = 'エージェントに指示する';
 			chat.onclick = run(ORCHESTRA_CHAT_SEND_PROMPT_ACTION_ID);
-			// 手元のエージェントとは別に、クラウド (Division のサンドボックス) で並列に走らせる入口
+			// 手元のエージェントとは別に、クラウド (Division のサンドボックス) で並列に走らせる入口。
+			// クラウドエージェントモードに切り替え、「新しいエージェント」の入力欄を開く
 			const cloud = append(actions, $('button.orchestra-home__button'));
 			cloud.textContent = 'クラウドで並列に任せる';
-			cloud.title = 'クラウド上のサンドボックスでエージェントを動かします。いくつでも同時に起動できます';
-			cloud.onclick = run(CLOUD_AGENTS_NEW_ACTION_ID);
+			cloud.title = 'クラウドエージェントモードに切り替えます。クラウド上のサンドボックスでエージェントを動かし、いくつでも同時に起動できます';
+			cloud.onclick = run(ORCHESTRA_UI_SET_CLOUD_MODE_ACTION_ID, { newAgent: true });
 			const files = append(actions, $('button.orchestra-home__button'));
 			files.textContent = 'ファイル一覧を見る';
 			files.onclick = run(ORCHESTRA_UI_TOGGLE_FILES_ACTION_ID);

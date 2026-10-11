@@ -30,7 +30,7 @@ import { IDialogService } from '../../../../platform/dialogs/common/dialogs.js';
 import { IQuickInputService } from '../../../../platform/quickinput/common/quickInput.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
-import { ORCHESTRA_UI_TOGGLE_MODE_ACTION_ID } from './orchestraUiModeTypes.js';
+import { ORCHESTRA_UI_MODE_SETTING, ORCHESTRA_UI_TOGGLE_MODE_ACTION_ID, parseOrchestraUiMode } from './orchestraUiModeTypes.js';
 import { CLOUD_AGENTS_OPEN_ACTION_ID } from '../common/cloudAgentTypes.js';
 
 // ---------- Register commands and keybindings ----------
@@ -77,6 +77,8 @@ registerAction2(class extends Action2 {
 		super({ id: VOID_OPEN_SIDEBAR_ACTION_ID, title: localize2('voidOpenSidebar', 'Void: Open Sidebar'), f1: true });
 	}
 	async run(accessor: ServicesAccessor): Promise<void> {
+		// クラウドエージェントモードではチャットを強制的に隠している (orchestraUiMode.ts) ので開かない
+		if (parseOrchestraUiMode(accessor.get(IConfigurationService).getValue(ORCHESTRA_UI_MODE_SETTING)) === 'cloud') return
 		const viewsService = accessor.get(IViewsService)
 		const chatThreadsService = accessor.get(IChatThreadService)
 		viewsService.openViewContainer(VOID_VIEW_CONTAINER_ID)

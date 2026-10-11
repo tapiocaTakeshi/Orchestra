@@ -37,7 +37,7 @@ import { ILanguageDetectionService } from '../../../../../../services/languageDe
 import { IKeybindingService } from '../../../../../../../platform/keybinding/common/keybinding.js'
 import { IEnvironmentService } from '../../../../../../../platform/environment/common/environment.js'
 import { IConfigurationService } from '../../../../../../../platform/configuration/common/configuration.js'
-import { ORCHESTRA_UI_MODE_SETTING, OrchestraUiMode } from '../../../orchestraUiModeTypes.js'
+import { ORCHESTRA_UI_MODE_SETTING, OrchestraUiMode, parseOrchestraUiMode } from '../../../orchestraUiModeTypes.js'
 import { IPathService } from '../../../../../../../workbench/services/path/common/pathService.js'
 import { IMetricsService } from '../../../../../../../workbench/contrib/void/common/metricsService.js'
 import { URI } from '../../../../../../../base/common/uri.js'
@@ -608,12 +608,12 @@ export const useIsOptedOut = () => {
 }
 
 
-// Orchestra の表示モード (エージェント / 上級者)。実体は VS Code 設定 `orchestra.ui.mode`。
+// Orchestra の表示モード (エージェント / クラウドエージェント / 上級者)。実体は VS Code 設定 `orchestra.ui.mode`。
 // エージェントモードではチャットを「エージェントへの指示欄」として見せ、細かいオプションを畳む。
 export const useOrchestraUiMode = (): OrchestraUiMode => {
 	const accessor = useAccessor()
 	const configurationService = accessor.get('IConfigurationService')
-	const read = useCallback((): OrchestraUiMode => configurationService.getValue<string>(ORCHESTRA_UI_MODE_SETTING) === 'pro' ? 'pro' : 'agent', [configurationService])
+	const read = useCallback((): OrchestraUiMode => parseOrchestraUiMode(configurationService.getValue<string>(ORCHESTRA_UI_MODE_SETTING)), [configurationService])
 	const [mode, setMode] = useState<OrchestraUiMode>(read)
 	useEffect(() => {
 		setMode(read())

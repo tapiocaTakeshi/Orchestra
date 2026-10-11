@@ -5,9 +5,10 @@
 
 // クラウドエージェントのパネル (エディタ領域) とコマンド。
 //
-// 左に「新しいクラウドエージェント」の入力欄とセッション一覧、右に選んだセッションの
-// トランスクリプト・変更ファイル・追加指示の入力欄を出す (React: react/src/cloud-agents-tsx)。
-// 表示モード (エージェント / 上級者) のどちらでも、タイトルバーの ☁ ボタンと Ctrl+Alt+A で開ける。
+// Cursor の Agents 画面のような 3 列: 左にエージェントの一覧 (実行中 / 完了 / 停止・失敗)、
+// 中央に選んだエージェントとの会話と入力欄、右に変更ファイルと差分 (React: react/src/cloud-agents-tsx)。
+// どの表示モードでも Ctrl+Alt+A で開ける。タイトルバーの ☁ は「クラウドエージェントモードへ切り替える」
+// (orchestraUiMode.ts) で、クラウドエージェントモードのあいだだけ、このパネルを前面に出すボタンになる。
 
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { EditorInput } from '../../../common/editor/editorInput.js';
@@ -30,12 +31,13 @@ import { Codicon } from '../../../../base/common/codicons.js';
 import { Disposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 import { KeybindingWeight } from '../../../../platform/keybinding/common/keybindingsRegistry.js';
-import { IContextKeyService, RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
+import { ContextKeyExpr, IContextKeyService, RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 
 import { mountCloudAgents } from './react/out/cloud-agents-tsx/index.js';
 import { ICloudAgentService } from './cloudAgentServiceInterface.js';
+import { ORCHESTRA_UI_MODE_CONTEXT_KEY } from './orchestraUiModeTypes.js';
 import {
 	CLOUD_AGENTS_NEW_ACTION_ID,
 	CLOUD_AGENTS_OPEN_ACTION_ID,
@@ -156,8 +158,9 @@ registerAction2(class extends Action2 {
 				weight: KeybindingWeight.WorkbenchContrib,
 				primary: KeyMod.CtrlCmd | KeyMod.Alt | KeyCode.KeyA,
 			},
-			// エージェントモード・上級者モードのどちらのタイトルバーにも出す (表示モードの when は付けない)
-			menu: { id: MenuId.TitleBar, group: 'navigation', order: 5 },
+			// タイトルバーにはクラウドエージェントモードのときだけ出す。他のモードでは同じ位置に
+			// 「クラウドエージェントモードに切り替える」(orchestraUiMode.ts) が出る
+			menu: { id: MenuId.TitleBar, group: 'navigation', order: 5, when: ContextKeyExpr.equals(ORCHESTRA_UI_MODE_CONTEXT_KEY, 'cloud') },
 		});
 	}
 
