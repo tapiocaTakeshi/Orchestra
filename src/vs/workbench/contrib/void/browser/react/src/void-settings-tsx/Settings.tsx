@@ -2004,6 +2004,7 @@ export const Settings = () => {
 														voidSettingsService.setGlobalSetting('divisionAccessToken', '')
 														voidSettingsService.setGlobalSetting('divisionRefreshToken', '')
 														voidSettingsService.setGlobalSetting('divisionApiKey', '')
+														voidSettingsService.setGlobalSetting('divisionUserApiKey', '')
 													}}
 													className="text-xs text-void-fg-3 hover:text-void-fg-1 transition-colors"
 												>

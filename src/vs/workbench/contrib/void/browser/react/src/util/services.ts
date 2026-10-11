@@ -58,6 +58,8 @@ import { IExtensionManagementService } from '../../../../../../../platform/exten
 import { IMCPService } from '../../../../common/mcpService.js';
 import { ISkillService } from '../../../../common/skillService.js';
 import { IKanbanService } from '../../../kanbanService.js';
+import { ICloudAgentService } from '../../../cloudAgentServiceInterface.js';
+import type { CloudAgentState } from '../../../cloudAgentServiceInterface.js';
 import { IObsidianService } from '../../../../common/obsidianService.js';
 import { IStorageService, StorageScope } from '../../../../../../../platform/storage/common/storage.js'
 import { OPT_OUT_KEY } from '../../../../common/storageKeys.js'
@@ -97,6 +99,10 @@ const activeURIListeners: Set<(uri: URI | null) => void> = new Set();
 const mcpListeners: Set<() => void> = new Set()
 const skillListeners: Set<() => void> = new Set()
 const kanbanListeners: Set<() => void> = new Set()
+
+// クラウドエージェント (Division のサンドボックスで並列に動くセッション)
+let cloudAgentState: CloudAgentState
+const cloudAgentStateListeners: Set<(s: CloudAgentState) => void> = new Set()
 const obsidianListeners: Set<() => void> = new Set()
 
 let divisionProjectConfig: DivisionProjectConfig | null = null
@@ -131,9 +137,10 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 		obsidianService: accessor.get(IObsidianService),
 		divisionProjectService: accessor.get(IDivisionProjectService),
 		voidUpdateService: accessor.get(IVoidUpdateService),
+		cloudAgentService: accessor.get(ICloudAgentService),
 	}
 
-	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, voidCommandBarService, mcpService, skillService, kanbanService, obsidianService, divisionProjectService, voidUpdateService } = stateServices
+	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, voidCommandBarService, mcpService, skillService, kanbanService, obsidianService, divisionProjectService, voidUpdateService, cloudAgentService } = stateServices
 
 
 
@@ -253,6 +260,14 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 		})
 	)
 
+	cloudAgentState = cloudAgentService.state
+	disposables.push(
+		cloudAgentService.onDidChangeState(() => {
+			cloudAgentState = cloudAgentService.state
+			cloudAgentStateListeners.forEach(l => l(cloudAgentState))
+		})
+	)
+
 
 	return disposables
 }
@@ -306,6 +321,7 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IMCPService: accessor.get(IMCPService),
 		ISkillService: accessor.get(ISkillService),
 		IKanbanService: accessor.get(IKanbanService),
+		ICloudAgentService: accessor.get(ICloudAgentService),
 		IObsidianService: accessor.get(IObsidianService),
 
 		IStorageService: accessor.get(IStorageService),
@@ -510,6 +526,16 @@ export const useKanbanServiceState = () => {
 		kanbanListeners.add(listener);
 		return () => { kanbanListeners.delete(listener) };
 	}, []);
+	return s
+}
+
+export const useCloudAgentState = () => {
+	const [s, ss] = useState(cloudAgentState)
+	useEffect(() => {
+		ss(cloudAgentState)
+		cloudAgentStateListeners.add(ss)
+		return () => { cloudAgentStateListeners.delete(ss) }
+	}, [ss])
 	return s
 }
 

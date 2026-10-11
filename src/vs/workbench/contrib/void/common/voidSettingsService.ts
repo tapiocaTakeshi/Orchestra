@@ -403,6 +403,7 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 			if (readS.globalSettings.divisionUserEmail === undefined) readS.globalSettings.divisionUserEmail = '';
 			if (readS.globalSettings.divisionAccessToken === undefined) readS.globalSettings.divisionAccessToken = '';
 			if (readS.globalSettings.divisionRefreshToken === undefined) readS.globalSettings.divisionRefreshToken = '';
+			if (readS.globalSettings.divisionUserApiKey === undefined) readS.globalSettings.divisionUserApiKey = '';
 		}
 		catch (e) {
 			readS = defaultState()
