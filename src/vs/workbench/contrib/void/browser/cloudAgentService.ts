@@ -13,6 +13,9 @@
 //   それ以外は 30 秒ごと。イベント (トランスクリプト) は選択中と実行中のセッションを 2 秒ごとに差分で取る。
 // - 結果 (サンドボックス内のファイル変更) は、ローカルのワークスペースに「承認待ちの差分」として取り込む。
 //   ローカルのチャットが Division の file operation を取り込むとき (chatThreadService.ts) と同じ手順。
+// - GitHub アカウント連携 (/api/github): 連携するとリポジトリとブランチを一覧から選んで始められる。
+//   トークンは Division のサーバーだけが持ち、clone もサーバーがそのトークンで行う (非公開リポジトリも可)。
+//   連携はシステムのブラウザで完了するので、/status を 2 秒ごと (最大 5 分) とウィンドウに戻ったときに確かめる。
 
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
@@ -27,6 +30,9 @@ import { IFileService } from '../../../../platform/files/common/files.js';
 import { IDialogService } from '../../../../platform/dialogs/common/dialogs.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
+import { IHostService } from '../../../services/host/browser/host.js';
+import { IOpenerService } from '../../../../platform/opener/common/opener.js';
+import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
 import { IVoidModelService } from '../common/voidModelService.js';
 import { DIVISION_API_BASE_URL } from '../common/divisionAuthConfig.js';
@@ -41,15 +47,30 @@ import {
 	CloudFileResponse,
 	CloudSession,
 	CloudSessionEvent,
+	CloudStartRepo,
 	CloudWorkspaceInfo,
+	GITHUB_API_PREFIX,
+	GITHUB_NOT_CONFIGURED,
+	GITHUB_NOT_CONNECTED,
+	GitHubRepo,
+	GitHubStatus,
 	ICloudAgentMainService,
+	cloudRepoFolderName,
 	isCloudSessionActive,
+	validateCloudRepoBranch,
+	validateCloudRepoUrl,
+	validateGitHubFullName,
 } from '../common/cloudAgentTypes.js';
 import { IEditCodeService } from './editCodeServiceInterface.js';
 import {
 	CloudAgentState,
 	CloudApplyResult,
 	CloudChangesState,
+	CloudGitHubBranchesState,
+	CloudGitHubPick,
+	CloudGitHubReposState,
+	CloudGitHubState,
+	CloudSessionSource,
 	CreateCloudSessionsOptions,
 	ICloudAgentService,
 } from './cloudAgentServiceInterface.js';
@@ -72,6 +93,11 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_FILES_TO_REVEAL = 5;
 /** 取り込み時のファイル取得の同時実行数 */
 const FETCH_CONCURRENCY = 4;
+/** GitHub の連携をブラウザで許可してもらうあいだ、/status を確かめる間隔と待つ上限 */
+const GITHUB_CONNECT_POLL_MS = 2_000;
+const GITHUB_CONNECT_TIMEOUT_MS = 5 * 60_000;
+/** 最後に選んだ GitHub のリポジトリとブランチ (StorageScope.APPLICATION) */
+const GITHUB_PICK_STORAGE_KEY = 'orchestra.cloudAgents.githubPick';
 
 /** key を除いたコピー (状態は差し替えで更新するので、元のオブジェクトは触らない) */
 const omitKey = <T>(obj: Record<string, T>, key: string): Record<string, T> => {
@@ -93,9 +119,20 @@ const looksBinary = (buf: VSBuffer) => {
 	return false;
 };
 
+/** サーバーが { error, code } で返した code (無ければ空) */
+const errorCodeOf = (res: { data?: any }): string => res.data && typeof res.data.code === 'string' ? res.data.code : '';
+
 /** Division API の HTTP エラーを、ユーザー向けの日本語にする (sendLLMMessage.impl.ts の divisionErrorMessage と同じ方針) */
 export const describeCloudAgentError = (res: { status: number; error?: string; data?: any }): string => {
 	const detail = (res.data && typeof res.data.error === 'string' ? res.data.error : '') || res.error || '';
+	// GitHub 連携の理由は HTTP ステータスより code を優先する (409 / 503 は他の理由でも返るため)
+	const code = errorCodeOf(res);
+	if (code === GITHUB_NOT_CONNECTED) {
+		return 'GitHub と連携されていないか、連携が解除されています。もう一度「GitHub と連携」してください。';
+	}
+	if (code === GITHUB_NOT_CONFIGURED) {
+		return 'サーバー側で GitHub 連携が未設定です。リポジトリの URL を直接指定してください (公開リポジトリのみ)。';
+	}
 	switch (res.status) {
 		case 0:
 			return `Division に接続できませんでした。ネットワークを確認してください。${detail ? ` (${detail})` : ''}`;
@@ -128,6 +165,66 @@ export const describeCloudAgentError = (res: { status: number; error?: string; d
 };
 
 
+// ---------------------------------------------------------------------------
+// GitHub の DTO の取り出し (欠けた値で画面が落ちないように)
+// ---------------------------------------------------------------------------
+
+const str = (value: unknown, fallback = ''): string => typeof value === 'string' ? value : fallback;
+const strOrNull = (value: unknown): string | null => typeof value === 'string' && value ? value : null;
+
+const toGitHubStatus = (raw: unknown): GitHubStatus => {
+	const s = (raw ?? {}) as Record<string, unknown>;
+	const configured = s.configured === true;
+	return {
+		configured,
+		connected: configured && s.connected === true,
+		...(typeof s.login === 'string' && s.login ? { login: s.login } : {}),
+		...(typeof s.avatarUrl === 'string' && /^https:\/\//i.test(s.avatarUrl) ? { avatarUrl: s.avatarUrl } : {}),
+		...(typeof s.scopes === 'string' ? { scopes: s.scopes } : {}),
+	};
+};
+
+const toGitHubRepo = (raw: unknown): GitHubRepo => {
+	const r = (raw ?? {}) as Record<string, unknown>;
+	const fullName = str(r.fullName).trim();
+	const [ownerPart = '', namePart = ''] = fullName.split('/');
+	return {
+		fullName,
+		name: str(r.name) || namePart,
+		owner: str(r.owner) || ownerPart,
+		private: r.private === true,
+		defaultBranch: str(r.defaultBranch),
+		description: strOrNull(r.description),
+		pushedAt: strOrNull(r.pushedAt),
+		htmlUrl: str(r.htmlUrl) || (fullName ? `https://github.com/${fullName}` : ''),
+	};
+};
+
+/** 次のページを足す。読んでいるあいだに push されて順番がずれると同じリポジトリが 2 ページに出るので、fullName で重複を除く */
+const mergeRepoPages = (current: GitHubRepo[], next: GitHubRepo[]): GitHubRepo[] => {
+	const seen = new Set(current.map(r => r.fullName));
+	const merged = [...current];
+	for (const r of next) {
+		if (seen.has(r.fullName)) continue;
+		seen.add(r.fullName);
+		merged.push(r);
+	}
+	return merged;
+};
+
+const initialGitHubState = (): CloudGitHubState => ({
+	loading: false,
+	loaded: false,
+	configured: false,
+	connected: false,
+	starting: false,
+	waitingForAuth: false,
+	disconnecting: false,
+});
+
+const initialGitHubRepos = (): CloudGitHubReposState => ({ q: '', page: 0, hasMore: false, loading: false, loaded: false, repos: [] });
+
+
 class CloudAgentService extends Disposable implements ICloudAgentService {
 	readonly _serviceBrand: undefined;
 
@@ -149,6 +246,10 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		sendingById: {},
 		workspaceName: null,
 		focusFormRequest: 0,
+		github: initialGitHubState(),
+		githubRepos: initialGitHubRepos(),
+		githubBranchesByRepo: {},
+		githubPick: null,
 	};
 	get state(): CloudAgentState { return this._state; }
 
@@ -166,6 +267,15 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 	/** 作成直後のセッション (一覧 API にまだ出てこなくても消さない) → 作成時刻 */
 	private readonly _recentlyCreated = new Map<string, number>();
 
+	/** ログアウト / アカウントの切り替えで増やす。古いアカウントの GitHub の応答を捨てるため */
+	private _githubGen = 0;
+	private _githubStatusInFlight: Promise<void> | null = null;
+	/** リポジトリ検索の通し番号 (古い検索結果で上書きしない) */
+	private _repoRequestId = 0;
+	private _githubConnectTimer: ReturnType<typeof setTimeout> | undefined;
+	private _githubConnectDeadline = 0;
+	private _githubConnectCheckInFlight = false;
+
 	constructor(
 		@IMainProcessService mainProcessService: IMainProcessService,
 		@IVoidSettingsService private readonly _settingsService: IVoidSettingsService,
@@ -177,18 +287,25 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		@IEditorService private readonly _editorService: IEditorService,
 		@IEditCodeService private readonly _editCodeService: IEditCodeService,
 		@IVoidModelService private readonly _voidModelService: IVoidModelService,
+		@IOpenerService private readonly _openerService: IOpenerService,
+		@IHostService private readonly _hostService: IHostService,
+		@IStorageService private readonly _storageService: IStorageService,
 	) {
 		super();
 		this._main = ProxyChannel.toService<ICloudAgentMainService>(mainProcessService.getChannel(CLOUD_AGENT_CHANNEL_NAME));
 
 		this._lastToken = this._token();
-		this._state = { ...this._state, isLoggedIn: this._isLoggedIn(), workspaceName: this._workspaceFolder()?.name ?? null };
+		this._state = { ...this._state, isLoggedIn: this._isLoggedIn(), workspaceName: this._workspaceFolder()?.name ?? null, githubPick: this._loadGitHubPick() };
 
 		this._register(this._settingsService.onDidChangeState(() => this._onSettingsChanged()));
 		this._register(this._workspaceService.onDidChangeWorkspaceFolders(() => {
 			this._setState({ workspaceName: this._workspaceFolder()?.name ?? null });
 		}));
-		this._register({ dispose: () => this._clearTimers() });
+		// ブラウザで GitHub の連携を許可して戻ってきたら、ポーリングを待たずにすぐ確かめる
+		this._register(this._hostService.onDidChangeFocus(focused => {
+			if (focused && this._state.github.waitingForAuth) this._checkGitHubConnectNow();
+		}));
+		this._register({ dispose: () => { this._clearTimers(); this._clearGitHubConnectTimer(); } });
 
 		// 起動直後は他の処理を邪魔しないよう、少し待ってから一覧を取る
 		if (this._state.isLoggedIn) this._scheduleList(3_000);
@@ -240,10 +357,13 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 				this._listLoadedOnce = false;
 				this._setState({ isLoggedIn: false, sessions: [], eventsById: {}, changesById: {}, selectedId: null, lastError: null, sendingById: {} });
 			}
+			if (this._state.github.loaded || this._state.github.waitingForAuth || this._state.githubRepos.loaded) this._resetGitHub();
 			this._clearListTimer();
 			return;
 		}
 		if (!this._state.isLoggedIn || tokenChanged) {
+			// 別のアカウントかもしれないので、GitHub の連携状態も取り直す
+			this._resetGitHub();
 			this._authFailedToken = null;
 			this._setState({ isLoggedIn: true, lastError: null });
 			this._scheduleList(0);
@@ -506,11 +626,33 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 
 		const requested = Number.isFinite(opts.count) ? Math.floor(opts.count!) : 1;
 		const count = Math.max(1, Math.min(CLOUD_AGENTS_MAX_PARALLEL, requested));
+		const source: CloudSessionSource = opts.source ?? (opts.includeWorkspace ? 'workspace' : 'empty');
+
+		// github / url: アップロードせず、サーバーに clone してもらう
+		let repo: CloudStartRepo | undefined;
+		if (source === 'github' || source === 'url') {
+			const branch = (opts.repo?.branch ?? '').trim();
+			const target = source === 'github' ? (opts.repo?.fullName ?? '').trim() : (opts.repo?.url ?? '').trim();
+			const issue = (source === 'github' ? validateGitHubFullName(target) : validateCloudRepoUrl(target)) ?? validateCloudRepoBranch(branch);
+			if (issue) {
+				this._setState({ lastError: issue });
+				return [];
+			}
+			repo = source === 'github'
+				? { fullName: target, ...(branch ? { branch } : {}) }
+				: { url: target, ...(branch ? { branch } : {}) };
+		}
+
 		const folder = this._workspaceFolder();
-		const folderPath = opts.includeWorkspace && folder && folder.uri.scheme === 'file' ? folder.uri.fsPath : null;
-		if (opts.includeWorkspace && folder && folder.uri.scheme !== 'file') {
+		const folderPath = source === 'workspace' && folder && folder.uri.scheme === 'file' ? folder.uri.fsPath : null;
+		if (source === 'workspace' && folder && folder.uri.scheme !== 'file') {
 			this._notificationService.warn('リモートのフォルダはアップロードできないため、空のフォルダでクラウドエージェントを起動します。');
 		}
+		// 一覧と詳細に出す名前: リポジトリならリポジトリ名 (clone したフォルダ名)、フォルダを送るならフォルダ名
+		const workspaceName = repo
+			? cloudRepoFolderName(repo) || undefined
+			: (folderPath && folder ? folder.name : undefined);
+		const repoLabel = repo ? ('fullName' in repo ? repo.fullName : repo.url) : '';
 		const baseTitle = (opts.title ?? '').trim();
 		const model = (opts.model ?? '').trim();
 
@@ -527,7 +669,7 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 				prompt,
 				...(title ? { title } : {}),
 				...(model ? { model } : {}),
-				...(folder ? { workspaceName: folder.name } : {}),
+				...(workspaceName ? { workspaceName } : {}),
 			}, CREATE_TIMEOUT_MS);
 			const session = created.ok ? created.data?.session as CloudSession | undefined : undefined;
 			if (!session?.id) {
@@ -560,9 +702,22 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 				workspaceInfo = up.info;
 			}
 
-			const started = await this._request('POST', this._sessionPath(session.id, '/start'), workspaceInfo ? { workspaceInfo } : {}, CREATE_TIMEOUT_MS);
+			if (repo && i === 0) {
+				this._setState({ creatingProgress: `リポジトリを clone しています (${repoLabel})…` });
+			}
+			const started = await this._request('POST', this._sessionPath(session.id, '/start'), {
+				...(workspaceInfo ? { workspaceInfo } : {}),
+				...(repo ? { repo } : {}),
+			}, CREATE_TIMEOUT_MS);
 			if (!started.ok) {
 				errors.push(`エージェントを開始できませんでした: ${describeCloudAgentError(started)}`);
+				if (errorCodeOf(started) === GITHUB_NOT_CONNECTED) {
+					// 連携が切れていた: 状態を未連携に戻し、開始できないサンドボックスは片付ける
+					this._markGitHubDisconnected();
+					await this._request('POST', this._sessionPath(session.id, '/archive'), {});
+					this._removeSessionLocally(session.id);
+					return null;
+				}
 				return session;
 			}
 			const startedSession = started.data?.session as CloudSession | undefined;
@@ -847,6 +1002,297 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 
 	dismissError(): void {
 		if (this._state.lastError) this._setState({ lastError: null });
+	}
+
+
+	// -----------------------------------------------------------------------
+	// GitHub アカウント連携
+	// -----------------------------------------------------------------------
+
+	private _setGitHub(partial: Partial<CloudGitHubState>) {
+		this._setState({ github: { ...this._state.github, ...partial } });
+	}
+
+	private _setGitHubRepos(partial: Partial<CloudGitHubReposState>) {
+		this._setState({ githubRepos: { ...this._state.githubRepos, ...partial } });
+	}
+
+	private _setGitHubBranches(fullName: string, partial: Partial<CloudGitHubBranchesState>) {
+		const prev = this._state.githubBranchesByRepo[fullName] ?? { loading: false };
+		this._setState({ githubBranchesByRepo: { ...this._state.githubBranchesByRepo, [fullName]: { ...prev, ...partial } } });
+	}
+
+	/** ログアウト / アカウントの切り替え: 連携の状態・一覧を捨てて、待っている応答も無視する */
+	private _resetGitHub() {
+		this._githubGen++;
+		this._repoRequestId++;
+		this._githubStatusInFlight = null;
+		this._clearGitHubConnectTimer();
+		this._setState({ github: initialGitHubState(), githubRepos: initialGitHubRepos(), githubBranchesByRepo: {} });
+	}
+
+	/** 409 github_not_connected (未連携 / トークン失効) や解除のあと: 未連携に戻し、一覧も捨てる */
+	private _markGitHubDisconnected(error?: string) {
+		this._repoRequestId++;
+		this._setState({
+			github: { ...this._state.github, loaded: true, configured: true, connected: false, login: undefined, avatarUrl: undefined, error },
+			githubRepos: initialGitHubRepos(),
+			githubBranchesByRepo: {},
+		});
+	}
+
+	/** GitHub の API の失敗を状態に反映し、ユーザー向けの文言を返す */
+	private _handleGitHubFailure(res: CloudAgentResponse): string {
+		const code = errorCodeOf(res);
+		const message = res.status === 404 && !code
+			? 'この Division サーバーは GitHub 連携に未対応です。リポジトリの URL を指定してください。'
+			: describeCloudAgentError(res);
+		if (code === GITHUB_NOT_CONNECTED) {
+			this._markGitHubDisconnected(message);
+		} else if (code === GITHUB_NOT_CONFIGURED) {
+			this._setGitHub({ loaded: true, configured: false, connected: false, login: undefined, avatarUrl: undefined });
+		}
+		return message;
+	}
+
+	/** /api/github/status。サーバーが未対応 (404) / OAuth アプリが無い (503 github_not_configured) なら configured:false として扱う */
+	private async _fetchGitHubStatus(): Promise<{ status?: GitHubStatus; res: CloudAgentResponse }> {
+		const res = await this._request('GET', `${GITHUB_API_PREFIX}/status`);
+		if (res.ok) return { status: toGitHubStatus(res.data), res };
+		const code = errorCodeOf(res);
+		if ((res.status === 404 && !code) || code === GITHUB_NOT_CONFIGURED) return { status: { configured: false, connected: false }, res };
+		return { res };
+	}
+
+	private _applyGitHubStatus(status: GitHubStatus) {
+		const prev = this._state.github;
+		// 別のアカウントになった / 連携が外れたら、前のアカウントの一覧は捨てる
+		const accountChanged = !status.connected || (prev.loaded && prev.login !== status.login);
+		if (accountChanged) {
+			this._repoRequestId++;
+			this._setState({ githubRepos: initialGitHubRepos(), githubBranchesByRepo: {} });
+		}
+		this._setGitHub({
+			loaded: true,
+			configured: status.configured,
+			connected: status.connected,
+			login: status.login,
+			avatarUrl: status.avatarUrl,
+			error: undefined,
+		});
+	}
+
+	refreshGitHubStatus(): Promise<void> {
+		if (!this._isLoggedIn()) return Promise.resolve();
+		if (this._githubStatusInFlight) return this._githubStatusInFlight;
+		const gen = this._githubGen;
+		const promise = (async () => {
+			this._setGitHub({ loading: true });
+			try {
+				const { status, res } = await this._fetchGitHubStatus();
+				if (gen !== this._githubGen) return;
+				if (status) this._applyGitHubStatus(status);
+				else this._setGitHub({ error: describeCloudAgentError(res) });
+			} finally {
+				if (gen === this._githubGen) {
+					this._githubStatusInFlight = null;
+					this._setGitHub({ loading: false });
+				}
+			}
+		})();
+		this._githubStatusInFlight = promise;
+		return promise;
+	}
+
+	async connectGitHub(): Promise<void> {
+		const gh = this._state.github;
+		if (!this._isLoggedIn() || gh.starting || gh.waitingForAuth) return;
+		const gen = this._githubGen;
+		this._setGitHub({ starting: true, error: undefined });
+		const res = await this._request('POST', `${GITHUB_API_PREFIX}/connect`, {});
+		if (gen !== this._githubGen) return;
+		if (!res.ok) {
+			this._setGitHub({ starting: false, error: this._handleGitHubFailure(res) });
+			return;
+		}
+		const url = typeof res.data?.url === 'string' ? res.data.url.trim() : '';
+		if (!/^https:\/\//i.test(url)) {
+			this._setGitHub({ starting: false, error: 'GitHub の連携ページの URL を受け取れませんでした。' });
+			return;
+		}
+		try {
+			// URI にせず文字列のまま渡す (文字列ならそのまま開かれる)。URI にすると、OAuth の URL のクエリ
+			// (redirect_uri などのエンコード済みの値) が decode → encodeURI で変わってしまうことがある
+			await this._openerService.open(url, { openExternal: true });
+		} catch (e) {
+			if (gen === this._githubGen) {
+				this._setGitHub({ starting: false, error: `ブラウザを開けませんでした: ${e instanceof Error ? e.message : String(e)}` });
+			}
+			return;
+		}
+		if (gen !== this._githubGen) return;
+		this._setGitHub({ starting: false, waitingForAuth: true });
+		this._githubConnectDeadline = Date.now() + GITHUB_CONNECT_TIMEOUT_MS;
+		// 開いた直後はまだ許可されていないので、最初の確認も 1 間隔おいてから
+		this._scheduleGitHubConnectCheck(GITHUB_CONNECT_POLL_MS);
+	}
+
+	private _clearGitHubConnectTimer() {
+		if (this._githubConnectTimer !== undefined) { clearTimeout(this._githubConnectTimer); this._githubConnectTimer = undefined; }
+	}
+
+	private _scheduleGitHubConnectCheck(delayMs: number) {
+		this._clearGitHubConnectTimer();
+		const wait = Math.min(delayMs, Math.max(0, this._githubConnectDeadline - Date.now()));
+		this._githubConnectTimer = setTimeout(() => {
+			this._githubConnectTimer = undefined;
+			void this._checkGitHubConnect();
+		}, wait);
+	}
+
+	/** ウィンドウに戻ってきたとき: 確認中でなければすぐ確かめる */
+	private _checkGitHubConnectNow() {
+		if (this._githubConnectCheckInFlight) return;
+		this._clearGitHubConnectTimer();
+		void this._checkGitHubConnect();
+	}
+
+	private async _checkGitHubConnect() {
+		if (!this._state.github.waitingForAuth || this._githubConnectCheckInFlight) return;
+		this._githubConnectCheckInFlight = true;
+		const gen = this._githubGen;
+		let status: GitHubStatus | undefined;
+		try {
+			({ status } = await this._fetchGitHubStatus());
+		} catch {
+			// 一時的な失敗は無視して次の確認を待つ
+		} finally {
+			this._githubConnectCheckInFlight = false;
+		}
+		if (gen !== this._githubGen || !this._state.github.waitingForAuth) return;
+
+		if (status?.connected) {
+			this._clearGitHubConnectTimer();
+			this._setGitHub({ waitingForAuth: false });
+			this._applyGitHubStatus(status);
+			this._notificationService.notify({
+				severity: Severity.Info,
+				message: status.login ? `GitHub (@${status.login}) と連携しました` : 'GitHub と連携しました',
+			});
+			return;
+		}
+		if (Date.now() >= this._githubConnectDeadline) {
+			this._clearGitHubConnectTimer();
+			this._setGitHub({ waitingForAuth: false, error: '5 分待ちましたが連携を確認できませんでした。もう一度「GitHub と連携」からお試しください。' });
+			return;
+		}
+		this._scheduleGitHubConnectCheck(GITHUB_CONNECT_POLL_MS);
+	}
+
+	cancelGitHubConnect(): void {
+		this._clearGitHubConnectTimer();
+		if (this._state.github.waitingForAuth || this._state.github.starting) {
+			this._setGitHub({ waitingForAuth: false });
+		}
+	}
+
+	async disconnectGitHub(): Promise<boolean> {
+		const gh = this._state.github;
+		if (!gh.connected || gh.disconnecting) return false;
+		const { confirmed } = await this._dialogService.confirm({
+			message: 'GitHub の連携を解除しますか？',
+			detail: `${gh.login ? `@${gh.login} の` : ''}リポジトリを一覧から選べなくなります (URL の指定は引き続き使えます)。動いているセッションには影響しません。`,
+			primaryButton: '解除',
+			cancelButton: 'キャンセル',
+		});
+		if (!confirmed) return false;
+		const gen = this._githubGen;
+		this._setGitHub({ disconnecting: true, error: undefined });
+		const res = await this._request('POST', `${GITHUB_API_PREFIX}/disconnect`, {});
+		if (gen !== this._githubGen) return false;
+		// 既に未連携 (409 github_not_connected) なら、解除できたのと同じ
+		if (!res.ok && errorCodeOf(res) !== GITHUB_NOT_CONNECTED) {
+			this._setGitHub({ disconnecting: false, error: this._handleGitHubFailure(res) });
+			return false;
+		}
+		this._markGitHubDisconnected();
+		this._setGitHub({ disconnecting: false });
+		this._notificationService.notify({ severity: Severity.Info, message: 'GitHub の連携を解除しました' });
+		return true;
+	}
+
+	async searchGitHubRepos(q: string, page = 1): Promise<void> {
+		if (!this._isLoggedIn()) return;
+		const query = (q ?? '').trim();
+		const nextPage = Math.max(1, Math.floor(page) || 1);
+		const id = ++this._repoRequestId;
+		const gen = this._githubGen;
+		this._setGitHubRepos({ q: query, loading: true, error: undefined });
+		const params = [...(query ? [`q=${encodeURIComponent(query)}`] : []), `page=${nextPage}`].join('&');
+		const res = await this._request('GET', `${GITHUB_API_PREFIX}/repos?${params}`);
+		if (id !== this._repoRequestId || gen !== this._githubGen) return;
+		if (!res.ok) {
+			const error = this._handleGitHubFailure(res);
+			// 未連携に戻ったときは一覧ごと捨てている (_markGitHubDisconnected)
+			if (id === this._repoRequestId) this._setGitHubRepos({ loading: false, error });
+			return;
+		}
+		const fetched = (Array.isArray(res.data?.repos) ? res.data.repos as unknown[] : []).map(toGitHubRepo).filter(r => !!r.fullName);
+		this._setGitHubRepos({
+			q: query,
+			repos: nextPage === 1 ? mergeRepoPages([], fetched) : mergeRepoPages(this._state.githubRepos.repos, fetched),
+			page: nextPage,
+			hasMore: res.data?.hasMore === true,
+			loading: false,
+			loaded: true,
+			error: undefined,
+		});
+	}
+
+	async loadGitHubBranches(fullName: string, force?: boolean): Promise<void> {
+		const name = (fullName ?? '').trim();
+		if (!this._isLoggedIn() || validateGitHubFullName(name)) return;
+		const current = this._state.githubBranchesByRepo[name];
+		if (current?.loading || (current?.branches && !force)) return;
+		const gen = this._githubGen;
+		this._setGitHubBranches(name, { loading: true, error: undefined });
+		const res = await this._request('GET', `${GITHUB_API_PREFIX}/branches?repo=${encodeURIComponent(name)}`);
+		if (gen !== this._githubGen) return;
+		if (!res.ok) {
+			const error = this._handleGitHubFailure(res);
+			if (errorCodeOf(res) !== GITHUB_NOT_CONNECTED) this._setGitHubBranches(name, { loading: false, error });
+			return;
+		}
+		const branches = (Array.isArray(res.data?.branches) ? res.data.branches as unknown[] : []).filter((b): b is string => typeof b === 'string' && !!b);
+		const defaultBranch = str(res.data?.defaultBranch) || branches[0] || '';
+		// 既定のブランチを必ず先頭に置く (サーバーがそう返す前提だが、念のため)
+		const ordered = defaultBranch ? [defaultBranch, ...branches.filter(b => b !== defaultBranch)] : branches;
+		this._setGitHubBranches(name, { loading: false, branches: ordered, defaultBranch, error: undefined });
+	}
+
+	setGitHubPick(pick: CloudGitHubPick | null): void {
+		const next = pick && !validateGitHubFullName(pick.repo?.fullName ?? '')
+			? { repo: toGitHubRepo(pick.repo), branch: validateCloudRepoBranch(pick.branch ?? '') ? '' : (pick.branch ?? '').trim() }
+			: null;
+		this._setState({ githubPick: next });
+		try {
+			if (next) this._storageService.store(GITHUB_PICK_STORAGE_KEY, JSON.stringify(next), StorageScope.APPLICATION, StorageTarget.MACHINE);
+			else this._storageService.remove(GITHUB_PICK_STORAGE_KEY, StorageScope.APPLICATION);
+		} catch { /* 覚えられなくても選択はできている */ }
+	}
+
+	private _loadGitHubPick(): CloudGitHubPick | null {
+		try {
+			const raw = this._storageService.get(GITHUB_PICK_STORAGE_KEY, StorageScope.APPLICATION);
+			if (!raw) return null;
+			const parsed = JSON.parse(raw);
+			const repo = toGitHubRepo(parsed?.repo);
+			if (validateGitHubFullName(repo.fullName)) return null;
+			const branch = typeof parsed?.branch === 'string' && !validateCloudRepoBranch(parsed.branch) ? parsed.branch.trim() : '';
+			return { repo, branch };
+		} catch {
+			return null;
+		}
 	}
 }
 

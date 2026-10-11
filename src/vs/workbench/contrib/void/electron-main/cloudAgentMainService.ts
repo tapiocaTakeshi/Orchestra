@@ -5,7 +5,7 @@
 
 // クラウドエージェントの main プロセス側。
 //
-// 1. Division の /api/cloud-sessions 配下への認証付き GET / POST の中継
+// 1. Division の /api/cloud-sessions・/api/github 配下への認証付き GET / POST の中継
 //    (レンダラーから直接叩くと Division に CORS が無いので失敗する)。
 // 2. ワークスペースを tar.gz にまとめてアップロードする。
 //    Vercel のリクエストボディ上限 (~4.5 MB) があるので、2 MiB ずつに切って base64 で順に POST する。
@@ -21,6 +21,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import {
 	CLOUD_SESSIONS_API_PREFIX,
+	GITHUB_API_PREFIX,
 	CloudAgentRequestParams,
 	CloudAgentResponse,
 	CloudAgentUploadParams,
@@ -57,7 +58,17 @@ const SKIP_DIRS = new Set([
 const normalizeEndpoint = (endpoint: unknown): string =>
 	typeof endpoint === 'string' ? endpoint.trim().replace(/\/+$/, '') : '';
 
-/** endpoint 配下の /api/cloud-sessions… だけを通す (汎用のプロキシにしない) */
+/** 中継してよい API のパス (この下だけ。汎用のプロキシにしない) */
+const ALLOWED_API_PREFIXES = [CLOUD_SESSIONS_API_PREFIX, GITHUB_API_PREFIX];
+
+/** prefix そのものか、prefix + '/...' か (`/api/github-evil` のような前方一致は通さない) */
+const isUnderPrefix = (pathname: string, prefix: string): boolean => {
+	if (!pathname.startsWith(prefix)) return false;
+	const rest = pathname.slice(prefix.length);
+	return rest === '' || rest.startsWith('/');
+};
+
+/** endpoint 配下の /api/cloud-sessions… と /api/github… だけを通す (汎用のプロキシにしない) */
 const buildUrl = (endpointRaw: unknown, pathRaw: unknown): URL | string => {
 	const endpoint = normalizeEndpoint(endpointRaw);
 	const p = typeof pathRaw === 'string' ? pathRaw : '';
@@ -71,8 +82,7 @@ const buildUrl = (endpointRaw: unknown, pathRaw: unknown): URL | string => {
 	}
 	// クエリ (?path=foo..bar.txt など) には '..' が入りうるので、パス部分だけを見る
 	const pathname = p.split('?')[0];
-	const rest = pathname.slice(CLOUD_SESSIONS_API_PREFIX.length);
-	const prefixOk = pathname.startsWith(CLOUD_SESSIONS_API_PREFIX) && (rest === '' || rest.startsWith('/'));
+	const prefixOk = ALLOWED_API_PREFIXES.some(prefix => isUnderPrefix(pathname, prefix));
 	if (!/^https?:$/.test(url.protocol) || !prefixOk || pathname.includes('..') || pathname.includes('\\') || url.origin !== base.origin) {
 		return 'path not allowed';
 	}

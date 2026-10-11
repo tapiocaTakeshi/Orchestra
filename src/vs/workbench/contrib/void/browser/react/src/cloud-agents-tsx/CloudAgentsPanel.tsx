@@ -5,7 +5,7 @@
 
 // クラウドエージェントのパネル。エディタ領域にマウントされる (cloudAgentsPane.ts)。
 //
-// 左: 新しいクラウドエージェントの入力欄 + セッション一覧
+// 左: 新しいクラウドエージェントの入力欄 (作業する場所: 開いているフォルダ / GitHub のリポジトリ / URL / 空) + セッション一覧
 // 右: 選んだセッションの詳細 (トランスクリプト / 変更ファイル / 追加の指示)
 //
 // 状態はすべて ICloudAgentService 側にあり、このコンポーネントは表示と操作だけを受け持つ。
@@ -16,6 +16,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
 	AlertTriangle,
 	Archive,
+	Book,
 	Bot,
 	CheckCircle2,
 	ChevronDown,
@@ -23,10 +24,14 @@ import {
 	Cloud,
 	Download,
 	FileText,
+	GitBranch,
+	Github,
 	Loader2,
+	Lock,
 	LogIn,
 	Plus,
 	RefreshCw,
+	Search,
 	SendHorizontal,
 	Square,
 	Terminal,
@@ -45,9 +50,13 @@ import {
 	CloudSession,
 	CloudSessionEvent,
 	CloudSessionStatus,
+	GitHubRepo,
+	cloudRepoLabel,
 	isCloudSessionActive,
+	validateCloudRepoBranch,
+	validateCloudRepoUrl,
 } from '../../../../common/cloudAgentTypes.js';
-import type { CloudChangesState } from '../../../cloudAgentServiceInterface.js';
+import type { CloudChangesState, CloudGitHubPick, CloudSessionSource } from '../../../cloudAgentServiceInterface.js';
 
 
 // ---------------------------------------------------------------------------
@@ -175,12 +184,393 @@ const useRelativeTime = () => {
 	}, [now, t]);
 };
 
+/** リポジトリから始めたセッションなら「owner/name @ branch」、そうでなければ null */
+const sessionRepoLabel = (s: CloudSession): string | null => {
+	const info = s.workspaceInfo;
+	const branch = info?.gitBranch ? ` @ ${info.gitBranch}` : '';
+	if (info?.repoFullName) return `${info.repoFullName}${branch}`;
+	if (info?.repoUrl) return `${cloudRepoLabel(info.repoUrl)}${branch}`;
+	return null;
+};
+
 const sessionTitle = (s: CloudSession) => s.title || (s.prompt.split('\n').find(l => l.trim()) ?? '').slice(0, 80) || s.id;
 
 const formatBytes = (n: number) => n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : n >= 1024 ? `${Math.round(n / 1024)} KB` : `${n} B`;
 
 const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform);
 const isSubmitKey = (e: React.KeyboardEvent) => e.key === 'Enter' && (isMac ? e.metaKey : e.ctrlKey);
+
+
+// ---------------------------------------------------------------------------
+// 左: GitHub のリポジトリを選ぶ部品
+//
+//   GitHubConnectBox    … 未連携のときの「GitHub と連携」と、ブラウザで許可してもらうあいだの待ち表示
+//   GitHubAccountChip   … 連携中のアカウント (アバター + @login) と「解除」
+//   GitHubRepoList      … 検索 (サーバー側の q、300 ms 待ってから) とリポジトリ一覧、「もっと見る」
+//   GitHubSelectedRepo  … 選んだリポジトリのカード (「変更」) とブランチの選択
+//
+// 連携の状態・一覧・選んだリポジトリはすべて ICloudAgentService 側にある (パネルを閉じても残る)。
+// ---------------------------------------------------------------------------
+
+/** 検索欄の入力が止まってからサーバーに問い合わせるまで */
+const REPO_SEARCH_DEBOUNCE_MS = 300;
+
+const boxStyle: React.CSSProperties = {
+	border: `1px solid ${C.border}`,
+	borderRadius: '6px',
+	padding: '8px 10px',
+	display: 'flex', flexDirection: 'column', gap: '6px',
+};
+
+const GitHubConnectBox = () => {
+	const { t } = useTranslation();
+	const accessor = useAccessor();
+	const cloudAgentService = accessor.get('ICloudAgentService');
+	const gh = useCloudAgentState().github;
+
+	if (gh.waitingForAuth) {
+		return (
+			<div style={boxStyle} aria-live='polite'>
+				<div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: C.fg }}>
+					<Spinner size={12} color={statusColor.running} />
+					{t('cloudAgents.github.waiting')}
+				</div>
+				<div style={{ fontSize: '11px', color: C.fgMuted, lineHeight: 1.4 }}>{t('cloudAgents.github.waitingHint')}</div>
+				<div>
+					<button type='button' onClick={() => cloudAgentService.cancelGitHubConnect()} style={buttonStyle('secondary')}>
+						{t('cloudAgents.github.cancel')}
+					</button>
+				</div>
+			</div>
+		);
+	}
+	return (
+		<div style={boxStyle}>
+			<div style={{ fontSize: '11px', color: C.fgMuted, lineHeight: 1.4 }}>{t('cloudAgents.github.connectHint')}</div>
+			<div>
+				<button type='button' disabled={gh.starting} onClick={() => { void cloudAgentService.connectGitHub(); }} style={buttonStyle('primary', gh.starting)}>
+					{gh.starting ? <Spinner size={12} /> : <Github size={12} />}
+					{t('cloudAgents.github.connect')}
+				</button>
+			</div>
+		</div>
+	);
+};
+
+const GitHubAccountChip = () => {
+	const { t } = useTranslation();
+	const accessor = useAccessor();
+	const cloudAgentService = accessor.get('ICloudAgentService');
+	const gh = useCloudAgentState().github;
+	const [avatarFailed, setAvatarFailed] = useState(false);
+	useEffect(() => { setAvatarFailed(false); }, [gh.avatarUrl]);
+
+	return (
+		<div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+			{gh.avatarUrl && !avatarFailed ? (
+				<img
+					src={gh.avatarUrl}
+					alt=''
+					width={20}
+					height={20}
+					onError={() => setAvatarFailed(true)}
+					style={{ width: '20px', height: '20px', borderRadius: '50%', flexShrink: 0, background: C.hover }}
+				/>
+			) : (
+				<span style={{ width: '20px', height: '20px', borderRadius: '50%', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: C.hover, color: C.fgMuted }}>
+					<Github size={12} />
+				</span>
+			)}
+			<span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+				<span style={{ fontSize: '12px', fontWeight: 600, color: C.fg, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+					{gh.login ? `@${gh.login}` : 'GitHub'}
+				</span>
+				<span style={{ fontSize: '10px', color: C.fgMuted }}>{t('cloudAgents.github.connected')}</span>
+			</span>
+			<button
+				type='button'
+				disabled={gh.disconnecting}
+				onClick={() => { void cloudAgentService.disconnectGitHub(); }}
+				style={{ ...buttonStyle('ghost', gh.disconnecting), padding: '2px 6px', fontWeight: 400 }}
+			>
+				{gh.disconnecting && <Spinner size={11} />}
+				{t('cloudAgents.github.disconnect')}
+			</button>
+		</div>
+	);
+};
+
+const GitHubRepoRow = ({ repo, pushed, onSelect }: { repo: GitHubRepo; pushed: string; onSelect: () => void }) => {
+	const { t } = useTranslation();
+	const [hover, setHover] = useState(false);
+	return (
+		<button
+			type='button'
+			onClick={onSelect}
+			onMouseEnter={() => setHover(true)}
+			onMouseLeave={() => setHover(false)}
+			title={repo.fullName}
+			style={{
+				display: 'flex', alignItems: 'flex-start', gap: '6px',
+				width: '100%', boxSizing: 'border-box', textAlign: 'left',
+				padding: '6px 8px', border: 'none', borderBottom: `1px solid ${C.border}`,
+				background: hover ? C.hover : 'transparent', color: C.fg,
+				cursor: 'pointer', fontFamily: 'inherit',
+			}}
+		>
+			<span style={{ marginTop: '2px', flexShrink: 0, display: 'inline-flex', color: repo.private ? C.warning : C.fgMuted }} title={repo.private ? t('cloudAgents.github.private') : undefined}>
+				{repo.private ? <Lock size={12} /> : <Book size={12} />}
+			</span>
+			<span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '1px' }}>
+				<span style={{ display: 'flex', alignItems: 'baseline', gap: '6px', minWidth: 0 }}>
+					<span style={{ fontSize: '12px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{repo.name}</span>
+					<span style={{ fontSize: '10px', color: C.fgMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 1 }}>{repo.owner}</span>
+				</span>
+				{repo.description && (
+					<span style={{ fontSize: '11px', color: C.fgMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{repo.description}</span>
+				)}
+			</span>
+			{pushed && <span style={{ fontSize: '10px', color: C.fgMuted, flexShrink: 0, marginTop: '2px' }}>{pushed}</span>}
+		</button>
+	);
+};
+
+const GitHubRepoList = ({ onSelect, onCancel }: { onSelect: (repo: GitHubRepo) => void; onCancel?: () => void }) => {
+	const { t } = useTranslation();
+	const accessor = useAccessor();
+	const cloudAgentService = accessor.get('ICloudAgentService');
+	const repos = useCloudAgentState().githubRepos;
+	// 行ごとにタイマーを持たせないよう、「◯分前」はここで 1 つだけ
+	const relTime = useRelativeTime();
+	const [query, setQuery] = useState(repos.q);
+	const isFirstRun = useRef(true);
+
+	// まだ読んでいない (初めて開いた / 連携し直した) ときは、すぐ 1 ページ目を読む
+	useEffect(() => {
+		if (!repos.loaded && !repos.loading && !repos.error) void cloudAgentService.searchGitHubRepos(query.trim(), 1);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [repos.loaded, repos.loading, repos.error]);
+
+	// 検索語は入力が 300 ms 止まってからサーバーに問い合わせる
+	useEffect(() => {
+		if (isFirstRun.current) { isFirstRun.current = false; return; }
+		const handle = setTimeout(() => { void cloudAgentService.searchGitHubRepos(query.trim(), 1); }, REPO_SEARCH_DEBOUNCE_MS);
+		return () => clearTimeout(handle);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [query]);
+
+	const firstPageLoading = repos.loading && repos.page <= 1;
+
+	return (
+		<div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+			<div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+				<div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+					<Search size={12} style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: C.fgMuted, pointerEvents: 'none' }} />
+					<input
+						value={query}
+						onChange={e => setQuery(e.target.value)}
+						placeholder={t('cloudAgents.github.search')}
+						aria-label={t('cloudAgents.github.search')}
+						spellCheck={false}
+						style={{ ...inputStyle, paddingLeft: '26px' }}
+					/>
+				</div>
+				{/* 検索し直している間は、前の結果を出したまま横にくるくるを出す */}
+				{firstPageLoading && repos.repos.length > 0 && <Spinner size={11} color={C.fgMuted} />}
+				{onCancel && (
+					<button type='button' onClick={onCancel} style={{ ...buttonStyle('ghost'), padding: '2px 6px', fontWeight: 400 }}>
+						{t('cloudAgents.github.cancel')}
+					</button>
+				)}
+			</div>
+			{repos.error && (
+				<div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', fontSize: '11px', color: C.error }}>
+					<AlertTriangle size={12} style={{ marginTop: '1px', flexShrink: 0 }} />
+					<span style={{ flex: 1, minWidth: 0, whiteSpace: 'pre-wrap' }}>{repos.error}</span>
+					<button type='button' onClick={() => { void cloudAgentService.searchGitHubRepos(query.trim(), 1); }} style={{ ...buttonStyle('ghost'), padding: '0 4px', fontWeight: 400 }}>
+						{t('cloudAgents.github.retry')}
+					</button>
+				</div>
+			)}
+			<div style={{ maxHeight: '240px', overflowY: 'auto', border: `1px solid ${C.border}`, borderRadius: '6px', background: C.bg }}>
+				{repos.repos.map(repo => <GitHubRepoRow key={repo.fullName} repo={repo} pushed={relTime(repo.pushedAt)} onSelect={() => onSelect(repo)} />)}
+				{firstPageLoading && repos.repos.length === 0 && (
+					<div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px', fontSize: '11px', color: C.fgMuted }}><Spinner size={11} /> {t('cloudAgents.list.loading')}</div>
+				)}
+				{!repos.loading && !repos.error && repos.loaded && repos.repos.length === 0 && (
+					<div style={{ padding: '10px', fontSize: '11px', color: C.fgMuted }}>
+						{repos.q ? t('cloudAgents.github.noMatch').replace('{q}', repos.q) : t('cloudAgents.github.noRepos')}
+					</div>
+				)}
+				{repos.hasMore && (
+					<div style={{ display: 'flex', justifyContent: 'center', padding: '4px' }}>
+						<button
+							type='button'
+							disabled={repos.loading}
+							onClick={() => { void cloudAgentService.searchGitHubRepos(repos.q, repos.page + 1); }}
+							style={{ ...buttonStyle('ghost', repos.loading), fontWeight: 400 }}
+						>
+							{repos.loading && !firstPageLoading && <Spinner size={11} />}
+							{t('cloudAgents.github.more')}
+						</button>
+					</div>
+				)}
+			</div>
+		</div>
+	);
+};
+
+const GitHubSelectedRepo = ({ pick, onChange }: { pick: CloudGitHubPick; onChange: () => void }) => {
+	const { t } = useTranslation();
+	const accessor = useAccessor();
+	const cloudAgentService = accessor.get('ICloudAgentService');
+	const state = useCloudAgentState();
+	const repo = pick.repo;
+	const branchesState = state.githubBranchesByRepo[repo.fullName];
+	const defaultBranch = branchesState?.defaultBranch || repo.defaultBranch;
+	const branch = pick.branch || defaultBranch;
+
+	useEffect(() => {
+		void cloudAgentService.loadGitHubBranches(repo.fullName);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [repo.fullName]);
+
+	// ブランチ一覧が来たら、未選択 / 前回のブランチが無くなっていれば既定のブランチにする
+	useEffect(() => {
+		const list = branchesState?.branches;
+		if (!list) return;
+		const fallback = branchesState?.defaultBranch || repo.defaultBranch;
+		if ((!pick.branch || (list.length > 0 && !list.includes(pick.branch))) && fallback && fallback !== pick.branch) {
+			cloudAgentService.setGitHubPick({ repo, branch: fallback });
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [branchesState?.branches]);
+
+	const options = branchesState?.branches?.length ? branchesState.branches : (branch ? [branch] : []);
+
+	return (
+		<div style={{ ...boxStyle, background: C.bg }}>
+			<div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', minWidth: 0 }}>
+				<span style={{ marginTop: '2px', flexShrink: 0, display: 'inline-flex', color: repo.private ? C.warning : C.fgMuted }} title={repo.private ? t('cloudAgents.github.private') : undefined}>
+					{repo.private ? <Lock size={13} /> : <Book size={13} />}
+				</span>
+				<span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '1px' }}>
+					<span title={repo.fullName} style={{ fontSize: '12px', fontWeight: 600, color: C.fg, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{repo.fullName}</span>
+					{repo.description && <span style={{ fontSize: '11px', color: C.fgMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{repo.description}</span>}
+				</span>
+				<button type='button' onClick={onChange} style={{ ...buttonStyle('ghost'), padding: '2px 6px', fontWeight: 400 }}>
+					{t('cloudAgents.github.change')}
+				</button>
+			</div>
+			<label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: C.fg, minWidth: 0 }}>
+				<GitBranch size={12} style={{ flexShrink: 0, color: C.fgMuted }} />
+				<span style={{ flexShrink: 0 }}>{t('cloudAgents.github.branch')}</span>
+				<select
+					value={branch}
+					disabled={!options.length}
+					onChange={e => cloudAgentService.setGitHubPick({ repo, branch: e.target.value })}
+					style={{ ...inputStyle, flex: 1, minWidth: 0, width: 'auto', padding: '3px 6px', fontFamily: C.monoFont }}
+				>
+					{options.map(name => (
+						<option key={name} value={name}>{name === defaultBranch ? `${name} (${t('cloudAgents.github.defaultBranch')})` : name}</option>
+					))}
+				</select>
+				{branchesState?.loading && <Spinner size={11} color={C.fgMuted} />}
+			</label>
+			{branchesState?.error && (
+				<div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', fontSize: '11px', color: C.warning }}>
+					<AlertTriangle size={12} style={{ marginTop: '1px', flexShrink: 0 }} />
+					<span style={{ flex: 1, minWidth: 0, whiteSpace: 'pre-wrap' }}>{t('cloudAgents.github.branchesError').replace('{error}', branchesState.error)}</span>
+					<button type='button' onClick={() => { void cloudAgentService.loadGitHubBranches(repo.fullName, true); }} style={{ ...buttonStyle('ghost'), padding: '0 4px', fontWeight: 400 }}>
+						{t('cloudAgents.github.retry')}
+					</button>
+				</div>
+			)}
+		</div>
+	);
+};
+
+/** 「GitHub のリポジトリ」を選んだときの中身 (連携していなければ連携から、連携中ならアカウント + リポジトリ) */
+const GitHubSourceFields = ({ choosing, setChoosing }: { choosing: boolean; setChoosing: (v: boolean) => void }) => {
+	const { t } = useTranslation();
+	const accessor = useAccessor();
+	const cloudAgentService = accessor.get('ICloudAgentService');
+	const state = useCloudAgentState();
+	const gh = state.github;
+	const pick = state.githubPick;
+
+	let body: React.ReactNode;
+	if (!gh.loaded) {
+		body = gh.loading || !gh.error
+			? <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: C.fgMuted }}><Spinner size={11} /> {t('cloudAgents.github.checking')}</div>
+			: null;
+	} else if (!gh.connected) {
+		body = <GitHubConnectBox />;
+	} else {
+		body = (
+			<>
+				<GitHubAccountChip />
+				{pick && !choosing
+					? <GitHubSelectedRepo pick={pick} onChange={() => setChoosing(true)} />
+					: (
+						<GitHubRepoList
+							onSelect={repo => { cloudAgentService.setGitHubPick({ repo, branch: repo.defaultBranch }); setChoosing(false); }}
+							onCancel={pick ? () => setChoosing(false) : undefined}
+						/>
+					)}
+			</>
+		);
+	}
+
+	return (
+		<div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+			{body}
+			{gh.error && (
+				<div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', fontSize: '11px', color: C.error }}>
+					<AlertTriangle size={12} style={{ marginTop: '1px', flexShrink: 0 }} />
+					<span style={{ flex: 1, minWidth: 0, whiteSpace: 'pre-wrap' }}>{gh.error}</span>
+					{!gh.loaded && (
+						<button type='button' onClick={() => { void cloudAgentService.refreshGitHubStatus(); }} style={{ ...buttonStyle('ghost'), padding: '0 4px', fontWeight: 400 }}>
+							{t('cloudAgents.github.retry')}
+						</button>
+					)}
+				</div>
+			)}
+		</div>
+	);
+};
+
+/** 「URL を指定」のときの入力欄 (公開リポジトリの https URL + 任意のブランチ) */
+const UrlSourceFields = ({ url, setUrl, branch, setBranch }: { url: string; setUrl: (v: string) => void; branch: string; setBranch: (v: string) => void }) => {
+	const { t } = useTranslation();
+	const urlInvalid = !!url.trim() && !!validateCloudRepoUrl(url);
+	const branchInvalid = !!validateCloudRepoBranch(branch);
+	return (
+		<div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+			<input
+				value={url}
+				onChange={e => setUrl(e.target.value)}
+				placeholder={t('cloudAgents.url.placeholder')}
+				aria-label={t('cloudAgents.source.url')}
+				spellCheck={false}
+				style={{ ...inputStyle, fontFamily: C.monoFont, ...(urlInvalid ? { borderColor: C.error } : {}) }}
+			/>
+			{urlInvalid && <div style={{ fontSize: '11px', color: C.error }}>{t('cloudAgents.url.invalid')}</div>}
+			<div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+				<GitBranch size={12} style={{ flexShrink: 0, color: C.fgMuted }} />
+				<input
+					value={branch}
+					onChange={e => setBranch(e.target.value)}
+					placeholder={t('cloudAgents.url.branchPlaceholder')}
+					aria-label={t('cloudAgents.github.branch')}
+					spellCheck={false}
+					style={{ ...inputStyle, fontFamily: C.monoFont, ...(branchInvalid ? { borderColor: C.error } : {}) }}
+				/>
+			</div>
+			{branchInvalid && <div style={{ fontSize: '11px', color: C.error }}>{t('cloudAgents.url.branchInvalid')}</div>}
+		</div>
+	);
+};
 
 
 // ---------------------------------------------------------------------------
@@ -198,7 +588,12 @@ const NewSessionForm = () => {
 
 	const [prompt, setPrompt] = useState('');
 	const [count, setCount] = useState(1);
-	const [includeWorkspace, setIncludeWorkspace] = useState(true);
+	// フォルダを開いていればそれを送るのが既定。開いていなければ、前回 GitHub のリポジトリを選んでいたらそれ
+	const [source, setSource] = useState<CloudSessionSource>(() => state.workspaceName ? 'workspace' : state.githubPick ? 'github' : 'empty');
+	const [repoUrl, setRepoUrl] = useState('');
+	const [urlBranch, setUrlBranch] = useState('');
+	/** GitHub: 選んだリポジトリがあっても一覧から選び直している (「変更」) */
+	const [choosingRepo, setChoosingRepo] = useState(false);
 	const [showDetails, setShowDetails] = useState(false);
 	const [title, setTitle] = useState('');
 	const [model, setModel] = useState('');
@@ -211,25 +606,54 @@ const NewSessionForm = () => {
 		}
 	}, [state.focusFormRequest]);
 
-	const canLaunch = !!prompt.trim() && !state.creating && state.isLoggedIn;
+	const gh = state.github;
+	// GitHub の連携状態はこの部品が GitHub を選んだときに初めて取りに行く (失敗したら再試行ボタンから)
+	useEffect(() => {
+		if (source === 'github' && state.isLoggedIn && !gh.loaded && !gh.loading && !gh.error) void cloudAgentService.refreshGitHubStatus();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [source, state.isLoggedIn, gh.loaded, gh.loading, gh.error]);
+
+	// 実際に使う出どころ: フォルダが閉じられていたら空のフォルダ、サーバーに GitHub 連携が無ければ URL
+	const githubUnavailable = source === 'github' && gh.loaded && !gh.configured;
+	const effectiveSource: CloudSessionSource =
+		source === 'workspace' && !state.workspaceName ? 'empty'
+			: githubUnavailable ? 'url'
+				: source;
+
+	const sourceReady =
+		effectiveSource === 'github' ? (gh.connected && !!state.githubPick && !choosingRepo)
+			: effectiveSource === 'url' ? (!validateCloudRepoUrl(repoUrl) && !validateCloudRepoBranch(urlBranch))
+				: true;
+	const canLaunch = !!prompt.trim() && !state.creating && state.isLoggedIn && sourceReady;
 
 	const launch = useCallback(async () => {
 		if (!canLaunch) return;
+		const pick = state.githubPick;
 		const created = await cloudAgentService.createSession({
 			prompt,
 			title: title.trim() || undefined,
 			model: model.trim() || undefined,
-			includeWorkspace: includeWorkspace && !!state.workspaceName,
+			source: effectiveSource,
+			includeWorkspace: effectiveSource === 'workspace',
+			...(effectiveSource === 'github' && pick ? { repo: { fullName: pick.repo.fullName, ...(pick.branch ? { branch: pick.branch } : {}) } } : {}),
+			...(effectiveSource === 'url' ? { repo: { url: repoUrl.trim(), ...(urlBranch.trim() ? { branch: urlBranch.trim() } : {}) } } : {}),
 			count,
 		});
 		if (created.length) {
 			setPrompt('');
 			setTitle('');
 		}
-	}, [canLaunch, cloudAgentService, prompt, title, model, includeWorkspace, state.workspaceName, count]);
+	}, [canLaunch, cloudAgentService, prompt, title, model, effectiveSource, state.githubPick, repoUrl, urlBranch, count]);
+
+	const sourceHint =
+		effectiveSource === 'workspace' && state.workspaceName ? t('cloudAgents.new.includeWorkspaceHint').replace('{name}', state.workspaceName)
+			: effectiveSource === 'github' ? t('cloudAgents.source.githubHint')
+				: effectiveSource === 'url' ? (githubUnavailable ? '' : t('cloudAgents.source.urlHint'))
+					: source === 'workspace' ? t('cloudAgents.new.noWorkspace')
+						: t('cloudAgents.new.emptyFolder');
 
 	return (
-		<div style={{ padding: '12px', borderBottom: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+		<div style={{ padding: '12px', borderBottom: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', maxHeight: '70%', flexShrink: 0 }}>
 			<div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: C.fg }}>
 				<Plus size={13} />
 				{t('cloudAgents.new.title')}
@@ -246,6 +670,28 @@ const NewSessionForm = () => {
 				style={{ ...inputStyle, resize: 'vertical', minHeight: '72px', lineHeight: 1.5 }}
 			/>
 
+			<label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: C.fg }}>
+				<span style={{ flexShrink: 0 }}>{t('cloudAgents.source.label')}</span>
+				<select
+					value={source}
+					onChange={e => { setSource(e.target.value as CloudSessionSource); setChoosingRepo(false); }}
+					style={{ ...inputStyle, flex: 1, minWidth: 0, width: 'auto', padding: '3px 6px' }}
+				>
+					<option value='workspace' disabled={!state.workspaceName}>
+						{state.workspaceName ? t('cloudAgents.source.workspace') : `${t('cloudAgents.source.workspace')} ${t('cloudAgents.source.noFolderOption')}`}
+					</option>
+					<option value='github'>{t('cloudAgents.source.github')}</option>
+					<option value='url'>{t('cloudAgents.source.url')}</option>
+					<option value='empty'>{t('cloudAgents.source.empty')}</option>
+				</select>
+			</label>
+
+			{source === 'github' && !githubUnavailable && <GitHubSourceFields choosing={choosingRepo} setChoosing={setChoosingRepo} />}
+			{githubUnavailable && <div style={{ fontSize: '11px', color: C.fgMuted, lineHeight: 1.4 }}>{t('cloudAgents.github.notConfigured')}</div>}
+			{effectiveSource === 'url' && <UrlSourceFields url={repoUrl} setUrl={setRepoUrl} branch={urlBranch} setBranch={setUrlBranch} />}
+
+			{sourceHint && <div style={{ fontSize: '11px', color: C.fgMuted, lineHeight: 1.4 }}>{sourceHint}</div>}
+
 			<div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
 				<label title={t('cloudAgents.new.parallelHint')} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: C.fg }}>
 					{t('cloudAgents.new.parallel')}
@@ -257,28 +703,10 @@ const NewSessionForm = () => {
 						{Array.from({ length: CLOUD_AGENTS_MAX_PARALLEL }, (_, i) => i + 1).map(n => <option key={n} value={n}>{n}</option>)}
 					</select>
 				</label>
-				<label
-					title={state.workspaceName ? t('cloudAgents.new.includeWorkspaceHint').replace('{name}', state.workspaceName) : t('cloudAgents.new.noWorkspace')}
-					style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: state.workspaceName ? C.fg : C.fgMuted, cursor: state.workspaceName ? 'pointer' : 'default' }}
-				>
-					<input
-						type='checkbox'
-						checked={includeWorkspace && !!state.workspaceName}
-						disabled={!state.workspaceName}
-						onChange={e => setIncludeWorkspace(e.target.checked)}
-					/>
-					{t('cloudAgents.new.includeWorkspace')}
-				</label>
 				<button type='button' onClick={() => setShowDetails(v => !v)} style={{ ...buttonStyle('ghost'), padding: '2px 4px', fontWeight: 400 }}>
 					{showDetails ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
 					{t('cloudAgents.new.details')}
 				</button>
-			</div>
-
-			<div style={{ fontSize: '11px', color: C.fgMuted, lineHeight: 1.4 }}>
-				{state.workspaceName
-					? (includeWorkspace ? t('cloudAgents.new.includeWorkspaceHint').replace('{name}', state.workspaceName) : t('cloudAgents.new.emptyFolder'))
-					: t('cloudAgents.new.noWorkspace')}
 			</div>
 
 			{showDetails && (
@@ -300,7 +728,8 @@ const NewSessionForm = () => {
 					{state.creating ? t('cloudAgents.new.launching') : count > 1 ? t('cloudAgents.new.launchN').replace('{count}', String(count)) : t('cloudAgents.new.launch')}
 				</button>
 				<span style={{ fontSize: '10px', color: C.fgMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-					{state.creatingProgress ?? t('cloudAgents.new.shortcut')}
+					{state.creatingProgress
+						?? (effectiveSource === 'github' && gh.connected && (!state.githubPick || choosingRepo) ? t('cloudAgents.github.pickRepo') : t('cloudAgents.new.shortcut'))}
 				</span>
 			</div>
 			<div style={{ fontSize: '10px', color: C.fgMuted }}>{t('cloudAgents.billing')}</div>
@@ -317,6 +746,7 @@ const SessionRow = ({ session, selected, onSelect }: { session: CloudSession; se
 	const { t } = useTranslation();
 	const relTime = useRelativeTime();
 	const [hover, setHover] = useState(false);
+	const repoLabel = sessionRepoLabel(session);
 	return (
 		<button
 			type='button'
@@ -341,7 +771,12 @@ const SessionRow = ({ session, selected, onSelect }: { session: CloudSession; se
 			<div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '10px', color: selected ? C.selectedFg : C.fgMuted, opacity: selected ? 0.85 : 1 }}>
 				<span>{relTime(session.updatedAt || session.createdAt)}</span>
 				{session.changedFiles > 0 && <span>{t('cloudAgents.filesChanged').replace('{count}', String(session.changedFiles))}</span>}
-				{session.workspaceName && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.workspaceName}</span>}
+				{repoLabel ? (
+					<span title={repoLabel} style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', minWidth: 0, overflow: 'hidden' }}>
+						{session.workspaceInfo?.repoFullName ? <Github size={10} style={{ flexShrink: 0 }} /> : <GitBranch size={10} style={{ flexShrink: 0 }} />}
+						<span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{repoLabel}</span>
+					</span>
+				) : session.workspaceName && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.workspaceName}</span>}
 			</div>
 		</button>
 	);
@@ -773,6 +1208,7 @@ const SessionDetail = ({ session }: { session: CloudSession }) => {
 	useEffect(() => { setTab('transcript'); }, [session.id]);
 
 	const info = session.workspaceInfo;
+	const repoLabel = sessionRepoLabel(session);
 	const workspaceText = session.workspaceName
 		? `${session.workspaceName}${info ? ` · ${t('cloudAgents.detail.workspaceFiles').replace('{count}', String(info.fileCount))} · ${formatBytes(info.bytes)}` : ''}${info?.gitBranch ? ` · ${info.gitBranch}${info.gitCommit ? `@${info.gitCommit.slice(0, 7)}` : ''}` : ''}`
 		: t('cloudAgents.detail.noWorkspace');
@@ -824,8 +1260,10 @@ const SessionDetail = ({ session }: { session: CloudSession }) => {
 				</div>
 				<div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', fontSize: '11px', color: C.fgMuted }}>
 					<span>{t('cloudAgents.detail.model')}: <span style={{ color: C.fg }}>{session.modelLabel || session.model || t('cloudAgents.detail.modelDefault')}</span></span>
-					<span>{t('cloudAgents.detail.workspace')}: <span style={{ color: C.fg }}>{workspaceText}</span></span>
-					{info && info.skipped > 0 && <span style={{ color: C.warning }}>{t('cloudAgents.detail.skipped').replace('{count}', String(info.skipped))}</span>}
+					{repoLabel
+						? <span>{t('cloudAgents.detail.repo')}: <span style={{ color: C.fg }}>{repoLabel}</span></span>
+						: <span>{t('cloudAgents.detail.workspace')}: <span style={{ color: C.fg }}>{workspaceText}</span></span>}
+					{!repoLabel && info && info.skipped > 0 && <span style={{ color: C.warning }}>{t('cloudAgents.detail.skipped').replace('{count}', String(info.skipped))}</span>}
 				</div>
 				<div style={{ display: 'flex', gap: '4px' }}>
 					{tabButton('transcript', t('cloudAgents.detail.transcript'))}

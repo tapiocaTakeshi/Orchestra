@@ -13,7 +13,7 @@
 
 import type { Event } from '../../../../base/common/event.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
-import type { CloudChange, CloudSession, CloudSessionEvent } from '../common/cloudAgentTypes.js';
+import type { CloudChange, CloudSession, CloudSessionEvent, GitHubRepo } from '../common/cloudAgentTypes.js';
 
 
 /** 「変更を取り込む」の結果 (パスはワークスペースからの相対パス) */
@@ -39,6 +39,52 @@ export type CloudChangesState = {
 	lastApply?: CloudApplyResult;
 };
 
+/** GitHub アカウント連携の状態 */
+export type CloudGitHubState = {
+	/** /api/github/status を取りに行っている */
+	loading: boolean;
+	/** status を一度でも取れたか (取れるまでは configured / connected は当てにならない) */
+	loaded: boolean;
+	/** false = サーバーに GitHub の OAuth アプリが無い (またはサーバーが連携に未対応) */
+	configured: boolean;
+	connected: boolean;
+	login?: string;
+	avatarUrl?: string;
+	/** 「GitHub と連携」を押して、連携用の URL を取りに行っているあいだ */
+	starting: boolean;
+	/** ブラウザで許可してもらうのを待っているあいだ (/status をポーリング中) */
+	waitingForAuth: boolean;
+	disconnecting: boolean;
+	error?: string;
+};
+
+/** GitHub のリポジトリ一覧 (検索語 q で絞った結果を page まで読んだもの) */
+export type CloudGitHubReposState = {
+	q: string;
+	page: number;
+	hasMore: boolean;
+	loading: boolean;
+	/** 一度でも読み込めたか */
+	loaded: boolean;
+	repos: GitHubRepo[];
+	error?: string;
+};
+
+/** リポジトリごとのブランチ一覧 (既定のブランチが先頭) */
+export type CloudGitHubBranchesState = {
+	loading: boolean;
+	branches?: string[];
+	defaultBranch?: string;
+	error?: string;
+};
+
+/** 最後に選んだリポジトリとブランチ (IStorageService に覚えておき、次回の初期値にする) */
+export type CloudGitHubPick = {
+	repo: GitHubRepo;
+	/** 空なら既定のブランチ */
+	branch: string;
+};
+
 export type CloudAgentState = {
 	sessions: CloudSession[];
 	eventsById: Record<string, CloudSessionEvent[]>;
@@ -61,15 +107,33 @@ export type CloudAgentState = {
 	 * 大きくなったら入力欄にフォーカスする (パネルのマウント前に来た要求も取りこぼさない)。
 	 */
 	focusFormRequest: number;
+	github: CloudGitHubState;
+	githubRepos: CloudGitHubReposState;
+	/** fullName ("owner/name") → ブランチ一覧 */
+	githubBranchesByRepo: Record<string, CloudGitHubBranchesState>;
+	githubPick: CloudGitHubPick | null;
 };
+
+/**
+ * サンドボックスに何を置いて始めるか:
+ *  - workspace: 開いているフォルダを tar.gz にしてアップロードする
+ *  - github:    GitHub のリポジトリ (連携したアカウントのトークンでサーバーが clone する。非公開も可)
+ *  - url:       公開リポジトリの https URL をサーバーが clone する
+ *  - empty:     空のフォルダ
+ */
+export type CloudSessionSource = 'workspace' | 'github' | 'url' | 'empty';
 
 export type CreateCloudSessionsOptions = {
 	prompt: string;
 	title?: string;
 	/** provider/model の指定。空ならプロジェクトの coder 割り当て */
 	model?: string;
-	/** ワークスペースを tar.gz にしてサンドボックスへ送る */
-	includeWorkspace: boolean;
+	/** 何を置いて始めるか。省略時は includeWorkspace から決める (true → workspace / false → empty) */
+	source?: CloudSessionSource;
+	/** source が github なら fullName、url なら url (と、どちらも任意で branch) */
+	repo?: { fullName?: string; url?: string; branch?: string };
+	/** 旧オプション (source を省略したときだけ見る): ワークスペースを tar.gz にしてサンドボックスへ送る */
+	includeWorkspace?: boolean;
 	/** 同じ指示で並列に起動するセッション数 (1〜10) */
 	count?: number;
 };
@@ -96,6 +160,23 @@ export interface ICloudAgentService {
 	setPaneVisible(visible: boolean): void;
 	requestFocusForm(): void;
 	dismissError(): void;
+
+	// --- GitHub アカウント連携 ---
+
+	/** 連携の状態を取り直す */
+	refreshGitHubStatus(): Promise<void>;
+	/** 連携を始める: 連携用の URL をシステムのブラウザで開き、連携できるまで /status をポーリングする */
+	connectGitHub(): Promise<void>;
+	/** ブラウザでの許可待ちをやめる */
+	cancelGitHubConnect(): void;
+	/** 確認してから連携を解除する。解除できたら true */
+	disconnectGitHub(): Promise<boolean>;
+	/** リポジトリを検索する (q はサーバー側で名前を絞る)。page 2 以降は今の一覧に足す */
+	searchGitHubRepos(q: string, page?: number): Promise<void>;
+	/** ブランチ一覧を読む (読み込み済みなら force のときだけ読み直す) */
+	loadGitHubBranches(fullName: string, force?: boolean): Promise<void>;
+	/** 選んだリポジトリとブランチを覚える (次回の初期値になる)。null で忘れる */
+	setGitHubPick(pick: CloudGitHubPick | null): void;
 }
 
 export const ICloudAgentService = createDecorator<ICloudAgentService>('cloudAgentService');
