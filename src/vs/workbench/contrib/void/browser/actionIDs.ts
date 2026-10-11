@@ -40,3 +40,9 @@ export const VOID_KANBAN_CANCEL_ACTION_ID = 'void.kanban.cancelCurrent'
 
 // チャットのタイトルバーの「ログイン」から、サイドバーのログイン画面を開く。サイドバーの React 側がマウント中だけ登録する。
 export const ORCHESTRA_CHAT_SHOW_LOGIN_COMMAND_ID = 'orchestra.chat.showLogin'
+
+// Division プロジェクト (ロールごとのモデル割り当て) とコスト管理 (コストの自動調整・クレジット・クラウドの利用額)。
+// どちらも Orchestra の設定画面の該当タブを開く。右のチャットを隠すクラウドエージェントモードでも使えるように、
+// コマンドパレットと (クラウドエージェントモードの) タイトルバーから開ける。voidSettingsPane.ts で登録する
+export const ORCHESTRA_OPEN_DIVISION_PROJECTS_ACTION_ID = 'orchestra.divisionProjects.open'
+export const ORCHESTRA_OPEN_COST_MANAGEMENT_ACTION_ID = 'orchestra.costManagement.open'

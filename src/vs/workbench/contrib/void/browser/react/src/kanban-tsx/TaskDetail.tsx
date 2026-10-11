@@ -5,9 +5,10 @@
  *--------------------------------------------------------------------------------------*/
 
 import React, { useEffect, useRef, useState } from 'react';
-import { MessageSquare, Play, Plus, Trash2, X } from 'lucide-react';
+import { Cloud, Loader2, MessageSquare, Play, Plus, Trash2, X } from 'lucide-react';
 
 import { useAccessor } from '../util/services.js';
+import { ORCHESTRA_UI_SET_CLOUD_MODE_ACTION_ID } from '../../../orchestraUiModeTypes.js';
 import { useTranslation } from '../util/i18n.js';
 import {
 	KanbanBoard as KanbanBoardType,
@@ -45,10 +46,11 @@ const Section = ({ title, action, children }: { title: string; action?: React.Re
 	</div>
 );
 
-const RunEntry = ({ run, onOpenThread }: { run: KanbanRunRecord; onOpenThread: (threadId: string) => void }) => {
+const RunEntry = ({ run, onOpenThread, onOpenCloud }: { run: KanbanRunRecord; onOpenThread: (threadId: string) => void; onOpenCloud: (sessionId: string) => void }) => {
 	const { t, language } = useTranslation();
 	const [expanded, setExpanded] = useState(false);
 	const durationSec = Math.max(0, Math.round((run.endedAt - run.startedAt) / 1000));
+	const isRunning = run.status === 'running';
 
 	return (
 		<div style={{
@@ -57,13 +59,19 @@ const RunEntry = ({ run, onOpenThread }: { run: KanbanRunRecord; onOpenThread: (
 			background: 'var(--void-bg-1)', border: '1px solid var(--void-border-3)',
 		}}>
 			<div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px' }}>
+				{run.cloudSessionId && <Cloud size={10} style={{ color: runStatusColor[run.status], flexShrink: 0 }} />}
 				<span style={{ color: runStatusColor[run.status], fontWeight: 700 }}>{runStatusLabel(run.status, language)}</span>
-				<span style={{ color: 'var(--void-fg-4)' }}>{durationSec}s</span>
+				{!isRunning && <span style={{ color: 'var(--void-fg-4)' }}>{durationSec}s</span>}
 				<span style={{ color: 'var(--void-fg-4)' }}>{formatTimestamp(run.startedAt)}</span>
 				<div style={{ flex: 1 }} />
 				{run.threadId && (
 					<button type='button' onClick={() => onOpenThread(run.threadId!)} style={{ ...buttonStyle('ghost'), padding: '0 2px', fontSize: '10px' }}>
 						{t('kanban.detail.openThread')}
+					</button>
+				)}
+				{run.cloudSessionId && (
+					<button type='button' onClick={() => onOpenCloud(run.cloudSessionId!)} style={{ ...buttonStyle('ghost'), padding: '0 2px', fontSize: '10px' }}>
+						{t('kanban.detail.openInCloud')}
 					</button>
 				)}
 			</div>
@@ -88,10 +96,14 @@ const RunEntry = ({ run, onOpenThread }: { run: KanbanRunRecord; onOpenThread: (
 	);
 };
 
-export const TaskDetail = ({ task, board, onClose }: {
+export const TaskDetail = ({ task, board, onClose, isCloudRunning, onRunInCloud }: {
 	task: KanbanTask;
 	board: KanbanBoardType;
 	onClose: () => void;
+	/** クラウドエージェントで実行中か */
+	isCloudRunning?: boolean;
+	/** 「クラウドで実行」。ログインしていなければ undefined (ボタンを出さない) */
+	onRunInCloud?: () => void;
 }) => {
 	const accessor = useAccessor();
 	const kanbanService = accessor.get('IKanbanService');
@@ -128,6 +140,11 @@ export const TaskDetail = ({ task, board, onClose }: {
 	const openThread = (threadId: string) => {
 		chatThreadService.switchToThread(threadId);
 		void commandService.executeCommand('void.sidebar.open');
+	};
+
+	// クラウドエージェントモードに切り替えて、そのエージェントを選ぶ
+	const openCloud = (sessionId: string) => {
+		void commandService.executeCommand(ORCHESTRA_UI_SET_CLOUD_MODE_ACTION_ID, { sessionId });
 	};
 
 	return (
@@ -189,6 +206,18 @@ export const TaskDetail = ({ task, board, onClose }: {
 						<Play size={12} />
 						{t('kanban.card.run')}
 					</button>
+					{onRunInCloud && (
+						<button
+							type='button'
+							title={t('kanban.detail.runInCloudHint')}
+							disabled={isCloudRunning}
+							onClick={onRunInCloud}
+							style={{ ...buttonStyle('secondary'), opacity: isCloudRunning ? 0.6 : 1, cursor: isCloudRunning ? 'default' : 'pointer' }}
+						>
+							{isCloudRunning ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Cloud size={12} />}
+							{isCloudRunning ? t('kanban.card.cloudRunning') : t('kanban.card.runInCloud')}
+						</button>
+					)}
 					<label
 						title={t('kanban.detail.agentEnabledDetail')}
 						style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: 'var(--void-fg-2)', cursor: 'pointer' }}
@@ -383,7 +412,7 @@ export const TaskDetail = ({ task, board, onClose }: {
 				<Section title={t('kanban.detail.runHistory')}>
 					{task.runs.length === 0
 						? <span style={{ fontSize: '11px', color: 'var(--void-fg-4)' }}>{t('kanban.detail.noRuns')}</span>
-						: task.runs.map((run, i) => <RunEntry key={`${run.startedAt}-${i}`} run={run} onOpenThread={openThread} />)}
+						: task.runs.map((run, i) => <RunEntry key={`${run.startedAt}-${i}`} run={run} onOpenThread={openThread} onOpenCloud={openCloud} />)}
 				</Section>
 			</div>
 		</div>

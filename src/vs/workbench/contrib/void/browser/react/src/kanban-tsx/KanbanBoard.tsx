@@ -12,6 +12,7 @@ import {
 	Ban,
 	CheckSquare,
 	Clock,
+	Cloud,
 	Loader2,
 	MessageSquare,
 	MoreHorizontal,
@@ -25,7 +26,8 @@ import {
 	X,
 } from 'lucide-react';
 
-import { useAccessor, useKanbanServiceState, useSettingsState } from '../util/services.js';
+import { useAccessor, useCloudAgentState, useDivisionProjectConfig, useKanbanServiceState, useSettingsState } from '../util/services.js';
+import { ORCHESTRA_UI_SET_CLOUD_MODE_ACTION_ID } from '../../../orchestraUiModeTypes.js';
 import { useTranslation } from '../util/i18n.js';
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js';
 import {
@@ -69,13 +71,17 @@ type DropTarget = { columnId: string; index: number };
 // カード
 // ---------------------------------------------------------------------------
 
-const TaskCard = ({ task, isSelected, isRunning, isQueued, onSelect, onRun, onDragStart, onDragEnd, onDragOverCard }: {
+const TaskCard = ({ task, isSelected, isRunning, isCloudRunning, isQueued, onSelect, onRun, onRunInCloud, onDragStart, onDragEnd, onDragOverCard }: {
 	task: KanbanTask;
 	isSelected: boolean;
 	isRunning: boolean;
+	/** クラウドエージェントで実行中 (ローカルの実行とは別) */
+	isCloudRunning: boolean;
 	isQueued: boolean;
 	onSelect: () => void;
 	onRun: () => void;
+	/** ログインしていなければ undefined (ボタンを出さない) */
+	onRunInCloud: (() => void) | undefined;
 	onDragStart: () => void;
 	onDragEnd: () => void;
 	onDragOverCard: (e: React.DragEvent) => void;
@@ -124,13 +130,24 @@ const TaskCard = ({ task, isSelected, isRunning, isQueued, onSelect, onRun, onDr
 				}}>
 					{task.title}
 				</span>
-				{(hover || isRunning) && (
-					<div onClick={e => e.stopPropagation()}>
+				{(hover || isRunning || isCloudRunning) && (
+					<div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+						{isCloudRunning && (
+							<span title={t('kanban.card.cloudRunning')} style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', color: '#f59e0b' }}>
+								<Cloud size={12} />
+								<Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
+							</span>
+						)}
 						{isRunning
 							? <Loader2 size={13} style={{ color: '#f59e0b', animation: 'spin 1s linear infinite' }} />
-							: <IconButton title={t('kanban.card.run')} onClick={e => { e.stopPropagation(); onRun(); }}>
+							: hover && <IconButton title={t('kanban.card.run')} onClick={e => { e.stopPropagation(); onRun(); }}>
 								<Play size={12} />
 							</IconButton>}
+						{hover && !isCloudRunning && onRunInCloud && (
+							<IconButton title={t('kanban.card.runInCloud')} onClick={e => { e.stopPropagation(); onRunInCloud(); }}>
+								<Cloud size={12} />
+							</IconButton>
+						)}
 					</div>
 				)}
 			</div>
@@ -272,7 +289,7 @@ const ColumnSettingsPopover = ({ column, columnCount, onClose }: {
 	);
 };
 
-const Column = ({ column, tasks, index, columnCount, isFiltered, selectedTaskId, runningTaskId, queuedTaskIds, drag, dropTarget, onSelectTask, onRunTask, onDragStateChange, onDropTargetChange, onDrop }: {
+const Column = ({ column, tasks, index, columnCount, isFiltered, selectedTaskId, runningTaskId, cloudRunTaskIds, queuedTaskIds, drag, dropTarget, onSelectTask, onRunTask, onRunTaskInCloud, onDragStateChange, onDropTargetChange, onDrop }: {
 	column: KanbanColumn;
 	tasks: KanbanTask[];
 	index: number;
@@ -280,11 +297,13 @@ const Column = ({ column, tasks, index, columnCount, isFiltered, selectedTaskId,
 	isFiltered: boolean;
 	selectedTaskId: string | null;
 	runningTaskId: string | null;
+	cloudRunTaskIds: string[];
 	queuedTaskIds: string[];
 	drag: DragState | null;
 	dropTarget: DropTarget | null;
 	onSelectTask: (taskId: string) => void;
 	onRunTask: (taskId: string) => void;
+	onRunTaskInCloud: ((taskId: string) => void) | undefined;
 	onDragStateChange: (drag: DragState | null) => void;
 	onDropTargetChange: (target: DropTarget | null) => void;
 	onDrop: () => void;
@@ -418,9 +437,11 @@ const Column = ({ column, tasks, index, columnCount, isFiltered, selectedTaskId,
 							task={task}
 							isSelected={selectedTaskId === task.id}
 							isRunning={runningTaskId === task.id}
+							isCloudRunning={cloudRunTaskIds.includes(task.id)}
 							isQueued={queuedTaskIds.includes(task.id)}
 							onSelect={() => onSelectTask(task.id)}
 							onRun={() => onRunTask(task.id)}
+							onRunInCloud={onRunTaskInCloud ? () => onRunTaskInCloud(task.id) : undefined}
 							onDragStart={() => onDragStateChange({ kind: 'task', taskId: task.id, fromColumnId: column.id })}
 							onDragEnd={() => { onDragStateChange(null); onDropTargetChange(null); }}
 							onDragOverCard={e => {
@@ -486,6 +507,13 @@ const KanbanBoardInner = () => {
 	const { t } = useTranslation();
 
 	const state = useKanbanServiceState();
+	// クラウドで実行: ログインしているときだけ。プロジェクトはチャットで使用中の Division プロジェクト
+	const cloudLoggedIn = useCloudAgentState().isLoggedIn;
+	const activeProjectId = useDivisionProjectConfig()?.projectId?.trim() || '';
+	const runInCloud = cloudLoggedIn
+		? (taskId: string) => { void kanbanService.runTaskInCloud(taskId, activeProjectId ? { projectId: activeProjectId } : undefined); }
+		: undefined;
+	const cloudRunTaskIds = state.cloudRunTaskIds ?? [];
 	// 旧い設定ファイルからの移行直後など、kanban キーがまだ無いことがある
 	const kanbanSettings = useSettingsState().globalSettings.kanban ?? defaultKanbanSettings;
 
@@ -638,7 +666,7 @@ const KanbanBoardInner = () => {
 			</div>
 
 			{/* 状態バー */}
-			{(state.isRunning || state.lastError || kanbanSettings.dryRun || state.source.kind === 'storage') && (
+			{(state.isRunning || cloudRunTaskIds.length > 0 || state.lastError || kanbanSettings.dryRun || state.source.kind === 'storage') && (
 				<div style={{ display: 'flex', flexDirection: 'column' }}>
 					{state.isRunning && (
 						<Banner color='#f59e0b' icon={<Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />}>
@@ -655,6 +683,19 @@ const KanbanBoardInner = () => {
 									</button>
 								</>
 							)}
+						</Banner>
+					)}
+					{cloudRunTaskIds.length > 0 && (
+						<Banner color='#f59e0b' icon={<Cloud size={12} />}>
+							{t('kanban.board.cloudRunning').replace('{count}', String(cloudRunTaskIds.length))}
+							{' — '}
+							<button
+								type='button'
+								onClick={() => { void commandService.executeCommand(ORCHESTRA_UI_SET_CLOUD_MODE_ACTION_ID); }}
+								style={{ ...buttonStyle('ghost'), padding: 0, color: '#f59e0b', textDecoration: 'underline' }}
+							>
+								{t('kanban.board.openCloud')}
+							</button>
 						</Banner>
 					)}
 					{kanbanSettings.dryRun && (
@@ -687,11 +728,13 @@ const KanbanBoardInner = () => {
 							isFiltered={isFiltered}
 							selectedTaskId={selectedTaskId}
 							runningTaskId={state.runningTaskId}
+							cloudRunTaskIds={cloudRunTaskIds}
 							queuedTaskIds={state.queuedTaskIds}
 							drag={drag}
 							dropTarget={dropTarget}
 							onSelectTask={setSelectedTaskId}
 							onRunTask={taskId => { void kanbanService.runTask(taskId); }}
+							onRunTaskInCloud={runInCloud}
 							onDragStateChange={setDrag}
 							onDropTargetChange={setDropTarget}
 							onDrop={handleDrop}
@@ -703,6 +746,8 @@ const KanbanBoardInner = () => {
 					<TaskDetail
 						task={selectedTask}
 						board={board}
+						isCloudRunning={cloudRunTaskIds.includes(selectedTask.id)}
+						onRunInCloud={runInCloud ? () => runInCloud(selectedTask.id) : undefined}
 						onClose={() => setSelectedTaskId(null)}
 					/>
 				)}

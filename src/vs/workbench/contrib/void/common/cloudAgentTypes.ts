@@ -11,7 +11,7 @@
 // createDecorator 以外の実行時依存を持たせないこと。
 //
 // サーバー側の API 契約 (Division ⇄ Orchestra) に合わせてある:
-//   POST /api/cloud-sessions                  → { session }
+//   POST /api/cloud-sessions                  { prompt, title?, model?, projectId?, workspaceName? } → { session }
 //   POST /api/cloud-sessions/:id/upload       { index, total, data(base64) }
 //   POST /api/cloud-sessions/:id/start        { workspaceInfo?, repo? } → { session }
 //   GET  /api/cloud-sessions?limit=50         → { sessions }
@@ -76,6 +76,11 @@ export interface CloudSession {
 	updatedAt: string;
 	startedAt: string | null;
 	completedAt: string | null;
+	/**
+	 * ここまでに課金されたモデルの料金 (USD)。一覧 (GET /api/cloud-sessions) と GET /api/cloud-sessions/:id にだけ付く。
+	 * 無ければ「不明」(0 ではない)。イベントの応答などに付いてくる session には無いので、上書きで消さないこと
+	 */
+	costUsd?: number;
 }
 
 export type CloudSessionEventType = 'user' | 'assistant' | 'tool' | 'status' | 'error' | 'done';
@@ -161,6 +166,27 @@ export const CLOUD_AGENT_CHANNEL_NAME = 'void-channel-cloudAgent';
 export const CLOUD_AGENTS_OPEN_ACTION_ID = 'orchestra.cloudAgents.open';
 export const CLOUD_AGENTS_NEW_ACTION_ID = 'orchestra.cloudAgents.new';
 export const CLOUD_AGENTS_STOP_ALL_ACTION_ID = 'orchestra.cloudAgents.stopAll';
+
+/** クラウドで使った料金 (costUsd) の表示。AutoRouting.tsx の見積もりと同じ書き方 ($0.12 / $0.0034 / $1.50) */
+export const formatCloudCostUsd = (n: number): string => {
+	if (!Number.isFinite(n) || n <= 0) return '$0';
+	if (n < 0.0001) return '<$0.0001';
+	if (n >= 1) return `$${n.toFixed(2)}`;
+	return `$${n.toFixed(4).replace(/(\.\d\d\d*?)0+$/, '$1')}`;
+};
+
+/** costUsd が付いているセッションだけを足す。1 つも無ければ null (= 不明) */
+export const sumCloudCostUsd = (sessions: readonly { costUsd?: number }[]): number | null => {
+	let total = 0;
+	let known = false;
+	for (const s of sessions) {
+		if (typeof s.costUsd === 'number' && Number.isFinite(s.costUsd)) {
+			total += s.costUsd;
+			known = true;
+		}
+	}
+	return known ? total : null;
+};
 
 /** API のパスはすべてこの下 (と GITHUB_API_PREFIX の下)。main プロセス側の中継もこれ以外は通さない */
 export const CLOUD_SESSIONS_API_PREFIX = '/api/cloud-sessions';

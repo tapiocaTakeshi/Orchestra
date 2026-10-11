@@ -6,9 +6,10 @@
 // クラウドエージェントのパネル。エディタ領域にマウントされる (cloudAgentsPane.ts)。
 // Cursor の Agents 画面 (エージェントモード) のような 3 列のレイアウト:
 //
-//   左   (約 260px): 「＋ 新しいエージェント」・検索欄・エージェントの一覧 (実行中 / 完了 / 停止・失敗)・アカウント
+//   左   (約 260px): 「＋ 新しいエージェント」・検索欄・エージェントの一覧 (実行中 / 完了 / 停止・失敗)・
+//                   ワークスペースの道具 (Division プロジェクト / コスト管理 / カンバン)・表示中の料金の合計・アカウント
 //   中央          : 選んだエージェントとの会話 (指示・発言・ツールの実行・完了カード) と、下に固定した入力欄。
-//                   「新しいエージェント」のときは「何を任せますか？」の画面と、作業する場所・並列数・モデルを選べる入力欄
+//                   「新しいエージェント」のときは「何を任せますか？」の画面と、作業する場所・並列数・プロジェクト・モデルを選べる入力欄
 //   右   (約 360px): 変更ファイルの一覧と差分。「すべて取り込む」/ ファイルごとの「取り込む」。ヘッダーのボタンで開閉
 //
 // 幅が狭いとき (1000px 未満) は右の変更パネルを最初は閉じ、開いたときは上に重ねる。
@@ -18,6 +19,9 @@
 // (入力中の下書きと、どのパネルを開いているかだけはこのコンポーネントが持つ)。
 // スタイルはカンバンと同じく inline style + VS Code のテーマ変数 (ダーク / ライトどちらにも追従する)。
 // :hover / :focus-within が要るものだけ、PANEL_CSS の oca- で始まるクラスで書く。
+//
+// クラウドエージェントモードでは右のチャットが隠れるので、チャットや IDE から使っていた Division プロジェクト・
+// コスト管理・カンバンへは、左の列の「ワークスペース」から開く (どれもエディタ領域に開く既存の画面)。
 
 import '../styles.css'
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -29,6 +33,7 @@ import {
 	Book,
 	CheckCircle2,
 	ChevronDown,
+	Coins,
 	ChevronRight,
 	Cloud,
 	Cpu,
@@ -40,6 +45,8 @@ import {
 	FolderPlus,
 	GitBranch,
 	Github,
+	Kanban,
+	Layers,
 	Link,
 	Loader2,
 	Lock,
@@ -56,7 +63,7 @@ import {
 	XCircle,
 } from 'lucide-react';
 
-import { useAccessor, useCloudAgentState, useIsDark, useOrchestraUiMode, useSettingsState } from '../util/services.js';
+import { useAccessor, useCloudAgentState, useDivisionProjectConfig, useDivisionProjects, useIsDark, useOrchestraUiMode, useSettingsState } from '../util/services.js';
 import { TranslationKey, useTranslation } from '../util/i18n.js';
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js';
 import { ChatMarkdownRender } from '../markdown/ChatMarkdownRender.js';
@@ -68,47 +75,69 @@ import {
 	CloudSessionStatus,
 	GitHubRepo,
 	cloudRepoLabel,
+	formatCloudCostUsd,
 	isCloudSessionActive,
+	sumCloudCostUsd,
 	validateCloudRepoBranch,
 	validateCloudRepoUrl,
 } from '../../../../common/cloudAgentTypes.js';
 import type { CloudChangesState, CloudGitHubPick, CloudSessionSource } from '../../../cloudAgentServiceInterface.js';
+import type { DivisionProjectConfig } from '../../../divisionProjectService.js';
+import { ORCHESTRA_OPEN_COST_MANAGEMENT_ACTION_ID, ORCHESTRA_OPEN_DIVISION_PROJECTS_ACTION_ID, VOID_OPEN_KANBAN_ACTION_ID } from '../../../actionIDs.js';
 
 
 // ---------------------------------------------------------------------------
 // 見た目の共通部品
 // ---------------------------------------------------------------------------
 
+// 色は IDE / エージェントモードのチャット (SidebarChat・Sidebar・styles.css) と同じトークンを使う。
+// void-* は styles.css が VS Code のテーマ変数から作る色 (Orchestra Dark / Light / Sun Red のどれにも追従する)。
+//   背景: チャットと同じ void-bg-2 (サイドバーの背景)、入力欄とポップオーバーは void-bg-1
+//   文字: void-fg-1 / 補足は void-fg-3 / さらに弱いものは void-fg-4
+//   枠: void-border-2〜3 (チャットの区切り線と同じ 60% の混ぜ方)
+//   ホバー・選択: 文字色を 6% / 10% 混ぜる (チャットのチップ・メニューと同じ)
+//   主ボタン: テーマのボタン色 (Orchestra のテーマでは赤)。送信 ↑ / 停止 ■ はチャットと同じく文字色の丸ボタン
+//   強調 (実行中・フォーカス): テーマの focusBorder / リンク色 (Orchestra のテーマでは金)
 const C = {
-	fg: 'var(--vscode-foreground)',
-	fgMuted: 'var(--vscode-descriptionForeground)',
-	bg: 'var(--vscode-editor-background)',
-	bgSide: 'var(--vscode-sideBar-background, var(--vscode-editor-background))',
-	bgWidget: 'var(--vscode-editorWidget-background, var(--vscode-editor-background))',
-	bgInput: 'var(--vscode-input-background)',
-	fgInput: 'var(--vscode-input-foreground)',
-	border: 'var(--vscode-panel-border, var(--vscode-editorGroup-border))',
-	borderInput: 'var(--vscode-input-border, var(--vscode-panel-border, transparent))',
-	hover: 'var(--vscode-list-hoverBackground)',
-	selected: 'var(--vscode-list-activeSelectionBackground, var(--vscode-list-hoverBackground))',
-	selectedFg: 'var(--vscode-list-activeSelectionForeground, var(--vscode-foreground))',
-	link: 'var(--vscode-textLink-foreground)',
-	codeBg: 'var(--vscode-textCodeBlock-background, var(--vscode-editor-background))',
-	error: 'var(--vscode-errorForeground, #ef4444)',
-	warning: 'var(--vscode-editorWarning-foreground, #f59e0b)',
-	success: 'var(--vscode-testing-iconPassed, #10b981)',
-	focus: 'var(--vscode-focusBorder)',
+	fg: 'var(--void-fg-1)',
+	fgMuted: 'var(--void-fg-3)',
+	fgFaint: 'var(--void-fg-4)',
+	bg: 'var(--void-bg-2)',
+	bgSide: 'var(--void-bg-2-alt)',
+	bgWidget: 'var(--void-bg-1)',
+	bgInput: 'var(--void-bg-1)',
+	fgInput: 'var(--void-fg-1)',
+	border: 'color-mix(in srgb, var(--void-border-2) 60%, transparent)',
+	borderInput: 'var(--void-border-3)',
+	hover: 'color-mix(in srgb, var(--void-fg-1) 6%, transparent)',
+	selected: 'color-mix(in srgb, var(--void-fg-1) 10%, transparent)',
+	selectedFg: 'var(--void-fg-1)',
+	link: 'var(--void-link-color)',
+	accent: 'var(--void-link-color)',
+	codeBg: 'color-mix(in srgb, var(--void-fg-1) 5%, var(--void-bg-1))',
+	error: 'var(--vscode-errorForeground)',
+	warning: 'var(--void-warning)',
+	success: 'var(--vscode-charts-green)',
+	focus: 'color-mix(in srgb, var(--vscode-focusBorder) 60%, var(--void-border-1) 40%)',
 	buttonBg: 'var(--vscode-button-background)',
 	buttonFg: 'var(--vscode-button-foreground)',
-	button2Bg: 'var(--vscode-button-secondaryBackground, var(--vscode-input-background))',
-	button2Fg: 'var(--vscode-button-secondaryForeground, var(--vscode-foreground))',
-	shadow: 'var(--vscode-widget-shadow, rgba(0, 0, 0, 0.36))',
-	added: 'var(--vscode-gitDecoration-addedResourceForeground, #10b981)',
-	deleted: 'var(--vscode-gitDecoration-deletedResourceForeground, #ef4444)',
-	addedBg: 'var(--vscode-diffEditor-insertedLineBackground, rgba(16, 185, 129, 0.16))',
-	deletedBg: 'var(--vscode-diffEditor-removedLineBackground, rgba(239, 68, 68, 0.16))',
+	buttonHoverBg: 'var(--vscode-button-hoverBackground)',
+	button2Bg: 'var(--vscode-button-secondaryBackground, var(--void-bg-1))',
+	button2Fg: 'var(--vscode-button-secondaryForeground, var(--void-fg-1))',
+	/** チャットの送信 ↑ / 停止 ■ と同じ (文字色の丸ボタン) */
+	sendBg: 'var(--void-fg-1)',
+	sendFg: 'var(--void-bg-1)',
+	sendDisabledBg: 'color-mix(in srgb, var(--void-fg-1) 12%, transparent)',
+	shadow: 'rgba(0, 0, 0, 0.35)',
+	added: 'var(--vscode-gitDecoration-addedResourceForeground)',
+	deleted: 'var(--vscode-gitDecoration-deletedResourceForeground)',
+	addedBg: 'var(--vscode-diffEditor-insertedLineBackground)',
+	deletedBg: 'var(--vscode-diffEditor-removedLineBackground)',
 	monoFont: 'var(--vscode-editor-font-family, monospace)',
 };
+
+/** 色に透明度を付ける (テーマ変数でも使えるよう color-mix で) */
+const tint = (color: string, percent: number) => `color-mix(in srgb, ${color} ${percent}%, transparent)`;
 
 /** :hover / :focus-within / ::placeholder が要るものだけ CSS で書く (クラス名は oca- で始める) */
 const PANEL_CSS = `
@@ -121,15 +150,15 @@ const PANEL_CSS = `
 .oca-row:hover .oca-row-actions, .oca-row:focus-within .oca-row-actions { display: inline-flex; }
 .oca-row:hover .oca-row-hide-on-hover { display: none; }
 .oca-iconbtn { display: inline-flex; align-items: center; justify-content: center; gap: 4px; border: none; background: transparent; color: ${C.fgMuted}; border-radius: 5px; cursor: pointer; font-family: inherit; }
-.oca-iconbtn:hover:not(:disabled) { background: var(--vscode-toolbar-hoverBackground, ${C.hover}); color: ${C.fg}; }
+.oca-iconbtn:hover:not(:disabled) { background: ${C.hover}; color: ${C.fg}; }
 .oca-iconbtn:disabled { opacity: 0.45; cursor: default; }
-.oca-iconbtn[data-active="true"] { background: var(--vscode-toolbar-activeBackground, ${C.hover}); color: ${C.fg}; }
+.oca-iconbtn[data-active="true"] { background: ${C.selected}; color: ${C.fg}; }
 .oca-chip { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 7px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: ${C.fgMuted}; font-size: 11.5px; font-family: inherit; cursor: pointer; max-width: 240px; white-space: nowrap; }
-.oca-chip:hover:not(:disabled), .oca-chip[data-active="true"] { background: var(--vscode-toolbar-hoverBackground, ${C.hover}); color: ${C.fg}; }
+.oca-chip:hover:not(:disabled), .oca-chip[data-active="true"] { background: ${C.hover}; color: ${C.fg}; }
 .oca-chip[data-warn="true"] { color: ${C.warning}; }
 .oca-composer { border: 1px solid ${C.borderInput}; transition: border-color 0.1s; }
 .oca-composer:focus-within { border-color: ${C.focus}; }
-.oca-textarea::placeholder, .oca-input::placeholder { color: var(--vscode-input-placeholderForeground, ${C.fgMuted}); }
+.oca-textarea::placeholder, .oca-input::placeholder { color: ${C.fgMuted}; }
 .oca-tool { border-radius: 6px; }
 .oca-tool:hover { background: ${C.hover}; }
 .oca-example { border: 1px solid ${C.border}; background: transparent; color: ${C.fg}; border-radius: 14px; padding: 5px 12px; font-size: 12px; font-family: inherit; cursor: pointer; }
@@ -138,27 +167,33 @@ const PANEL_CSS = `
 .oca-option:hover:not(:disabled) { background: ${C.hover}; }
 .oca-option:disabled { opacity: 0.5; cursor: default; }
 .oca-option[data-selected="true"] { background: ${C.selected}; color: ${C.selectedFg}; }
+.oca-nav { display: flex; align-items: center; gap: 8px; width: calc(100% - 12px); box-sizing: border-box; margin: 0 6px; padding: 5px 8px; border: none; border-radius: 6px; background: transparent; color: ${C.fg}; font-size: 12.5px; font-family: inherit; cursor: pointer; text-align: left; }
+.oca-nav:hover { background: ${C.hover}; }
+.oca-nav:focus-visible { outline: none; box-shadow: inset 0 0 0 1px ${C.focus}; }
+.oca-link { border: none; background: transparent; padding: 0; color: ${C.link}; font-size: inherit; font-family: inherit; cursor: pointer; }
+.oca-link:hover { text-decoration: underline; }
 .oca-md p:first-child { margin-top: 0; }
 .oca-md p:last-child { margin-bottom: 0; }
 `;
 
 const statusColor: Record<CloudSessionStatus, string> = {
-	provisioning: '#8b5cf6',
-	uploading: '#06b6d4',
-	running: '#3b82f6',
-	idle: '#10b981',
-	failed: '#ef4444',
-	cancelled: '#8b95a5',
+	// 動いているものはチャットの強調色 (テーマのリンク色)、終わったものは緑、失敗はエラー色、止めたものは弱い文字色
+	provisioning: C.accent,
+	uploading: C.accent,
+	running: C.accent,
+	idle: C.success,
+	failed: C.error,
+	cancelled: C.fgFaint,
 };
 
 const statusKey = (s: CloudSessionStatus): TranslationKey => `cloudAgents.status.${s}` as TranslationKey;
 const changeStatusKey = (s: CloudChange['status']): TranslationKey => `cloudAgents.changes.status.${s}` as TranslationKey;
 
 const changeStatusColor: Record<CloudChange['status'], string> = {
-	added: '#10b981',
-	modified: '#3b82f6',
-	deleted: '#ef4444',
-	renamed: '#f59e0b',
+	added: 'var(--vscode-gitDecoration-addedResourceForeground)',
+	modified: 'var(--vscode-gitDecoration-modifiedResourceForeground)',
+	deleted: 'var(--vscode-gitDecoration-deletedResourceForeground)',
+	renamed: 'var(--vscode-gitDecoration-renamedResourceForeground)',
 };
 const changeStatusLetter: Record<CloudChange['status'], string> = { added: 'A', modified: 'M', deleted: 'D', renamed: 'R' };
 
@@ -199,7 +234,7 @@ const Spinner = ({ size = 12, color }: { size?: number; color?: string }) => (
 
 /** ステータスの丸 (動いているものはくるくる) */
 const StatusDot = ({ status }: { status: CloudSessionStatus }) => {
-	const color = statusColor[status] ?? '#8b95a5';
+	const color = statusColor[status] ?? C.fgFaint;
 	if (isCloudSessionActive(status)) return <Spinner size={11} color={color} />;
 	return (
 		<span style={{ width: '11px', height: '11px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -210,13 +245,13 @@ const StatusDot = ({ status }: { status: CloudSessionStatus }) => {
 
 const StatusPill = ({ status }: { status: CloudSessionStatus }) => {
 	const { t } = useTranslation();
-	const color = statusColor[status] ?? '#8b95a5';
+	const color = statusColor[status] ?? C.fgFaint;
 	return (
 		<span style={{
 			display: 'inline-flex', alignItems: 'center', gap: '4px',
 			fontSize: '10.5px', fontWeight: 600, lineHeight: 1.4,
 			padding: '1px 7px', borderRadius: '10px',
-			background: `${color}22`, color, border: `1px solid ${color}55`,
+			background: tint(color, 13), color, border: `1px solid ${tint(color, 33)}`,
 			whiteSpace: 'nowrap', flexShrink: 0,
 		}}>
 			{isCloudSessionActive(status) && <Spinner size={10} color={color} />}
@@ -283,6 +318,46 @@ const SessionSource = ({ session, size = 11 }: { session: CloudSession; size?: n
 };
 
 const sessionTitle = (s: CloudSession) => s.title || (s.prompt.split('\n').find(l => l.trim()) ?? '').slice(0, 80) || s.id;
+
+/** Division と同期済み (projectId がある) のプロジェクト。サーバーに送れるのはこれだけ */
+const useSyncedProjects = (): DivisionProjectConfig[] => {
+	const projects = useDivisionProjects();
+	return useMemo(() => (projects ?? []).filter(p => !!p.projectId?.trim()), [projects]);
+};
+
+/** projectId → プロジェクト名 (.division/projects.json に無ければ ID の先頭) */
+const useProjectLabel = () => {
+	const projects = useSyncedProjects();
+	return useCallback((projectId: string | null | undefined): string | null => {
+		const id = projectId?.trim();
+		if (!id) return null;
+		return projects.find(p => p.projectId === id)?.name || `#${id.slice(0, 8)}`;
+	}, [projects]);
+};
+
+/** エージェントの Division プロジェクト (一覧の行・ヘッダー) */
+const ProjectTag = ({ label, size = 10 }: { label: string | null; size?: number }) => {
+	const { t } = useTranslation();
+	if (!label) return null;
+	return (
+		<span title={`${t('cloudAgents.project.label')}: ${label}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', minWidth: 0, flexShrink: 1 }}>
+			<Layers size={size} style={{ flexShrink: 0 }} />
+			<span style={ellipsis}>{label}</span>
+		</span>
+	);
+};
+
+/** ここまでの料金 ($0.12)。サーバーが付けていなければ出さない */
+const CostTag = ({ costUsd, withIcon }: { costUsd: number | undefined; withIcon?: boolean }) => {
+	const { t } = useTranslation();
+	if (typeof costUsd !== 'number' || !Number.isFinite(costUsd)) return null;
+	return (
+		<span title={`${t('cloudAgents.cost.label')}: ${formatCloudCostUsd(costUsd)}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontFamily: C.monoFont, fontSize: '10.5px', flexShrink: 0, whiteSpace: 'nowrap' }}>
+			{withIcon && <Coins size={10} style={{ flexShrink: 0 }} />}
+			{formatCloudCostUsd(costUsd)}
+		</span>
+	);
+};
 
 const formatBytes = (n: number) => n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : n >= 1024 ? `${Math.round(n / 1024)} KB` : `${n} B`;
 
@@ -757,7 +832,7 @@ const ComposerBox = ({ value, onChange, onSubmit, placeholder, disabled, textare
 		<div style={{ padding: '6px 16px 12px', flexShrink: 0 }}>
 			<div style={{ position: 'relative', maxWidth: '860px', margin: '0 auto' }}>
 				{above}
-				<div className='oca-composer' style={{ borderRadius: '8px', background: C.bgInput, display: 'flex', flexDirection: 'column' }}>
+				<div className='oca-composer' style={{ borderRadius: '12px', background: `linear-gradient(to bottom, ${C.bgInput}, color-mix(in srgb, var(--void-bg-1) 92%, var(--vscode-focusBorder) 8%))`, display: 'flex', flexDirection: 'column' }}>
 					<textarea
 						ref={setRef}
 						className='oca-textarea'
@@ -807,7 +882,7 @@ const SendButton = ({ disabled, busy, title, onClick }: { disabled: boolean; bus
 		style={{
 			width: '26px', height: '26px', borderRadius: '50%', border: 'none', flexShrink: 0,
 			display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-			background: disabled ? C.button2Bg : C.buttonBg, color: disabled ? C.fgMuted : C.buttonFg,
+			background: disabled ? C.sendDisabledBg : C.sendBg, color: disabled ? C.fgMuted : C.sendFg,
 			cursor: disabled ? 'default' : 'pointer', opacity: disabled && !busy ? 0.6 : 1,
 		}}
 	>
@@ -825,7 +900,7 @@ const StopButton = ({ title, onClick }: { title: string; onClick: () => void }) 
 		style={{
 			width: '26px', height: '26px', borderRadius: '50%', border: 'none', flexShrink: 0,
 			display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-			background: C.fg, color: C.bg, cursor: 'pointer',
+			background: C.sendBg, color: C.sendFg, cursor: 'pointer',
 		}}
 	>
 		<Square size={10} fill='currentColor' strokeWidth={0} />
@@ -856,7 +931,7 @@ const PopoverTitle = ({ children }: { children: React.ReactNode }) => (
 
 
 // ---------------------------------------------------------------------------
-// 新しいエージェント: 入力欄 (作業する場所・並列数・モデルのチップ付き)
+// 新しいエージェント: 入力欄 (作業する場所・並列数・プロジェクト・モデルのチップ付き)
 // ---------------------------------------------------------------------------
 
 export type NewAgentDraft = {
@@ -867,12 +942,17 @@ export type NewAgentDraft = {
 	urlBranch: string;
 	title: string;
 	model: string;
+	/**
+	 * Division プロジェクトの ID。null は「使用中のプロジェクト (divisionProjectService の active) に従う」(既定)、
+	 * '' は「指定しない」(サーバーの既定)
+	 */
+	projectId: string | null;
 };
 
 /** パネルが閉じている間に来た「入力欄にフォーカス」の要求も拾えるよう、最後に処理した番号を覚えておく */
 let lastHandledFocusRequest = 0;
 
-type ComposerMenu = 'source' | 'parallel' | 'model' | null;
+type ComposerMenu = 'source' | 'parallel' | 'project' | 'model' | null;
 
 const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 	draft: NewAgentDraft;
@@ -882,6 +962,7 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 	const { t } = useTranslation();
 	const accessor = useAccessor();
 	const cloudAgentService = accessor.get('ICloudAgentService');
+	const commandService = accessor.get('ICommandService');
 	const state = useCloudAgentState();
 	/** GitHub: 選んだリポジトリがあっても一覧から選び直している (「変更」) */
 	const [choosingRepo, setChoosingRepo] = useState(false);
@@ -891,6 +972,12 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 	useDismiss(menu !== null, [popoverRef, toolbarRef], () => setMenu(null));
 
 	const { prompt, count, source, repoUrl, urlBranch, title, model } = draft;
+
+	// プロジェクト: 選んでいなければ使用中のプロジェクト (チャットと同じもの)。サーバーの既定に任せることもできる
+	const projects = useSyncedProjects();
+	const activeProjectId = useDivisionProjectConfig()?.projectId?.trim() || '';
+	const projectId = draft.projectId === null ? activeProjectId : draft.projectId;
+	const projectLabel = useProjectLabel()(projectId);
 
 	useEffect(() => {
 		if (state.focusFormRequest > lastHandledFocusRequest) {
@@ -931,6 +1018,7 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 			prompt,
 			title: title.trim() || undefined,
 			model: model.trim() || undefined,
+			...(projectId ? { projectId } : {}),
 			source: effectiveSource,
 			includeWorkspace: effectiveSource === 'workspace',
 			...(effectiveSource === 'github' && pick ? { repo: { fullName: pick.repo.fullName, ...(pick.branch ? { branch: pick.branch } : {}) } } : {}),
@@ -942,7 +1030,7 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 			// 並列で起動したときは 1 本目を開く
 			cloudAgentService.select(created[0].id);
 		}
-	}, [canLaunch, sourceReady, cloudAgentService, prompt, title, model, effectiveSource, state.githubPick, repoUrl, urlBranch, count, setDraft]);
+	}, [canLaunch, sourceReady, cloudAgentService, prompt, title, model, projectId, effectiveSource, state.githubPick, repoUrl, urlBranch, count, setDraft]);
 
 	const sourceHint =
 		effectiveSource === 'workspace' && state.workspaceName ? t('cloudAgents.new.includeWorkspaceHint').replace('{name}', state.workspaceName)
@@ -1019,6 +1107,35 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 				<div style={{ fontSize: '11px', color: C.fgMuted, lineHeight: 1.4 }}>{t('cloudAgents.new.parallelHint')}</div>
 			</Popover>
 		);
+	} else if (menu === 'project') {
+		const chooseProject = (id: string) => { setDraft({ projectId: id }); setMenu(null); textareaRef.current?.focus(); };
+		popover = (
+			<Popover ref={popoverRef} onClose={() => setMenu(null)} width='360px'>
+				<PopoverTitle>{t('cloudAgents.project.label')}</PopoverTitle>
+				<div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+					{projects.map(p => (
+						<button key={p.projectId} type='button' className='oca-option' data-selected={projectId === p.projectId} onClick={() => chooseProject(p.projectId)}>
+							<Layers size={13} style={{ color: C.fgMuted, flexShrink: 0 }} />
+							<span style={{ flex: 1, minWidth: 0, ...ellipsis }}>{p.name || p.projectId}</span>
+							{p.projectId === activeProjectId && <span style={{ fontSize: '10px', color: C.fgMuted, flexShrink: 0 }}>{t('cloudAgents.project.active')}</span>}
+							{projectId === p.projectId && <CheckCircle2 size={12} style={{ flexShrink: 0 }} />}
+						</button>
+					))}
+					<button type='button' className='oca-option' data-selected={!projectId} onClick={() => chooseProject('')}>
+						<span style={{ width: '13px', flexShrink: 0 }} />
+						<span style={{ flex: 1, minWidth: 0, ...ellipsis, color: C.fgMuted }}>{t('cloudAgents.project.noneOption')}</span>
+						{!projectId && <CheckCircle2 size={12} style={{ flexShrink: 0 }} />}
+					</button>
+				</div>
+				<div style={{ fontSize: '11px', color: C.fgMuted, lineHeight: 1.4 }}>{projects.length ? t('cloudAgents.project.hint') : t('cloudAgents.project.empty')}</div>
+				<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+					<button type='button' className='oca-link' style={{ fontSize: '11.5px' }} onClick={() => { setMenu(null); void commandService.executeCommand(ORCHESTRA_OPEN_DIVISION_PROJECTS_ACTION_ID); }}>
+						{t('cloudAgents.project.manage')}
+					</button>
+					<button type='button' onClick={() => { setMenu(null); textareaRef.current?.focus(); }} style={buttonStyle('secondary')}>{t('cloudAgents.composer.done')}</button>
+				</div>
+			</Popover>
+		);
 	} else if (menu === 'model') {
 		popover = (
 			<Popover ref={popoverRef} onClose={() => setMenu(null)} width='380px'>
@@ -1057,6 +1174,11 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 					</button>
 					<button type='button' className='oca-chip' data-active={menu === 'parallel'} title={t('cloudAgents.new.parallelHint')} onClick={() => toggleMenu('parallel')}>
 						<span style={{ fontFamily: C.monoFont }}>×{count}</span>
+						<ChevronDown size={11} style={{ flexShrink: 0, opacity: 0.7 }} />
+					</button>
+					<button type='button' className='oca-chip' data-active={menu === 'project'} title={`${t('cloudAgents.project.label')}: ${projectLabel ?? t('cloudAgents.project.none')}`} onClick={() => toggleMenu('project')}>
+						<Layers size={12} />
+						<span style={ellipsis}>{projectLabel ?? t('cloudAgents.project.none')}</span>
 						<ChevronDown size={11} style={{ flexShrink: 0, opacity: 0.7 }} />
 					</button>
 					<button type='button' className='oca-chip' data-active={menu === 'model'} title={t('cloudAgents.composer.options')} onClick={() => toggleMenu('model')}>
@@ -1171,11 +1293,13 @@ const ChangesChip = ({ session, changes }: { session: CloudSession; changes: Clo
 	return null;
 };
 
-const AgentRow = ({ session, selected, time, changes, onSelect }: {
+const AgentRow = ({ session, selected, time, changes, projectLabel, onSelect }: {
 	session: CloudSession;
 	selected: boolean;
 	time: string;
 	changes: CloudChangesState | undefined;
+	/** Division プロジェクトの名前 (起動時に指定したとき) */
+	projectLabel: string | null;
 	onSelect: () => void;
 }) => {
 	const { t } = useTranslation();
@@ -1196,6 +1320,7 @@ const AgentRow = ({ session, selected, time, changes, onSelect }: {
 			<div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
 				<span title={t(statusKey(session.status))} style={{ display: 'inline-flex' }}><StatusDot status={session.status} /></span>
 				<span title={session.prompt} style={{ flex: 1, minWidth: 0, fontSize: '12.5px', fontWeight: selected ? 600 : 500, ...ellipsis }}>{sessionTitle(session)}</span>
+				{typeof session.costUsd === 'number' && <span className='oca-row-hide-on-hover' style={{ display: 'inline-flex', color: selected ? C.selectedFg : C.fgMuted, opacity: 0.85 }}><CostTag costUsd={session.costUsd} /></span>}
 				<span className='oca-row-actions' style={{ alignItems: 'center', gap: '1px', flexShrink: 0 }}>
 					{active && (
 						<button type='button' className='oca-iconbtn' title={t('cloudAgents.detail.stop')} aria-label={t('cloudAgents.detail.stop')} onClick={e => { e.stopPropagation(); void cloudAgentService.stop(session.id); }} style={{ width: '20px', height: '20px' }}>
@@ -1208,11 +1333,52 @@ const AgentRow = ({ session, selected, time, changes, onSelect }: {
 				</span>
 			</div>
 			<div style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingLeft: '18px', fontSize: '11px', color: selected ? C.selectedFg : C.fgMuted, opacity: selected ? 0.85 : 1, minWidth: 0 }}>
-				<span style={{ flex: 1, minWidth: 0, display: 'flex' }}><SessionSource session={session} size={10} /></span>
+				<span style={{ flex: 1, minWidth: 0, display: 'flex', gap: '6px' }}>
+					<span style={{ flex: '0 1 auto', minWidth: '24px', display: 'flex' }}><SessionSource session={session} size={10} /></span>
+					{projectLabel && <span style={{ flex: '0 3 auto', minWidth: '24px', display: 'flex' }}><ProjectTag label={projectLabel} /></span>}
+				</span>
 				<span style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>{time}</span>
 				<ChangesChip session={session} changes={changes} />
 			</div>
 		</div>
+	);
+};
+
+/**
+ * 左の列の下に置く「ワークスペース」: Division プロジェクト / コスト管理 / カンバン。
+ * クラウドエージェントモードではチャット (プロジェクトの選択・コスト調整・カンバンの開閉がある) が隠れるので、
+ * ここから IDE モードと同じ画面 (設定画面のタブ・カンバンのボード) をエディタ領域に開く。
+ */
+const WorkspaceNav = ({ compact }: { compact?: boolean }) => {
+	const { t } = useTranslation();
+	const accessor = useAccessor();
+	const commandService = accessor.get('ICommandService');
+	const items: { id: string; icon: React.ReactNode; label: string; hint: string; command: string }[] = [
+		{ id: 'division', icon: <Layers size={13} />, label: t('cloudAgents.nav.divisionProjects'), hint: t('cloudAgents.nav.divisionProjectsHint'), command: ORCHESTRA_OPEN_DIVISION_PROJECTS_ACTION_ID },
+		{ id: 'cost', icon: <Coins size={13} />, label: t('cloudAgents.nav.cost'), hint: t('cloudAgents.nav.costHint'), command: ORCHESTRA_OPEN_COST_MANAGEMENT_ACTION_ID },
+		{ id: 'kanban', icon: <Kanban size={13} />, label: t('cloudAgents.nav.kanban'), hint: t('cloudAgents.nav.kanbanHint'), command: VOID_OPEN_KANBAN_ACTION_ID },
+	];
+	if (compact) {
+		return (
+			<div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', justifyContent: 'center' }}>
+				{items.map(it => (
+					<button key={it.id} type='button' className='oca-chip' title={it.hint} onClick={() => { void commandService.executeCommand(it.command); }}>
+						{it.icon}
+						<span>{it.label}</span>
+					</button>
+				))}
+			</div>
+		);
+	}
+	return (
+		<nav aria-label={t('cloudAgents.nav.label')} style={{ borderTop: `1px solid ${C.border}`, padding: '6px 0', display: 'flex', flexDirection: 'column', gap: '1px', flexShrink: 0 }}>
+			{items.map(it => (
+				<button key={it.id} type='button' className='oca-nav' title={it.hint} onClick={() => { void commandService.executeCommand(it.command); }}>
+					<span style={{ display: 'inline-flex', color: C.fgMuted, flexShrink: 0 }}>{it.icon}</span>
+					<span style={{ flex: 1, minWidth: 0, ...ellipsis }}>{it.label}</span>
+				</button>
+			))}
+		</nav>
 	);
 };
 
@@ -1229,15 +1395,19 @@ const AgentSidebar = ({ width, onNew, onSelect, style }: {
 	const settings = useSettingsState();
 	// 行ごとにタイマーを持たせないよう、「◯分前」はここで 1 つだけ
 	const relTime = useRelativeTime();
+	const projectLabel = useProjectLabel();
+	const commandService = accessor.get('ICommandService');
 	const [query, setQuery] = useState('');
 	const [collapsed, setCollapsed] = useState<Record<SectionId, boolean>>({ running: false, done: false, stopped: false });
 
 	const q = query.trim().toLowerCase();
 	const filtered = q
-		? state.sessions.filter(s => [sessionTitle(s), s.prompt, sessionRepoLabel(s) ?? '', s.workspaceName ?? ''].some(v => v.toLowerCase().includes(q)))
+		? state.sessions.filter(s => [sessionTitle(s), s.prompt, sessionRepoLabel(s) ?? '', s.workspaceName ?? '', projectLabel(s.projectId) ?? ''].some(v => v.toLowerCase().includes(q)))
 		: state.sessions;
 	const sections = SECTIONS.map(sec => ({ ...sec, items: filtered.filter(s => sectionOf(s.status) === sec.id) })).filter(sec => sec.items.length > 0);
 	const running = state.sessions.filter(s => isCloudSessionActive(s.status)).length;
+	// 一覧に表示中 (検索で絞ったもの) の料金の合計。サーバーが料金を付けていなければ出さない
+	const totalCost = sumCloudCostUsd(filtered);
 	const email = settings.globalSettings.divisionUserEmail;
 	const newSelected = state.selectedId === null;
 
@@ -1308,12 +1478,27 @@ const AgentSidebar = ({ width, onNew, onSelect, style }: {
 								selected={s.id === state.selectedId}
 								time={relTime(s.updatedAt || s.createdAt)}
 								changes={state.changesById[s.id]}
+								projectLabel={projectLabel(s.projectId)}
 								onSelect={() => onSelect(s.id)}
 							/>
 						))}
 					</div>
 				))}
 			</div>
+			<WorkspaceNav />
+			{totalCost !== null && (
+				<div title={t('cloudAgents.cost.totalHint').replace('{count}', String(filtered.length))} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 10px 6px 14px', borderTop: `1px solid ${C.border}`, fontSize: '11px', color: C.fgMuted, flexShrink: 0, minWidth: 0 }}>
+					<Coins size={11} style={{ flexShrink: 0 }} />
+					<span style={{ flex: 1, minWidth: 0, ...ellipsis }}>
+						{t('cloudAgents.cost.total').split('{cost}')[0]}
+						<span style={{ fontFamily: C.monoFont, color: C.fg }}>{formatCloudCostUsd(totalCost)}</span>
+						{t('cloudAgents.cost.total').split('{cost}')[1] ?? ''}
+					</span>
+					<button type='button' className='oca-link' style={{ fontSize: '11px', flexShrink: 0 }} onClick={() => { void commandService.executeCommand(ORCHESTRA_OPEN_COST_MANAGEMENT_ACTION_ID); }}>
+						{t('cloudAgents.cost.manage')}
+					</button>
+				</div>
+			)}
 			<div style={{ borderTop: `1px solid ${C.border}`, padding: '8px 10px 8px 14px', display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, minWidth: 0 }}>
 				<span style={{ width: '20px', height: '20px', borderRadius: '50%', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: C.hover, color: C.fg, fontSize: '10px', fontWeight: 700 }}>
 					{(email || 'O').slice(0, 1).toUpperCase()}
@@ -1590,7 +1775,7 @@ const EventView = ({ event, onReview }: { event: CloudSessionEvent; onReview: ()
 				<div style={{
 					display: 'flex', gap: '6px', alignItems: 'flex-start', fontSize: '12px', color: C.error,
 					whiteSpace: 'pre-wrap', wordBreak: 'break-word', padding: '6px 10px', borderRadius: '6px',
-					background: 'var(--vscode-inputValidation-errorBackground, transparent)', border: `1px solid var(--vscode-inputValidation-errorBorder, ${C.border})`,
+					background: tint(C.error, 8), border: `1px solid ${tint(C.error, 30)}`,
 				}}>
 					<AlertTriangle size={13} style={{ marginTop: '2px', flexShrink: 0 }} />
 					<span style={{ color: C.fg }}>{String(data.message ?? '')}</span>
@@ -1789,6 +1974,7 @@ const Conversation = ({ session, leftSlot, reviewOpen, onToggleReview, onReview,
 	const active = isCloudSessionActive(session.status);
 	const changes = state.changesById[session.id];
 	const changedCount = changes?.changes?.length ?? session.changedFiles;
+	const projectLabel = useProjectLabel();
 
 	return (
 		<div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
@@ -1804,7 +1990,9 @@ const Conversation = ({ session, leftSlot, reviewOpen, onToggleReview, onReview,
 							<Cpu size={10} style={{ flexShrink: 0 }} />
 							<span style={ellipsis}>{session.modelLabel || session.model || t('cloudAgents.detail.modelDefault')}</span>
 						</span>
+						<ProjectTag label={projectLabel(session.projectId)} />
 						<span style={{ display: 'flex', minWidth: 0, flexShrink: 1 }}><SessionSource session={session} size={10} /></span>
+						<CostTag costUsd={session.costUsd} withIcon />
 						{session.workspaceInfo && session.workspaceInfo.skipped > 0 && !sessionRepoLabel(session) && (
 							<span title={t('cloudAgents.detail.skipped').replace('{count}', String(session.workspaceInfo.skipped))} style={{ display: 'inline-flex', color: C.warning, flexShrink: 0 }}>
 								<AlertTriangle size={10} />
@@ -2024,7 +2212,7 @@ const ReviewPanel = ({ session, onClose, style }: { session: CloudSession; onClo
 				<>
 					<div style={{ maxHeight: '40%', overflowY: 'auto', borderBottom: `1px solid ${C.border}`, padding: '4px 0', flexShrink: 0 }}>
 						{list.map(c => {
-							const color = changeStatusColor[c.status] ?? '#8b95a5';
+							const color = changeStatusColor[c.status] ?? C.fgFaint;
 							const conflict = conflicts.has(c.path);
 							const error = failed.get(c.path);
 							const dir = dirname(c.path);
@@ -2120,6 +2308,8 @@ const LoginPrompt = () => {
 					<LogIn size={12} />
 					{t('cloudAgents.login.button')}
 				</button>
+				{/* カンバンなどはログインしなくても使える */}
+				<div style={{ marginTop: '12px' }}><WorkspaceNav compact /></div>
 			</div>
 		</div>
 	);
@@ -2135,8 +2325,8 @@ const ErrorBanner = () => {
 		<div style={{
 			display: 'flex', alignItems: 'flex-start', gap: '8px', flexShrink: 0,
 			padding: '8px 14px', fontSize: '12px', color: C.error,
-			background: 'var(--vscode-inputValidation-errorBackground, transparent)',
-			borderBottom: `1px solid var(--vscode-inputValidation-errorBorder, ${C.border})`,
+			background: tint(C.error, 8),
+			borderBottom: `1px solid ${tint(C.error, 30)}`,
 		}}>
 			<AlertTriangle size={13} style={{ marginTop: '2px', flexShrink: 0 }} />
 			<span style={{ flex: 1, minWidth: 0, whiteSpace: 'pre-wrap', color: C.fg }}>{state.lastError}</span>
@@ -2191,6 +2381,7 @@ const CloudAgentsPanelInner = ({ width }: { width: number }) => {
 		urlBranch: '',
 		title: '',
 		model: '',
+		projectId: null,
 	}));
 	const setDraft = useCallback((patch: Partial<NewAgentDraft>) => setDraftState(prev => ({ ...prev, ...patch })), []);
 	const [followDrafts, setFollowDrafts] = useState<Record<string, string>>({});
@@ -2259,7 +2450,7 @@ const CloudAgentsPanelInner = ({ width }: { width: number }) => {
 				{!compact && <AgentSidebar width={SIDEBAR_WIDTH} onNew={newAgent} onSelect={selectSession} />}
 				{compact && listOpen && (
 					<>
-						<div onClick={() => setListOpen(false)} style={{ position: 'absolute', inset: 0, zIndex: 24, background: 'rgba(0, 0, 0, 0.25)' }} />
+						<div onClick={() => setListOpen(false)} style={{ position: 'absolute', inset: 0, zIndex: 24, background: tint('var(--void-bg-3)', 60) }} />
 						<AgentSidebar width={`min(${SIDEBAR_WIDTH}px, 85%)`} onNew={newAgent} onSelect={selectSession} style={{ ...overlayStyle, left: 0 }} />
 					</>
 				)}

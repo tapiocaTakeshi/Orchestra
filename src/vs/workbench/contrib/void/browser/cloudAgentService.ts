@@ -375,11 +375,15 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		const sessions = this._state.sessions;
 		const idx = sessions.findIndex(s => s.id === session.id);
 		const prev = idx >= 0 ? sessions[idx] : undefined;
+		// costUsd は一覧と GET /:id にしか付かない。イベントや操作の応答で来た session で消さない
+		const merged = prev && typeof session.costUsd !== 'number' && typeof prev.costUsd === 'number'
+			? { ...session, costUsd: prev.costUsd }
+			: session;
 		const next = idx >= 0
-			? sessions.map((s, i) => i === idx ? session : s)
-			: [session, ...sessions];
+			? sessions.map((s, i) => i === idx ? merged : s)
+			: [merged, ...sessions];
 		this._setState({ sessions: next });
-		if (prev) this._maybeNotifyTransition(prev, session);
+		if (prev) this._maybeNotifyTransition(prev, merged);
 	}
 
 	/** 実行中 → 待機 / 失敗 に変わったら知らせる (パネルでそのセッションを見ているときは出さない) */
@@ -655,6 +659,8 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		const repoLabel = repo ? ('fullName' in repo ? repo.fullName : repo.url) : '';
 		const baseTitle = (opts.title ?? '').trim();
 		const model = (opts.model ?? '').trim();
+		const projectId = (opts.projectId ?? '').trim();
+		const selectCreated = opts.select !== false;
 
 		this._authFailedToken = null;
 		this._setState({ creating: true, creatingProgress: count > 1 ? `${count} 個のセッションを準備しています…` : 'セッションを準備しています…', lastError: null });
@@ -669,6 +675,7 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 				prompt,
 				...(title ? { title } : {}),
 				...(model ? { model } : {}),
+				...(projectId ? { projectId } : {}),
 				...(workspaceName ? { workspaceName } : {}),
 			}, CREATE_TIMEOUT_MS);
 			const session = created.ok ? created.data?.session as CloudSession | undefined : undefined;
@@ -678,7 +685,7 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 			}
 			this._recentlyCreated.set(session.id, Date.now());
 			this._upsertSession(session);
-			if (i === 0 || !this._state.selectedId) this.select(session.id);
+			if (selectCreated && (i === 0 || !this._state.selectedId)) this.select(session.id);
 
 			let workspaceInfo: CloudWorkspaceInfo | undefined;
 			if (folderPath) {

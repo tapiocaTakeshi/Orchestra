@@ -55,6 +55,7 @@ export const runStatusColor: Record<KanbanRunStatus, string> = {
 	'timeout': '#f59e0b',
 	'canceled': '#8b95a5',
 	'dry-run': '#60a5fa',
+	'running': '#f59e0b',
 };
 
 export const runStatusLabel = (status: KanbanRunStatus, lang: UILanguage): string => {
@@ -64,6 +65,7 @@ export const runStatusLabel = (status: KanbanRunStatus, lang: UILanguage): strin
 		'timeout': { en: 'Timed out', ja: 'タイムアウト' },
 		'canceled': { en: 'Canceled', ja: '中断' },
 		'dry-run': { en: 'Dry run', ja: 'ドライラン' },
+		'running': { en: 'Running in the cloud', ja: 'クラウドで実行中' },
 	};
 	return labels[status][lang] ?? labels[status].en;
 };

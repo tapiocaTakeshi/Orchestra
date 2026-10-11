@@ -35,21 +35,12 @@ import { useTranslation } from '../util/i18n.js';
 import { KanbanSettings } from './KanbanSettings.js';
 import { UiModeSettings } from './UiModeSettings.js';
 import { ObsidianSettings } from './ObsidianSettings.js';
+import { CostManagementSettings } from './CostManagement.js';
+import { consumeRequestedVoidSettingsTab, onDidRequestVoidSettingsTab, type VoidSettingsTab } from '../../../voidSettingsTabRequest.js';
 import { uiLanguages, displayInfoOfUILanguage } from '../../../../common/voidSettingsTypes.js';
 
-type Tab =
-	| 'models'
-	| 'localProviders'
-	| 'providers'
-	| 'featureOptions'
-	| 'mcp'
-	| 'skills'
-	| 'kanban'
-	| 'obsidian'
-	| 'division'
-	| 'general'
-	| 'updates'
-	| 'all';
+// タブの一覧は voidSettingsTabRequest.ts (コマンドから「このタブで開く」を頼むときと同じ型)
+type Tab = VoidSettingsTab;
 
 
 const ButtonLeftTextRightOption = ({ text, leftButton }: { text: string, leftButton?: React.ReactNode }) => {
@@ -1535,8 +1526,11 @@ export const Settings = () => {
 	const isDark = useIsDark()
 	const { t } = useTranslation()
 	// ─── sidebar nav ──────────────────────────
+	// コマンド (「Division プロジェクト」「コスト管理」など) から頼まれたタブがあれば、それで開く
 	const [selectedSection, setSelectedSection] =
-		useState<Tab>('models');
+		useState<Tab>(() => consumeRequestedVoidSettingsTab() ?? 'models');
+	// 開いたままの設定画面にも、あとから頼まれたタブを反映する
+	useEffect(() => onDidRequestVoidSettingsTab(tab => setSelectedSection(tab)), []);
 
 	const navItems: { tab: Tab; label: string }[] = [
 		{ tab: 'models', label: t('tab.models') },
@@ -1544,6 +1538,7 @@ export const Settings = () => {
 		{ tab: 'providers', label: t('tab.providers') },
 		{ tab: 'featureOptions', label: t('tab.featureOptions') },
 		{ tab: 'division', label: t('tab.division') },
+		{ tab: 'cost', label: t('tab.cost') },
 		{ tab: 'general', label: t('tab.general') },
 		{ tab: 'mcp', label: t('tab.mcp') },
 		{ tab: 'skills', label: t('tab.skills') },
@@ -2183,6 +2178,15 @@ export const Settings = () => {
 									<h2 className="text-3xl mb-2">{t('division.title')}</h2>
 									<h4 className="text-void-fg-3 mb-4">{t('division.subtitle')}</h4>
 									<DivisionSettings />
+								</ErrorBoundary>
+							</div>
+
+							{/* Cost management section (チャットの「コスト調整」・クレジット・クラウドエージェントの利用額) */}
+							<div className={shouldShowTab('cost') ? `` : 'hidden'}>
+								<ErrorBoundary>
+									<h2 className="text-3xl mb-2">{t('cost.title')}</h2>
+									<h4 className="text-void-fg-3 mb-4">{t('cost.subtitle')}</h4>
+									<CostManagementSettings onOpenBilling={() => setShowBillingPanel(true)} />
 								</ErrorBoundary>
 							</div>
 

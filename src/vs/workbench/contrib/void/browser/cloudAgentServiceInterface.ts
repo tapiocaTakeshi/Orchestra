@@ -138,6 +138,13 @@ export type CreateCloudSessionsOptions = {
 	includeWorkspace?: boolean;
 	/** 同じ指示で並列に起動するセッション数 (1〜10) */
 	count?: number;
+	/**
+	 * Division プロジェクトの ID (.division/projects.json の projectId)。指定するとサーバーはそのプロジェクトの
+	 * coder の割り当てをモデルに使う (model を指定したときは model が優先)。空なら送らない
+	 */
+	projectId?: string;
+	/** false なら、起動したセッションを選択しない (カンバンからの起動など、見ている画面を切り替えたくないとき)。既定は true */
+	select?: boolean;
 };
 
 export interface ICloudAgentService {

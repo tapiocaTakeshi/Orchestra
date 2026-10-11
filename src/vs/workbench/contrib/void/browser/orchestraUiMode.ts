@@ -562,8 +562,13 @@ registerAction2(class extends Action2 {
 	async run(accessor: ServicesAccessor, options?: unknown): Promise<void> {
 		const cloudAgentService = accessor.get(ICloudAgentService);
 		await setUiMode(accessor, 'cloud');
-		// ホーム画面の「クラウドで並列に任せる」などから: 「新しいエージェント」の入力欄を開く
-		if (options && typeof options === 'object' && (options as { newAgent?: unknown }).newAgent === true) {
+		const opts = (options && typeof options === 'object' ? options : {}) as { newAgent?: unknown; sessionId?: unknown };
+		if (typeof opts.sessionId === 'string' && opts.sessionId) {
+			// カンバンの「クラウドで開く」などから: そのエージェントを選んで、パネルを前面に出す
+			cloudAgentService.select(opts.sessionId);
+			await cloudAgentService.openPane();
+		} else if (opts.newAgent === true) {
+			// ホーム画面の「クラウドで並列に任せる」などから: 「新しいエージェント」の入力欄を開く
 			cloudAgentService.select(null);
 			cloudAgentService.requestFocusForm();
 		}
@@ -728,6 +733,8 @@ registerAction2(class extends Action2 {
 
 // タイトルバーの右側: ☁ クラウドエージェントモードへ (5) / 🤖 エージェントモードへ (8) / 🔧 上級者モードへ (9)。
 // 今のモード以外へのボタンだけを出す。クラウドエージェントモードの ☁ は「パネルを前面に出す」(cloudAgentsPane.ts)。
+// クラウドエージェントモードでは 6〜7 に Division プロジェクト (6)・コスト管理 (6.5)・カンバン (7) が並ぶ
+// (voidSettingsPane.ts / kanbanPane.ts。右のチャットが無くても、IDE モードと同じ画面をエディタ領域に開く)。
 registerAction2(class extends Action2 {
 	constructor() {
 		super({
