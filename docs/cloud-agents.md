@@ -6,7 +6,7 @@
 **クラウドエージェント** は、エージェントを Division のサーバー側のサンドボックス (Daytona) で動かす機能。
 Claude Code の Web 版のように、仕事を投げたらあとはクラウドが進めてくれる。
 
-- セッションごとに専用のサンドボックスが用意され、ワークスペースのコピーの上で作業する。手元の PC は空いたまま。
+- セッションごとに専用のサンドボックスが用意され、ワークスペースのコピー (または GitHub のリポジトリ) の上で作業する。手元の PC は空いたまま。
 - **いくつでも並列に** 起動できる。別々の仕事を並べても、同じ仕事を N 個走らせて結果を比べてもよい。
 - 進み具合 (エージェントの発言・ツールの実行・コマンドの出力) をその場で見られる。止めたり、追加の指示を送ったりもできる。
 - 終わったら通知が届く。結果 (ファイルの変更) は **差分としてワークスペースに取り込み**、エディタで Accept / Reject する。
@@ -36,9 +36,18 @@ Claude Code の Web 版のように、仕事を投げたらあとはクラウド
 | 項目 | 意味 |
 | --- | --- |
 | 並列数 (1〜10) | 同じ指示で、独立したセッションをいくつ同時に起動するか。2 以上にするとタイトルに `#1` `#2` … が付く |
-| ワークスペースを送る (既定: オン) | 開いているフォルダ (先頭のフォルダ) のファイルをサンドボックスへアップロードする。オフ、またはフォルダ未選択なら空のフォルダから始める |
+| 作業する場所 | 何を置いて始めるか (下の表)。フォルダを開いていれば **開いているフォルダを送る** が既定 |
 | 詳細 > タイトル | 一覧に出す名前。空なら指示から自動で付く |
 | 詳細 > モデル | `provider/model` 形式 (例: `anthropic/claude-opus-4-6`)。空ならプロジェクトの Coder の割り当てを使う |
+
+**作業する場所** の選び方:
+
+| 選択肢 | 意味 |
+| --- | --- |
+| 開いているフォルダを送る | 開いているフォルダ (先頭のフォルダ) のファイルをサンドボックスへアップロードする。フォルダ未選択なら空のフォルダから始める |
+| GitHub のリポジトリ | 連携した GitHub アカウントのリポジトリとブランチを一覧から選ぶ。アップロードせず、サーバーが clone する (非公開も可)。下の「GitHub 連携」を参照 |
+| URL を指定 | 公開リポジトリの `https://` URL (と任意のブランチ) を入れる。サーバーが clone する。ユーザー名やトークンを含む URL は使えない |
+| 空のフォルダ | 何も置かずに始める |
 
 ### 2. 見守る
 
@@ -81,6 +90,49 @@ Claude Code の Web 版のように、仕事を投げたらあとはクラウド
 
 ---
 
+## GitHub 連携
+
+GitHub アカウントを連携すると、クラウドエージェントを始めるときに URL を打ったりワークスペースを送ったりせず、
+自分のリポジトリ (所有・コラボレーター・所属している組織のもの) とブランチを一覧から選べる。モバイル版 (Orchestra Mobile) と同じ機能。
+
+### 連携する
+
+1. **作業する場所** で **GitHub のリポジトリ** を選ぶ。
+2. **GitHub と連携** を押すと、システムのブラウザで GitHub の許可画面が開く。許可すると「連携しました」のページが出る。
+3. Orchestra に戻ると、自動で連携が確認され「GitHub (@ユーザー名) と連携しました」と通知が出る
+   (Orchestra は 2 秒ごと・最大 5 分、ウィンドウに戻ったときはすぐに状態を確かめる)。待っているあいだは **キャンセル** でやめられる。
+
+### リポジトリを選ぶ
+
+- 一覧は最近 push した順。検索欄に入れると (入力が止まって 300 ms 後に) サーバー側で名前を絞り込む。50 件ずつで、続きは **もっと見る**。
+- 🔒 は非公開リポジトリ。選ぶとカードになり、ブランチを選べる (既定は、そのリポジトリの既定のブランチ)。**変更** で選び直す。
+- 最後に選んだリポジトリとブランチは覚えておき、次回の初期値になる。
+- 起動すると、一覧とパネルの詳細に「リポジトリ: owner/name @ branch」と出る。変更の取り込みは、いつもどおり開いているフォルダへ行う
+  (取り込むなら、同じリポジトリを開いておくこと)。
+
+### 非公開リポジトリとトークン
+
+- GitHub のトークンは **Division のサーバーにだけ** (暗号化して) 保存される。Orchestra の PC には保存しない。
+- clone もサーバーがそのトークンで行うので、非公開リポジトリも使える。トークンはそのコマンドだけに渡され、サンドボックスの `.git/config` には残らない。
+- GitHub 側で許可を取り消した場合など、トークンが使えなくなると「GitHub と連携されていないか、連携が解除されています」と出て、
+  未連携の表示に戻る。もう一度 **GitHub と連携** すればよい。
+
+### 解除する
+
+アカウント表示の **解除** を押して確認する。リポジトリを一覧から選べなくなるだけで、動いているセッションには影響しない
+(URL の指定は引き続き使える)。GitHub 側の許可も消したいときは、GitHub の Settings > Applications から取り消す。
+
+### サーバー管理者向け
+
+GitHub 連携には、Division のサーバーに GitHub の **OAuth App** が必要。
+
+- 環境変数 `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` を設定する。OAuth App の Authorization callback URL は `<Division API>/api/github/callback`。
+- 任意で `GITHUB_TOKEN_ENCRYPTION_KEY` (32 バイトの鍵、base64 か hex)。無ければクライアントシークレットから導出する。
+- 要求するスコープは `repo read:user`。
+- 未設定のサーバーでは、**GitHub のリポジトリ** を選ぶと「サーバー側で GitHub 連携が未設定です」と出て、URL の指定だけになる。
+
+---
+
 ## 仕組み
 
 ```
@@ -90,6 +142,7 @@ CloudAgentService  ── IPC ──▶  CloudAgentMainService  ── HTTPS ─
 ```
 
 1. **作成**: `POST /api/cloud-sessions` でセッションを作ると、Division がサンドボックスを用意する (状態: アップロード中)。
+   GitHub のリポジトリ / URL から始めるときは、2 のアップロードを飛ばして 3 の `/start` に `repo: { fullName | url, branch? }` を付け、サーバーが clone する。
 2. **アップロード**: main プロセスがワークスペースを tar.gz にまとめ、2 MiB ずつに切って `POST …/:id/upload` に順に送る。
    - git 管理のフォルダなら `git ls-files -co --exclude-standard` の結果 (= コミット済み + .gitignore されていない未追跡ファイル) を送る。
    - git 管理でなければフォルダを歩き、`node_modules` `.next` `dist` `build` `out` `.venv` `venv` `__pycache__` `.turbo` `.cache` `coverage` `target` は飛ばす。
@@ -100,7 +153,10 @@ CloudAgentService  ── IPC ──▶  CloudAgentMainService  ── HTTPS ─
 4. **見守る**: レンダラーがポーリングする。
    - 一覧 `GET /api/cloud-sessions`: 動いているセッションがある / パネルを開いているあいだは 4 秒ごと、それ以外は 30 秒ごと。
    - イベント `GET …/:id/events?after=<seq>`: 選んでいるセッションと実行中のセッションを 2 秒ごと、新しいものだけ取る。
-5. **取り込み**: `GET …/:id/changes` で変更一覧とパッチを取り、ファイルごとに `GET …/:id/file?ref=current` (今の中身) と
+5. **GitHub 連携**: `GET /api/github/status`・`POST /api/github/connect` (返る URL をブラウザで開く)・`POST /api/github/disconnect`・
+   `GET /api/github/repos?q=&page=`・`GET /api/github/branches?repo=owner/name`。main プロセスの中継は `/api/cloud-sessions` と `/api/github`
+   の下だけを通す。未連携 / トークン失効は `409 { code: 'github_not_connected' }`、OAuth App 未設定は `503 { code: 'github_not_configured' }`。
+6. **取り込み**: `GET …/:id/changes` で変更一覧とパッチを取り、ファイルごとに `GET …/:id/file?ref=current` (今の中身) と
    `ref=base` (アップロード時の中身) を取る。ローカルの中身が base と違えば競合として知らせる。
 
 Division には CORS が無いので、認証付きの通信はすべて main プロセスを経由する。認証には、ログイン時に受け取る
@@ -128,9 +184,9 @@ Division には CORS が無いので、認証付きの通信はすべて main �
 | ファイル | 役割 |
 | --- | --- |
 | `common/cloudAgentTypes.ts` | API の型 (CloudSession など)・コマンド ID・main プロセス側サービスのインターフェース |
-| `electron-main/cloudAgentMainService.ts` | Division への認証付き中継・ワークスペースの tar.gz 化と分割アップロード (`src/vs/code/electron-main/app.ts` でチャンネル `void-channel-cloudAgent` に登録) |
+| `electron-main/cloudAgentMainService.ts` | Division への認証付き中継 (`/api/cloud-sessions`・`/api/github` の下だけ)・ワークスペースの tar.gz 化と分割アップロード (`src/vs/code/electron-main/app.ts` でチャンネル `void-channel-cloudAgent` に登録) |
 | `browser/cloudAgentServiceInterface.ts` | `ICloudAgentService` の decorator と状態の型 (依存なし。React の services.ts から import する) |
-| `browser/cloudAgentService.ts` | 状態・ポーリング・通知・作成 / 停止 / 追加指示 / アーカイブ・変更の取り込み |
+| `browser/cloudAgentService.ts` | 状態・ポーリング・通知・作成 / 停止 / 追加指示 / アーカイブ・変更の取り込み・GitHub 連携 (状態・連携待ち・リポジトリ / ブランチ一覧) |
 | `browser/cloudAgentsPane.ts` | エディタ領域のパネル・コマンド・タイトルバーのボタン・`Ctrl+Alt+A` |
 | `react/src/cloud-agents-tsx/` | パネルの UI |
 | `react/src/util/services.ts` | `useCloudAgentState()` |
