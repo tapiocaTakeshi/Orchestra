@@ -16,6 +16,13 @@
 //       todo カラムから拾う → in-progress へ移す → プロンプトを組み立てて流す
 //         → 完了を待つ → 結果をコメントに残して done / error へ移す
 //     と進める。エージェントは 1 スレッド 1 ループなので実行は必ず直列。
+//
+//  3. タスクのクラウド実行 (「クラウドで実行」)
+//     同じプロンプトでクラウドエージェント (ICloudAgentService) を起動する。開いているフォルダを
+//     アップロードして始め、in-progress へ移し、セッション ID を実行履歴 (status: running) に残す。
+//     セッションが終わったら (idle / failed / cancelled) 結果を書き戻して done / error へ移す。
+//     ローカルの実行とは独立していて、いくつでも並列に動く。履歴は kanban.json に残るので、
+//     再起動しても実行中の記録から追跡を再開する。
 
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { Disposable, DisposableStore, toDisposable } from '../../../../base/common/lifecycle.js';
@@ -51,6 +58,9 @@ import {
 	normalizeKanbanBoard,
 } from '../common/kanbanServiceTypes.js';
 import { IChatThreadService } from './chatThreadServiceInterface.js';
+// decorator は依存の無い Interface ファイルから取る (実装の cloudAgentService.ts を import すると循環の輪に入る)
+import { ICloudAgentService } from './cloudAgentServiceInterface.js';
+import { CloudSession, isCloudSessionActive } from '../common/cloudAgentTypes.js';
 
 /** ワークスペースが無いときの退避先 */
 const KANBAN_STORAGE_KEY = 'void.kanban.board';
@@ -62,6 +72,11 @@ const SAVE_DEBOUNCE_MS = 400;
 // 立ち上がる。開始を観測できないまま idle 判定しないよう、開始待ちに猶予を持たせる。
 const STREAM_START_GRACE_MS = 15_000;
 const STREAM_POLL_MS = 500;
+
+/** クラウドエージェントの起動は 1 度に 1 つ (ICloudAgentService の creating)。空くのを待つ上限 */
+const CLOUD_CREATE_WAIT_MS = 10 * 60_000;
+/** 追跡中のクラウドセッションが一覧から消えたまま (アーカイブなど) これだけ経ったら、終わったものとして扱う */
+const CLOUD_SESSION_MISSING_MS = 3 * 60_000;
 
 export type NewKanbanTaskInput = {
 	title: string;
@@ -111,6 +126,11 @@ export interface IKanbanService {
 	runTask(taskId: string): Promise<void>;
 	/** 実行中のタスクを中断する */
 	cancelCurrent(): Promise<void>;
+	/**
+	 * 指定タスクをクラウドエージェントで実行する (ログインが必要)。開いているフォルダをアップロードして始める。
+	 * projectId は Division プロジェクト (省略時はサーバーの既定)。ローカルの実行とは並列に動く
+	 */
+	runTaskInCloud(taskId: string, opts?: { projectId?: string }): Promise<void>;
 	/** 自動実行を開始 / 停止する (設定 autoRunEnabled も更新する) */
 	setAutoRunEnabled(enabled: boolean): Promise<void>;
 }
@@ -150,6 +170,7 @@ class KanbanService extends Disposable implements IKanbanService {
 		queuedTaskIds: [],
 		lastPolledAt: null,
 		lastError: undefined,
+		cloudRunTaskIds: [],
 	};
 
 	private readonly _onDidChangeState = new Emitter<void>();
@@ -185,6 +206,12 @@ class KanbanService extends Disposable implements IKanbanService {
 	private _currentRunCts: CancellationTokenSource | null = null;
 	private _currentRunThreadId: string | null = null;
 
+	/**
+	 * クラウドで実行中のタスク → セッション。sessionId が null の間は起動中。
+	 * missingSince はセッションが一覧に見当たらなくなった時刻 (見つかったら消す)
+	 */
+	private readonly _cloudRuns = new Map<string, { sessionId: string | null; startedAt: number; missingSince?: number }>();
+
 	constructor(
 		@IVoidSettingsService private readonly _settingsService: IVoidSettingsService,
 		@IChatThreadService private readonly _chatThreadService: IChatThreadService,
@@ -192,10 +219,13 @@ class KanbanService extends Disposable implements IKanbanService {
 		@IStorageService private readonly _storageService: IStorageService,
 		@IFileService private readonly _fileService: IFileService,
 		@IWorkspaceContextService private readonly _workspaceContextService: IWorkspaceContextService,
+		@ICloudAgentService private readonly _cloudAgentService: ICloudAgentService,
 	) {
 		super();
 
 		this._register(toDisposable(() => this._stopPolling()));
+		// クラウドで実行中のタスクの終わりを、クラウドエージェントの状態 (ポーリング) から拾う
+		this._register(this._cloudAgentService.onDidChangeState(() => this._checkCloudRuns()));
 		this._register(this._settingsService.onDidChangeState(() => this._syncPollingWithSettings()));
 		this._register(this._workspaceContextService.onDidChangeWorkspaceFolders(() => { void this._initForWorkspace(); }));
 
@@ -273,6 +303,7 @@ class KanbanService extends Disposable implements IKanbanService {
 
 			this._lastWrittenText = text;
 			this._setState({ board: normalizeKanbanBoard(JSON.parse(text)), isLoaded: true, lastError: undefined });
+			this._checkCloudRuns();
 		} catch (e) {
 			// 壊れた JSON を既定のボードで上書きしてしまうと、手で直す機会を奪ってしまう。
 			// 読めなかったことだけ伝えて、メモリ上のボードはそのまま残す。
@@ -288,6 +319,7 @@ class KanbanService extends Disposable implements IKanbanService {
 		}
 		try {
 			this._setState({ board: normalizeKanbanBoard(JSON.parse(raw)), isLoaded: true, lastError: undefined });
+			this._checkCloudRuns();
 		} catch {
 			this._setState({ board: defaultKanbanBoard(), isLoaded: true });
 		}
@@ -765,9 +797,10 @@ class KanbanService extends Disposable implements IKanbanService {
 			'timeout': 'タイムアウト',
 			'canceled': '中断',
 			'dry-run': 'ドライラン',
+			'running': '実行中',
 		};
 		const durationSec = Math.round((run.endedAt - run.startedAt) / 1000);
-		const lines = [`🎼 エージェント実行 — ${statusLabel[run.status]} (${durationSec}s)`, ''];
+		const lines = [`🎼 ${run.cloudSessionId ? 'クラウドエージェント実行' : 'エージェント実行'} — ${statusLabel[run.status]} (${durationSec}s)`, ''];
 		if (run.error) lines.push(`エラー: ${run.error}`, '');
 		lines.push(run.summary || '(エージェントからのテキスト出力はありませんでした)');
 		return lines.join('\n');
@@ -839,6 +872,214 @@ class KanbanService extends Disposable implements IKanbanService {
 		const threadId = this._currentRunThreadId;
 		this._currentRunCts?.cancel();
 		if (threadId) await this._chatThreadService.abortRunning(threadId).catch(() => { /* noop */ });
+	}
+
+	// -----------------------------------------------------------------------
+	// クラウド実行
+	// -----------------------------------------------------------------------
+
+	async runTaskInCloud(taskId: string, opts?: { projectId?: string }): Promise<void> {
+		const task = this.state.board.tasks.find(t => t.id === taskId);
+		if (!task) return;
+		if (this._cloudRuns.has(taskId)) {
+			this._notificationService.notify({ severity: Severity.Info, message: `カンバン: 「${task.title}」はクラウドで実行中です。` });
+			return;
+		}
+		if (!this._cloudAgentService.state.isLoggedIn) {
+			this._notificationService.notify({ severity: Severity.Warning, message: 'カンバン: クラウドで実行するには、Orchestra にログインしてください。' });
+			return;
+		}
+
+		const settings = this._kanbanSettings();
+		const startedAt = Date.now();
+		const columnName = this.state.board.columns.find(c => c.id === task.columnId)?.title;
+		const prompt = buildKanbanPrompt(task, {
+			boardTitle: this.state.board.title,
+			columnName,
+			template: settings.promptTemplate,
+		});
+
+		if (settings.dryRun) {
+			this._recordRun(task.id, { status: 'dry-run', startedAt, endedAt: Date.now(), summary: prompt }, { moveTo: null, comment: false });
+			this._notificationService.notify({
+				severity: Severity.Info,
+				message: `カンバン (dry run): 「${task.title}」のプロンプトを生成しました。クラウドでは実行していません。`,
+			});
+			return;
+		}
+
+		this._cloudRuns.set(taskId, { sessionId: null, startedAt });
+		this._syncCloudRunTaskIds();
+
+		const inProgressColumn = columnWithRole(this.state.board, 'in-progress');
+		if (inProgressColumn && inProgressColumn.id !== task.columnId) {
+			this._moveTaskCore(task.id, inProgressColumn.id, 0);
+		}
+
+		let session: CloudSession | undefined;
+		let launchError: string | undefined;
+		try {
+			await this._waitForCloudCreateSlot();
+			const created = await this._cloudAgentService.createSession({
+				prompt,
+				title: task.title,
+				// 開いているフォルダをアップロードして始める (フォルダが無ければ空のフォルダ)
+				source: 'workspace',
+				includeWorkspace: true,
+				...(opts?.projectId ? { projectId: opts.projectId } : {}),
+				// クラウドエージェントの画面で見ているエージェントを切り替えない
+				select: false,
+			});
+			session = created[0];
+			// 起動 1 本ぶんのエラーは lastError に入る (成功すれば null に戻る)
+			launchError = this._cloudAgentService.state.lastError ?? undefined;
+			if (!session) launchError = launchError || 'クラウドエージェントを起動できませんでした。';
+		} catch (e) {
+			launchError = errorMessageOf(e);
+		}
+
+		if (!this.state.board.tasks.some(t => t.id === taskId)) {
+			// 起動を待っているあいだにタスクが消された
+			this._cloudRuns.delete(taskId);
+			this._syncCloudRunTaskIds();
+			return;
+		}
+
+		if (!session || launchError) {
+			this._cloudRuns.delete(taskId);
+			this._syncCloudRunTaskIds();
+			const destination = columnWithRole(this.state.board, 'error');
+			this._recordRun(taskId, {
+				status: 'error', startedAt, endedAt: Date.now(), error: launchError,
+				...(session ? { cloudSessionId: session.id } : {}),
+			}, { moveTo: destination?.id ?? null, comment: settings.postResultComment });
+			this._notificationService.notify({ severity: Severity.Warning, message: `カンバン: 「${task.title}」をクラウドで実行できませんでした。${launchError ? ` (${launchError})` : ''}` });
+			return;
+		}
+
+		// 実行中の記録を残す (セッション ID 付き)。終わったら _finishCloudRun が同じ記録を書き換える
+		this._recordRun(taskId, { status: 'running', startedAt, endedAt: startedAt, cloudSessionId: session.id }, { moveTo: null, comment: false });
+		this._cloudRuns.set(taskId, { sessionId: session.id, startedAt });
+		this._notificationService.notify({ severity: Severity.Info, message: `カンバン: 「${task.title}」をクラウドで実行しています。終わるとカードを移動します。` });
+		this._checkCloudRuns();
+	}
+
+	/** ICloudAgentService の起動 (1 度に 1 つ) が空くのを待つ */
+	private async _waitForCloudCreateSlot(): Promise<void> {
+		const deadline = Date.now() + CLOUD_CREATE_WAIT_MS;
+		while (this._cloudAgentService.state.creating) {
+			if (Date.now() > deadline) throw new Error('別のクラウドエージェントの起動が終わりません。しばらくしてから再度お試しください。');
+			await timeout(1_000);
+		}
+	}
+
+	private _syncCloudRunTaskIds() {
+		const ids = [...this._cloudRuns.keys()];
+		const prev = this.state.cloudRunTaskIds;
+		if (ids.length === prev.length && ids.every((id, i) => id === prev[i])) return;
+		this._setState({ cloudRunTaskIds: ids });
+	}
+
+	/**
+	 * クラウドで実行中のタスクを見回る。
+	 *  - ボードに「実行中 (running) + セッション ID」の記録があって追跡していなければ追跡を始める (再起動後の再開)
+	 *  - セッションが終わっていれば (idle / failed / cancelled) 結果を書き戻す
+	 */
+	private _checkCloudRuns(): void {
+		const board = this.state.board;
+		let changed = false;
+
+		for (const task of board.tasks) {
+			if (this._cloudRuns.has(task.id)) continue;
+			const run = task.runs.find(r => r.status === 'running' && !!r.cloudSessionId);
+			if (run?.cloudSessionId) {
+				this._cloudRuns.set(task.id, { sessionId: run.cloudSessionId, startedAt: run.startedAt });
+				changed = true;
+			}
+		}
+
+		if (this._cloudRuns.size === 0) {
+			// 追跡するものが無ければクラウドエージェントのサービスに触らない (Delayed なので、触ると起動時に作られてしまう)
+			if (changed) this._syncCloudRunTaskIds();
+			return;
+		}
+
+		const cloud = this._cloudAgentService.state;
+		const now = Date.now();
+		for (const [taskId, entry] of [...this._cloudRuns]) {
+			if (!entry.sessionId) continue; // 起動中
+			if (!board.tasks.some(t => t.id === taskId)) {
+				// カードが消された: 追跡もやめる (クラウドのエージェントはそのまま)
+				this._cloudRuns.delete(taskId);
+				changed = true;
+				continue;
+			}
+			// ログアウト中は一覧が空になるので、何も決めない
+			if (!cloud.isLoggedIn) continue;
+
+			const session = cloud.sessions.find(s => s.id === entry.sessionId);
+			if (!session) {
+				// アーカイブされた / まだ一覧に出ていない。一覧が取れている状態でしばらく見当たらなければ終わったものとする
+				if (cloud.sessions.length === 0 || cloud.loading || cloud.lastError) continue;
+				if (entry.missingSince === undefined) {
+					entry.missingSince = now;
+				} else if (now - entry.missingSince > CLOUD_SESSION_MISSING_MS) {
+					this._cloudRuns.delete(taskId);
+					changed = true;
+					this._finishCloudRun(taskId, entry.sessionId, entry.startedAt, {
+						status: 'canceled',
+						endedAt: now,
+						error: 'クラウドのセッションが見つかりません (アーカイブされた可能性があります)。',
+					});
+				}
+				continue;
+			}
+			entry.missingSince = undefined;
+			if (isCloudSessionActive(session.status)) continue;
+
+			this._cloudRuns.delete(taskId);
+			changed = true;
+			const completedAt = session.completedAt ? Date.parse(session.completedAt) : NaN;
+			this._finishCloudRun(taskId, session.id, entry.startedAt, {
+				status: session.status === 'idle' ? 'done' : session.status === 'cancelled' ? 'canceled' : 'error',
+				endedAt: Number.isFinite(completedAt) && completedAt >= entry.startedAt ? completedAt : now,
+				summary: session.summary ?? undefined,
+				error: session.status === 'failed' ? (session.errorMsg || 'クラウドエージェントが失敗しました。') : undefined,
+			});
+		}
+
+		if (changed) this._syncCloudRunTaskIds();
+	}
+
+	/** クラウド実行の結果を書き戻す: 実行中の記録を結果で置き換え、コメントを残し、done / error へ移す */
+	private _finishCloudRun(
+		taskId: string,
+		sessionId: string,
+		startedAt: number,
+		outcome: { status: KanbanRunStatus; endedAt: number; summary?: string; error?: string },
+	): void {
+		const settings = this._kanbanSettings();
+		const finalRun: KanbanRunRecord = {
+			status: outcome.status,
+			startedAt,
+			endedAt: outcome.endedAt,
+			cloudSessionId: sessionId,
+			...(outcome.error ? { error: outcome.error } : {}),
+			...(outcome.summary ? { summary: outcome.summary.slice(0, KANBAN_MAX_SUMMARY_CHARS) } : {}),
+		};
+
+		this._mutateBoard(board => {
+			this._replaceTask(board, taskId, task => {
+				const runs = task.runs.filter(r => !(r.cloudSessionId === sessionId && r.status === 'running'));
+				const comments = settings.postResultComment
+					? [...task.comments, { id: generateUuid(), author: 'agent' as const, body: this._buildRunComment(finalRun), createdAt: Date.now() }]
+					: task.comments;
+				return { ...task, comments, runs: [finalRun, ...runs].slice(0, KANBAN_MAX_RUNS_PER_TASK) };
+			});
+		});
+
+		const destination = columnWithRole(this.state.board, outcome.status === 'done' ? 'done' : 'error');
+		if (destination) this._moveTaskCore(taskId, destination.id, 0);
 	}
 
 	// -----------------------------------------------------------------------

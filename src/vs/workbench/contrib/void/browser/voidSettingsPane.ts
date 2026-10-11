@@ -26,6 +26,9 @@ import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextke
 import { mountVoidSettings } from './react/out/void-settings-tsx/index.js'
 import { Codicon } from '../../../../base/common/codicons.js';
 import { toDisposable } from '../../../../base/common/lifecycle.js';
+import { ORCHESTRA_OPEN_COST_MANAGEMENT_ACTION_ID, ORCHESTRA_OPEN_DIVISION_PROJECTS_ACTION_ID } from './actionIDs.js';
+import { ORCHESTRA_UI_MODE_CONTEXT_KEY } from './orchestraUiModeTypes.js';
+import { isVoidSettingsTab, requestVoidSettingsTab, VoidSettingsTab } from './voidSettingsTabRequest.js';
 
 
 // refer to preferences.contribution.ts keybindings editor
@@ -177,7 +180,8 @@ registerAction2(class extends Action2 {
 			icon: Codicon.settingsGear,
 		});
 	}
-	async run(accessor: ServicesAccessor): Promise<void> {
+	// 引数 { tab } でタブを指定できる (例: executeCommand(VOID_OPEN_SETTINGS_ACTION_ID, { tab: 'division' }))
+	async run(accessor: ServicesAccessor, options?: unknown): Promise<void> {
 		const editorService = accessor.get(IEditorService);
 		const instantiationService = accessor.get(IInstantiationService);
 
@@ -187,11 +191,76 @@ registerAction2(class extends Action2 {
 			await editorService.closeEditors(openEditors);
 		}
 
+		// 閉じてから頼む (閉じる前だと、閉じる設定画面のほうが受け取ってしまう)
+		const tab = options && typeof options === 'object' ? (options as { tab?: unknown }).tab : undefined;
+		if (isVoidSettingsTab(tab)) requestVoidSettingsTab(tab);
+
 		// then, open one single editor
 		const input = instantiationService.createInstance(VoidSettingsInput);
 		await editorService.openEditor(input);
 	}
 })
+
+
+// ---------------------------------------------------------------------------
+// 設定画面を特定のタブで開く: Division プロジェクト / コスト管理
+//
+// 右のチャット (プロジェクトの選択やコスト調整のチップがある) を隠すクラウドエージェントモードでも、
+// IDE モードと同じ画面に手が届くようにする。エディタ領域に開くので、チャットは戻さない。
+// 開いていれば (閉じずに) 前面に出してタブを切り替え、なければ今のエディタグループに開く。
+// ---------------------------------------------------------------------------
+
+const openVoidSettingsAtTab = async (accessor: ServicesAccessor, tab: VoidSettingsTab): Promise<void> => {
+	const editorService = accessor.get(IEditorService);
+	const editorGroupService = accessor.get(IEditorGroupsService);
+	const instantiationService = accessor.get(IInstantiationService);
+
+	requestVoidSettingsTab(tab);
+	const openEditors = editorService.findEditors(VoidSettingsInput.RESOURCE);
+	if (openEditors.length !== 0) {
+		const { editor, groupId } = openEditors[0];
+		const group = editorGroupService.getGroup(groupId) ?? editorGroupService.activeGroup;
+		await group.openEditor(editor);
+		group.focus();
+		return;
+	}
+	await editorGroupService.activeGroup.openEditor(instantiationService.createInstance(VoidSettingsInput), { pinned: true });
+};
+
+const isCloudModeContext = ContextKeyExpr.equals(ORCHESTRA_UI_MODE_CONTEXT_KEY, 'cloud');
+
+registerAction2(class extends Action2 {
+	constructor() {
+		super({
+			id: ORCHESTRA_OPEN_DIVISION_PROJECTS_ACTION_ID,
+			title: nls.localize2('orchestraOpenDivisionProjects', "Division プロジェクトを開く (ロールとモデルの割り当て)"),
+			category: nls.localize2('orchestraCategory', "Orchestra"),
+			f1: true,
+			icon: Codicon.organization,
+			// タイトルバーにはクラウドエージェントモードのときだけ (他のモードではチャットのプロジェクト選択から行ける)
+			menu: { id: MenuId.TitleBar, group: 'navigation', order: 6, when: isCloudModeContext },
+		});
+	}
+	async run(accessor: ServicesAccessor): Promise<void> {
+		await openVoidSettingsAtTab(accessor, 'division');
+	}
+});
+
+registerAction2(class extends Action2 {
+	constructor() {
+		super({
+			id: ORCHESTRA_OPEN_COST_MANAGEMENT_ACTION_ID,
+			title: nls.localize2('orchestraOpenCostManagement', "コスト管理を開く (コストの自動調整・クレジット・利用額)"),
+			category: nls.localize2('orchestraCategory', "Orchestra"),
+			f1: true,
+			icon: Codicon.creditCard,
+			menu: { id: MenuId.TitleBar, group: 'navigation', order: 6.5, when: isCloudModeContext },
+		});
+	}
+	async run(accessor: ServicesAccessor): Promise<void> {
+		await openVoidSettingsAtTab(accessor, 'cost');
+	}
+});
 
 
 

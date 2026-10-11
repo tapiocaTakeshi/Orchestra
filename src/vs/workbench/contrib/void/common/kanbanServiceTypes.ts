@@ -46,7 +46,8 @@ export type KanbanComment = {
 	createdAt: number;
 };
 
-export type KanbanRunStatus = 'done' | 'error' | 'timeout' | 'canceled' | 'dry-run';
+/** running はクラウドで実行中 (クラウドの実行だけが使う。終わったら done / error / canceled に書き換える) */
+export type KanbanRunStatus = 'done' | 'error' | 'timeout' | 'canceled' | 'dry-run' | 'running';
 
 export type KanbanRunRecord = {
 	status: KanbanRunStatus;
@@ -57,6 +58,11 @@ export type KanbanRunRecord = {
 	error?: string;
 	/** アシスタントの最終出力 (先頭部分) */
 	summary?: string;
+	/**
+	 * クラウドエージェントで実行したときのセッション ID (ICloudAgentService)。
+	 * カードから「クラウドで開く」のに使う。ローカル実行の記録や古い kanban.json には無い
+	 */
+	cloudSessionId?: string;
 };
 
 export type KanbanTask = {
@@ -188,6 +194,8 @@ export type KanbanServiceState = {
 	lastPolledAt: number | null;
 	/** 読み書き / 実行で起きた最後のエラー */
 	lastError: string | undefined;
+	/** クラウドエージェントで実行中 (起動中を含む) のタスクの ID。ローカルの実行 (isRunning) とは独立に、いくつでも並列に動く */
+	cloudRunTaskIds: string[];
 };
 
 // ---------------------------------------------------------------------------
@@ -233,7 +241,7 @@ const asColumnRole = (v: unknown): KanbanColumnRole =>
 	kanbanColumnRoles.includes(v as KanbanColumnRole) ? (v as KanbanColumnRole) : 'none';
 
 const asRunStatus = (v: unknown): KanbanRunStatus => {
-	const known: KanbanRunStatus[] = ['done', 'error', 'timeout', 'canceled', 'dry-run'];
+	const known: KanbanRunStatus[] = ['done', 'error', 'timeout', 'canceled', 'dry-run', 'running'];
 	return known.includes(v as KanbanRunStatus) ? (v as KanbanRunStatus) : 'error';
 };
 
@@ -295,6 +303,7 @@ const normalizeRuns = (raw: unknown): KanbanRunRecord[] => {
 			threadId: typeof item.threadId === 'string' ? item.threadId : undefined,
 			error: typeof item.error === 'string' ? item.error : undefined,
 			summary: typeof item.summary === 'string' ? item.summary : undefined,
+			...(typeof item.cloudSessionId === 'string' && item.cloudSessionId ? { cloudSessionId: item.cloudSessionId } : {}),
 		}))
 		.slice(0, KANBAN_MAX_RUNS_PER_TASK);
 };
