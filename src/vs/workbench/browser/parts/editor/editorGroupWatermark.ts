@@ -34,6 +34,7 @@ import {
 	ORCHESTRA_UI_TOGGLE_TERMINAL_ACTION_ID,
 } from '../../../contrib/void/browser/orchestraUiModeTypes.js';
 import { VIEWLET_ID as REMOTE_EXPLORER_VIEWLET_ID } from '../../../contrib/remote/browser/remoteExplorer.js';
+import { CLOUD_AGENTS_NEW_ACTION_ID } from '../../../contrib/void/common/cloudAgentTypes.js';
 /* eslint-enable */
 
 // interface WatermarkEntry {
@@ -458,6 +459,11 @@ export class EditorGroupWatermark extends Disposable {
 			const chat = append(actions, $('button.orchestra-home__button.orchestra-home__button--primary'));
 			chat.textContent = 'エージェントに指示する';
 			chat.onclick = run(ORCHESTRA_CHAT_SEND_PROMPT_ACTION_ID);
+			// 手元のエージェントとは別に、クラウド (Division のサンドボックス) で並列に走らせる入口
+			const cloud = append(actions, $('button.orchestra-home__button'));
+			cloud.textContent = 'クラウドで並列に任せる';
+			cloud.title = 'クラウド上のサンドボックスでエージェントを動かします。いくつでも同時に起動できます';
+			cloud.onclick = run(CLOUD_AGENTS_NEW_ACTION_ID);
 			const files = append(actions, $('button.orchestra-home__button'));
 			files.textContent = 'ファイル一覧を見る';
 			files.onclick = run(ORCHESTRA_UI_TOGGLE_FILES_ACTION_ID);

@@ -639,6 +639,10 @@ export type GlobalSettings = {
 	divisionUserEmail: string;
 	divisionAccessToken: string;
 	divisionRefreshToken: string;
+	// ログイン時に Division から受け取った、そのユーザー専用の長期 API キー (ak_…)。
+	// Supabase の JWT は更新されず数時間で切れるので、クラウドエージェントのように
+	// 長く裏でポーリングする機能はこちらを優先して使う。ログアウトで消す。
+	divisionUserApiKey: string;
 	isLoggedIn: boolean;
 	// Brief Gate Not OK → File Search → Leader 進捗確認 → Coder/Writer ループの最大試行回数。
 	// 1 以上の整数。0 / 負数は 1 に丸められる。
@@ -709,6 +713,7 @@ export const defaultGlobalSettings: GlobalSettings = {
 	divisionUserEmail: '',
 	divisionAccessToken: '',
 	divisionRefreshToken: '',
+	divisionUserApiKey: '',
 	isLoggedIn: false,
 	maxBriefGateIterations: 10,
 	maxReviewerIterations: 5, // 目標ループの最大ラウンド数 (1 ラウンド = Leader の計画 → 各ロール → Reviewer)

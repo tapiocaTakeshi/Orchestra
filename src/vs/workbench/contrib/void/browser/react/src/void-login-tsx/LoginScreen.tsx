@@ -68,6 +68,9 @@ export const LoginScreen = ({ onClose }: { onClose: () => void }) => {
 		// 既存のDivision API呼び出し経路との互換性を保ちつつ、
 		// 実際に保存・送信する値はAPIキーではなくSupabase JWTに統一する。
 		voidSettingsService.setGlobalSetting('divisionApiKey', result.accessToken);
+		// ユーザー専用の長期 API キー (ak_…)。JWT と違って期限切れにならないので、
+		// クラウドエージェントのポーリングなど長く続く呼び出しはこちらを使う。
+		voidSettingsService.setGlobalSetting('divisionUserApiKey', result.apiKey || '');
 		voidSettingsService.setGlobalSetting('isLoggedIn', true);
 	};
 

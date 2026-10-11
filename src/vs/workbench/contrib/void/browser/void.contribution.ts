@@ -92,6 +92,10 @@ import './kanbanService.js'
 import './kanbanPane.js'
 import './kanbanActions.js'
 
+// register クラウドエージェント (Division のサンドボックスでエージェントを並列に動かす, Ctrl+Alt+A)
+import './cloudAgentService.js'
+import './cloudAgentsPane.js'
+
 // ---------- common (unclear if these actually need to be imported, because they're already imported wherever they're used) ----------
 
 // llmMessage

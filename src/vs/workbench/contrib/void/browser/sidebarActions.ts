@@ -31,6 +31,7 @@ import { IQuickInputService } from '../../../../platform/quickinput/common/quick
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
 import { ORCHESTRA_UI_TOGGLE_MODE_ACTION_ID } from './orchestraUiModeTypes.js';
+import { CLOUD_AGENTS_OPEN_ACTION_ID } from '../common/cloudAgentTypes.js';
 
 // ---------- Register commands and keybindings ----------
 
@@ -294,6 +295,7 @@ const CHAT_TITLE_TEXT = {
 	newChat: { ja: '新しいチャット', en: 'New Chat' },
 	history: { ja: '過去のチャット', en: 'Past Chats' },
 	kanban: { ja: 'タスクボード', en: 'Task Board' },
+	cloudAgents: { ja: 'クラウドエージェント (並列実行)', en: 'Cloud Agents (run in parallel)' },
 	logIn: { ja: 'ログイン', en: 'Log In' },
 	account: { ja: 'アカウント', en: 'Account' },
 	settings: { ja: '設定', en: 'Settings' },
@@ -375,6 +377,7 @@ registerAction2(class extends Action2 {
 		voidSettingsService.setGlobalSetting('divisionAccessToken', '')
 		voidSettingsService.setGlobalSetting('divisionRefreshToken', '')
 		voidSettingsService.setGlobalSetting('divisionApiKey', '')
+		voidSettingsService.setGlobalSetting('divisionUserApiKey', '')
 	}
 })
 
@@ -398,6 +401,7 @@ for (const { id, themeName } of ORCHESTRA_THEMES) {
 appendChatTitleItem(VOID_CMD_SHIFT_L_ACTION_ID, CHAT_TITLE_TEXT.newChat, { group: 'navigation', order: 1, icon: Codicon.add })
 appendChatTitleItem(VOID_HISTORY_ACTION_ID, CHAT_TITLE_TEXT.history, { group: 'navigation', order: 2, icon: Codicon.history })
 appendChatTitleItem(VOID_TOGGLE_KANBAN_ACTION_ID, CHAT_TITLE_TEXT.kanban, { group: 'navigation', order: 3, icon: Codicon.checklist })
+appendChatTitleItem(CLOUD_AGENTS_OPEN_ACTION_ID, CHAT_TITLE_TEXT.cloudAgents, { group: 'navigation', order: 3.5, icon: Codicon.cloud })
 appendChatTitleItem(ORCHESTRA_CHAT_LOG_IN_ACTION_ID, CHAT_TITLE_TEXT.logIn, { group: 'navigation', order: 4, icon: Codicon.signIn, when: OrchestraLoggedInContext.negate() })
 appendChatTitleItem(ORCHESTRA_CHAT_ACCOUNT_ACTION_ID, CHAT_TITLE_TEXT.account, { group: 'navigation', order: 4, icon: Codicon.account, when: OrchestraLoggedInContext })
 appendChatTitleItem(VOID_SETTINGS_ACTION_ID, CHAT_TITLE_TEXT.settings, { group: 'navigation', order: 5, icon: Codicon.settingsGear })

@@ -132,6 +132,8 @@ import { VoidMainUpdateService } from '../../workbench/contrib/void/electron-mai
 import { LLMMessageChannel } from '../../workbench/contrib/void/electron-main/sendLLMMessageChannel.js';
 import { VoidSCMService } from '../../workbench/contrib/void/electron-main/voidSCMMainService.js';
 import { IVoidSCMService } from '../../workbench/contrib/void/common/voidSCMTypes.js';
+import { CloudAgentMainService } from '../../workbench/contrib/void/electron-main/cloudAgentMainService.js';
+import { CLOUD_AGENT_CHANNEL_NAME, ICloudAgentMainService } from '../../workbench/contrib/void/common/cloudAgentTypes.js';
 import { MCPChannel } from '../../workbench/contrib/void/electron-main/mcpChannel.js';
 /**
  * The main VS Code application. There will only ever be one instance,
@@ -1105,6 +1107,7 @@ export class CodeApplication extends Disposable {
 		services.set(IMetricsService, new SyncDescriptor(MetricsMainService, undefined, false));
 		services.set(IVoidUpdateService, new SyncDescriptor(VoidMainUpdateService, undefined, false));
 		services.set(IVoidSCMService, new SyncDescriptor(VoidSCMService, undefined, false));
+		services.set(ICloudAgentMainService, new SyncDescriptor(CloudAgentMainService, undefined, false));
 
 		// Default Extensions Profile Init
 		services.set(IExtensionsProfileScannerService, new SyncDescriptor(ExtensionsProfileScannerService, undefined, true));
@@ -1249,6 +1252,10 @@ export class CodeApplication extends Disposable {
 		// Void added this
 		const voidSCMChannel = ProxyChannel.fromService(accessor.get(IVoidSCMService), disposables);
 		mainProcessElectronServer.registerChannel('void-channel-scm', voidSCMChannel);
+
+		// Orchestra: クラウドエージェント (Division API への中継 + ワークスペースのアップロード)
+		const cloudAgentChannel = ProxyChannel.fromService(accessor.get(ICloudAgentMainService), disposables);
+		mainProcessElectronServer.registerChannel(CLOUD_AGENT_CHANNEL_NAME, cloudAgentChannel);
 
 		// Void added this
 		const mcpChannel = new MCPChannel();
