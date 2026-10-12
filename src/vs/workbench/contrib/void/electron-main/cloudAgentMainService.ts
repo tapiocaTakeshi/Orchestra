@@ -7,6 +7,7 @@
 //
 // 1. Division の /api/cloud-sessions・/api/github 配下への認証付き GET / POST の中継
 //    (レンダラーから直接叩くと Division に CORS が無いので失敗する)。
+//    Pull requests (GET / POST /api/cloud-sessions/:id/pull-request) go through this same relay.
 // 2. ワークスペースを tar.gz にまとめてアップロードする。
 //    Vercel のリクエストボディ上限 (~4.5 MB) があるので、2 MiB ずつに切って base64 で順に POST する。
 //

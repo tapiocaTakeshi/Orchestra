@@ -46,6 +46,10 @@ import {
 	CloudAgentUploadResult,
 	CloudChange,
 	CloudFileResponse,
+	CloudPullRequest,
+	CloudPullRequestInfo,
+	CloudPullRequestResult,
+	CLOUD_PR_ERROR_CODES,
 	CloudSession,
 	CloudSessionEvent,
 	CloudStartRepo,
@@ -56,8 +60,12 @@ import {
 	GitHubRepo,
 	GitHubStatus,
 	ICloudAgentMainService,
+	CreateCloudPullRequestParams,
 	cloudRepoFolderName,
 	isCloudSessionActive,
+	isGitHubRepoSession,
+	validateCloudPullRequestBranch,
+	validateCloudPullRequestFields,
 	validateCloudRepoBranch,
 	validateCloudRepoUrl,
 	validateGitHubFullName,
@@ -65,6 +73,7 @@ import {
 import { IEditCodeService } from './editCodeServiceInterface.js';
 import {
 	CloudAgentState,
+	CloudApiError,
 	CloudApplyResult,
 	CloudChangesState,
 	CloudGitHubBranchesState,
@@ -72,6 +81,9 @@ import {
 	CloudGitHubReposState,
 	CloudGitHubState,
 	CloudModelPick,
+	CloudPullRequestCreateResult,
+	CloudPullRequestInfoResult,
+	CloudPullRequestState,
 	CloudSessionSource,
 	CreateCloudSessionsOptions,
 	ICloudAgentService,
@@ -89,6 +101,8 @@ const EVENTS_PAGE_LIMIT = 500;
 const CREATE_TIMEOUT_MS = 300_000;
 /** 変更一覧 (git diff) とファイル取得 */
 const CHANGES_TIMEOUT_MS = 120_000;
+/** Creating / updating a PR commits the workspace, pushes it and calls the GitHub API, all synchronously on the server */
+const PULL_REQUEST_TIMEOUT_MS = 180_000;
 /** それ以外 (一覧・イベント・停止・追加指示など) */
 const DEFAULT_TIMEOUT_MS = 30_000;
 /** 取り込み時に、差分を開いて見せるファイル数の上限 (全部開くとタブが溢れる) */
@@ -238,6 +252,64 @@ const initialGitHubState = (): CloudGitHubState => ({
 const initialGitHubRepos = (): CloudGitHubReposState => ({ q: '', page: 0, hasMore: false, loading: false, loaded: false, repos: [] });
 
 
+// ---------------------------------------------------------------------------
+// Pull request DTOs (tolerate missing fields so a partial response cannot break the panel)
+// ---------------------------------------------------------------------------
+
+/** A PR object from the server, or null when it is missing / unusable (no number or a non-https URL) */
+const toPullRequest = (raw: unknown): CloudPullRequest | null => {
+	if (!raw || typeof raw !== 'object') return null;
+	const r = raw as Record<string, unknown>;
+	const number = typeof r.number === 'number' && Number.isFinite(r.number) ? r.number : NaN;
+	const url = str(r.url);
+	if (!(number > 0) || !/^https:\/\//i.test(url)) return null;
+	return {
+		number,
+		url,
+		branch: str(r.branch),
+		base: str(r.base),
+		headSha: str(r.headSha),
+		title: str(r.title),
+		draft: r.draft === true,
+		createdAt: str(r.createdAt),
+		updatedAt: str(r.updatedAt),
+	};
+};
+
+const toPullRequestInfo = (raw: unknown): CloudPullRequestInfo => {
+	const r = (raw ?? {}) as Record<string, unknown>;
+	const sg = (r.suggestion ?? {}) as Record<string, unknown>;
+	return {
+		pullRequest: toPullRequest(r.pullRequest),
+		suggestion: { title: str(sg.title), body: str(sg.body), branch: str(sg.branch), base: str(sg.base) },
+		canCreate: r.canCreate === true,
+		...(typeof r.reason === 'string' && r.reason.trim() ? { reason: r.reason.trim() } : {}),
+	};
+};
+
+/** The newer of two PR snapshots (by updatedAt; the first one wins a tie) */
+const newerPullRequest = (a: CloudPullRequest | null | undefined, b: CloudPullRequest | null | undefined): CloudPullRequest | null => {
+	if (!a) return b ?? null;
+	if (!b) return a;
+	return (Date.parse(b.updatedAt) || 0) > (Date.parse(a.updatedAt) || 0) ? b : a;
+};
+
+/**
+ * Error text for the PR endpoints. They answer with a Japanese `error` plus a `code`, which is shown as is;
+ * transport / auth / billing failures (no code) use the shared wording.
+ */
+const describePullRequestError = (res: CloudAgentResponse): string => {
+	const code = errorCodeOf(res);
+	const detail = res.data && typeof res.data.error === 'string' ? res.data.error.trim() : '';
+	if (code === GITHUB_NOT_CONNECTED) return detail || describeCloudAgentError(res);
+	if (code && detail) return detail;
+	if (res.status === 404 && !code) return 'この Division サーバーはプルリクエストの作成に未対応か、セッションが見つかりません。';
+	return describeCloudAgentError(res);
+};
+
+const toApiError = (res: CloudAgentResponse, error: string): CloudApiError => ({ ok: false, error, code: errorCodeOf(res), status: res.status });
+
+
 class CloudAgentService extends Disposable implements ICloudAgentService {
 	readonly _serviceBrand: undefined;
 
@@ -264,6 +336,7 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		githubBranchesByRepo: {},
 		githubPick: null,
 		modelPick: null,
+		pullRequestById: {},
 	};
 	get state(): CloudAgentState { return this._state; }
 
@@ -343,6 +416,11 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		this._setState({ changesById: { ...this._state.changesById, [id]: { ...prev, ...partial } } });
 	}
 
+	private _setPullRequest(id: string, partial: Partial<CloudPullRequestState>) {
+		const prev = this._state.pullRequestById[id] ?? { loading: false, submitting: false };
+		this._setState({ pullRequestById: { ...this._state.pullRequestById, [id]: { ...prev, ...partial } } });
+	}
+
 	/**
 	 * 使える可能性のある認証情報を優先順に並べる。
 	 * ログイン時に保存した長期の API キーが Division に登録されていないアカウントがある (401 になる) ので、
@@ -388,7 +466,7 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 				// ログアウト: 他人に見えないよう、手元の一覧も消す
 				this._lastSeqById.clear();
 				this._listLoadedOnce = false;
-				this._setState({ isLoggedIn: false, sessions: [], eventsById: {}, changesById: {}, selectedId: null, lastError: null, sendingById: {} });
+				this._setState({ isLoggedIn: false, sessions: [], eventsById: {}, changesById: {}, pullRequestById: {}, selectedId: null, lastError: null, sendingById: {} });
 			}
 			if (this._state.github.loaded || this._state.github.waitingForAuth || this._state.githubRepos.loaded) this._resetGitHub();
 			this._clearListTimer();
@@ -409,9 +487,12 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		const idx = sessions.findIndex(s => s.id === session.id);
 		const prev = idx >= 0 ? sessions[idx] : undefined;
 		// costUsd は一覧と GET /:id にしか付かない。イベントや操作の応答で来た session で消さない
-		const merged = prev && typeof session.costUsd !== 'number' && typeof prev.costUsd === 'number'
+		let merged = prev && typeof session.costUsd !== 'number' && typeof prev.costUsd === 'number'
 			? { ...session, costUsd: prev.costUsd }
 			: session;
+		// Same for pullRequest: only an explicit null clears it. Also normalize the server's object
+		const pullRequest = session.pullRequest === undefined ? prev?.pullRequest : toPullRequest(session.pullRequest);
+		if (pullRequest !== undefined) merged = { ...merged, pullRequest };
 		const next = idx >= 0
 			? sessions.map((s, i) => i === idx ? merged : s)
 			: [merged, ...sessions];
@@ -628,6 +709,10 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		if (fresh.some(e => e.type === 'done') && this._state.changesById[id]?.changes) {
 			void this.loadChanges(id);
 		}
+		// The PR suggestion (summary in the body) and canCreate depend on the latest turn: refresh it if it is shown
+		if (fresh.some(e => e.type === 'done') && this._state.pullRequestById[id]?.info) {
+			void this.getPullRequestInfo(id);
+		}
 	}
 
 	private _removeSessionLocally(id: string) {
@@ -637,6 +722,7 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 			sessions: this._state.sessions.filter(s => s.id !== id),
 			eventsById: omitKey(this._state.eventsById, id),
 			changesById: omitKey(this._state.changesById, id),
+			pullRequestById: omitKey(this._state.pullRequestById, id),
 			selectedId: this._state.selectedId === id ? null : this._state.selectedId,
 		});
 	}
@@ -1053,6 +1139,134 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 
 	dismissError(): void {
 		if (this._state.lastError) this._setState({ lastError: null });
+	}
+
+
+	// -----------------------------------------------------------------------
+	// Pull requests (GitHub-repo sessions only)
+	// -----------------------------------------------------------------------
+
+	/** Local checks shared by both PR calls. Returns an error for sessions that can never have a PR */
+	private _pullRequestPrecheck(id: string): CloudApiError | null {
+		if (!this._isLoggedIn()) return { ok: false, error: describeCloudAgentError({ status: 401 }), code: '', status: 401 };
+		const session = this._state.sessions.find(s => s.id === id);
+		if (session && !isGitHubRepoSession(session)) {
+			return { ok: false, error: 'GitHub のリポジトリから始めたセッションだけがプルリクエストを作成できます。', code: CLOUD_PR_ERROR_CODES.notGitHubRepo, status: 0 };
+		}
+		return null;
+	}
+
+	/** github_not_connected from a PR call means the token is gone: reflect it in the shared GitHub state too */
+	private _notePullRequestFailure(res: CloudAgentResponse) {
+		if (errorCodeOf(res) === GITHUB_NOT_CONNECTED) this._markGitHubDisconnected();
+	}
+
+	async getPullRequestInfo(id: string): Promise<CloudPullRequestInfoResult> {
+		const pre = this._pullRequestPrecheck(id);
+		if (pre) return pre;
+		const gen = this._githubGen;
+		this._setPullRequest(id, { loading: true });
+		const res = await this._request('GET', this._sessionPath(id, '/pull-request'), undefined, CHANGES_TIMEOUT_MS);
+		// Logged out / switched accounts meanwhile: drop the answer (the state was already reset)
+		if (gen !== this._githubGen || !this._state.isLoggedIn) return toApiError(res, describePullRequestError(res));
+		if (!res.ok) {
+			const error = describePullRequestError(res);
+			this._notePullRequestFailure(res);
+			this._setPullRequest(id, { loading: false, error, errorCode: errorCodeOf(res), errorFrom: 'info' });
+			return toApiError(res, error);
+		}
+		const info = toPullRequestInfo(res.data);
+		this._mergeSessionPullRequest(id, info.pullRequest);
+		const prev = this._state.pullRequestById[id];
+		// Keep a submit error visible (a fresh GET only clears its own error), except "GitHub not connected":
+		// a successful GET after reconnecting means it no longer applies
+		const keepError = prev?.errorFrom === 'submit' && prev.errorCode !== GITHUB_NOT_CONNECTED;
+		this._setPullRequest(id, {
+			loading: false,
+			info,
+			...(keepError ? {} : { error: undefined, errorCode: undefined, errorFrom: undefined }),
+		});
+		return { ok: true, ...info };
+	}
+
+	async createPullRequest(id: string, params: CreateCloudPullRequestParams): Promise<CloudPullRequestCreateResult> {
+		const pre = this._pullRequestPrecheck(id);
+		if (pre) return pre;
+		const current = this._state.pullRequestById[id];
+		if (current?.submitting) {
+			return { ok: false, error: 'プルリクエストを送信中です。終わるまでお待ちください。', code: CLOUD_PR_ERROR_CODES.inProgress, status: 0 };
+		}
+		const session = this._state.sessions.find(s => s.id === id);
+		const hasPr = !!newerPullRequest(session?.pullRequest, current?.info?.pullRequest);
+
+		// Same limits as the server, checked here so the user gets the reason without a round trip
+		const title = (params.title ?? '').trim();
+		const body = params.body ?? '';
+		const branch = (params.branch ?? '').trim();
+		const invalid = validateCloudPullRequestFields(title, body) ?? (!hasPr && branch ? validateCloudPullRequestBranch(branch) : null);
+		if (invalid) {
+			const error: CloudApiError = { ok: false, error: invalid, code: CLOUD_PR_ERROR_CODES.validation, status: 0 };
+			this._setPullRequest(id, { error: error.error, errorCode: error.code, errorFrom: 'submit' });
+			return error;
+		}
+
+		const payload: CreateCloudPullRequestParams = {
+			title,
+			...(body ? { body } : {}),
+			// The head branch and draft flag are fixed once the PR exists
+			...(!hasPr && branch ? { branch } : {}),
+			...(params.base?.trim() ? { base: params.base.trim() } : {}),
+			...(!hasPr && typeof params.draft === 'boolean' ? { draft: params.draft } : {}),
+		};
+		const gen = this._githubGen;
+		this._setPullRequest(id, { submitting: true, lastResult: undefined, lastAction: undefined, error: undefined, errorCode: undefined, errorFrom: undefined });
+		const res = await this._request('POST', this._sessionPath(id, '/pull-request'), payload, PULL_REQUEST_TIMEOUT_MS);
+		if (gen !== this._githubGen || !this._state.isLoggedIn) return toApiError(res, describePullRequestError(res));
+		if (!res.ok) {
+			const error = describePullRequestError(res);
+			this._notePullRequestFailure(res);
+			this._setPullRequest(id, { submitting: false, error, errorCode: errorCodeOf(res), errorFrom: 'submit' });
+			return toApiError(res, error);
+		}
+		const pullRequest = toPullRequest(res.data?.pullRequest);
+		if (!pullRequest) {
+			const error = 'プルリクエストの情報を受け取れませんでした。GitHub で作成されているか確認してください。';
+			this._setPullRequest(id, { submitting: false, error, errorCode: CLOUD_PR_ERROR_CODES.githubError, errorFrom: 'submit' });
+			return { ok: false, error, code: CLOUD_PR_ERROR_CODES.githubError, status: res.status };
+		}
+		const result: CloudPullRequestResult = { pullRequest, updated: res.data?.updated !== false };
+		this._mergeSessionPullRequest(id, pullRequest);
+		const info = this._state.pullRequestById[id]?.info;
+		this._setPullRequest(id, {
+			submitting: false,
+			lastResult: result,
+			lastAction: !hasPr ? 'created' : result.updated ? 'updated' : 'unchanged',
+			...(info ? { info: { ...info, pullRequest } } : {}),
+		});
+		// The server appended a pull_request event; also refresh canCreate / the suggestion for the next update
+		void this._fetchEvents(id);
+		void this.getPullRequestInfo(id);
+		return { ok: true, ...result };
+	}
+
+	/** Store a PR snapshot on the session when it is newer than what the list gave us */
+	private _mergeSessionPullRequest(id: string, pullRequest: CloudPullRequest | null) {
+		if (!pullRequest) return;
+		const session = this._state.sessions.find(s => s.id === id);
+		if (!session) return;
+		const next = newerPullRequest(pullRequest, session.pullRequest);
+		if (next === session.pullRequest) return;
+		this._setState({ sessions: this._state.sessions.map(s => s.id === id ? { ...s, pullRequest: next } : s) });
+	}
+
+	async openPullRequest(url: string): Promise<void> {
+		const target = (url ?? '').trim();
+		if (!/^https:\/\//i.test(target)) return;
+		try {
+			await this._openerService.open(target, { openExternal: true });
+		} catch (e) {
+			this._setState({ lastError: `ブラウザを開けませんでした: ${e instanceof Error ? e.message : String(e)}` });
+		}
 	}
 
 

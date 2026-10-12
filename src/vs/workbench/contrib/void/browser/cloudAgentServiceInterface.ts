@@ -13,7 +13,7 @@
 
 import type { Event } from '../../../../base/common/event.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
-import type { CloudChange, CloudSession, CloudSessionEvent, GitHubRepo } from '../common/cloudAgentTypes.js';
+import type { CloudChange, CloudPullRequestInfo, CloudPullRequestResult, CloudSession, CloudSessionEvent, CreateCloudPullRequestParams, GitHubRepo } from '../common/cloudAgentTypes.js';
 
 
 /** 「変更を取り込む」の結果 (パスはワークスペースからの相対パス) */
@@ -39,6 +39,34 @@ export type CloudChangesState = {
 	error?: string;
 	applying?: boolean;
 	lastApply?: CloudApplyResult;
+};
+
+/**
+ * A failed cloud API call, with the server's `{ error, code }` (code is '' when the server sent none).
+ * `error` is already user-facing Japanese text.
+ */
+export type CloudApiError = { ok: false; error: string; code: string; status: number };
+
+export type CloudPullRequestInfoResult = ({ ok: true } & CloudPullRequestInfo) | CloudApiError;
+export type CloudPullRequestCreateResult = ({ ok: true } & CloudPullRequestResult) | CloudApiError;
+
+/** Per-session pull request state (shared by the header button, the inline form and the completion card) */
+export type CloudPullRequestState = {
+	/** GET .../pull-request in flight */
+	loading: boolean;
+	/** Last successful GET (refreshed after a create / update) */
+	info?: CloudPullRequestInfo;
+	/** POST .../pull-request in flight */
+	submitting: boolean;
+	/** Last successful POST (cleared when a new submit starts) */
+	lastResult?: CloudPullRequestResult;
+	/** What the last successful POST did: opened the PR, pushed new commits to it, or found nothing new to push */
+	lastAction?: 'created' | 'updated' | 'unchanged';
+	/** Last failed GET / POST */
+	error?: string;
+	errorCode?: string;
+	/** Whether `error` came from the POST (shown in the form) or the GET (shown instead of the button) */
+	errorFrom?: 'info' | 'submit';
 };
 
 /** GitHub アカウント連携の状態 */
@@ -127,6 +155,8 @@ export type CloudAgentState = {
 	githubPick: CloudGitHubPick | null;
 	/** 最後に選んだモデル。null = まだ選んだことがない (パネルは使用中の Division プロジェクトがあれば Division Project を既定にする) */
 	modelPick: CloudModelPick | null;
+	/** session id → pull request state (only for GitHub-repo sessions that were looked at) */
+	pullRequestById: Record<string, CloudPullRequestState>;
 };
 
 /**
@@ -205,6 +235,15 @@ export interface ICloudAgentService {
 
 	/** 選んだモデルを覚える (次回の初期値になる)。null で忘れる */
 	setModelPick(pick: CloudModelPick | null): void;
+
+	// --- Pull requests (GitHub-repo sessions only) ---
+
+	/** GET .../pull-request: the existing PR, the form's suggestion and whether a PR can be created now. Also stored in pullRequestById */
+	getPullRequestInfo(id: string): Promise<CloudPullRequestInfoResult>;
+	/** POST .../pull-request: creates the PR, or pushes the current workspace to it when one exists. Also stored in pullRequestById */
+	createPullRequest(id: string, params: CreateCloudPullRequestParams): Promise<CloudPullRequestCreateResult>;
+	/** Opens a pull request URL (https only) in the system browser */
+	openPullRequest(url: string): Promise<void>;
 }
 
 export const ICloudAgentService = createDecorator<ICloudAgentService>('cloudAgentService');
