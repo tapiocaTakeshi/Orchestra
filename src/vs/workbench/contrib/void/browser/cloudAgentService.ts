@@ -40,6 +40,7 @@ import {
 	CLOUD_AGENT_CHANNEL_NAME,
 	CLOUD_AGENTS_MAX_PARALLEL,
 	CLOUD_AGENTS_OPEN_ACTION_ID,
+	CLOUD_DIVISION_PROJECT_MODEL,
 	CLOUD_SESSIONS_API_PREFIX,
 	CloudAgentResponse,
 	CloudAgentUploadResult,
@@ -70,6 +71,7 @@ import {
 	CloudGitHubPick,
 	CloudGitHubReposState,
 	CloudGitHubState,
+	CloudModelPick,
 	CloudSessionSource,
 	CreateCloudSessionsOptions,
 	ICloudAgentService,
@@ -98,6 +100,17 @@ const GITHUB_CONNECT_POLL_MS = 2_000;
 const GITHUB_CONNECT_TIMEOUT_MS = 5 * 60_000;
 /** 最後に選んだ GitHub のリポジトリとブランチ (StorageScope.APPLICATION) */
 const GITHUB_PICK_STORAGE_KEY = 'orchestra.cloudAgents.githubPick';
+/** 最後に選んだモデル (StorageScope.APPLICATION) */
+const MODEL_PICK_STORAGE_KEY = 'orchestra.cloudAgents.modelPick';
+
+/** 覚えておけるモデルの選択か (壊れた値・古い形式は null) */
+const toModelPick = (raw: any): CloudModelPick | null => {
+	if (!raw || typeof raw !== 'object') return null;
+	if (raw.kind === 'default') return { kind: 'default' };
+	if (raw.kind === 'divisionProject' && typeof raw.projectId === 'string' && raw.projectId.trim()) return { kind: 'divisionProject', projectId: raw.projectId.trim() };
+	if (raw.kind === 'model' && typeof raw.model === 'string' && raw.model.trim() && raw.model.trim() !== CLOUD_DIVISION_PROJECT_MODEL) return { kind: 'model', model: raw.model.trim() };
+	return null;
+};
 
 /** key を除いたコピー (状態は差し替えで更新するので、元のオブジェクトは触らない) */
 const omitKey = <T>(obj: Record<string, T>, key: string): Record<string, T> => {
@@ -250,6 +263,7 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		githubRepos: initialGitHubRepos(),
 		githubBranchesByRepo: {},
 		githubPick: null,
+		modelPick: null,
 	};
 	get state(): CloudAgentState { return this._state; }
 
@@ -297,7 +311,7 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		this._main = ProxyChannel.toService<ICloudAgentMainService>(mainProcessService.getChannel(CLOUD_AGENT_CHANNEL_NAME));
 
 		this._lastToken = this._tokenSignature();
-		this._state = { ...this._state, isLoggedIn: this._isLoggedIn(), workspaceName: this._workspaceFolder()?.name ?? null, githubPick: this._loadGitHubPick() };
+		this._state = { ...this._state, isLoggedIn: this._isLoggedIn(), workspaceName: this._workspaceFolder()?.name ?? null, githubPick: this._loadGitHubPick(), modelPick: this._loadModelPick() };
 
 		this._register(this._settingsService.onDidChangeState(() => this._onSettingsChanged()));
 		this._register(this._workspaceService.onDidChangeWorkspaceFolders(() => {
@@ -685,6 +699,11 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		const model = (opts.model ?? '').trim();
 		const projectId = (opts.projectId ?? '').trim();
 		const selectCreated = opts.select !== false;
+		if (model === CLOUD_DIVISION_PROJECT_MODEL && !projectId) {
+			// サーバーも 400 を返すが、サンドボックスを作る前に日本語で弾く
+			this._setState({ lastError: 'Division Project をモデルにするには、Division と同期したプロジェクトを選んでください。' });
+			return [];
+		}
 
 		this._authFailedToken = null;
 		this._setState({ creating: true, creatingProgress: count > 1 ? `${count} 個のセッションを準備しています…` : 'セッションを準備しています…', lastError: null });
@@ -1311,6 +1330,24 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 			if (next) this._storageService.store(GITHUB_PICK_STORAGE_KEY, JSON.stringify(next), StorageScope.APPLICATION, StorageTarget.MACHINE);
 			else this._storageService.remove(GITHUB_PICK_STORAGE_KEY, StorageScope.APPLICATION);
 		} catch { /* 覚えられなくても選択はできている */ }
+	}
+
+	setModelPick(pick: CloudModelPick | null): void {
+		const next = toModelPick(pick);
+		this._setState({ modelPick: next });
+		try {
+			if (next) this._storageService.store(MODEL_PICK_STORAGE_KEY, JSON.stringify(next), StorageScope.APPLICATION, StorageTarget.MACHINE);
+			else this._storageService.remove(MODEL_PICK_STORAGE_KEY, StorageScope.APPLICATION);
+		} catch { /* 覚えられなくても選択はできている */ }
+	}
+
+	private _loadModelPick(): CloudModelPick | null {
+		try {
+			const raw = this._storageService.get(MODEL_PICK_STORAGE_KEY, StorageScope.APPLICATION);
+			return raw ? toModelPick(JSON.parse(raw)) : null;
+		} catch {
+			return null;
+		}
 	}
 
 	private _loadGitHubPick(): CloudGitHubPick | null {
