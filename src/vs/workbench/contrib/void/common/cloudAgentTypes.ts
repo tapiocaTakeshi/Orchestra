@@ -33,9 +33,10 @@
 //   エラー: 409 { code: 'github_not_connected' } (未連携 / トークン失効)、503 { code: 'github_not_configured' }
 //
 // Pull requests (only for sessions started from a GitHub repo, i.e. workspaceInfo.repoFullName is set):
-//   GET  /api/cloud-sessions/:id/pull-request → { pullRequest, suggestion, canCreate, reason? }
-//   POST /api/cloud-sessions/:id/pull-request { title, body?, branch?, base?, draft? } → { pullRequest, updated }
-//        Creates the PR on the first call; later calls push a new commit to the same branch ("update").
+//   GET  /api/cloud-sessions/:id/pull-request → { pullRequest, pullRequestState?, suggestion, canCreate, reason?, code? }
+//   POST /api/cloud-sessions/:id/pull-request { title, body?, branch?, base?, draft? } → { pullRequest, updated, action }
+//        Creates the PR on the first call; while it is open, later calls push a new commit to the same branch ("update").
+//        Once it is merged / closed, the next call opens a new PR.
 //   Errors: { error: <Japanese message>, code } (see CLOUD_PR_ERROR_CODES)
 
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
@@ -190,13 +191,23 @@ export type CloudPullRequestSuggestion = {
 	base: string;
 };
 
+/** State of the session's PR on GitHub. null = it could not be read */
+export type CloudPullRequestStatus = 'open' | 'closed' | 'merged';
+
 /** GET /api/cloud-sessions/:id/pull-request */
 export type CloudPullRequestInfo = {
 	pullRequest: CloudPullRequest | null;
+	/** Only meaningful when pullRequest is set. merged / closed → the next POST opens a new PR */
+	pullRequestState: CloudPullRequestStatus | null;
+	/**
+	 * Prefill for the form. While the PR is open: its current title / body / branch / base on GitHub.
+	 * Otherwise a fresh suggestion for a new PR.
+	 */
 	suggestion: CloudPullRequestSuggestion;
-	/** false → `reason` (Japanese) says why the PR cannot be created / updated right now */
+	/** false → `reason` (Japanese) says why the PR cannot be created / updated right now, `code` says it for machines */
 	canCreate: boolean;
 	reason?: string;
+	code?: string;
 };
 
 /** POST /api/cloud-sessions/:id/pull-request body */
@@ -209,10 +220,11 @@ export type CreateCloudPullRequestParams = {
 	draft?: boolean;
 };
 
-/** POST /api/cloud-sessions/:id/pull-request response. updated=false: nothing changed since the last push */
+/** POST /api/cloud-sessions/:id/pull-request response. updated=false / action 'unchanged': nothing to push or patch */
 export type CloudPullRequestResult = {
 	pullRequest: CloudPullRequest;
 	updated: boolean;
+	action: 'created' | 'updated' | 'unchanged';
 };
 
 /**
@@ -228,6 +240,10 @@ export const CLOUD_PR_ERROR_CODES = {
 	branchExists: 'branch_exists',
 	noPushAccess: 'github_no_push_access',
 	githubError: 'github_error',
+	sessionArchived: 'session_archived',
+	branchDiverged: 'branch_diverged',
+	missingParent: 'missing_parent',
+	sandboxError: 'sandbox_error',
 } as const;
 
 export const CLOUD_PR_TITLE_MAX = 256;
@@ -283,6 +299,16 @@ export interface GitHubRepo {
 /** サーバーが { error, code } の code で返す、HTTP ステータスだけでは分からない理由 */
 export const GITHUB_NOT_CONNECTED = 'github_not_connected';
 export const GITHUB_NOT_CONFIGURED = 'github_not_configured';
+
+/**
+ * The PR that "PR を更新" would push to: the given one unless GET .../pull-request reported that same PR as
+ * merged / closed (then the next submit opens a new PR). An unknown state counts as open.
+ */
+export const updatablePullRequest = (pullRequest: CloudPullRequest | null, info: CloudPullRequestInfo | undefined): CloudPullRequest | null => {
+	if (!pullRequest) return null;
+	const sameAsInfo = info?.pullRequest?.number === pullRequest.number;
+	return sameAsInfo && (info.pullRequestState === 'merged' || info.pullRequestState === 'closed') ? null : pullRequest;
+};
 
 /** Whether the session was started from a GitHub repo (the only kind that can open a pull request) */
 export const isGitHubRepoSession = (session: { workspaceInfo: CloudWorkspaceInfo | null }): boolean =>

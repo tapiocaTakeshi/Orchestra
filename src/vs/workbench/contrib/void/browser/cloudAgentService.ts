@@ -64,6 +64,7 @@ import {
 	cloudRepoFolderName,
 	isCloudSessionActive,
 	isGitHubRepoSession,
+	updatablePullRequest,
 	validateCloudPullRequestBranch,
 	validateCloudPullRequestFields,
 	validateCloudRepoBranch,
@@ -101,8 +102,10 @@ const EVENTS_PAGE_LIMIT = 500;
 const CREATE_TIMEOUT_MS = 300_000;
 /** 変更一覧 (git diff) とファイル取得 */
 const CHANGES_TIMEOUT_MS = 120_000;
-/** Creating / updating a PR commits the workspace, pushes it and calls the GitHub API, all synchronously on the server */
-const PULL_REQUEST_TIMEOUT_MS = 180_000;
+/** GET .../pull-request may start a stopped sandbox and diff it (up to ~3 min on the server) */
+const PULL_REQUEST_INFO_TIMEOUT_MS = 300_000;
+/** Creating / updating a PR commits the workspace, pushes it and calls the GitHub API synchronously (up to ~10 min) */
+const PULL_REQUEST_TIMEOUT_MS = 600_000;
 /** それ以外 (一覧・イベント・停止・追加指示など) */
 const DEFAULT_TIMEOUT_MS = 30_000;
 /** 取り込み時に、差分を開いて見せるファイル数の上限 (全部開くとタブが溢れる) */
@@ -279,11 +282,15 @@ const toPullRequest = (raw: unknown): CloudPullRequest | null => {
 const toPullRequestInfo = (raw: unknown): CloudPullRequestInfo => {
 	const r = (raw ?? {}) as Record<string, unknown>;
 	const sg = (r.suggestion ?? {}) as Record<string, unknown>;
+	const pullRequest = toPullRequest(r.pullRequest);
+	const state = r.pullRequestState;
 	return {
-		pullRequest: toPullRequest(r.pullRequest),
+		pullRequest,
+		pullRequestState: pullRequest && (state === 'open' || state === 'closed' || state === 'merged') ? state : null,
 		suggestion: { title: str(sg.title), body: str(sg.body), branch: str(sg.branch), base: str(sg.base) },
 		canCreate: r.canCreate === true,
 		...(typeof r.reason === 'string' && r.reason.trim() ? { reason: r.reason.trim() } : {}),
+		...(typeof r.code === 'string' && r.code ? { code: r.code } : {}),
 	};
 };
 
@@ -1166,7 +1173,7 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		if (pre) return pre;
 		const gen = this._githubGen;
 		this._setPullRequest(id, { loading: true });
-		const res = await this._request('GET', this._sessionPath(id, '/pull-request'), undefined, CHANGES_TIMEOUT_MS);
+		const res = await this._request('GET', this._sessionPath(id, '/pull-request'), undefined, PULL_REQUEST_INFO_TIMEOUT_MS);
 		// Logged out / switched accounts meanwhile: drop the answer (the state was already reset)
 		if (gen !== this._githubGen || !this._state.isLoggedIn) return toApiError(res, describePullRequestError(res));
 		if (!res.ok) {
@@ -1197,7 +1204,8 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 			return { ok: false, error: 'プルリクエストを送信中です。終わるまでお待ちください。', code: CLOUD_PR_ERROR_CODES.inProgress, status: 0 };
 		}
 		const session = this._state.sessions.find(s => s.id === id);
-		const hasPr = !!newerPullRequest(session?.pullRequest, current?.info?.pullRequest);
+		// An open PR is updated; with none (or a merged / closed one) the server opens a new PR
+		const hasPr = !!updatablePullRequest(newerPullRequest(session?.pullRequest, current?.info?.pullRequest), current?.info);
 
 		// Same limits as the server, checked here so the user gets the reason without a round trip
 		const title = (params.title ?? '').trim();
@@ -1210,14 +1218,16 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 			return error;
 		}
 
-		const payload: CreateCloudPullRequestParams = {
-			title,
-			...(body ? { body } : {}),
-			// The head branch and draft flag are fixed once the PR exists
-			...(!hasPr && branch ? { branch } : {}),
-			...(params.base?.trim() ? { base: params.base.trim() } : {}),
-			...(!hasPr && typeof params.draft === 'boolean' ? { draft: params.draft } : {}),
-		};
+		// Updating an open PR only takes title / body (the server ignores branch, base and draft then)
+		const payload: CreateCloudPullRequestParams = hasPr
+			? { title, ...(body ? { body } : {}) }
+			: {
+				title,
+				...(body ? { body } : {}),
+				...(branch ? { branch } : {}),
+				...(params.base?.trim() ? { base: params.base.trim() } : {}),
+				...(typeof params.draft === 'boolean' ? { draft: params.draft } : {}),
+			};
 		const gen = this._githubGen;
 		this._setPullRequest(id, { submitting: true, lastResult: undefined, lastAction: undefined, error: undefined, errorCode: undefined, errorFrom: undefined });
 		const res = await this._request('POST', this._sessionPath(id, '/pull-request'), payload, PULL_REQUEST_TIMEOUT_MS);
@@ -1234,14 +1244,20 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 			this._setPullRequest(id, { submitting: false, error, errorCode: CLOUD_PR_ERROR_CODES.githubError, errorFrom: 'submit' });
 			return { ok: false, error, code: CLOUD_PR_ERROR_CODES.githubError, status: res.status };
 		}
-		const result: CloudPullRequestResult = { pullRequest, updated: res.data?.updated !== false };
+		const updated = res.data?.updated !== false;
+		const rawAction = res.data?.action;
+		const action: CloudPullRequestResult['action'] = rawAction === 'created' || rawAction === 'updated' || rawAction === 'unchanged'
+			? rawAction
+			: !hasPr ? 'created' : updated ? 'updated' : 'unchanged';
+		const result: CloudPullRequestResult = { pullRequest, updated, action };
 		this._mergeSessionPullRequest(id, pullRequest);
 		const info = this._state.pullRequestById[id]?.info;
 		this._setPullRequest(id, {
 			submitting: false,
 			lastResult: result,
-			lastAction: !hasPr ? 'created' : result.updated ? 'updated' : 'unchanged',
-			...(info ? { info: { ...info, pullRequest } } : {}),
+			lastAction: action,
+			// The PR we just pushed to is open (the old state may describe a merged predecessor)
+			...(info ? { info: { ...info, pullRequest, pullRequestState: 'open' } } : {}),
 		});
 		// The server appended a pull_request event; also refresh canCreate / the suggestion for the next update
 		void this._fetchEvents(id);

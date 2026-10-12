@@ -80,6 +80,7 @@ import {
 	CloudPlanTask,
 	CloudPullRequest,
 	CloudPullRequestEventData,
+	CloudPullRequestStatus,
 	CloudSession,
 	CloudSessionEvent,
 	CloudSessionStatus,
@@ -91,6 +92,7 @@ import {
 	isCloudSessionActive,
 	isGitHubRepoSession,
 	sumCloudCostUsd,
+	updatablePullRequest,
 	validateCloudPullRequestBranch,
 	validateCloudPullRequestFields,
 	validateCloudRepoBranch,
@@ -2096,13 +2098,19 @@ const usePullRequestView = (session: CloudSession) => {
 	const pr = state.pullRequestById[session.id];
 	const pullRequest = currentPullRequest(session, pr);
 	const info = pr?.info;
+	// GitHub state of the shown PR (only when the last GET described that same PR)
+	const status: CloudPullRequestStatus | null = pullRequest && info?.pullRequest?.number === pullRequest.number ? info.pullRequestState : null;
+	// The PR "PR を更新" pushes to; null when there is none or it was merged / closed (then the next submit opens a new PR)
+	const updatable = updatablePullRequest(pullRequest, info);
 	const infoError = pr?.errorFrom === 'info' ? pr.error : undefined;
 	// Until the first GET answers we do not know canCreate: keep the button disabled (not hidden) meanwhile
 	const checking = !info && !infoError && (!pr || pr.loading);
 	const canCreate = !!info?.canCreate && !pr?.submitting;
 	const reason = info && !info.canCreate ? (info.reason || null) : null;
-	const githubDisconnected = state.github.loaded && state.github.configured && !state.github.connected;
-	return { pr, pullRequest, info, infoError, checking, canCreate, reason, githubDisconnected, submitting: !!pr?.submitting };
+	const reasonCode = info && !info.canCreate ? info.code : undefined;
+	// Offer "GitHub と連携" when the server says so, or when our own status check says the account is not connected
+	const githubDisconnected = reasonCode === GITHUB_NOT_CONNECTED || (state.github.loaded && state.github.configured && !state.github.connected);
+	return { pr, pullRequest, status, updatable, info, infoError, checking, canCreate, reason, githubDisconnected, submitting: !!pr?.submitting };
 };
 
 const prTemplate = (key: TranslationKey, n: number, t: (k: TranslationKey) => string) => t(key).replace('{n}', String(n));
@@ -2127,6 +2135,20 @@ const GitHubConnectInline = () => {
 			{gh.starting ? <Spinner size={11} /> : <Github size={11} />}
 			{t('cloudAgents.github.connect')}
 		</button>
+	);
+};
+
+const prStatusColor: Record<CloudPullRequestStatus, string> = { open: C.success, merged: 'var(--vscode-charts-purple, #a371f7)', closed: C.error };
+
+/** open / merged / closed next to the "PR #n" link */
+const PullRequestStatusBadge = ({ status }: { status: CloudPullRequestStatus | null }) => {
+	const { t } = useTranslation();
+	if (!status) return null;
+	const color = prStatusColor[status];
+	return (
+		<span style={{ fontSize: '10px', fontWeight: 600, lineHeight: 1.5, padding: '0 6px', borderRadius: '8px', background: tint(color, 13), color, border: `1px solid ${tint(color, 33)}`, whiteSpace: 'nowrap', flexShrink: 0 }}>
+			{t(`cloudAgents.pr.state.${status}` as TranslationKey)}
+		</span>
 	);
 };
 
@@ -2155,10 +2177,10 @@ const OpenPullRequestButton = ({ pullRequest, compact }: { pullRequest: CloudPul
 const PullRequestActionButton = ({ session, onOpenForm, compact }: { session: CloudSession; onOpenForm: () => void; compact?: boolean }) => {
 	const { t } = useTranslation();
 	const v = usePullRequestView(session);
-	const label = v.pullRequest ? t('cloudAgents.pr.update') : t('cloudAgents.pr.create');
+	const label = v.updatable ? t('cloudAgents.pr.update') : v.pullRequest ? t('cloudAgents.pr.createNew') : t('cloudAgents.pr.create');
 	const disabled = !v.canCreate;
 	const title = v.submitting
-		? t(v.pullRequest ? 'cloudAgents.pr.submittingUpdate' : 'cloudAgents.pr.submittingCreate')
+		? t(v.updatable ? 'cloudAgents.pr.submittingUpdate' : 'cloudAgents.pr.submittingCreate')
 		: v.checking ? t('cloudAgents.pr.loading')
 			: v.reason ?? (v.infoError ? t('cloudAgents.pr.loadError').replace('{error}', v.infoError) : disabled ? t('cloudAgents.pr.unavailable') : label);
 	const busy = v.submitting || (v.checking && !!v.pr?.loading);
@@ -2172,9 +2194,9 @@ const PullRequestActionButton = ({ session, onOpenForm, compact }: { session: Cl
 			onClick={onOpenForm}
 			style={compact
 				? { height: '28px', padding: '0 8px', fontSize: '11.5px', flexShrink: 0, color: disabled ? C.fgMuted : C.fg }
-				: { ...buttonStyle(v.pullRequest ? 'secondary' : 'primary', disabled), padding: '3px 9px' }}
+				: { ...buttonStyle(v.updatable ? 'secondary' : 'primary', disabled), padding: '3px 9px' }}
 		>
-			{busy ? <Spinner size={compact ? 12 : 11} /> : v.pullRequest ? <RefreshCw size={compact ? 12 : 11} /> : <GitPullRequest size={compact ? 13 : 12} />}
+			{busy ? <Spinner size={compact ? 12 : 11} /> : v.updatable ? <RefreshCw size={compact ? 12 : 11} /> : <GitPullRequest size={compact ? 13 : 12} />}
 			{label}
 		</button>
 	);
@@ -2182,11 +2204,12 @@ const PullRequestActionButton = ({ session, onOpenForm, compact }: { session: Cl
 
 /** PR buttons in the conversation header */
 const PullRequestHeaderActions = ({ session, onOpenForm }: { session: CloudSession; onOpenForm: () => void }) => {
-	const { pullRequest } = usePullRequestView(session);
+	const { pullRequest, status } = usePullRequestView(session);
 	if (!isPullRequestEligible(session)) return null;
 	return (
 		<>
 			{pullRequest && <OpenPullRequestButton pullRequest={pullRequest} compact />}
+			{pullRequest && <PullRequestStatusBadge status={status} />}
 			<PullRequestActionButton session={session} onOpenForm={onOpenForm} compact />
 		</>
 	);
@@ -2201,7 +2224,8 @@ const PullRequestForm = ({ session, onClose }: { session: CloudSession; onClose:
 	const accessor = useAccessor();
 	const cloudAgentService = accessor.get('ICloudAgentService');
 	const v = usePullRequestView(session);
-	const existing = v.pullRequest;
+	// Only an open PR is updated; after a merge / close the form creates a new one from the fresh suggestion
+	const existing = v.updatable;
 	const suggestion = v.info?.suggestion;
 
 	const [title, setTitle] = useState('');
@@ -2215,7 +2239,8 @@ const PullRequestForm = ({ session, onClose }: { session: CloudSession; onClose:
 	useEffect(() => {
 		if (filled.current || !suggestion) return;
 		filled.current = true;
-		setTitle(existing?.title || suggestion.title);
+		// While the PR is open the suggestion holds its current title / body on GitHub
+		setTitle(suggestion.title || existing?.title || '');
 		setBody(suggestion.body);
 		setBranch(existing?.branch || suggestion.branch);
 		setDraft(existing?.draft ?? false);
@@ -2394,6 +2419,7 @@ const PullRequestSection = ({ session, formOpen, onOpenForm, onCloseForm }: {
 								<>
 									<span style={{ fontWeight: 600, flexShrink: 0 }}>#{pullRequest.number}</span>
 									<span title={pullRequest.title} style={{ minWidth: 0, ...ellipsis }}>{pullRequest.title}</span>
+									<PullRequestStatusBadge status={v.status} />
 									{pullRequest.draft && <span style={{ fontSize: '10px', padding: '0 6px', borderRadius: '8px', border: `1px solid ${C.border}`, color: C.fgMuted, flexShrink: 0 }}>{t('cloudAgents.pr.draftBadge')}</span>}
 								</>
 							) : v.checking ? (
@@ -2408,6 +2434,11 @@ const PullRequestSection = ({ session, formOpen, onOpenForm, onCloseForm }: {
 					{pullRequest && (
 						<div style={{ fontSize: '11px', color: C.fgMuted, fontFamily: C.monoFont, ...ellipsis }} title={`${pullRequest.branch} → ${pullRequest.base}`}>
 							{pullRequest.branch} → {pullRequest.base}
+						</div>
+					)}
+					{pullRequest && !v.updatable && v.status && (
+						<div style={{ fontSize: '11.5px', color: C.fgMuted }}>
+							{prTemplate('cloudAgents.pr.closedHint', pullRequest.number, t).replace('{state}', t(`cloudAgents.pr.state.${v.status}` as TranslationKey))}
 						</div>
 					)}
 					{/* Why the button is disabled (the server's Japanese reason), with the GitHub connect flow when that is the cause */}
