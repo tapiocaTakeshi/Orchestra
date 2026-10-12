@@ -33,6 +33,7 @@ import {
 	Book,
 	CheckCircle2,
 	ChevronDown,
+	Circle,
 	Coins,
 	ChevronRight,
 	Cloud,
@@ -58,21 +59,26 @@ import {
 	Search,
 	Square,
 	SquareTerminal,
+	Workflow,
 	Wrench,
 	X,
 	XCircle,
 } from 'lucide-react';
 
-import { useAccessor, useCloudAgentState, useDivisionProjectConfig, useDivisionProjects, useIsDark, useOrchestraUiMode, useSettingsState } from '../util/services.js';
+import { useAccessor, useCloudAgentState, useDivisionProjectConfig, useDivisionProjects, useIsDark, useOrchestraUiMode, useRefreshModelState, useSettingsState } from '../util/services.js';
 import { TranslationKey, useTranslation } from '../util/i18n.js';
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js';
 import { ChatMarkdownRender } from '../markdown/ChatMarkdownRender.js';
 import {
 	CLOUD_AGENTS_MAX_PARALLEL,
+	CLOUD_DIVISION_PROJECT_MODEL,
 	CloudChange,
+	CloudPlanEventData,
+	CloudPlanTask,
 	CloudSession,
 	CloudSessionEvent,
 	CloudSessionStatus,
+	CloudTaskEventData,
 	GitHubRepo,
 	cloudRepoLabel,
 	formatCloudCostUsd,
@@ -81,7 +87,7 @@ import {
 	validateCloudRepoBranch,
 	validateCloudRepoUrl,
 } from '../../../../common/cloudAgentTypes.js';
-import type { CloudChangesState, CloudGitHubPick, CloudSessionSource } from '../../../cloudAgentServiceInterface.js';
+import type { CloudChangesState, CloudGitHubPick, CloudModelPick, CloudSessionSource } from '../../../cloudAgentServiceInterface.js';
 import type { DivisionProjectConfig } from '../../../divisionProjectService.js';
 import { ORCHESTRA_OPEN_COST_MANAGEMENT_ACTION_ID, ORCHESTRA_OPEN_DIVISION_PROJECTS_ACTION_ID, VOID_OPEN_KANBAN_ACTION_ID } from '../../../actionIDs.js';
 
@@ -156,6 +162,7 @@ const PANEL_CSS = `
 .oca-chip { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 7px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: ${C.fgMuted}; font-size: 11.5px; font-family: inherit; cursor: pointer; max-width: 240px; white-space: nowrap; }
 .oca-chip:hover:not(:disabled), .oca-chip[data-active="true"] { background: ${C.hover}; color: ${C.fg}; }
 .oca-chip[data-warn="true"] { color: ${C.warning}; }
+.oca-chip:disabled { cursor: default; }
 .oca-composer { border: 1px solid ${C.borderInput}; transition: border-color 0.1s; }
 .oca-composer:focus-within { border-color: ${C.focus}; }
 .oca-textarea::placeholder, .oca-input::placeholder { color: ${C.fgMuted}; }
@@ -167,6 +174,7 @@ const PANEL_CSS = `
 .oca-option:hover:not(:disabled) { background: ${C.hover}; }
 .oca-option:disabled { opacity: 0.5; cursor: default; }
 .oca-option[data-selected="true"] { background: ${C.selected}; color: ${C.selectedFg}; }
+.oca-option[data-focused="true"] { box-shadow: inset 0 0 0 1px ${C.focus}; }
 .oca-nav { display: flex; align-items: center; gap: 8px; width: calc(100% - 12px); box-sizing: border-box; margin: 0 6px; padding: 5px 8px; border: none; border-radius: 6px; background: transparent; color: ${C.fg}; font-size: 12.5px; font-family: inherit; cursor: pointer; text-align: left; }
 .oca-nav:hover { background: ${C.hover}; }
 .oca-nav:focus-visible { outline: none; box-shadow: inset 0 0 0 1px ${C.focus}; }
@@ -343,6 +351,95 @@ const ProjectTag = ({ label, size = 10 }: { label: string | null; size?: number 
 		<span title={`${t('cloudAgents.project.label')}: ${label}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', minWidth: 0, flexShrink: 1 }}>
 			<Layers size={size} style={{ flexShrink: 0 }} />
 			<span style={ellipsis}>{label}</span>
+		</span>
+	);
+};
+
+// --- モデル (IDE のチャットのモデル選択と同じ一覧) と Division Project ---
+
+/**
+ * Division API のモデル名は `<providerId>/<modelId>` 形式 (ModelDropdown.tsx と同じ分け方)。
+ * "/" を含まないもの (division-orchestrator など) は providerId を null にする
+ */
+const splitDivisionModelName = (modelName: string): { providerId: string | null; modelId: string } => {
+	const idx = modelName.indexOf('/');
+	if (idx > 0 && idx < modelName.length - 1) return { providerId: modelName.slice(0, idx), modelId: modelName.slice(idx + 1) };
+	return { providerId: null, modelId: modelName };
+};
+
+type DivisionModelGroup = { providerId: string; title: string; models: { name: string; modelId: string }[] };
+
+/**
+ * IDE のモデル選択 (ModelDropdown) が divisionAPI について出しているのと同じモデル一覧を、プロバイダごとにまとめたもの。
+ * 元は refreshModelService が Division の /api/models から取ってきて settingsOfProvider.divisionAPI.models に入れたもの
+ * (`providerId/modelId`。サーバーは model にこの形をそのまま受け付ける)。プロバイダの表示名は globalSettings.divisionProviders
+ */
+const useDivisionModelGroups = (): DivisionModelGroup[] => {
+	const settings = useSettingsState();
+	const models = settings.settingsOfProvider?.divisionAPI?.models;
+	const providers = settings.globalSettings?.divisionProviders;
+	return useMemo(() => {
+		const groups: DivisionModelGroup[] = [];
+		const seen = new Set<string>();
+		for (const m of models ?? []) {
+			if (!m || m.isHidden || typeof m.modelName !== 'string' || seen.has(m.modelName)) continue;
+			const { providerId, modelId } = splitDivisionModelName(m.modelName);
+			// division-orchestrator (Division Project) は上の専用の行で出す。単体のモデルは provider/model のものだけ
+			if (!providerId) continue;
+			seen.add(m.modelName);
+			let group = groups.find(g => g.providerId === providerId);
+			if (!group) {
+				const title = (providers ?? []).find(p => p.id === providerId)?.displayName || providerId;
+				group = { providerId, title, models: [] };
+				groups.push(group);
+			}
+			group.models.push({ name: m.modelName, modelId });
+		}
+		return groups;
+	}, [models, providers]);
+};
+
+const isDivisionProjectSession = (s: CloudSession) => s.model === CLOUD_DIVISION_PROJECT_MODEL;
+
+/** ヘッダー・入力欄に出すモデル名。サーバーが modelLabel を付ける前は、頼んだものから作る */
+const sessionModelLabel = (s: CloudSession, projectLabel: string | null, fallback: string): string => {
+	if (s.modelLabel) return s.modelLabel;
+	if (isDivisionProjectSession(s)) return projectLabel ? `Division Project · ${projectLabel}` : 'Division Project';
+	return s.model || fallback;
+};
+
+/** モデルのアイコン (Division Project は複数のエージェントなので別のアイコン) */
+const ModelIcon = ({ division, size = 12 }: { division: boolean; size?: number }) =>
+	division ? <Workflow size={size} style={{ flexShrink: 0 }} /> : <Cpu size={size} style={{ flexShrink: 0 }} />;
+
+/** ロールごとの色 (slug から決める。同じロールはいつも同じ色) */
+const ROLE_COLORS = [
+	'var(--vscode-charts-blue)',
+	'var(--vscode-charts-purple)',
+	'var(--vscode-charts-orange)',
+	'var(--vscode-charts-green)',
+	'var(--vscode-charts-yellow)',
+	'var(--vscode-charts-red)',
+];
+const roleColor = (role: string): string => {
+	let h = 0;
+	for (let i = 0; i < role.length; i++) h = (h * 31 + role.charCodeAt(i)) | 0;
+	return ROLE_COLORS[Math.abs(h) % ROLE_COLORS.length];
+};
+
+/** Division Project のロール (計画の行・タスクの見出し・発言の横) */
+const RoleChip = ({ role, name }: { role: string; name: string }) => {
+	const color = roleColor(role || name);
+	return (
+		<span
+			title={role && role !== name ? `${name} (${role})` : name}
+			style={{
+				display: 'inline-flex', alignItems: 'center', height: '17px', padding: '0 6px', borderRadius: '4px', flexShrink: 0,
+				fontSize: '10.5px', fontWeight: 600, lineHeight: 1, whiteSpace: 'nowrap', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis',
+				color: C.fg, background: tint(color, 16), border: `1px solid ${tint(color, 40)}`,
+			}}
+		>
+			{name || role}
 		</span>
 	);
 };
@@ -941,13 +1038,223 @@ export type NewAgentDraft = {
 	repoUrl: string;
 	urlBranch: string;
 	title: string;
-	model: string;
 	/**
 	 * Division プロジェクトの ID。null は「使用中のプロジェクト (divisionProjectService の active) に従う」(既定)、
-	 * '' は「指定しない」(サーバーの既定)
+	 * '' は「指定しない」(サーバーの既定)。モデルに Division Project を選んでいるあいだは使わない (モデルのプロジェクトになる)。
+	 * モデルの選択は下書きではなく ICloudAgentService の modelPick (覚えておいて次回の初期値にする)
 	 */
 	projectId: string | null;
 };
+
+const modelPicksEqual = (a: CloudModelPick, b: CloudModelPick) =>
+	a.kind === b.kind
+	&& (a.kind !== 'divisionProject' || a.projectId === (b as typeof a).projectId)
+	&& (a.kind !== 'model' || a.model === (b as typeof a).model);
+
+/**
+ * 覚えているモデルの選択を、今の Division プロジェクトに合わせて解決する (覚えている値自体は書き換えない):
+ *  - まだ選んだことがない → 使用中の Division プロジェクト (Division と同期済み) があれば「Division Project · 使用中」、無ければ既定
+ *  - Division Project で、そのプロジェクトがもう無い → 使用中のプロジェクト (それも無ければ projectId 空 = 起動できない)
+ */
+const resolveModelPick = (stored: CloudModelPick | null, projects: DivisionProjectConfig[], activeProjectId: string): CloudModelPick => {
+	const activeSynced = !!activeProjectId && projects.some(p => p.projectId === activeProjectId);
+	if (!stored) return activeSynced ? { kind: 'divisionProject', projectId: activeProjectId } : { kind: 'default' };
+	if (stored.kind === 'divisionProject' && !projects.some(p => p.projectId === stored.projectId)) {
+		return { kind: 'divisionProject', projectId: activeSynced ? activeProjectId : '' };
+	}
+	return stored;
+};
+
+type ModelOptionRow = {
+	key: string;
+	/** グループの見出し (変わるところで出す) */
+	group: string;
+	pick: CloudModelPick;
+	label: React.ReactNode;
+	/** 検索の対象 */
+	text: string;
+	icon?: React.ReactNode;
+	detail?: string;
+	badge?: string;
+	title?: string;
+};
+
+/** 一覧が長いときだけ検索欄を出す */
+const MODEL_SEARCH_MIN_OPTIONS = 10;
+
+/**
+ * モデルの選択 (IDE のチャットのモデル選択と同じ並び):
+ *   Division Project · <プロジェクト> (Division と同期済みのプロジェクトごと。使用中が先頭)
+ *   既定 (プロジェクトの coder ロール)
+ *   Division のモデル (プロバイダごと)
+ * 下にタイトル (任意) の入力欄
+ */
+const ModelPickerPopover = React.forwardRef<HTMLDivElement, {
+	pick: CloudModelPick;
+	onPick: (pick: CloudModelPick) => void;
+	projects: DivisionProjectConfig[];
+	activeProjectId: string;
+	title: string;
+	setTitle: (v: string) => void;
+	onClose: () => void;
+}>(({ pick, onPick, projects, activeProjectId, title, setTitle, onClose }, ref) => {
+	const { t } = useTranslation();
+	const accessor = useAccessor();
+	const commandService = accessor.get('ICommandService');
+	const refreshModelService = accessor.get('IRefreshModelService');
+	const refreshState = useRefreshModelState();
+	const groups = useDivisionModelGroups();
+	const [query, setQuery] = useState('');
+	const [focusIdx, setFocusIdx] = useState(-1);
+	const listRef = useRef<HTMLDivElement | null>(null);
+
+	const divisionGroup = t('cloudAgents.model.divisionProjectGroup');
+	const allRows = useMemo((): ModelOptionRow[] => {
+		const rows: ModelOptionRow[] = [];
+		const ordered = [...projects].sort((a, b) => Number(b.projectId === activeProjectId) - Number(a.projectId === activeProjectId));
+		for (const p of ordered) {
+			const name = p.name || p.projectId;
+			rows.push({
+				key: `dp:${p.projectId}`,
+				group: divisionGroup,
+				pick: { kind: 'divisionProject', projectId: p.projectId },
+				icon: <Workflow size={13} style={{ flexShrink: 0, color: C.fgMuted }} />,
+				label: <><span style={{ fontWeight: 600 }}>Division Project</span><span style={{ color: C.fgMuted }}> · </span>{name}</>,
+				text: `Division Project ${name}`,
+				badge: p.projectId === activeProjectId ? t('cloudAgents.project.active') : undefined,
+				title: `Division Project · ${name}`,
+			});
+		}
+		rows.push({
+			key: 'default',
+			group: '',
+			pick: { kind: 'default' },
+			icon: <Cpu size={13} style={{ flexShrink: 0, color: C.fgMuted }} />,
+			label: t('cloudAgents.model.default'),
+			text: `${t('cloudAgents.model.default')} default coder`,
+		});
+		for (const g of groups) {
+			for (const m of g.models) {
+				rows.push({
+					key: `m:${m.name}`,
+					group: g.title,
+					pick: { kind: 'model', model: m.name },
+					label: <span style={{ fontFamily: C.monoFont, fontSize: '11.5px' }}>{m.modelId}</span>,
+					text: `${m.name} ${g.title}`,
+					title: m.name,
+				});
+			}
+		}
+		return rows;
+	}, [projects, activeProjectId, groups, divisionGroup, t]);
+
+	const q = query.trim().toLowerCase();
+	const rows = useMemo(() => q ? allRows.filter(r => r.text.toLowerCase().includes(q)) : allRows, [allRows, q]);
+	const modelCount = groups.reduce((n, g) => n + g.models.length, 0);
+	const showSearch = allRows.length > MODEL_SEARCH_MIN_OPTIONS;
+	const modelsLoading = refreshState?.divisionAPI?.state === 'refreshing' || refreshState?.divisionAPI?.state === 'init';
+
+	useEffect(() => { setFocusIdx(q ? 0 : -1); }, [q]);
+	useEffect(() => {
+		if (focusIdx < 0) return;
+		listRef.current?.querySelector<HTMLElement>(`[data-idx="${focusIdx}"]`)?.scrollIntoView({ block: 'nearest' });
+	}, [focusIdx]);
+
+	const onSearchKey = (e: React.KeyboardEvent) => {
+		if (e.key === 'ArrowDown') { e.preventDefault(); setFocusIdx(i => Math.min(rows.length - 1, i + 1)); }
+		else if (e.key === 'ArrowUp') { e.preventDefault(); setFocusIdx(i => Math.max(0, i - 1)); }
+		else if (e.key === 'Enter') {
+			e.preventDefault();
+			const row = rows[focusIdx >= 0 ? focusIdx : 0];
+			if (row) onPick(row.pick);
+		}
+	};
+
+	const lastDivisionKey = [...allRows].reverse().find(r => r.pick.kind === 'divisionProject')?.key;
+	let lastGroup: string | null = null;
+	return (
+		<Popover ref={ref} onClose={onClose} width='420px'>
+			<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+				<PopoverTitle>{t('cloudAgents.model.label')}</PopoverTitle>
+				<button type='button' className='oca-link' style={{ fontSize: '11px' }} onClick={() => { onClose(); void commandService.executeCommand(ORCHESTRA_OPEN_DIVISION_PROJECTS_ACTION_ID); }}>
+					{t('cloudAgents.project.manage')}
+				</button>
+			</div>
+			{showSearch && (
+				<div style={{ position: 'relative' }}>
+					<Search size={12} style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: C.fgMuted, pointerEvents: 'none' }} />
+					<input
+						className='oca-input'
+						autoFocus
+						value={query}
+						onChange={e => setQuery(e.target.value)}
+						onKeyDown={onSearchKey}
+						placeholder={t('cloudAgents.model.search')}
+						spellCheck={false}
+						style={{ ...inputStyle, paddingLeft: '26px' }}
+					/>
+				</div>
+			)}
+			<div ref={listRef} role='listbox' style={{ display: 'flex', flexDirection: 'column', gap: '1px', maxHeight: '300px', overflowY: 'auto', margin: '0 -2px', padding: '0 2px' }}>
+				{rows.map((row, idx) => {
+					const header = row.group !== lastGroup && (row.group || lastGroup !== null) ? row.group : null;
+					// 区切り線は「Division Project / 既定 / モデル」の大きな区切りだけ (プロバイダの間は見出しだけ)
+					const showDivider = lastGroup !== null && row.group !== lastGroup && (lastGroup === divisionGroup || lastGroup === '');
+					lastGroup = row.group;
+					const selected = modelPicksEqual(row.pick, pick);
+					return (
+						<React.Fragment key={row.key}>
+							{showDivider && <div style={{ height: '1px', flexShrink: 0, background: C.border, margin: '4px 2px' }} />}
+							{header && <div style={{ fontSize: '10.5px', fontWeight: 600, color: C.fgMuted, padding: '4px 8px 2px', flexShrink: 0, ...ellipsis }}>{header}</div>}
+							<button
+								type='button'
+								role='option'
+								aria-selected={selected}
+								data-idx={idx}
+								className='oca-option'
+								data-selected={selected}
+								data-focused={idx === focusIdx}
+								title={row.title}
+								onClick={() => onPick(row.pick)}
+								style={{ padding: '5px 8px', flexShrink: 0 }}
+							>
+								{row.icon ?? <span style={{ width: '13px', flexShrink: 0 }} />}
+								<span style={{ flex: 1, minWidth: 0, ...ellipsis }}>{row.label}</span>
+								{row.badge && <span style={{ fontSize: '10px', color: C.fgMuted, flexShrink: 0 }}>{row.badge}</span>}
+								{selected && <CheckCircle2 size={12} style={{ flexShrink: 0 }} />}
+							</button>
+							{row.key === lastDivisionKey && !q && (
+								<div style={{ fontSize: '10.5px', color: C.fgMuted, lineHeight: 1.45, padding: '2px 8px 2px 29px', flexShrink: 0 }}>{t('cloudAgents.model.divisionProjectHint')}</div>
+							)}
+						</React.Fragment>
+					);
+				})}
+				{rows.length === 0 && <div style={{ fontSize: '11.5px', color: C.fgMuted, padding: '6px 8px' }}>{t('cloudAgents.model.noMatch')}</div>}
+				{!q && projects.length === 0 && (
+					<div style={{ fontSize: '11px', color: C.fgMuted, lineHeight: 1.45, padding: '2px 8px 4px' }}>{t('cloudAgents.model.noProjects')}</div>
+				)}
+				{!q && modelCount === 0 && (
+					<div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: C.fgMuted, padding: '6px 8px' }}>
+						{modelsLoading ? <><Spinner size={10} /> {t('cloudAgents.model.loading')}</> : (
+							<>
+								<span>{t('cloudAgents.model.noModels')}</span>
+								<button type='button' className='oca-link' style={{ fontSize: '11px' }} onClick={() => refreshModelService.startRefreshingModels('divisionAPI', { enableProviderOnSuccess: false, doNotFire: true })}>
+									{t('cloudAgents.model.reload')}
+								</button>
+							</>
+						)}
+					</div>
+				)}
+			</div>
+			<div style={{ height: '1px', background: C.border, margin: '0 -8px' }} />
+			<label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: C.fgMuted }}>
+				{t('cloudAgents.new.titleLabel')}
+				<input className='oca-input' value={title} onChange={e => setTitle(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onClose(); } }} placeholder={t('cloudAgents.new.titlePlaceholder')} style={inputStyle} />
+			</label>
+		</Popover>
+	);
+});
+ModelPickerPopover.displayName = 'ModelPickerPopover';
 
 /** パネルが閉じている間に来た「入力欄にフォーカス」の要求も拾えるよう、最後に処理した番号を覚えておく */
 let lastHandledFocusRequest = 0;
@@ -971,13 +1278,20 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 	const toolbarRef = useRef<HTMLDivElement | null>(null);
 	useDismiss(menu !== null, [popoverRef, toolbarRef], () => setMenu(null));
 
-	const { prompt, count, source, repoUrl, urlBranch, title, model } = draft;
+	const { prompt, count, source, repoUrl, urlBranch, title } = draft;
 
 	// プロジェクト: 選んでいなければ使用中のプロジェクト (チャットと同じもの)。サーバーの既定に任せることもできる
 	const projects = useSyncedProjects();
 	const activeProjectId = useDivisionProjectConfig()?.projectId?.trim() || '';
-	const projectId = draft.projectId === null ? activeProjectId : draft.projectId;
-	const projectLabel = useProjectLabel()(projectId);
+	const getProjectLabel = useProjectLabel();
+
+	// モデル: 覚えている選択 (無ければ使用中の Division プロジェクトの Division Project)。
+	// Division Project を選んでいるあいだは、プロジェクトはそのプロジェクトに固定する (チップを 2 つで食い違わせない)
+	const modelPick = resolveModelPick(state.modelPick, projects, activeProjectId);
+	const divisionMode = modelPick.kind === 'divisionProject';
+	const projectId = divisionMode ? modelPick.projectId : (draft.projectId === null ? activeProjectId : draft.projectId);
+	const projectLabel = getProjectLabel(projectId);
+	const modelReady = !divisionMode || !!projectId;
 
 	useEffect(() => {
 		if (state.focusFormRequest > lastHandledFocusRequest) {
@@ -1004,20 +1318,24 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 		effectiveSource === 'github' ? (gh.connected && !!state.githubPick && !choosingRepo)
 			: effectiveSource === 'url' ? (!validateCloudRepoUrl(repoUrl) && !validateCloudRepoBranch(urlBranch))
 				: true;
-	const canLaunch = !!prompt.trim() && !state.creating && state.isLoggedIn && sourceReady;
+	const canLaunch = !!prompt.trim() && !state.creating && state.isLoggedIn && sourceReady && modelReady;
 
 	const launch = useCallback(async () => {
 		if (!canLaunch) {
-			// 場所が決まっていなければ、どこが足りないか見せる
+			// 場所・モデルが決まっていなければ、どこが足りないか見せる
 			if (prompt.trim() && !sourceReady) setMenu('source');
+			else if (prompt.trim() && !modelReady) setMenu('model');
 			return;
 		}
 		setMenu(null);
 		const pick = state.githubPick;
+		const model = modelPick.kind === 'divisionProject' ? CLOUD_DIVISION_PROJECT_MODEL
+			: modelPick.kind === 'model' ? modelPick.model
+				: undefined;
 		const created = await cloudAgentService.createSession({
 			prompt,
 			title: title.trim() || undefined,
-			model: model.trim() || undefined,
+			model,
 			...(projectId ? { projectId } : {}),
 			source: effectiveSource,
 			includeWorkspace: effectiveSource === 'workspace',
@@ -1030,7 +1348,7 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 			// 並列で起動したときは 1 本目を開く
 			cloudAgentService.select(created[0].id);
 		}
-	}, [canLaunch, sourceReady, cloudAgentService, prompt, title, model, projectId, effectiveSource, state.githubPick, repoUrl, urlBranch, count, setDraft]);
+	}, [canLaunch, sourceReady, modelReady, cloudAgentService, prompt, title, modelPick, projectId, effectiveSource, state.githubPick, repoUrl, urlBranch, count, setDraft]);
 
 	const sourceHint =
 		effectiveSource === 'workspace' && state.workspaceName ? t('cloudAgents.new.includeWorkspaceHint').replace('{name}', state.workspaceName)
@@ -1138,21 +1456,26 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 		);
 	} else if (menu === 'model') {
 		popover = (
-			<Popover ref={popoverRef} onClose={() => setMenu(null)} width='380px'>
-				<label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: C.fgMuted }}>
-					{t('cloudAgents.new.model')}
-					<input className='oca-input' autoFocus value={model} onChange={e => setDraft({ model: e.target.value })} placeholder={t('cloudAgents.new.modelPlaceholder')} spellCheck={false} style={{ ...inputStyle, fontFamily: C.monoFont }} />
-				</label>
-				<label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: C.fgMuted }}>
-					{t('cloudAgents.new.titleLabel')}
-					<input className='oca-input' value={title} onChange={e => setDraft({ title: e.target.value })} placeholder={t('cloudAgents.new.titlePlaceholder')} style={inputStyle} />
-				</label>
-				<div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-					<button type='button' onClick={() => { setMenu(null); textareaRef.current?.focus(); }} style={buttonStyle('secondary')}>{t('cloudAgents.composer.done')}</button>
-				</div>
-			</Popover>
+			<ModelPickerPopover
+				ref={popoverRef}
+				pick={modelPick}
+				onPick={p => { cloudAgentService.setModelPick(p); setMenu(null); textareaRef.current?.focus(); }}
+				projects={projects}
+				activeProjectId={activeProjectId}
+				title={title}
+				setTitle={v => setDraft({ title: v })}
+				onClose={() => { setMenu(null); textareaRef.current?.focus(); }}
+			/>
 		);
 	}
+
+	// モデルのチップ
+	const modelChip: { label: string; mono: boolean; title: string } =
+		modelPick.kind === 'divisionProject'
+			? { label: projectLabel ? `Division Project · ${projectLabel}` : 'Division Project', mono: false, title: t('cloudAgents.model.divisionProjectHint') }
+			: modelPick.kind === 'model'
+				? { label: splitDivisionModelName(modelPick.model).modelId, mono: true, title: modelPick.model }
+				: { label: t('cloudAgents.composer.modelDefault'), mono: false, title: t('cloudAgents.model.default') };
 
 	const needsRepo = effectiveSource === 'github' && gh.connected && (!state.githubPick || choosingRepo);
 	const sourceWarn = !sourceReady && (effectiveSource === 'github' || (effectiveSource === 'url' && !!repoUrl.trim()));
@@ -1176,15 +1499,23 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 						<span style={{ fontFamily: C.monoFont }}>×{count}</span>
 						<ChevronDown size={11} style={{ flexShrink: 0, opacity: 0.7 }} />
 					</button>
-					<button type='button' className='oca-chip' data-active={menu === 'project'} title={`${t('cloudAgents.project.label')}: ${projectLabel ?? t('cloudAgents.project.none')}`} onClick={() => toggleMenu('project')}>
-						<Layers size={12} />
-						<span style={ellipsis}>{projectLabel ?? t('cloudAgents.project.none')}</span>
+					<button type='button' className='oca-chip' data-active={menu === 'model'} data-warn={!modelReady} title={`${t('cloudAgents.model.label')}: ${modelChip.title}`} onClick={() => toggleMenu('model')}>
+						<ModelIcon division={divisionMode} />
+						<span style={{ ...ellipsis, fontFamily: modelChip.mono ? C.monoFont : 'inherit' }}>{modelChip.label}</span>
 						<ChevronDown size={11} style={{ flexShrink: 0, opacity: 0.7 }} />
 					</button>
-					<button type='button' className='oca-chip' data-active={menu === 'model'} title={t('cloudAgents.composer.options')} onClick={() => toggleMenu('model')}>
-						<Cpu size={12} />
-						<span style={{ ...ellipsis, fontFamily: model.trim() ? C.monoFont : 'inherit' }}>{model.trim() || t('cloudAgents.composer.modelDefault')}</span>
-						<ChevronDown size={11} style={{ flexShrink: 0, opacity: 0.7 }} />
+					{/* Division Project のときはプロジェクトもモデルで選んだものに決まるので、ここでは変えられない (鍵) */}
+					<button
+						type='button'
+						className='oca-chip'
+						data-active={menu === 'project'}
+						disabled={divisionMode}
+						title={divisionMode ? t('cloudAgents.project.lockedByModel') : `${t('cloudAgents.project.label')}: ${projectLabel ?? t('cloudAgents.project.none')}`}
+						onClick={() => toggleMenu('project')}
+					>
+						<Layers size={12} />
+						<span style={ellipsis}>{projectLabel ?? t('cloudAgents.project.none')}</span>
+						{divisionMode ? <Lock size={10} style={{ flexShrink: 0, opacity: 0.7 }} /> : <ChevronDown size={11} style={{ flexShrink: 0, opacity: 0.7 }} />}
 					</button>
 				</div>
 			}
@@ -1199,7 +1530,8 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 			hintLeft={state.creatingProgress
 				? <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}><Spinner size={10} /> {state.creatingProgress}</span>
 				: needsRepo ? <span style={{ color: C.warning }}>{t('cloudAgents.github.pickRepo')}</span>
-					: t('cloudAgents.composer.hintLaunch')}
+					: !modelReady ? <span style={{ color: C.warning }}>{t('cloudAgents.model.needsProject')}</span>
+						: t('cloudAgents.composer.hintLaunch')}
 			hintRight={t('cloudAgents.billing')}
 		/>
 	);
@@ -1734,7 +2066,140 @@ const CompletionCard = ({ data, onReview }: { data: any; onReview: () => void })
 	);
 };
 
-const EventView = ({ event, onReview }: { event: CloudSessionEvent; onReview: () => void }) => {
+// --- Division Project モード (リーダーの計画 → ロールごとのタスク → まとめ) ---
+
+type DivisionTaskState = CloudTaskEventData['status'];
+
+type DivisionInfo = {
+	/** plan イベントの seq → タスクの index → 最新の状態 (その計画のあとに来た task イベントから) */
+	progressByPlan: Map<number, Map<number, DivisionTaskState>>;
+	/** task イベントの seq → 計画の中で何番目か (1 始まり) と、計画のタスク数 */
+	positionByTask: Map<number, { pos: number; total: number }>;
+	/** ロールの slug → 表示名 (計画・タスクから) */
+	roleNames: Map<string, string>;
+};
+
+/** イベント列から計画ごとの進み具合を作る。追加の指示のあとは新しい計画になるので、task は直前の plan に属する */
+const buildDivisionInfo = (events: CloudSessionEvent[]): DivisionInfo => {
+	const info: DivisionInfo = { progressByPlan: new Map(), positionByTask: new Map(), roleNames: new Map() };
+	let plan: { seq: number; tasks: CloudPlanTask[] } | null = null;
+	for (const ev of events) {
+		if (ev.type === 'plan') {
+			const tasks = Array.isArray(ev.data?.tasks) ? ev.data.tasks as CloudPlanTask[] : [];
+			plan = { seq: ev.seq, tasks };
+			info.progressByPlan.set(ev.seq, new Map());
+			for (const task of tasks) if (task?.role && task.roleName) info.roleNames.set(task.role, task.roleName);
+		} else if (ev.type === 'task') {
+			const d = ev.data as CloudTaskEventData | undefined;
+			if (!d || typeof d.index !== 'number') continue;
+			if (d.role && d.roleName) info.roleNames.set(d.role, d.roleName);
+			if (!plan) continue;
+			info.progressByPlan.get(plan.seq)?.set(d.index, d.status);
+			const pos = plan.tasks.findIndex(task => task?.index === d.index);
+			if (pos >= 0) info.positionByTask.set(ev.seq, { pos: pos + 1, total: plan.tasks.length });
+		}
+	}
+	return info;
+};
+
+/** 計画の 1 行の状態: ✓ 完了 / ✕ 失敗 / くるくる 作業中 / ○ まだ */
+const PlanTaskStatusIcon = ({ state, active }: { state: DivisionTaskState | undefined; active: boolean }) => {
+	const { t } = useTranslation();
+	const box = (node: React.ReactNode, label: string) => <span title={label} style={{ width: '14px', height: '14px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{node}</span>;
+	if (state === 'done') return box(<CheckCircle2 size={13} style={{ color: C.success }} />, t('cloudAgents.task.done'));
+	if (state === 'failed') return box(<XCircle size={13} style={{ color: C.error }} />, t('cloudAgents.task.failed'));
+	if (state === 'start' && active) return box(<Spinner size={12} color={C.accent} />, t('cloudAgents.task.running'));
+	return box(<Circle size={12} style={{ color: C.fgFaint }} />, t('cloudAgents.task.pending'));
+};
+
+/** plan イベント: リーダーが立てた計画のチェックリスト */
+const PlanCard = ({ data, progress, active }: { data: CloudPlanEventData; progress: Map<number, DivisionTaskState> | undefined; active: boolean }) => {
+	const { t } = useTranslation();
+	const tasks = (Array.isArray(data?.tasks) ? data.tasks : []).filter(task => task && typeof task === 'object');
+	const doneCount = tasks.filter(task => progress?.get(task.index) === 'done').length;
+	const leader = typeof data?.leaderModel === 'string' ? data.leaderModel : '';
+	return (
+		<div style={{ border: `1px solid ${C.border}`, borderRadius: '8px', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '2px', background: C.bgSide }}>
+			<div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0, paddingBottom: '4px' }}>
+				<Workflow size={13} style={{ color: C.fgMuted, flexShrink: 0 }} />
+				<span style={{ fontSize: '12.5px', fontWeight: 600, color: C.fg, flexShrink: 0 }}>{t('cloudAgents.plan.title')}</span>
+				{leader && <span title={leader} style={{ fontSize: '11px', color: C.fgMuted, minWidth: 0, ...ellipsis }}>{t('cloudAgents.plan.leader').replace('{model}', leader)}</span>}
+				<span style={{ flex: 1 }} />
+				{tasks.length > 0 && (
+					<span style={{ fontSize: '11px', color: C.fgMuted, flexShrink: 0, whiteSpace: 'nowrap' }}>
+						{t('cloudAgents.plan.progress').replace('{done}', String(doneCount)).replace('{total}', String(tasks.length))}
+					</span>
+				)}
+			</div>
+			{tasks.map((task, i) => {
+				const state = progress?.get(task.index);
+				return (
+					<div key={`${task.index}-${i}`} title={task.instruction || task.title} style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, minHeight: '24px', padding: '1px 2px' }}>
+						<PlanTaskStatusIcon state={state} active={active} />
+						<RoleChip role={task.role} name={task.roleName || task.role} />
+						<span style={{
+							flex: 1, minWidth: 0, fontSize: '12.5px', ...ellipsis,
+							color: state === 'done' ? C.fgMuted : C.fg,
+							fontWeight: state === 'start' && active ? 600 : 400,
+						}}>
+							{task.title}
+						</span>
+						{task.model && <span title={task.model} style={{ fontSize: '11px', color: C.fgMuted, flex: '0 1 auto', maxWidth: '40%', ...ellipsis }}>{task.model}</span>}
+					</div>
+				);
+			})}
+		</div>
+	);
+};
+
+/** task イベント: start は区切りの見出し (「2/4 · 実装 (Claude Opus) — タイトル」)、done / failed は結果の短い行 */
+const TaskEventRow = ({ data, position }: { data: CloudTaskEventData; position: { pos: number; total: number } | undefined }) => {
+	const { t } = useTranslation();
+	const roleName = data?.roleName || data?.role || '';
+	if (data?.status === 'start') {
+		return (
+			<div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0, marginTop: '10px', padding: '0 2px', fontSize: '12px' }}>
+				{position && <span style={{ color: C.fgMuted, fontFamily: C.monoFont, fontSize: '11px', flexShrink: 0 }}>{position.pos}/{position.total}</span>}
+				{position && <span style={{ color: C.fgFaint, flexShrink: 0 }}>·</span>}
+				<RoleChip role={data.role} name={roleName} />
+				{data.model && <span title={data.model} style={{ color: C.fgMuted, fontSize: '11px', flex: '0 2 auto', minWidth: '30px', ...ellipsis }}>({data.model})</span>}
+				{data.title && <span style={{ color: C.fgFaint, flexShrink: 0 }}>—</span>}
+				{data.title && <span title={data.title} style={{ color: C.fg, fontWeight: 600, flex: '0 1 auto', minWidth: '40px', ...ellipsis }}>{data.title}</span>}
+				<span style={{ flex: 1, minWidth: '16px', height: '1px', background: C.border }} />
+			</div>
+		);
+	}
+	const failed = data?.status === 'failed';
+	const summary = typeof data?.summary === 'string' ? data.summary.trim() : '';
+	return (
+		<div style={{ display: 'flex', alignItems: 'flex-start', gap: '7px', minWidth: 0, padding: '2px 6px', fontSize: '12px' }}>
+			<span style={{ display: 'inline-flex', marginTop: '2px', flexShrink: 0 }}>
+				{failed ? <XCircle size={13} style={{ color: C.error }} /> : <CheckCircle2 size={13} style={{ color: C.success }} />}
+			</span>
+			<div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+				<span style={{ color: failed ? C.error : C.fgMuted, fontSize: '11.5px' }}>
+					{(failed ? t('cloudAgents.task.failedLine') : t('cloudAgents.task.doneLine')).replace('{role}', roleName)}
+				</span>
+				{summary ? (
+					<div className='oca-md' style={{ fontSize: '12px', lineHeight: 1.55, color: C.fg }}>
+						<ChatMarkdownRender string={summary} chatMessageLocation={undefined} isApplyEnabled={false} isLinkDetectionEnabled={false} />
+					</div>
+				) : failed ? (
+					<span style={{ color: C.fgMuted, fontSize: '11.5px' }}>{t('cloudAgents.task.failedNoSummary')}</span>
+				) : null}
+			</div>
+		</div>
+	);
+};
+
+const EventView = ({ event, onReview, division, active }: {
+	event: CloudSessionEvent;
+	onReview: () => void;
+	/** Division Project モードの計画とタスクの進み具合 (plan / task / role 付きの発言の表示に使う) */
+	division?: DivisionInfo;
+	/** セッションが動いている (計画の「作業中」をくるくるにする) */
+	active?: boolean;
+}) => {
 	const { t } = useTranslation();
 	const data = event.data ?? {};
 	switch (event.type) {
@@ -1751,12 +2216,24 @@ const EventView = ({ event, onReview }: { event: CloudSessionEvent; onReview: ()
 		case 'assistant': {
 			const text = typeof data.text === 'string' ? data.text.trim() : '';
 			if (!text) return null;
+			// Division Project モードでは、どのロールの発言かを小さなチップで横に出す
+			const role = typeof data.role === 'string' ? data.role : '';
 			return (
 				<div className='oca-md' style={{ fontSize: '13px', lineHeight: 1.65, color: C.fg, padding: '0 2px' }}>
+					{role && (
+						<span style={{ float: 'left', margin: '2px 7px 0 0', display: 'inline-flex' }}>
+							<RoleChip role={role} name={division?.roleNames.get(role) || role} />
+						</span>
+					)}
 					<ChatMarkdownRender string={text} chatMessageLocation={undefined} isApplyEnabled={false} isLinkDetectionEnabled={false} />
+					{role && <div style={{ clear: 'both' }} />}
 				</div>
 			);
 		}
+		case 'plan':
+			return <PlanCard data={data as CloudPlanEventData} progress={division?.progressByPlan.get(event.seq)} active={!!active} />;
+		case 'task':
+			return <TaskEventRow data={data as CloudTaskEventData} position={division?.positionByTask.get(event.seq)} />;
 		case 'tool':
 			return <ToolRow data={data} />;
 		case 'status': {
@@ -1839,6 +2316,7 @@ const Stream = ({ session, events, onReview }: { session: CloudSession; events: 
 	const stickToBottom = useRef(true);
 	const [atBottom, setAtBottom] = useState(true);
 	const items = useMemo(() => buildStreamItems(withChangedFiles(events ?? [], session.changedFiles)), [events, session.changedFiles]);
+	const division = useMemo(() => buildDivisionInfo(events ?? []), [events]);
 	const lastSeq = events?.length ? events[events.length - 1].seq : -1;
 
 	const scrollToBottom = useCallback(() => {
@@ -1883,7 +2361,7 @@ const Stream = ({ session, events, onReview }: { session: CloudSession; events: 
 						</>
 					) : items.map(item => item.kind === 'tools'
 						? <ToolGroupRow key={item.key} events={item.events} />
-						: <EventView key={item.key} event={item.event} onReview={onReview} />)}
+						: <EventView key={item.key} event={item.event} onReview={onReview} division={division} active={active} />)}
 					{active && (
 						<div style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '12px', color: C.fgMuted, padding: '2px 6px' }}>
 							<Spinner color={statusColor[session.status]} />
@@ -1926,6 +2404,8 @@ const FollowUpComposer = ({ session, value, setValue }: { session: CloudSession;
 	const sending = !!state.sendingById[session.id];
 	const active = isCloudSessionActive(session.status);
 	const canSend = state.isLoggedIn && !sending && !!value.trim();
+	const projectLabelOf = useProjectLabel();
+	const modelLabel = sessionModelLabel(session, projectLabelOf(session.projectId), t('cloudAgents.detail.modelDefault'));
 
 	const send = async () => {
 		if (!canSend) return;
@@ -1941,9 +2421,9 @@ const FollowUpComposer = ({ session, value, setValue }: { session: CloudSession;
 			disabled={!state.isLoggedIn}
 			placeholder={state.isLoggedIn ? t('cloudAgents.followup.placeholder') : t('cloudAgents.followup.loginRequired')}
 			toolbar={
-				<span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: C.fgMuted, padding: '0 6px', minWidth: 0 }}>
-					<Cpu size={11} style={{ flexShrink: 0 }} />
-					<span style={ellipsis}>{session.modelLabel || session.model || t('cloudAgents.detail.modelDefault')}</span>
+				<span title={modelLabel} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: C.fgMuted, padding: '0 6px', minWidth: 0 }}>
+					<ModelIcon division={isDivisionProjectSession(session)} size={11} />
+					<span style={ellipsis}>{modelLabel}</span>
 				</span>
 			}
 			actions={
@@ -1987,10 +2467,11 @@ const Conversation = ({ session, leftSlot, reviewOpen, onToggleReview, onReview,
 					</div>
 					<div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '11px', color: C.fgMuted, minWidth: 0 }}>
 						<span title={t('cloudAgents.detail.model')} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', minWidth: 0, flexShrink: 1 }}>
-							<Cpu size={10} style={{ flexShrink: 0 }} />
-							<span style={ellipsis}>{session.modelLabel || session.model || t('cloudAgents.detail.modelDefault')}</span>
+							<ModelIcon division={isDivisionProjectSession(session)} size={10} />
+							<span style={ellipsis}>{sessionModelLabel(session, projectLabel(session.projectId), t('cloudAgents.detail.modelDefault'))}</span>
 						</span>
-						<ProjectTag label={projectLabel(session.projectId)} />
+						{/* Division Project のときはモデル名 (Division Project · <名前>) にプロジェクトが入っている */}
+						{!isDivisionProjectSession(session) && <ProjectTag label={projectLabel(session.projectId)} />}
 						<span style={{ display: 'flex', minWidth: 0, flexShrink: 1 }}><SessionSource session={session} size={10} /></span>
 						<CostTag costUsd={session.costUsd} withIcon />
 						{session.workspaceInfo && session.workspaceInfo.skipped > 0 && !sessionRepoLabel(session) && (
@@ -2380,7 +2861,6 @@ const CloudAgentsPanelInner = ({ width }: { width: number }) => {
 		repoUrl: '',
 		urlBranch: '',
 		title: '',
-		model: '',
 		projectId: null,
 	}));
 	const setDraft = useCallback((patch: Partial<NewAgentDraft>) => setDraftState(prev => ({ ...prev, ...patch })), []);
