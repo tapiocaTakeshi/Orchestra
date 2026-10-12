@@ -87,6 +87,17 @@ export type CloudGitHubPick = {
 	branch: string;
 };
 
+/**
+ * 新しいエージェントのモデルの選択 (IStorageService に覚えておき、次回の初期値にする):
+ *  - divisionProject: Division Project (マルチエージェント) として動かす。model = 'division-project' と projectId を送る
+ *  - default:         モデルを送らない (サーバーはプロジェクトの coder ロールの割り当てを使う)
+ *  - model:           単体のモデル ("providerId/modelId")
+ */
+export type CloudModelPick =
+	| { kind: 'divisionProject'; projectId: string }
+	| { kind: 'default' }
+	| { kind: 'model'; model: string };
+
 export type CloudAgentState = {
 	sessions: CloudSession[];
 	eventsById: Record<string, CloudSessionEvent[]>;
@@ -114,6 +125,8 @@ export type CloudAgentState = {
 	/** fullName ("owner/name") → ブランチ一覧 */
 	githubBranchesByRepo: Record<string, CloudGitHubBranchesState>;
 	githubPick: CloudGitHubPick | null;
+	/** 最後に選んだモデル。null = まだ選んだことがない (パネルは使用中の Division プロジェクトがあれば Division Project を既定にする) */
+	modelPick: CloudModelPick | null;
 };
 
 /**
@@ -128,7 +141,10 @@ export type CloudSessionSource = 'workspace' | 'github' | 'url' | 'empty';
 export type CreateCloudSessionsOptions = {
 	prompt: string;
 	title?: string;
-	/** provider/model の指定。空ならプロジェクトの coder 割り当て */
+	/**
+	 * provider/model の指定。空ならプロジェクトの coder 割り当て。
+	 * CLOUD_DIVISION_PROJECT_MODEL ('division-project') なら Division Project として動かす (projectId が必須)
+	 */
 	model?: string;
 	/** 何を置いて始めるか。省略時は includeWorkspace から決める (true → workspace / false → empty) */
 	source?: CloudSessionSource;
@@ -186,6 +202,9 @@ export interface ICloudAgentService {
 	loadGitHubBranches(fullName: string, force?: boolean): Promise<void>;
 	/** 選んだリポジトリとブランチを覚える (次回の初期値になる)。null で忘れる */
 	setGitHubPick(pick: CloudGitHubPick | null): void;
+
+	/** 選んだモデルを覚える (次回の初期値になる)。null で忘れる */
+	setModelPick(pick: CloudModelPick | null): void;
 }
 
 export const ICloudAgentService = createDecorator<ICloudAgentService>('cloudAgentService');

@@ -90,8 +90,18 @@ Cursor の Agents 画面のような 3 列。
 | --- | --- |
 | 作業する場所 (📁 フォルダ名など) | 何を置いて始めるか (下の表)。フォルダを開いていれば **開いているフォルダを送る** が既定。押すと選択肢と、GitHub のリポジトリ / URL の入力が出る |
 | 並列数 (×1〜×10) | 同じ指示で、独立したセッションをいくつ同時に起動するか。2 以上にするとタイトルに `#1` `#2` … が付き、起動後は 1 本目が開く |
-| プロジェクト | Division プロジェクト (`.division/projects.json` のうち Division と同期済みのもの)。既定はチャットで使用中のプロジェクト。選んだプロジェクトの ID を `projectId` として送り、サーバーはそのプロジェクトの Coder の割り当てをモデルに使う。「指定しない」ならサーバーの既定。**Division プロジェクトを管理** から設定画面を開ける |
-| モデル | `provider/model` 形式 (例: `anthropic/claude-opus-4-6`)。空ならプロジェクトの Coder の割り当てを使う (指定するとプロジェクトより優先)。同じところでタイトル (一覧に出す名前。空なら指示から自動) も付けられる |
+| モデル | IDE のチャットのモデル選択と同じ並びの一覧から選ぶ (下の「モデルの選び方」)。最後に選んだものを覚えていて次回の初期値にする。同じところでタイトル (一覧に出す名前。空なら指示から自動) も付けられる |
+| プロジェクト | Division プロジェクト (`.division/projects.json` のうち Division と同期済みのもの)。既定はチャットで使用中のプロジェクト。選んだプロジェクトの ID を `projectId` として送り、サーバーはそのプロジェクトの Coder の割り当てをモデルに使う。「指定しない」ならサーバーの既定。**Division プロジェクトを管理** から設定画面を開ける。モデルに **Division Project** を選んでいるあいだは、そのプロジェクトに固定される (🔒) |
+
+**モデル** の選び方 (IDE のチャットのモデル選択と同じく、Division Project が一番上):
+
+| 選択肢 | 意味 |
+| --- | --- |
+| Division Project · <プロジェクト名> | Division と同期済みのプロジェクトごとに 1 行 (使用中のプロジェクトが先頭)。**Division Project (マルチエージェント)** として動かす: プロジェクトのリーダーがロールごとにタスクを計画し、各タスクをそのロールに割り当てたモデルがサンドボックスで順に行い、最後にまとめる。`model: "division-project"` と `projectId` を送る。プロジェクトが無いときは起動できない |
+| 既定 (プロジェクトの coder ロール) | モデルを送らない。プロジェクトの Coder の割り当て (プロジェクトも無ければサーバーの既定) を使う |
+| Division のモデル (プロバイダごと) | IDE のモデル選択と同じ Division のモデル一覧 (`provider/model`。例: `anthropic/claude-opus-4-6`)。プロジェクトより優先。一覧が長いときは検索欄で絞れる (↑↓ と `Enter` でも選べる) |
+
+まだ一度も選んでいなければ、使用中の Division プロジェクト (Division と同期済み) があれば「Division Project · 使用中のプロジェクト」、無ければ既定になる。
 
 **作業する場所** の選び方:
 
@@ -123,6 +133,17 @@ Cursor の Agents 画面のような 3 列。
 ### 3. 追加の指示を送る
 
 中央下の入力欄から送る (`Enter`。改行は `Shift+Enter`)。同じサンドボックスの中で、続きから作業する。止まっている / 失敗したセッションも、送ると再開する。
+
+### Division Project として動かしたとき
+
+モデルに **Division Project** を選んで起動すると、ヘッダー・入力欄のモデルは「Division Project · <プロジェクト名>」になり、会話には次が並ぶ。
+
+- **計画** カード: リーダーのモデルと、ロールごとのタスクのチェックリスト (ロールのチップ・タイトル・担当モデル)。
+  終わったタスクは ✓、失敗は ✕、作業中のものはくるくる、まだのものは ○。
+- タスクの見出し: 「2/4 · 実装 (OpenAI · gpt-5.4) — タイトル」の区切り線。その下にそのタスクのエージェントの発言 (横にロールのチップ) とツールの実行が続く。
+- タスクが終わると、✓ / ✕ とそのタスクのまとめの短い行。全部終わったら、いつもの完了カード (全体のまとめ)。
+
+待機中に追加の指示を送ると、リーダーが前の計画の結果を踏まえて新しい計画を立てる。タスクの作業中に送った指示は、そのタスクのエージェントに渡る。
 
 ### 4. 変更を取り込む
 
@@ -208,6 +229,8 @@ CloudAgentService  ── IPC ──▶  CloudAgentMainService  ── HTTPS ─
 4. **見守る**: レンダラーがポーリングする。
    - 一覧 `GET /api/cloud-sessions`: 動いているセッションがある / パネルを開いているあいだは 4 秒ごと、それ以外は 30 秒ごと。
    - イベント `GET …/:id/events?after=<seq>`: 選んでいるセッションと実行中のセッションを 2 秒ごと、新しいものだけ取る。
+   - Division Project (`model: "division-project"` + `projectId`) のときは、`plan` (`{ tasks: [{ index, role, roleName, title, instruction, model }], leaderModel }`) と
+     `task` (`{ index, role, roleName, title, model, status: start | done | failed, summary? }`) のイベントが加わり、`assistant` に `role` が付く。
 5. **GitHub 連携**: `GET /api/github/status`・`POST /api/github/connect` (返る URL をブラウザで開く)・`POST /api/github/disconnect`・
    `GET /api/github/repos?q=&page=`・`GET /api/github/branches?repo=owner/name`。main プロセスの中継は `/api/cloud-sessions` と `/api/github`
    の下だけを通す。未連携 / トークン失効は `409 { code: 'github_not_connected' }`、OAuth App 未設定は `503 { code: 'github_not_configured' }`。

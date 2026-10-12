@@ -12,6 +12,7 @@
 //
 // サーバー側の API 契約 (Division ⇄ Orchestra) に合わせてある:
 //   POST /api/cloud-sessions                  { prompt, title?, model?, projectId?, workspaceName? } → { session }
+//        model: "provider/model" (単体のモデル) / "division-project" (projectId 必須。Division Project として動く) / 省略 (プロジェクトの coder)
 //   POST /api/cloud-sessions/:id/upload       { index, total, data(base64) }
 //   POST /api/cloud-sessions/:id/start        { workspaceInfo?, repo? } → { session }
 //   GET  /api/cloud-sessions?limit=50         → { sessions }
@@ -83,7 +84,7 @@ export interface CloudSession {
 	costUsd?: number;
 }
 
-export type CloudSessionEventType = 'user' | 'assistant' | 'tool' | 'status' | 'error' | 'done';
+export type CloudSessionEventType = 'user' | 'assistant' | 'tool' | 'status' | 'error' | 'done' | 'plan' | 'task';
 
 export interface CloudSessionEvent {
 	seq: number;
@@ -96,10 +97,52 @@ export interface CloudSessionEvent {
 	 *  - status:    { status, message? }
 	 *  - error:     { message }
 	 *  - done:      { summary, changedFiles }
+	 *  - plan:      CloudPlanEventData (Division Project モードのみ。リーダーの計画)
+	 *  - task:      CloudTaskEventData (Division Project モードのみ。ロールごとのタスクの開始 / 完了 / 失敗)
+	 *  Division Project モードでは assistant に role?: string (ロールの slug) も付く。
+	 *  assistant / tool は直前に start した task に属する。
 	 */
 	data: any;
 	createdAt: string;
 }
+
+/**
+ * model にこの値を指定して作成すると、サーバーは「Division Project」(マルチエージェント) として動かす:
+ * プロジェクトのリーダーがロールごとにタスクを計画し (plan イベント)、各タスクをそのロールに割り当てたモデルが
+ * サンドボックスで順に行い (task イベント)、最後にまとめ (done) を出す。projectId が必須。
+ * IDE のチャットのモデル選択の「Division Project」(divisionAPI / division-orchestrator) に当たる。
+ */
+export const CLOUD_DIVISION_PROJECT_MODEL = 'division-project';
+
+/** plan イベントの 1 タスク */
+export type CloudPlanTask = {
+	index: number;
+	/** ロールの slug (例: coder) */
+	role: string;
+	/** ロールの表示名 (例: 実装) */
+	roleName: string;
+	title: string;
+	instruction: string;
+	/** "Provider · modelId" */
+	model: string;
+};
+
+/** plan イベントの data */
+export type CloudPlanEventData = {
+	tasks: CloudPlanTask[];
+	leaderModel: string;
+};
+
+/** task イベントの data */
+export type CloudTaskEventData = {
+	index: number;
+	role: string;
+	roleName: string;
+	title: string;
+	model: string;
+	status: 'start' | 'done' | 'failed';
+	summary?: string;
+};
 
 export interface CloudChange {
 	path: string;
