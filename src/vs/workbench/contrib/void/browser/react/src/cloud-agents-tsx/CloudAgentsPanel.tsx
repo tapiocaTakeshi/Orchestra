@@ -41,10 +41,12 @@ import {
 	Download,
 	FilePen,
 	FileText,
+	ExternalLink,
 	Folder,
 	FolderOpen,
 	FolderPlus,
 	GitBranch,
+	GitPullRequest,
 	Github,
 	Kanban,
 	Layers,
@@ -72,22 +74,29 @@ import { ChatMarkdownRender } from '../markdown/ChatMarkdownRender.js';
 import {
 	CLOUD_AGENTS_MAX_PARALLEL,
 	CLOUD_DIVISION_PROJECT_MODEL,
+	CLOUD_PR_TITLE_MAX,
 	CloudChange,
 	CloudPlanEventData,
 	CloudPlanTask,
+	CloudPullRequest,
+	CloudPullRequestEventData,
 	CloudSession,
 	CloudSessionEvent,
 	CloudSessionStatus,
 	CloudTaskEventData,
+	GITHUB_NOT_CONNECTED,
 	GitHubRepo,
 	cloudRepoLabel,
 	formatCloudCostUsd,
 	isCloudSessionActive,
+	isGitHubRepoSession,
 	sumCloudCostUsd,
+	validateCloudPullRequestBranch,
+	validateCloudPullRequestFields,
 	validateCloudRepoBranch,
 	validateCloudRepoUrl,
 } from '../../../../common/cloudAgentTypes.js';
-import type { CloudChangesState, CloudGitHubPick, CloudModelPick, CloudSessionSource } from '../../../cloudAgentServiceInterface.js';
+import type { CloudChangesState, CloudGitHubPick, CloudModelPick, CloudPullRequestState, CloudSessionSource } from '../../../cloudAgentServiceInterface.js';
 import type { DivisionProjectConfig } from '../../../divisionProjectService.js';
 import { ORCHESTRA_OPEN_COST_MANAGEMENT_ACTION_ID, ORCHESTRA_OPEN_DIVISION_PROJECTS_ACTION_ID, VOID_OPEN_KANBAN_ACTION_ID } from '../../../actionIDs.js';
 
@@ -2066,6 +2075,400 @@ const CompletionCard = ({ data, onReview }: { data: any; onReview: () => void })
 	);
 };
 
+// --- Pull requests (GitHub-repo sessions only) ---
+
+/** The PR to show: the newer of the session's (from the list poll) and the last GET / POST result */
+const currentPullRequest = (session: CloudSession, pr: CloudPullRequestState | undefined): CloudPullRequest | null => {
+	const candidates = [session.pullRequest, pr?.lastResult?.pullRequest, pr?.info?.pullRequest].filter((p): p is CloudPullRequest => !!p);
+	let best: CloudPullRequest | null = null;
+	for (const p of candidates) {
+		if (!best || (Date.parse(p.updatedAt) || 0) > (Date.parse(best.updatedAt) || 0)) best = p;
+	}
+	return best;
+};
+
+/** Sessions that get PR actions: started from a GitHub repo and not working right now */
+const isPullRequestEligible = (session: CloudSession) => isGitHubRepoSession(session) && !isCloudSessionActive(session.status);
+
+/** Everything the PR buttons need for one session */
+const usePullRequestView = (session: CloudSession) => {
+	const state = useCloudAgentState();
+	const pr = state.pullRequestById[session.id];
+	const pullRequest = currentPullRequest(session, pr);
+	const info = pr?.info;
+	const infoError = pr?.errorFrom === 'info' ? pr.error : undefined;
+	// Until the first GET answers we do not know canCreate: keep the button disabled (not hidden) meanwhile
+	const checking = !info && !infoError && (!pr || pr.loading);
+	const canCreate = !!info?.canCreate && !pr?.submitting;
+	const reason = info && !info.canCreate ? (info.reason || null) : null;
+	const githubDisconnected = state.github.loaded && state.github.configured && !state.github.connected;
+	return { pr, pullRequest, info, infoError, checking, canCreate, reason, githubDisconnected, submitting: !!pr?.submitting };
+};
+
+const prTemplate = (key: TranslationKey, n: number, t: (k: TranslationKey) => string) => t(key).replace('{n}', String(n));
+
+/** Inline "Connect GitHub" (the same flow as the repo picker), used when a PR call says GitHub is not connected */
+const GitHubConnectInline = () => {
+	const { t } = useTranslation();
+	const accessor = useAccessor();
+	const cloudAgentService = accessor.get('ICloudAgentService');
+	const gh = useCloudAgentState().github;
+	if (gh.waitingForAuth) {
+		return (
+			<span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', color: C.fgMuted, flexWrap: 'wrap' }} aria-live='polite'>
+				<Spinner size={11} color={statusColor.running} />
+				{t('cloudAgents.github.waiting')}
+				<button type='button' className='oca-link' onClick={() => cloudAgentService.cancelGitHubConnect()}>{t('cloudAgents.github.cancel')}</button>
+			</span>
+		);
+	}
+	return (
+		<button type='button' disabled={gh.starting} onClick={() => { void cloudAgentService.connectGitHub(); }} style={{ ...buttonStyle('secondary', gh.starting), padding: '3px 9px' }}>
+			{gh.starting ? <Spinner size={11} /> : <Github size={11} />}
+			{t('cloudAgents.github.connect')}
+		</button>
+	);
+};
+
+/** "PR #12 を開く" — opens the PR in the system browser */
+const OpenPullRequestButton = ({ pullRequest, compact }: { pullRequest: CloudPullRequest; compact?: boolean }) => {
+	const { t } = useTranslation();
+	const accessor = useAccessor();
+	const cloudAgentService = accessor.get('ICloudAgentService');
+	const label = prTemplate('cloudAgents.pr.open', pullRequest.number, t);
+	return (
+		<button
+			type='button'
+			className={compact ? 'oca-iconbtn' : undefined}
+			title={`${label}\n${pullRequest.url}`}
+			onClick={() => { void cloudAgentService.openPullRequest(pullRequest.url); }}
+			style={compact ? { height: '28px', padding: '0 8px', fontSize: '11.5px', flexShrink: 0 } : { ...buttonStyle('secondary'), padding: '3px 9px' }}
+		>
+			<GitPullRequest size={compact ? 13 : 12} />
+			{label}
+			<ExternalLink size={compact ? 10 : 11} style={{ opacity: 0.7 }} />
+		</button>
+	);
+};
+
+/** "PR を作成" / "PR を更新". Disabled with the server's reason as tooltip while a PR cannot be created */
+const PullRequestActionButton = ({ session, onOpenForm, compact }: { session: CloudSession; onOpenForm: () => void; compact?: boolean }) => {
+	const { t } = useTranslation();
+	const v = usePullRequestView(session);
+	const label = v.pullRequest ? t('cloudAgents.pr.update') : t('cloudAgents.pr.create');
+	const disabled = !v.canCreate;
+	const title = v.submitting
+		? t(v.pullRequest ? 'cloudAgents.pr.submittingUpdate' : 'cloudAgents.pr.submittingCreate')
+		: v.checking ? t('cloudAgents.pr.loading')
+			: v.reason ?? (v.infoError ? t('cloudAgents.pr.loadError').replace('{error}', v.infoError) : disabled ? t('cloudAgents.pr.unavailable') : label);
+	const busy = v.submitting || (v.checking && !!v.pr?.loading);
+	return (
+		<button
+			type='button'
+			className={compact ? 'oca-iconbtn' : undefined}
+			disabled={disabled}
+			aria-disabled={disabled}
+			title={title}
+			onClick={onOpenForm}
+			style={compact
+				? { height: '28px', padding: '0 8px', fontSize: '11.5px', flexShrink: 0, color: disabled ? C.fgMuted : C.fg }
+				: { ...buttonStyle(v.pullRequest ? 'secondary' : 'primary', disabled), padding: '3px 9px' }}
+		>
+			{busy ? <Spinner size={compact ? 12 : 11} /> : v.pullRequest ? <RefreshCw size={compact ? 12 : 11} /> : <GitPullRequest size={compact ? 13 : 12} />}
+			{label}
+		</button>
+	);
+};
+
+/** PR buttons in the conversation header */
+const PullRequestHeaderActions = ({ session, onOpenForm }: { session: CloudSession; onOpenForm: () => void }) => {
+	const { pullRequest } = usePullRequestView(session);
+	if (!isPullRequestEligible(session)) return null;
+	return (
+		<>
+			{pullRequest && <OpenPullRequestButton pullRequest={pullRequest} compact />}
+			<PullRequestActionButton session={session} onOpenForm={onOpenForm} compact />
+		</>
+	);
+};
+
+const prFieldLabel: React.CSSProperties = { fontSize: '11px', fontWeight: 600, color: C.fgMuted };
+const prReadOnlyInput: React.CSSProperties = { ...inputStyle, color: C.fgMuted, background: 'transparent', cursor: 'default' };
+
+/** The inline create / update form, prefilled from GET .../pull-request */
+const PullRequestForm = ({ session, onClose }: { session: CloudSession; onClose: () => void }) => {
+	const { t } = useTranslation();
+	const accessor = useAccessor();
+	const cloudAgentService = accessor.get('ICloudAgentService');
+	const v = usePullRequestView(session);
+	const existing = v.pullRequest;
+	const suggestion = v.info?.suggestion;
+
+	const [title, setTitle] = useState('');
+	const [body, setBody] = useState('');
+	const [branch, setBranch] = useState('');
+	const [draft, setDraft] = useState(false);
+	const [localError, setLocalError] = useState<string | null>(null);
+	const titleRef = useRef<HTMLInputElement | null>(null);
+	// Fill the fields once, when the suggestion first arrives (the form may open before the GET answers)
+	const filled = useRef(false);
+	useEffect(() => {
+		if (filled.current || !suggestion) return;
+		filled.current = true;
+		setTitle(existing?.title || suggestion.title);
+		setBody(suggestion.body);
+		setBranch(existing?.branch || suggestion.branch);
+		setDraft(existing?.draft ?? false);
+		setTimeout(() => titleRef.current?.focus(), 0);
+	}, [suggestion, existing]);
+
+	const base = existing?.base || suggestion?.base || session.workspaceInfo?.gitBranch || '';
+	// Only show submit errors from this opening of the form (or a submit still running from before), not stale ones
+	const attempted = useRef(false);
+	if (v.submitting) attempted.current = true;
+	const submitError = attempted.current && v.pr?.errorFrom === 'submit' ? v.pr.error : undefined;
+	const submitCode = v.pr?.errorFrom === 'submit' ? v.pr.errorCode : undefined;
+	const error = localError ?? submitError;
+	const ready = !!suggestion && !v.submitting;
+
+	const submit = async () => {
+		if (!ready) return;
+		const invalid = validateCloudPullRequestFields(title, body) ?? (!existing ? validateCloudPullRequestBranch(branch) : null);
+		setLocalError(invalid);
+		if (invalid) return;
+		attempted.current = true;
+		const res = await cloudAgentService.createPullRequest(session.id, {
+			title: title.trim(),
+			body,
+			...(!existing ? { branch: branch.trim(), draft } : {}),
+			...(base ? { base } : {}),
+		});
+		if (res.ok) onClose();
+	};
+
+	const onKeyDown = (e: React.KeyboardEvent) => {
+		if (e.key === 'Enter' && isModKey(e)) { e.preventDefault(); void submit(); }
+		else if (e.key === 'Escape' && !v.submitting) { e.preventDefault(); onClose(); }
+	};
+
+	return (
+		<div onKeyDown={onKeyDown} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+			<div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', fontWeight: 600, color: C.fg }}>
+				<GitPullRequest size={14} />
+				{existing ? prTemplate('cloudAgents.pr.formUpdate', existing.number, t) : t('cloudAgents.pr.formCreate')}
+				{session.workspaceInfo?.repoFullName && <span style={{ fontWeight: 400, color: C.fgMuted, fontSize: '11.5px', minWidth: 0, ...ellipsis }}>· {session.workspaceInfo.repoFullName}</span>}
+			</div>
+			<div style={{ fontSize: '11px', lineHeight: 1.45, color: C.fgMuted }}>{t(existing ? 'cloudAgents.pr.updateHint' : 'cloudAgents.pr.createHint')}</div>
+
+			{!suggestion ? (
+				v.infoError ? (
+					<div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: C.error, flexWrap: 'wrap' }}>
+						<span>{t('cloudAgents.pr.loadError').replace('{error}', v.infoError)}</span>
+						<button type='button' className='oca-link' onClick={() => { void cloudAgentService.getPullRequestInfo(session.id); }}>{t('cloudAgents.pr.reload')}</button>
+					</div>
+				) : (
+					<div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: C.fgMuted }}><Spinner /> {t('cloudAgents.pr.loading')}</div>
+				)
+			) : (
+				<>
+					<label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+						<span style={prFieldLabel}>{t('cloudAgents.pr.title')}</span>
+						<input ref={titleRef} className='oca-input' value={title} maxLength={CLOUD_PR_TITLE_MAX} disabled={v.submitting} onChange={e => setTitle(e.target.value)} style={inputStyle} />
+					</label>
+					<label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+						<span style={prFieldLabel}>{t('cloudAgents.pr.body')}</span>
+						<textarea
+							className='oca-textarea'
+							value={body}
+							disabled={v.submitting}
+							onChange={e => setBody(e.target.value)}
+							rows={8}
+							style={{ ...inputStyle, resize: 'vertical', minHeight: '96px', maxHeight: '360px', lineHeight: 1.5, fontFamily: C.monoFont, fontSize: '11.5px' }}
+						/>
+					</label>
+					<div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+						<label style={{ flex: '2 1 220px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+							<span style={prFieldLabel}>{t('cloudAgents.pr.branch')}</span>
+							<input
+								className='oca-input'
+								value={branch}
+								readOnly={!!existing}
+								disabled={v.submitting}
+								title={existing ? t('cloudAgents.pr.branchLocked') : undefined}
+								onChange={e => setBranch(e.target.value)}
+								style={{ ...(existing ? prReadOnlyInput : inputStyle), fontFamily: C.monoFont }}
+							/>
+						</label>
+						<label style={{ flex: '1 1 120px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+							<span style={prFieldLabel}>{t('cloudAgents.pr.base')}</span>
+							<input className='oca-input' value={base} readOnly tabIndex={-1} style={{ ...prReadOnlyInput, fontFamily: C.monoFont }} />
+						</label>
+					</div>
+					<label title={existing ? t('cloudAgents.pr.draftLocked') : undefined} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: existing ? C.fgMuted : C.fg, cursor: existing ? 'default' : 'pointer', alignSelf: 'flex-start' }}>
+						<input type='checkbox' checked={draft} disabled={!!existing || v.submitting} onChange={e => setDraft(e.target.checked)} style={{ margin: 0 }} />
+						<span style={{ fontWeight: 600 }}>{t('cloudAgents.pr.draft')}</span>
+						<span style={{ color: C.fgMuted, fontSize: '11px' }}>{existing ? t('cloudAgents.pr.draftLocked') : t('cloudAgents.pr.draftHint')}</span>
+					</label>
+				</>
+			)}
+
+			{error && (
+				<div role='alert' style={{
+					display: 'flex', gap: '6px', alignItems: 'flex-start', fontSize: '12px', padding: '6px 10px', borderRadius: '6px',
+					background: tint(C.error, 8), border: `1px solid ${tint(C.error, 30)}`, flexWrap: 'wrap',
+				}}>
+					<AlertTriangle size={13} style={{ marginTop: '2px', flexShrink: 0, color: C.error }} />
+					<span style={{ flex: '1 1 200px', color: C.fg, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{error}</span>
+					{!localError && submitCode === GITHUB_NOT_CONNECTED && <GitHubConnectInline />}
+				</div>
+			)}
+
+			<div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+				<button type='button' disabled={!ready} onClick={() => { void submit(); }} style={buttonStyle('primary', !ready)}>
+					{v.submitting ? <Spinner size={12} /> : existing ? <RefreshCw size={12} /> : <GitPullRequest size={12} />}
+					{existing ? t('cloudAgents.pr.submitUpdate') : t('cloudAgents.pr.submitCreate')}
+				</button>
+				<button type='button' disabled={v.submitting} onClick={onClose} style={buttonStyle('secondary', v.submitting)}>{t('cloudAgents.pr.cancel')}</button>
+				{v.submitting
+					? <span style={{ fontSize: '11px', color: C.fgMuted }} aria-live='polite'>{t(existing ? 'cloudAgents.pr.submittingUpdate' : 'cloudAgents.pr.submittingCreate')}</span>
+					: <span style={{ fontSize: '10.5px', color: C.fgFaint }}>{t(isMac ? 'cloudAgents.pr.shortcutMac' : 'cloudAgents.pr.shortcut')}</span>}
+			</div>
+		</div>
+	);
+};
+
+/** "PR #12 を作成しました — GitHub で開く" after a successful submit */
+const PullRequestSuccessLine = ({ session }: { session: CloudSession }) => {
+	const { t } = useTranslation();
+	const accessor = useAccessor();
+	const cloudAgentService = accessor.get('ICloudAgentService');
+	const pr = useCloudAgentState().pullRequestById[session.id];
+	const result = pr?.lastResult;
+	if (!result || !pr?.lastAction) return null;
+	const key: TranslationKey = pr.lastAction === 'created' ? 'cloudAgents.pr.created' : pr.lastAction === 'updated' ? 'cloudAgents.pr.updated' : 'cloudAgents.pr.unchanged';
+	return (
+		<div aria-live='polite' style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: pr.lastAction === 'unchanged' ? C.fgMuted : C.success, flexWrap: 'wrap' }}>
+			<CheckCircle2 size={13} style={{ flexShrink: 0 }} />
+			<span>{prTemplate(key, result.pullRequest.number, t)}</span>
+			<button type='button' className='oca-link' title={result.pullRequest.url} onClick={() => { void cloudAgentService.openPullRequest(result.pullRequest.url); }} style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+				{t('cloudAgents.pr.openOnGitHub')}
+				<ExternalLink size={11} />
+			</button>
+		</div>
+	);
+};
+
+/**
+ * PR card at the end of the transcript (right under the completion card): the actions, the reason when a PR cannot be
+ * created, the inline form, and the result of the last submit.
+ */
+const PullRequestSection = ({ session, formOpen, onOpenForm, onCloseForm }: {
+	session: CloudSession;
+	formOpen: boolean;
+	onOpenForm: () => void;
+	onCloseForm: () => void;
+}) => {
+	const { t } = useTranslation();
+	const accessor = useAccessor();
+	const cloudAgentService = accessor.get('ICloudAgentService');
+	const v = usePullRequestView(session);
+	const ref = useRef<HTMLDivElement | null>(null);
+	// Bring the form into view when it is opened from the header
+	useEffect(() => {
+		if (formOpen) ref.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+	}, [formOpen]);
+
+	if (!isPullRequestEligible(session)) return null;
+	const pullRequest = v.pullRequest;
+
+	return (
+		<div ref={ref} style={{ border: `1px solid ${formOpen ? C.focus : C.border}`, borderRadius: '8px', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '8px', background: C.bgSide }}>
+			{formOpen ? (
+				<PullRequestForm session={session} onClose={onCloseForm} />
+			) : (
+				<>
+					<div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', minWidth: 0 }}>
+						<span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flex: '1 1 200px', minWidth: 0, fontSize: '12px', color: C.fg }}>
+							<GitPullRequest size={14} style={{ flexShrink: 0, color: pullRequest ? C.success : C.fgMuted }} />
+							{pullRequest ? (
+								<>
+									<span style={{ fontWeight: 600, flexShrink: 0 }}>#{pullRequest.number}</span>
+									<span title={pullRequest.title} style={{ minWidth: 0, ...ellipsis }}>{pullRequest.title}</span>
+									{pullRequest.draft && <span style={{ fontSize: '10px', padding: '0 6px', borderRadius: '8px', border: `1px solid ${C.border}`, color: C.fgMuted, flexShrink: 0 }}>{t('cloudAgents.pr.draftBadge')}</span>}
+								</>
+							) : v.checking ? (
+								<span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: C.fgMuted }}><Spinner size={11} /> {t('cloudAgents.pr.loading')}</span>
+							) : (
+								<span style={{ color: C.fgMuted }}>{v.canCreate ? t('cloudAgents.pr.ready') : t('cloudAgents.pr.unavailable')}</span>
+							)}
+						</span>
+						{pullRequest && <OpenPullRequestButton pullRequest={pullRequest} />}
+						<PullRequestActionButton session={session} onOpenForm={onOpenForm} />
+					</div>
+					{pullRequest && (
+						<div style={{ fontSize: '11px', color: C.fgMuted, fontFamily: C.monoFont, ...ellipsis }} title={`${pullRequest.branch} → ${pullRequest.base}`}>
+							{pullRequest.branch} → {pullRequest.base}
+						</div>
+					)}
+					{/* Why the button is disabled (the server's Japanese reason), with the GitHub connect flow when that is the cause */}
+					{v.reason && (
+						<div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11.5px', color: C.warning, flexWrap: 'wrap' }}>
+							<AlertTriangle size={12} style={{ flexShrink: 0 }} />
+							<span style={{ flex: '1 1 200px', minWidth: 0 }}>{v.reason}</span>
+							{v.githubDisconnected && <GitHubConnectInline />}
+						</div>
+					)}
+					{!v.reason && !v.info && v.githubDisconnected && (
+						<div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11.5px', color: C.fgMuted, flexWrap: 'wrap' }}>
+							<span style={{ flex: '1 1 200px', minWidth: 0 }}>{t('cloudAgents.pr.connectHint')}</span>
+							<GitHubConnectInline />
+						</div>
+					)}
+					{v.infoError && (
+						<div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11.5px', color: C.error, flexWrap: 'wrap' }}>
+							<span style={{ flex: '1 1 200px', minWidth: 0 }}>{t('cloudAgents.pr.loadError').replace('{error}', v.infoError)}</span>
+							{v.pr?.errorCode === GITHUB_NOT_CONNECTED
+								? <GitHubConnectInline />
+								: <button type='button' className='oca-link' onClick={() => { void cloudAgentService.getPullRequestInfo(session.id); }}>{t('cloudAgents.pr.reload')}</button>}
+						</div>
+					)}
+					<PullRequestSuccessLine session={session} />
+				</>
+			)}
+		</div>
+	);
+};
+
+/** Transcript card for a pull_request event: "PR #12 を作成しました — <title>" with an open link */
+const PullRequestEventCard = ({ data }: { data: CloudPullRequestEventData }) => {
+	const { t } = useTranslation();
+	const accessor = useAccessor();
+	const cloudAgentService = accessor.get('ICloudAgentService');
+	const number = typeof data?.number === 'number' ? data.number : 0;
+	const url = typeof data?.url === 'string' ? data.url : '';
+	const updated = data?.action === 'updated';
+	const color = updated ? C.accent : C.success;
+	return (
+		<div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, padding: '7px 10px', borderRadius: '6px', border: `1px solid ${tint(color, 35)}`, background: tint(color, 7), fontSize: '12px' }}>
+			<GitPullRequest size={14} style={{ color, flexShrink: 0 }} />
+			<span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '1px' }}>
+				<span style={{ display: 'flex', alignItems: 'baseline', gap: '6px', minWidth: 0 }}>
+					<span style={{ fontWeight: 600, color: C.fg, flexShrink: 0 }}>{prTemplate(updated ? 'cloudAgents.pr.updated' : 'cloudAgents.pr.created', number, t)}</span>
+					{data?.title && <span style={{ color: C.fgFaint, flexShrink: 0 }}>—</span>}
+					{data?.title && <span title={data.title} style={{ color: C.fg, minWidth: 0, ...ellipsis }}>{data.title}</span>}
+				</span>
+				{data?.branch && <span style={{ fontSize: '10.5px', color: C.fgMuted, fontFamily: C.monoFont, ...ellipsis }}>{data.branch}{data.base ? ` → ${data.base}` : ''}</span>}
+			</span>
+			{/^https:\/\//i.test(url) && (
+				<button type='button' className='oca-link' title={url} onClick={() => { void cloudAgentService.openPullRequest(url); }} style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', flexShrink: 0, fontSize: '11.5px' }}>
+					{t('cloudAgents.pr.openOnGitHub')}
+					<ExternalLink size={11} />
+				</button>
+			)}
+		</div>
+	);
+};
+
 // --- Division Project モード (リーダーの計画 → ロールごとのタスク → まとめ) ---
 
 type DivisionTaskState = CloudTaskEventData['status'];
@@ -2260,6 +2663,8 @@ const EventView = ({ event, onReview, division, active }: {
 			);
 		case 'done':
 			return <CompletionCard data={data} onReview={onReview} />;
+		case 'pull_request':
+			return <PullRequestEventCard data={data as CloudPullRequestEventData} />;
 		default:
 			return null;
 	}
@@ -2310,7 +2715,13 @@ const buildStreamItems = (events: CloudSessionEvent[]): StreamItem[] => {
 	return items;
 };
 
-const Stream = ({ session, events, onReview }: { session: CloudSession; events: CloudSessionEvent[] | undefined; onReview: () => void }) => {
+const Stream = ({ session, events, onReview, footer }: {
+	session: CloudSession;
+	events: CloudSessionEvent[] | undefined;
+	onReview: () => void;
+	/** Shown after the last event (the pull request card) */
+	footer?: React.ReactNode;
+}) => {
 	const { t } = useTranslation();
 	const scrollRef = useRef<HTMLDivElement | null>(null);
 	const stickToBottom = useRef(true);
@@ -2362,6 +2773,7 @@ const Stream = ({ session, events, onReview }: { session: CloudSession; events: 
 					) : items.map(item => item.kind === 'tools'
 						? <ToolGroupRow key={item.key} events={item.events} />
 						: <EventView key={item.key} event={item.event} onReview={onReview} division={division} active={active} />)}
+					{events !== undefined && footer}
 					{active && (
 						<div style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '12px', color: C.fgMuted, padding: '2px 6px' }}>
 							<Spinner color={statusColor[session.status]} />
@@ -2456,6 +2868,26 @@ const Conversation = ({ session, leftSlot, reviewOpen, onToggleReview, onReview,
 	const changedCount = changes?.changes?.length ?? session.changedFiles;
 	const projectLabel = useProjectLabel();
 
+	// Pull request form: open for at most one session at a time (kept while switching away and back)
+	const [prFormFor, setPrFormFor] = useState<string | null>(null);
+	const prFormOpen = prFormFor === session.id;
+	const openPrForm = useCallback(() => setPrFormFor(session.id), [session.id]);
+	const closePrForm = useCallback(() => setPrFormFor(null), []);
+	const prEligible = isPullRequestEligible(session);
+	// Ask the server whether a PR can be created whenever the session becomes eligible / is opened, and again
+	// after GitHub gets connected (canCreate depends on it)
+	const githubConnected = state.github.connected;
+	useEffect(() => {
+		if (!prEligible) return;
+		// The GitHub status decides whether the card offers "GitHub と連携" next to the server's reason
+		if (!cloudAgentService.state.github.loaded) void cloudAgentService.refreshGitHubStatus();
+		if (cloudAgentService.state.pullRequestById[session.id]?.loading) return;
+		void cloudAgentService.getPullRequestInfo(session.id);
+	}, [prEligible, session.id, githubConnected, cloudAgentService]);
+	useEffect(() => {
+		if (!prEligible && prFormOpen) setPrFormFor(null);
+	}, [prEligible, prFormOpen]);
+
 	return (
 		<div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
 			<div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 10px 0 14px', height: '44px', flexShrink: 0, borderBottom: `1px solid ${C.border}`, minWidth: 0 }}>
@@ -2487,6 +2919,7 @@ const Conversation = ({ session, leftSlot, reviewOpen, onToggleReview, onReview,
 						{t('cloudAgents.detail.stop')}
 					</button>
 				)}
+				<PullRequestHeaderActions session={session} onOpenForm={openPrForm} />
 				<button type='button' className='oca-iconbtn' title={t('cloudAgents.detail.archive')} aria-label={t('cloudAgents.detail.archive')} onClick={() => { void cloudAgentService.archive(session.id); }} style={{ width: '28px', height: '28px', flexShrink: 0 }}>
 					<Archive size={14} />
 				</button>
@@ -2504,7 +2937,12 @@ const Conversation = ({ session, leftSlot, reviewOpen, onToggleReview, onReview,
 					{changedCount > 0 && <span style={{ fontFamily: C.monoFont }}>{changedCount}</span>}
 				</button>
 			</div>
-			<Stream session={session} events={state.eventsById[session.id]} onReview={onReview} />
+			<Stream
+				session={session}
+				events={state.eventsById[session.id]}
+				onReview={onReview}
+				footer={prEligible ? <PullRequestSection session={session} formOpen={prFormOpen} onOpenForm={openPrForm} onCloseForm={closePrForm} /> : undefined}
+			/>
 			<FollowUpComposer session={session} value={draft} setValue={setDraft} />
 		</div>
 	);

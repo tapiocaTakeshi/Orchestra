@@ -31,6 +31,12 @@
 //   GET  /api/github/repos?q=&page=           → { repos, hasMore }  (最近 push した順に 50 件ずつ)
 //   GET  /api/github/branches?repo=owner/name → { branches, defaultBranch }
 //   エラー: 409 { code: 'github_not_connected' } (未連携 / トークン失効)、503 { code: 'github_not_configured' }
+//
+// Pull requests (only for sessions started from a GitHub repo, i.e. workspaceInfo.repoFullName is set):
+//   GET  /api/cloud-sessions/:id/pull-request → { pullRequest, suggestion, canCreate, reason? }
+//   POST /api/cloud-sessions/:id/pull-request { title, body?, branch?, base?, draft? } → { pullRequest, updated }
+//        Creates the PR on the first call; later calls push a new commit to the same branch ("update").
+//   Errors: { error: <Japanese message>, code } (see CLOUD_PR_ERROR_CODES)
 
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 
@@ -82,9 +88,15 @@ export interface CloudSession {
 	 * 無ければ「不明」(0 ではない)。イベントの応答などに付いてくる session には無いので、上書きで消さないこと
 	 */
 	costUsd?: number;
+	/**
+	 * The pull request opened from this session (GitHub-repo sessions only). null / absent = no PR yet.
+	 * Present on list / detail / create responses; sessions embedded in other responses may omit it,
+	 * so an absent value must not wipe a known one.
+	 */
+	pullRequest?: CloudPullRequest | null;
 }
 
-export type CloudSessionEventType = 'user' | 'assistant' | 'tool' | 'status' | 'error' | 'done' | 'plan' | 'task';
+export type CloudSessionEventType = 'user' | 'assistant' | 'tool' | 'status' | 'error' | 'done' | 'plan' | 'task' | 'pull_request';
 
 export interface CloudSessionEvent {
 	seq: number;
@@ -99,6 +111,7 @@ export interface CloudSessionEvent {
 	 *  - done:      { summary, changedFiles }
 	 *  - plan:      CloudPlanEventData (Division Project モードのみ。リーダーの計画)
 	 *  - task:      CloudTaskEventData (Division Project モードのみ。ロールごとのタスクの開始 / 完了 / 失敗)
+	 *  - pull_request: CloudPullRequestEventData (a PR was created / updated from this session)
 	 *  Division Project モードでは assistant に role?: string (ロールの slug) も付く。
 	 *  assistant / tool は直前に start した task に属する。
 	 */
@@ -143,6 +156,82 @@ export type CloudTaskEventData = {
 	status: 'start' | 'done' | 'failed';
 	summary?: string;
 };
+
+/** A pull request opened from a session (CloudSession.pullRequest, GET/POST .../pull-request) */
+export type CloudPullRequest = {
+	number: number;
+	/** https://github.com/owner/name/pull/<number> */
+	url: string;
+	/** Head branch the session's commits are pushed to */
+	branch: string;
+	base: string;
+	headSha: string;
+	title: string;
+	draft: boolean;
+	createdAt: string;
+	updatedAt: string;
+};
+
+/** Data of a pull_request event */
+export type CloudPullRequestEventData = {
+	number: number;
+	url: string;
+	branch: string;
+	base: string;
+	action: 'created' | 'updated';
+	title: string;
+};
+
+/** Server-generated defaults for the PR form */
+export type CloudPullRequestSuggestion = {
+	title: string;
+	body: string;
+	branch: string;
+	base: string;
+};
+
+/** GET /api/cloud-sessions/:id/pull-request */
+export type CloudPullRequestInfo = {
+	pullRequest: CloudPullRequest | null;
+	suggestion: CloudPullRequestSuggestion;
+	/** false → `reason` (Japanese) says why the PR cannot be created / updated right now */
+	canCreate: boolean;
+	reason?: string;
+};
+
+/** POST /api/cloud-sessions/:id/pull-request body */
+export type CreateCloudPullRequestParams = {
+	title: string;
+	body?: string;
+	/** Head branch to create (ignored by the server once the session has a PR) */
+	branch?: string;
+	base?: string;
+	draft?: boolean;
+};
+
+/** POST /api/cloud-sessions/:id/pull-request response. updated=false: nothing changed since the last push */
+export type CloudPullRequestResult = {
+	pullRequest: CloudPullRequest;
+	updated: boolean;
+};
+
+/**
+ * Error codes the PR endpoints return in `{ error, code }`. github_not_connected is shared with the GitHub API.
+ * `validation` is also used locally when the form is rejected before sending.
+ */
+export const CLOUD_PR_ERROR_CODES = {
+	notGitHubRepo: 'not_github_repo',
+	validation: 'validation',
+	sessionRunning: 'session_running',
+	noChanges: 'no_changes',
+	inProgress: 'pr_in_progress',
+	branchExists: 'branch_exists',
+	noPushAccess: 'github_no_push_access',
+	githubError: 'github_error',
+} as const;
+
+export const CLOUD_PR_TITLE_MAX = 256;
+export const CLOUD_PR_BODY_MAX = 60_000;
 
 export interface CloudChange {
 	path: string;
@@ -194,6 +283,10 @@ export interface GitHubRepo {
 /** サーバーが { error, code } の code で返す、HTTP ステータスだけでは分からない理由 */
 export const GITHUB_NOT_CONNECTED = 'github_not_connected';
 export const GITHUB_NOT_CONFIGURED = 'github_not_configured';
+
+/** Whether the session was started from a GitHub repo (the only kind that can open a pull request) */
+export const isGitHubRepoSession = (session: { workspaceInfo: CloudWorkspaceInfo | null }): boolean =>
+	!!session.workspaceInfo?.repoFullName;
 
 /** エージェントが動いている (または動き出す途中の) 状態か */
 export const isCloudSessionActive = (status: CloudSessionStatus): boolean =>
@@ -278,6 +371,35 @@ export const validateCloudRepoBranch = (raw: string): string | null => {
 	if (!/^[A-Za-z0-9._\/-]{1,200}$/.test(value) || value.startsWith('-') || value.includes('..')) {
 		return 'ブランチ名に使えない文字が含まれています。';
 	}
+	return null;
+};
+
+/**
+ * Head branch name for a new PR (git check-ref-format rules, plus no leading '-'). Returns a Japanese reason or null.
+ * Looser than validateCloudRepoBranch on purpose: the server's suggestion may contain any character git allows.
+ */
+export const validateCloudPullRequestBranch = (raw: string): string | null => {
+	const value = raw.trim();
+	if (!value) return 'ブランチ名を入力してください。';
+	if (value.length > 200) return 'ブランチ名が長すぎます。';
+	if (
+		value.startsWith('-') || value.startsWith('/') || value.endsWith('/') || value.endsWith('.') || value.endsWith('.lock')
+		|| value.includes('..') || value.includes('//') || value.includes('@{') || value === '@'
+		// eslint-disable-next-line no-control-regex
+		|| /[\x00-\x20\x7f~^:?*\[\\]/.test(value)
+		|| value.split('/').some(seg => seg.startsWith('.'))
+	) {
+		return 'ブランチ名に使えない文字が含まれています。';
+	}
+	return null;
+};
+
+/** PR title and body limits (same as the server). Returns a Japanese reason or null */
+export const validateCloudPullRequestFields = (title: string, body: string): string | null => {
+	const t = title.trim();
+	if (!t) return 'タイトルを入力してください。';
+	if (t.length > CLOUD_PR_TITLE_MAX) return `タイトルは ${CLOUD_PR_TITLE_MAX} 文字以内にしてください。`;
+	if (body.length > CLOUD_PR_BODY_MAX) return `説明は ${CLOUD_PR_BODY_MAX} 文字以内にしてください。`;
 	return null;
 };
 
