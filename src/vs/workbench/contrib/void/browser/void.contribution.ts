@@ -39,6 +39,9 @@ import './roleOutputPane.js'
 // built-in browser pane (localhost preview / docs, Ctrl+Alt+B)
 import './browserPane.js'
 
+// Markdown + HTML プレビュー (DESIGN.md の ```html ブロックをライブ表示・ビジュアル編集, Ctrl+Shift+Alt+V)
+import './designMdPreview.js'
+
 // register css
 import './media/void.css'
 
