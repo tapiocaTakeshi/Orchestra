@@ -178,10 +178,14 @@ Cursor の Agents 画面のような 3 列。
    コミットの作者は自分の GitHub アカウント。トークンはサンドボックスの `.git/config` には残らない。
 3. 終わると「PR #12 を作成しました」と **GitHub で開く** のリンクが出る。会話にも「PR #12 を作成しました — タイトル」のカードが残る。
 
-PR を作ったあとは、ヘッダーとカードに **PR #12 を開く** (システムのブラウザで開く) と **PR を更新** が出る。追加の指示で作業を続けたあと
-**PR を更新** を押すと、今のサンドボックスの内容を同じブランチに新しいコミットとして push し (前の push の上に積むので force push はしない)、
-タイトルと説明も入れたものに更新する。前回の push から何も変わっていなければ「変更がないため、PR #12 はそのままです」と出る。
-ブランチ名と下書きかどうかは更新では変えられない (下書きの解除は GitHub で行う)。
+PR を作ったあとは、ヘッダーとカードに **PR #12 を開く** (システムのブラウザで開く) と、その横に GitHub での状態
+(オープン / マージ済み / クローズ済み)、そして **PR を更新** が出る。追加の指示で作業を続けたあと **PR を更新** を押すと、フォームには
+GitHub 上の今のタイトルと説明が入っている。送ると、今のサンドボックスの内容を同じブランチに新しいコミットとして push し
+(前の push の上に積むので force push はしない)、タイトルと説明が変わっていれば更新する。何も変わっていなければ
+「変更はありません（PR #12 は最新です）」と出る。更新で送るのはタイトルと説明だけで、ブランチ名・ベース・下書きかどうかは変えられない
+(下書きの解除は GitHub で行う)。
+
+PR がマージ / クローズされたあとは、ボタンが **新しい PR を作成** になる。押すと新しいブランチ名が入ったフォームが開き、新しい PR を作る。
 
 PR を作れないときは、ボタンが押せなくなり、理由がカードに (ヘッダーではマウスを乗せると) 出る。
 
@@ -193,8 +197,11 @@ PR を作れないときは、ボタンが押せなくなり、理由がカー�
 | ブランチが既にある (`branch_exists`) | 別のブランチ名にする |
 | リポジトリに push する権限がない (`github_no_push_access`) | push できるアカウントで連携し直す |
 | 別の PR の送信中 (`pr_in_progress`) | 少し待ってからもう一度 |
+| 他の人が PR のブランチに push した (`branch_diverged`) | GitHub でブランチを確認する (上書きはしない) |
 
-送信に失敗したときは、サーバーが返した理由 (日本語) がフォームに出る。
+送信に失敗したときは、サーバーが返した理由 (日本語) がフォームに出る。ほかに `session_archived`・`missing_parent`・`sandbox_error`・
+`github_not_configured`・`validation` などがあるが、どれもサーバーの文言をそのまま出す。PR の作成・更新はサーバー側で数分かかることがある
+(Orchestra は確認に最大 5 分、送信に最大 10 分待つ)。
 
 ### 6. 片付ける
 
@@ -273,12 +280,15 @@ CloudAgentService  ── IPC ──▶  CloudAgentMainService  ── HTTPS ─
 6. **取り込み**: `GET …/:id/changes` で変更一覧とパッチを取り、ファイルごとに `GET …/:id/file?ref=current` (今の中身) と
    `ref=base` (アップロード時の中身) を取る。ローカルの中身が base と違えば競合として知らせる。
 7. **プルリクエスト** (GitHub のリポジトリから始めたセッションだけ): `GET …/:id/pull-request` が
-   `{ pullRequest, suggestion: { title, body, branch, base }, canCreate, reason? }` を返し、パネルはそれでボタンの可否とフォームの初期値を決める。
-   `POST …/:id/pull-request` (`{ title, body?, branch?, base?, draft? }`) が PR を作る / 更新して `{ pullRequest, updated }` を返し、
+   `{ pullRequest, pullRequestState?: open | closed | merged | null, suggestion: { title, body, branch, base }, canCreate, reason?, code? }` を返し、
+   パネルはそれでボタンの可否・ラベル (更新 / 新しい PR)・フォームの初期値を決める (`code: github_not_connected` なら連携ボタンも出す)。
+   `POST …/:id/pull-request` (作成は `{ title, body?, branch?, base?, draft? }`、更新は `{ title, body? }`) が PR を作る / 更新して
+   `{ pullRequest, updated, action: created | updated | unchanged }` を返し、
    セッションのイベントに `pull_request` (`{ number, url, branch, base, action: created | updated, title }`) を足す。
    セッションには `pullRequest` (`{ number, url, branch, base, headSha, title, draft, createdAt, updatedAt }`) が付く。
-   エラーは `{ error, code }` (`not_github_repo`・`session_running`・`github_not_connected`・`no_changes`・`pr_in_progress`・`branch_exists`・
-   `github_no_push_access`・`github_error`)。`error` はそのまま表示する。
+   エラーは `{ error, code }` (`not_github_repo`・`validation`・`session_running`・`session_archived`・`github_not_connected`・`no_changes`・
+   `pr_in_progress`・`branch_exists`・`branch_diverged`・`missing_parent`・`github_no_push_access`・`sandbox_error`・`github_error`・
+   `github_not_configured`)。`error` はそのまま表示する。タイムアウトは GET 300 秒・POST 600 秒 (main プロセスの中継の上限も 600 秒)。
 
 Division には CORS が無いので、認証付きの通信はすべて main プロセスを経由する。認証には、ログイン時に受け取る
 ユーザー専用の Division API キー (`ak_…`、設定 `divisionUserApiKey`) を優先して使う。Supabase のセッション (JWT) は
