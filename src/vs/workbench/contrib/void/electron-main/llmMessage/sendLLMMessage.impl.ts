@@ -1023,8 +1023,8 @@ const FLOW_ROLE_TO_FILENAME: Record<string, string> = {
 	'leader': 'LEADER.md',
 	'coder': 'CODER.md',
 	'coding': 'CODER.md',
-	'design': 'DESIGN.html',
-	'designer': 'DESIGN.html',
+	'design': 'DESIGN.md',
+	'designer': 'DESIGN.md',
 	'search': 'SEARCH.md',
 	'searcher': 'SEARCH.md',
 	'file-search': 'FILE-SEARCH.md',
@@ -1046,16 +1046,22 @@ const FLOW_ROLE_TO_FILENAME: Record<string, string> = {
 	'image': 'IMAGE.md',
 };
 
-// The designer answers with a self-contained HTML design doc, usually inside a
-// ```html block (v0 may also return it as a named file). Keep just the document so
-// DESIGN.html opens in a browser; plain text is wrapped so the file still renders.
-const toDesignHtml = (content: string): string => {
-	const fenced = content.match(/```html[^\n]*\n([\s\S]*?)\n```/i);
-	if (fenced) return fenced[1].trim() + '\n';
-	const doc = content.match(/<!DOCTYPE html[\s\S]*<\/html>/i);
-	if (doc) return doc[0] + '\n';
-	const escaped = content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-	return `<!DOCTYPE html>\n<html lang="ja">\n<head><meta charset="utf-8"><title>DESIGN</title></head>\n<body><pre style="white-space:pre-wrap;font:14px/1.6 system-ui,sans-serif;max-width:860px;margin:2rem auto;padding:0 1rem">${escaped}</pre></body>\n</html>\n`;
+// The designer answers with a Markdown design spec (DESIGN.md) whose visual parts are
+// ```html blocks and whose tokens are a ```css :root block; Orchestra's
+// 「Markdown + HTML プレビュー」 renders those blocks live. Normalise the reply into that
+// shape: unwrap a reply that is one big ```markdown block, and turn a bare HTML document
+// (older prompts, or v0 returning a named file) into a Markdown doc with one html block.
+const DESIGN_FILENAME = 'DESIGN.md';
+const toDesignMd = (content: string): string => {
+	const text = content.trim();
+	const wrapped = text.match(/^```(?:markdown|md)[^\n]*\n([\s\S]*?)\n```$/i);
+	if (wrapped) return wrapped[1].trim() + '\n';
+	const isBareHtml = /^(<!DOCTYPE html|<html)/i.test(text) || (/^```html/i.test(text) && /```$/.test(text) && (text.match(/```/g) || []).length === 2);
+	if (isBareHtml) {
+		const html = text.replace(/^```html[^\n]*\n/i, '').replace(/\n```$/, '').trim();
+		return `# デザイン仕様\n\n\`\`\`html\n${html}\n\`\`\`\n`;
+	}
+	return text + '\n';
 };
 
 const saveFlowResultAsMd = (
@@ -1074,9 +1080,9 @@ const saveFlowResultAsMd = (
 
 	try {
 		fs.mkdirSync(divisionDir, { recursive: true });
-		if (filename.endsWith('.html')) {
-			// Appending with a Markdown rule would break the document, so always replace it.
-			fs.writeFileSync(filePath, toDesignHtml(content), 'utf-8');
+		if (filename === DESIGN_FILENAME) {
+			// The design spec is one document; a new design replaces it instead of piling up.
+			fs.writeFileSync(filePath, toDesignMd(content), 'utf-8');
 		} else if (append && fs.existsSync(filePath)) {
 			const existing = fs.readFileSync(filePath, 'utf-8');
 			fs.writeFileSync(filePath, existing + '\n\n---\n\n' + content, 'utf-8');
@@ -3355,17 +3361,22 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			if (index < tasks.length && isFileSearchRole(tasks[index].role)) return 0;
 			return tasks.slice(0, index + 1).filter(t => !isFileSearchRole(t.role)).length + (index >= tasks.length ? 1 : 0);
 		};
-		// The designer's latest DESIGN.html on disk. It outlives a round, so later rounds
-		// that do not re-run the designer still hand it to the coder.
+		// The designer's latest DESIGN.md on disk. It outlives a round, so later rounds
+		// that do not re-run the designer still hand it to the coder. Workspaces from before
+		// the switch to Markdown may only have DESIGN.html.
 		const MAX_DESIGN_DOC_CHARS = 60_000;
-		const readDesignDoc = (): string => {
-			if (!workspaceFolderPath) return '';
-			try {
-				const doc = fs.readFileSync(path.join(workspaceFolderPath, '.division', 'DESIGN.html'), 'utf-8').trim();
-				return doc.length > MAX_DESIGN_DOC_CHARS ? truncateForContext(doc, MAX_DESIGN_DOC_CHARS) : doc;
-			} catch {
-				return '';
+		const readDesignDoc = (): { name: string; doc: string } | null => {
+			if (!workspaceFolderPath) return null;
+			for (const name of [DESIGN_FILENAME, 'DESIGN.html']) {
+				try {
+					const doc = fs.readFileSync(path.join(workspaceFolderPath, '.division', name), 'utf-8').trim();
+					if (!doc) continue;
+					return { name, doc: doc.length > MAX_DESIGN_DOC_CHARS ? truncateForContext(doc, MAX_DESIGN_DOC_CHARS) : doc };
+				} catch {
+					/* try the next name */
+				}
 			}
+			return null;
 		};
 
 		const isCoderLikeRole = (r: string): boolean => {
@@ -3787,7 +3798,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					if (!edited) return o;
 					if (workspaceFolderPath && o.mdFileName) {
 						try {
-							const body = o.mdFileName.endsWith('.html') ? toDesignHtml(edited.mdContent) : edited.mdContent;
+							const body = o.mdFileName === DESIGN_FILENAME ? toDesignMd(edited.mdContent) : edited.mdContent;
 							fs.writeFileSync(path.join(workspaceFolderPath, '.division', o.mdFileName), body, 'utf-8');
 						} catch (_e) { /* ignore */ }
 					}
@@ -4026,13 +4037,14 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				const isDesigner = role === 'design' || role === 'designer';
 				const taskInstruction = isDesigner
 					? [
-						`直前の assistant メッセージに先行タスクの出力が添付されています（ある場合）。それを踏まえ、ユーザー要求を視覚化した **DESIGN.html（ブラウザで開けるデザインシステム文書）** を作成してください。`,
+						`直前の assistant メッセージに先行タスクの出力が添付されています（ある場合）。それを踏まえ、ユーザー要求を視覚化した **DESIGN.md（デザイン仕様書）** を Markdown で作成してください。`,
 						``,
 						`### 出力要件`,
-						`- 出力は \`\`\`html コードブロック 1 つだけ（\`<!DOCTYPE html>\` から始まる完結した 1 ファイル）。前置き・後書きは書かないでください。`,
-						`- インラインの <style> だけで完結させ、React / Next.js / Tailwind / ビルド工程 / 外部画像は使わないでください。`,
-						`- トークンは :root の CSS 変数（--color-* / --font-* / --space-* / --radius-* / --shadow-*）で定義し、文書自体もそのトークンで装飾してください。`,
-						`- 配色スウォッチ、タイポグラフィ見本、ボタン等コンポーネントの実物、主要画面のワイヤーフレームを HTML で描き、それぞれに値と理由を添えてください。`,
+						`- 出力は DESIGN.md の本文そのもの（Markdown）。全体を \`\`\`markdown で囲んだり、前置き・後書きを書いたりしないでください。`,
+						`- 構成の例: 概要とデザイン方針 / デザイントークン / 配色 / タイポグラフィ / コンポーネント / 主要画面のワイヤーフレーム / レスポンシブ / アクセシビリティ。`,
+						`- デザイントークンは \`\`\`css ブロック 1 つにまとめ、:root の CSS 変数（--color-* / --font-* / --space-* / --radius-* / --shadow-*）で定義してください。この css は下の html ブロックすべてに自動で読み込まれます。`,
+						`- 見た目を示す部分（配色スウォッチ、タイポグラフィ見本、ボタン等コンポーネントの実物と状態、ワイヤーフレーム）は \`\`\`html ブロックで書いてください。Orchestra のプレビューで実際に描画されます。各 html ブロックの直前に見出しと説明（値と理由）を書いてください。`,
+						`- html ブロックは単体で表示できる断片（または <!DOCTYPE html> からの完結した文書）にし、色や余白はトークンの var(--…) を使ってください。インラインの <style> だけで完結させ、React / Next.js / Tailwind / ビルド工程 / 外部画像や外部スクリプトは使わないでください。`,
 						`- 実装コードではなく、後続の coder エージェントがそのまま実装に使える**デザイン仕様書**が目的です。`,
 					].join('\n')
 					: `直前の assistant メッセージに先行タスクの出力が添付されています（ある場合）。それを参考に、あなたの担当タスクを遂行してください。出力は Markdown 形式で、後続エージェントが直接利用できるよう具体的・網羅的にまとめてください。`;
@@ -4056,19 +4068,19 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 							`上記ファイルは既に存在します。SEARCH/REPLACE 形式で**差分編集**してください。新規作成ブロックで同じパスを上書きしないでください。`,
 						].join('\n')
 						: '';
-					// designer の DESIGN.html は全文を指示に入れる。先行出力の受け渡し (chatHistory) は
+					// designer の DESIGN.md は全文を指示に入れる。先行出力の受け渡し (chatHistory) は
 					// 8,000 文字で切り詰められ、Division API の /api/tasks/execute 側でも渡っていないため、
 					// ここに入れないと coder はデザインを見ないまま実装する。
-					const designDoc = readDesignDoc();
-					const designBlock = designDoc
+					const design = readDesignDoc();
+					const designBlock = design
 						? [
 							``,
-							`### デザイン仕様 (.division/DESIGN.html) — 必ずこの通りに実装すること`,
+							`### デザイン仕様 (.division/${design.name}) — 必ずこの通りに実装すること`,
 							`- :root の CSS 変数（色・フォント・余白・角丸・影）は名前と値をそのまま使う。独自の色や変数を作らない。`,
-							`- セクション構成・ワイヤーフレーム・コンポーネントの見た目と状態・レスポンシブの規則に従う。`,
-							'```html',
-							designDoc,
-							'```',
+							`- セクション構成・ワイヤーフレーム・コンポーネントの見た目と状態・レスポンシブの規則に従う。html ブロックは見た目の正解として扱う。`,
+							`<<<DESIGN_SPEC`,
+							design.name.endsWith('.html') ? '```html\n' + design.doc + '\n```' : design.doc,
+							`DESIGN_SPEC>>>`,
 						].join('\n')
 						: '';
 					extraCoderBlock = [
