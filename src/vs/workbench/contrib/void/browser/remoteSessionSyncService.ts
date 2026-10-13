@@ -41,8 +41,11 @@ export type RemoteGatewayStatus = {
 };
 
 export type RemoteGateway = {
-	/** RemoteSession をすぐ更新して、モバイルから見つけられる状態にする */
-	announce(): Promise<RemoteGatewayStatus>;
+	/**
+	 * RemoteSession をすぐ更新して、モバイルから見つけられる状態にする。
+	 * syncedAt を渡すと RemoteSession にも載せ、モバイルは Realtime でそれを受けてすぐ通知する。
+	 */
+	announce(syncedAt?: number): Promise<RemoteGatewayStatus>;
 	/** ペアリングリンクをクリップボードへ (チャットにはトークンを出さない) */
 	copyPairingLink(): Promise<void>;
 };
@@ -94,9 +97,10 @@ class RemoteSessionSyncService extends Disposable implements IRemoteSessionSyncS
 	get hasGateway(): boolean { return !!this._gateway; }
 
 	async sync(threadId: string): Promise<RemoteGatewayStatus | undefined> {
-		this._synced = { threadId, syncedAt: Date.now() };
+		const syncedAt = Date.now();
+		this._synced = { threadId, syncedAt };
 		this._onDidChangeSync.fire();
-		return this._gateway?.announce();
+		return this._gateway?.announce(syncedAt);
 	}
 
 	retarget(threadId: string): void {

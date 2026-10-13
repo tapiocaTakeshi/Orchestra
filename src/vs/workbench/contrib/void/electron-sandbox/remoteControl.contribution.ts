@@ -138,7 +138,7 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 		super();
 
 		this._register(this._remoteSessionSyncService.setGateway({
-			announce: () => ipcRenderer.invoke(REMOTE_CONTROL_IPC_ANNOUNCE) as Promise<RemoteGatewayStatus>,
+			announce: (syncedAt?: number) => ipcRenderer.invoke(REMOTE_CONTROL_IPC_ANNOUNCE, syncedAt) as Promise<RemoteGatewayStatus>,
 			copyPairingLink: async () => { await ipcRenderer.invoke(REMOTE_CONTROL_IPC_COPY_PAIRING_LINK); },
 		}));
 
