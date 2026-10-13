@@ -368,10 +368,7 @@ export const translations = {
 
 	// Settings - 表示モード
 	'general.uiMode.title': { en: 'Display mode', ja: '表示モード' },
-	'general.uiMode.subtitle': { en: 'Choose whether the agent or the editor takes center stage. You can switch anytime.', ja: 'エージェントとエディタのどちらを主役にするかを選びます。いつでも切り替えられます。' },
-	'general.uiMode.agent': { en: 'Agent mode', ja: 'エージェントモード' },
-	'general.uiMode.agent.desc': { en: 'Hand the work to the AI agent. Chat and a home screen take center stage; IDE parts like the activity bar, status bar and minimap are hidden.', ja: 'AI エージェントに作業を任せるモード。チャットとホーム画面が中心で、アクティビティバー・ステータスバー・ミニマップなど IDE 的な部品は隠れます。' },
-	'general.uiMode.agent.note': { en: 'Switching to Agent mode also sets the chat to "Agent" and turns on auto-approval for file edits and terminal commands. You can change those individually below.', ja: 'エージェントモードに切り替えると、チャットモードが「エージェント」になり、ファイル編集とターミナル実行の自動承認がオンになります。それぞれは下の設定で個別に変えられます。' },
+	'general.uiMode.subtitle': { en: 'Choose whether cloud agents or the editor take center stage. You can switch anytime.', ja: 'クラウドエージェントとエディタのどちらを主役にするかを選びます。いつでも切り替えられます。' },
 	'general.uiMode.cloud': { en: 'Cloud agent mode', ja: 'クラウドエージェントモード' },
 	'general.uiMode.cloud.desc': { en: 'Run many agents in parallel in the cloud. Only the agents list, conversation and changes are shown (like Cursor\'s Agents view); the chat on the right stays hidden.', ja: 'クラウドでエージェントを何本も並列に任せるモード。エージェントの一覧・会話・変更だけを表示し (Cursor の Agents 画面のような形)、右のチャットは常に隠れます。' },
 	'general.uiMode.pro': { en: 'Pro (IDE)', ja: '上級者モード (IDE 表示)' },

@@ -301,7 +301,7 @@ const CHAT_TITLE_TEXT = {
 	logIn: { ja: 'ログイン', en: 'Log In' },
 	account: { ja: 'アカウント', en: 'Account' },
 	settings: { ja: '設定', en: 'Settings' },
-	uiMode: { ja: '表示モードを切り替える (エージェント / 上級者)', en: 'Switch Display Mode (Agent / Pro)' },
+	uiMode: { ja: '表示モードを切り替える (クラウドエージェント / 上級者)', en: 'Switch Display Mode (Cloud Agent / Pro)' },
 	themeLight: { ja: 'テーマ: ライト', en: 'Theme: Light' },
 	themeDark: { ja: 'テーマ: ダーク', en: 'Theme: Dark' },
 	themeSunRed: { ja: 'テーマ: サンレッド', en: 'Theme: Sun Red' },

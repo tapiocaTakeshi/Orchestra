@@ -9,11 +9,11 @@
 // orchestraUiMode.ts 側のコマンドに任せる (通知・ユーザー設定の書き戻し・エージェント動作設定をそこに集約している)。
 
 import React from 'react';
-import { Bot, Check, Cloud, Wrench } from 'lucide-react';
+import { Check, Cloud, Wrench } from 'lucide-react';
 
 import { useAccessor, useOrchestraUiMode } from '../util/services.js';
 import { useTranslation } from '../util/i18n.js';
-import { ORCHESTRA_UI_SET_PRO_MODE_ACTION_ID, ORCHESTRA_UI_SET_AGENT_MODE_ACTION_ID, ORCHESTRA_UI_SET_CLOUD_MODE_ACTION_ID, OrchestraUiMode } from '../../../orchestraUiModeTypes.js';
+import { ORCHESTRA_UI_SET_PRO_MODE_ACTION_ID, ORCHESTRA_UI_SET_CLOUD_MODE_ACTION_ID, OrchestraUiMode } from '../../../orchestraUiModeTypes.js';
 
 
 const ModeCard = ({ selected, icon, title, description, currentLabel, onSelect }: {
@@ -56,26 +56,14 @@ export const UiModeSettings = () => {
 
 	const select = (next: OrchestraUiMode) => {
 		if (next === mode) return;
-		commandService.executeCommand(
-			next === 'pro' ? ORCHESTRA_UI_SET_PRO_MODE_ACTION_ID
-				: next === 'cloud' ? ORCHESTRA_UI_SET_CLOUD_MODE_ACTION_ID
-					: ORCHESTRA_UI_SET_AGENT_MODE_ACTION_ID
-		);
+		commandService.executeCommand(next === 'pro' ? ORCHESTRA_UI_SET_PRO_MODE_ACTION_ID : ORCHESTRA_UI_SET_CLOUD_MODE_ACTION_ID);
 	};
 
 	return (
 		<div>
 			<h2 className='text-3xl mb-2'>{t('general.uiMode.title')}</h2>
 			<h4 className='text-void-fg-3 mb-4'>{t('general.uiMode.subtitle')}</h4>
-			<div className='grid grid-cols-1 md:grid-cols-3 gap-3 max-w-3xl'>
-				<ModeCard
-					selected={mode === 'agent'}
-					icon={<Bot size={16} />}
-					title={t('general.uiMode.agent')}
-					description={t('general.uiMode.agent.desc')}
-					currentLabel={t('general.uiMode.current')}
-					onSelect={() => select('agent')}
-				/>
+			<div className='grid grid-cols-1 md:grid-cols-2 gap-3 max-w-3xl'>
 				<ModeCard
 					selected={mode === 'cloud'}
 					icon={<Cloud size={16} />}
@@ -93,7 +81,6 @@ export const UiModeSettings = () => {
 					onSelect={() => select('pro')}
 				/>
 			</div>
-			<p className='text-[12px] text-void-fg-4 mt-3 max-w-3xl leading-relaxed'>{t('general.uiMode.agent.note')}</p>
 		</div>
 	);
 };

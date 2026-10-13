@@ -15,7 +15,7 @@ import { ICommandService } from '../../../../platform/commands/common/commands.j
 import { defaultKeybindingLabelStyles } from '../../../../platform/theme/browser/defaultStyles.js';
 import { editorForeground, registerColor, transparent } from '../../../../platform/theme/common/colorRegistry.js';
 import { IThemeService } from '../../../../platform/theme/common/themeService.js';
-import { IRecent, isRecentFolder, IWorkspacesService } from '../../../../platform/workspaces/common/workspaces.js';
+import { isRecentFolder, IWorkspacesService } from '../../../../platform/workspaces/common/workspaces.js';
 import { IHostService } from '../../../services/host/browser/host.js';
 import { ILabelService, Verbosity } from '../../../../platform/label/common/label.js';
 
@@ -27,13 +27,8 @@ import { IViewsService } from '../../../services/views/common/viewsService.js';
 /* eslint-disable */ // Void
 import { VOID_CTRL_K_ACTION_ID, VOID_CTRL_L_ACTION_ID } from '../../../contrib/void/browser/actionIDs.js';
 import {
-	ORCHESTRA_CHAT_SEND_PROMPT_ACTION_ID,
 	ORCHESTRA_UI_MODE_SETTING,
-	ORCHESTRA_UI_SET_AGENT_MODE_ACTION_ID,
-	ORCHESTRA_UI_SET_CLOUD_MODE_ACTION_ID,
 	ORCHESTRA_UI_SET_PRO_MODE_ACTION_ID,
-	ORCHESTRA_UI_TOGGLE_FILES_ACTION_ID,
-	ORCHESTRA_UI_TOGGLE_TERMINAL_ACTION_ID,
 	parseOrchestraUiMode,
 } from '../../../contrib/void/browser/orchestraUiModeTypes.js';
 import { VIEWLET_ID as REMOTE_EXPLORER_VIEWLET_ID } from '../../../contrib/remote/browser/remoteExplorer.js';
@@ -128,8 +123,8 @@ export class EditorGroupWatermark extends Disposable {
 
 		// void icon style
 		const updateTheme = () => {
-			elements.icon.style.maxWidth = this.isAgentMode() ? '96px' : '220px'
-			elements.icon.style.opacity = this.isAgentMode() ? '90%' : '70%' // Slightly higher opacity for the new logo
+			elements.icon.style.maxWidth = this.isCloudMode() ? '96px' : '220px'
+			elements.icon.style.opacity = this.isCloudMode() ? '90%' : '70%' // Slightly higher opacity for the new logo
 			// elements.icon.style.filter = isDark ? '' : 'invert(1)' //brightness(.5)
 		}
 		updateTheme()
@@ -171,12 +166,8 @@ export class EditorGroupWatermark extends Disposable {
 
 
 
-	// Orchestra: エージェントモード (またはクラウドエージェントモード) かどうか。この 2 つでは Void 由来の
-	// ショートカット表ではなく、「エージェントに何をさせるか」のホーム画面 (renderAgentHome) を出す。
-	private isAgentMode(): boolean {
-		return parseOrchestraUiMode(this.configurationService.getValue<string>(ORCHESTRA_UI_MODE_SETTING)) !== 'pro';
-	}
-
+	// Orchestra: クラウドエージェントモードかどうか。このときは Void 由来のショートカット表ではなく、
+	// クラウドエージェントのパネルへ戻るホーム画面 (renderCloudHome) を出す。
 	private isCloudMode(): boolean {
 		return parseOrchestraUiMode(this.configurationService.getValue<string>(ORCHESTRA_UI_MODE_SETTING)) === 'cloud';
 	}
@@ -185,10 +176,10 @@ export class EditorGroupWatermark extends Disposable {
 
 		this.clear();
 
-		const agent = this.isAgentMode();
-		this.rootElement.classList.toggle('orchestra-home', agent);
-		this.iconElement.style.maxWidth = agent ? '96px' : '220px';
-		this.iconElement.style.opacity = agent ? '90%' : '70%';
+		const cloud = this.isCloudMode();
+		this.rootElement.classList.toggle('orchestra-home', cloud);
+		this.iconElement.style.maxWidth = cloud ? '96px' : '220px';
+		this.iconElement.style.opacity = cloud ? '90%' : '70%';
 
 		const voidIconBox = append(this.shortcuts, $('.watermark-box'));
 		const recentsBox = append(this.shortcuts, $('div'));
@@ -209,9 +200,9 @@ export class EditorGroupWatermark extends Disposable {
 			this.currentDisposables.forEach(label => label.dispose());
 			this.currentDisposables.clear();
 
-			// Orchestra: エージェントモードのホーム画面
-			if (this.isAgentMode()) {
-				this.renderAgentHome(voidIconBox, recentlyOpened);
+			// Orchestra: クラウドエージェントモードのホーム画面
+			if (this.isCloudMode()) {
+				this.renderCloudHome(voidIconBox);
 				return;
 			}
 
@@ -364,145 +355,24 @@ export class EditorGroupWatermark extends Disposable {
 	}
 
 	// ---------------------------------------------------------------------------------------
-	// Orchestra エージェントモードのホーム画面
+	// Orchestra クラウドエージェントモードのホーム画面
 	//
-	// IDE の「透かし + ショートカット一覧」ではなく、「エージェントに何をさせるか」が分かる画面。
-	// フォルダ未選択なら「フォルダを開く」、選択済みなら「エージェントに指示する」へ誘導する。
+	// クラウドエージェントのパネルを閉じたときに出る。チャットは隠れているので、パネルへ戻る入口だけを出す。
 	// ---------------------------------------------------------------------------------------
-	private renderAgentHome(box: HTMLElement, recentlyOpened: readonly IRecent[]): void {
-		const hasFolder = this.contextService.getWorkbenchState() !== WorkbenchState.EMPTY;
+	private renderCloudHome(box: HTMLElement): void {
 		const run = (id: string, ...args: unknown[]) => () => { this.commandService.executeCommand(id, ...args); };
 
 		const home = append(box, $('.orchestra-home__body'));
-
-		// クラウドエージェントモードでパネルを閉じたとき: チャットは隠れているので、パネルへ戻る入口だけを出す
-		if (this.isCloudMode()) {
-			const heading = append(home, $('.orchestra-home__heading'));
-			append(heading, $('h1.orchestra-home__title')).textContent = 'クラウドエージェントモード';
-			append(heading, $('p.orchestra-home__subtitle')).textContent = 'クラウドのサンドボックスでエージェントを動かし、いくつでも並列に任せられます。一覧・会話・変更はクラウドエージェントのパネルで確認できます。';
-			const actions = append(home, $('.orchestra-home__actions'));
-			const open = append(actions, $('button.orchestra-home__button.orchestra-home__button--primary'));
-			open.textContent = 'クラウドエージェントを開く';
-			open.onclick = run(CLOUD_AGENTS_OPEN_ACTION_ID);
-			const newAgent = append(actions, $('button.orchestra-home__button'));
-			newAgent.textContent = '新しいエージェント';
-			newAgent.onclick = run(CLOUD_AGENTS_NEW_ACTION_ID);
-			const toAgent = append(actions, $('button.orchestra-home__button'));
-			toAgent.textContent = 'エージェントモードに戻す';
-			toAgent.onclick = run(ORCHESTRA_UI_SET_AGENT_MODE_ACTION_ID);
-			const footer = append(home, $('p.orchestra-home__footer'));
-			append(footer, $('span')).textContent = '自分でもコードを編集したい方は ';
-			const pro = append(footer, $('button.orchestra-home__link'));
-			pro.textContent = '上級者モード (IDE 表示)';
-			pro.onclick = run(ORCHESTRA_UI_SET_PRO_MODE_ACTION_ID);
-			append(footer, $('span')).textContent = ' に切り替えられます。';
-			return;
-		}
-
-		// 見出し
 		const heading = append(home, $('.orchestra-home__heading'));
-		append(heading, $('h1.orchestra-home__title')).textContent = hasFolder
-			? 'エージェントに任せましょう'
-			: 'ようこそ、Orchestra へ';
-		append(heading, $('p.orchestra-home__subtitle')).textContent = hasFolder
-			? '右側のエージェントに、やってほしいことをそのまま書いてください。ファイルの編集からコマンドの実行、結果の確認まで、エージェントが自分で進めます。'
-			: 'やってほしいことを日本語で伝えるだけで、AI エージェントがファイルを編集し、コマンドを実行し、結果まで確認してくれるアプリです。まずは作業するフォルダを選びましょう。';
-
-		// エージェントにできること
-		const capabilities = append(home, $('ul.orchestra-home__capabilities'));
-		for (const [icon, text] of [
-			['📝', 'ファイルの作成・編集'],
-			['⌨️', 'コマンドの実行'],
-			['🔍', 'コードの調査とエラー修正'],
-			['✅', '動作の確認と報告'],
-		]) {
-			const li = append(capabilities, $('li.orchestra-home__capability'));
-			append(li, $('span.orchestra-home__capability-icon')).textContent = icon;
-			append(li, $('span')).textContent = text;
-		}
-
-		if (!hasFolder) {
-			// 3 ステップ
-			const steps = append(home, $('ol.orchestra-home__steps'));
-			for (const [n, title, desc] of [
-				['1', 'フォルダを選ぶ', 'エージェントの作業場所になるフォルダです。空のフォルダでも大丈夫。'],
-				['2', 'やってほしいことを伝える', '「TODO アプリを作って」「テストを通して」のように、日本語で。'],
-				['3', 'エージェントが進めます', 'ファイル編集・コマンド実行・確認まで自動。できあがりを見て、直したい点をまた伝えるだけ。'],
-			]) {
-				const li = append(steps, $('li.orchestra-home__step'));
-				append(li, $('span.orchestra-home__step-num')).textContent = n;
-				const text = append(li, $('div.orchestra-home__step-text'));
-				append(text, $('strong')).textContent = title;
-				append(text, $('span')).textContent = desc;
-			}
-
-			// 主ボタン
-			const actions = append(home, $('.orchestra-home__actions'));
-			const openFolder = append(actions, $('button.orchestra-home__button.orchestra-home__button--primary'));
-			openFolder.textContent = 'フォルダを開く';
-			openFolder.onclick = () => {
-				this.commandService.executeCommand(isMacintosh && isNative ? OpenFileFolderAction.ID : OpenFolderAction.ID);
-			};
-			const askAgent = append(actions, $('button.orchestra-home__button'));
-			askAgent.textContent = 'まずはエージェントに相談する';
-			askAgent.onclick = run(ORCHESTRA_CHAT_SEND_PROMPT_ACTION_ID);
-
-			// 最近使ったフォルダ
-			const recents = recentlyOpened.filter(isRecentFolder).slice(0, 5);
-			if (recents.length > 0) {
-				append(home, $('h2.orchestra-home__section-title')).textContent = '最近使ったフォルダ';
-				const list = append(home, $('ul.orchestra-home__recents'));
-				for (const w of recents) {
-					const fullPath = w.label || this.labelService.getWorkspaceLabel(w.folderUri, { verbose: Verbosity.LONG });
-					const { name, parentPath } = splitRecentLabel(fullPath);
-					const item = append(list, $('li'));
-					const button = append(item, $('button.orchestra-home__recent'));
-					button.title = fullPath;
-					append(button, $('span.orchestra-home__recent-name')).textContent = name;
-					append(button, $('span.orchestra-home__recent-path')).textContent = parentPath;
-					button.onclick = e => {
-						this.hostService.openWindow([{ folderUri: w.folderUri } satisfies IWindowOpenable], {
-							forceNewWindow: e.ctrlKey || e.metaKey,
-							remoteAuthority: w.remoteAuthority || null,
-						});
-						e.preventDefault();
-						e.stopPropagation();
-					};
-				}
-			}
-		} else {
-			// 例: 押すとそのままエージェントに送られ、エージェントが作業を始める
-			append(home, $('h2.orchestra-home__section-title')).textContent = 'たとえば、こんな仕事を任せられます';
-			const examples = append(home, $('.orchestra-home__examples'));
-			for (const [label, prompt] of [
-				['このプロジェクトを調べて、構成を説明して', 'このフォルダの中身を調べて、何のプロジェクトで、どんな構成になっているか、主要なファイルの役割とあわせて分かりやすく説明してください。'],
-				['シンプルな TODO アプリを作って動かして', 'このフォルダに、ブラウザで動くシンプルな TODO アプリを作ってください。HTML / CSS / JavaScript だけで作り、必要なファイルを作成したら、実際に開いて動作を確認できる手順まで用意してください。'],
-				['エラーを調べて直して', 'いまエラーが出ています。原因を調べて、修正まで行ってください。必要なコマンドがあれば実行して確認し、何をどう直したか最後に報告してください。'],
-				['テストを実行して、失敗を直して', 'このプロジェクトのテストを実行してください。失敗するものがあれば原因を調べて修正し、もう一度実行して通ることを確認してから結果を報告してください。'],
-			]) {
-				const chip = append(examples, $('button.orchestra-home__example'));
-				chip.textContent = label;
-				chip.title = 'クリックするとエージェントに送信し、作業が始まります';
-				chip.onclick = run(ORCHESTRA_CHAT_SEND_PROMPT_ACTION_ID, prompt);
-			}
-
-			const actions = append(home, $('.orchestra-home__actions'));
-			const chat = append(actions, $('button.orchestra-home__button.orchestra-home__button--primary'));
-			chat.textContent = 'エージェントに指示する';
-			chat.onclick = run(ORCHESTRA_CHAT_SEND_PROMPT_ACTION_ID);
-			// 手元のエージェントとは別に、クラウド (Division のサンドボックス) で並列に走らせる入口。
-			// クラウドエージェントモードに切り替え、「新しいエージェント」の入力欄を開く
-			const cloud = append(actions, $('button.orchestra-home__button'));
-			cloud.textContent = 'クラウドで並列に任せる';
-			cloud.title = 'クラウドエージェントモードに切り替えます。クラウド上のサンドボックスでエージェントを動かし、いくつでも同時に起動できます';
-			cloud.onclick = run(ORCHESTRA_UI_SET_CLOUD_MODE_ACTION_ID, { newAgent: true });
-			const files = append(actions, $('button.orchestra-home__button'));
-			files.textContent = 'ファイル一覧を見る';
-			files.onclick = run(ORCHESTRA_UI_TOGGLE_FILES_ACTION_ID);
-			const terminal = append(actions, $('button.orchestra-home__button'));
-			terminal.textContent = 'ターミナルを開く';
-			terminal.onclick = run(ORCHESTRA_UI_TOGGLE_TERMINAL_ACTION_ID);
-		}
+		append(heading, $('h1.orchestra-home__title')).textContent = 'クラウドエージェントモード';
+		append(heading, $('p.orchestra-home__subtitle')).textContent = 'クラウドのサンドボックスでエージェントを動かし、いくつでも並列に任せられます。一覧・会話・変更はクラウドエージェントのパネルで確認できます。';
+		const actions = append(home, $('.orchestra-home__actions'));
+		const open = append(actions, $('button.orchestra-home__button.orchestra-home__button--primary'));
+		open.textContent = 'クラウドエージェントを開く';
+		open.onclick = run(CLOUD_AGENTS_OPEN_ACTION_ID);
+		const newAgent = append(actions, $('button.orchestra-home__button'));
+		newAgent.textContent = '新しいエージェント';
+		newAgent.onclick = run(CLOUD_AGENTS_NEW_ACTION_ID);
 
 		// 自分でもコードを触りたい人向けの逃げ道
 		const footer = append(home, $('p.orchestra-home__footer'));
