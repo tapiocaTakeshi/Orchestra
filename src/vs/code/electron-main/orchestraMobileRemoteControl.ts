@@ -166,7 +166,12 @@ async function removeRemoteSession(activeAccount = account, activePairing = pair
 	}
 }
 
-async function publishRemoteSession(): Promise<void> {
+/**
+ * Upserts this desktop's RemoteSession row. `syncedAt` is only sent by `/remote-control`;
+ * heartbeats leave it out, so the merge keeps the last sync time and the phone's Realtime
+ * UPDATE listener only notifies when a chat is actually synced.
+ */
+async function publishRemoteSession(syncedAt?: number): Promise<void> {
 	if (!account || !pairing || pairing.url.includes('127.0.0.1')) return;
 	const response = await fetch(`${SUPABASE_URL}/rest/v1/${REMOTE_SESSION_TABLE}?on_conflict=id`, {
 		method: 'POST',
@@ -184,6 +189,7 @@ async function publishRemoteSession(): Promise<void> {
 			token: pairing.token,
 			protocolVersion: PROTOCOL_VERSION,
 			lastSeenAt: new Date().toISOString(),
+			...(syncedAt !== undefined ? { syncedAt: new Date(syncedAt).toISOString() } : {}),
 		}),
 	});
 	if (!response.ok) throw new Error(`RemoteSession publish failed (HTTP ${response.status})`);
@@ -199,8 +205,11 @@ type GatewayStatus = { listening: boolean; url: string; deviceLabel: string; acc
 /**
  * `/remote-control` in the chat: republish the RemoteSession right away instead of
  * waiting for the next heartbeat, so the phone finds this desktop immediately.
+ * With `syncedAt` (a chat was synced, not just `/remote-control status`) the row carries
+ * it, and the phone notifies as soon as Realtime delivers the update.
  */
-async function announce(): Promise<GatewayStatus> {
+async function announce(_event: unknown, rawSyncedAt?: unknown): Promise<GatewayStatus> {
+	const syncedAt = typeof rawSyncedAt === 'number' && Number.isFinite(rawSyncedAt) && rawSyncedAt > 0 ? rawSyncedAt : undefined;
 	const status: GatewayStatus = {
 		listening: !!server?.listening,
 		url: pairing?.url ?? '',
@@ -212,7 +221,7 @@ async function announce(): Promise<GatewayStatus> {
 	if (!account || !pairing) return status;
 	if (pairing.url.includes('127.0.0.1')) return { ...status, error: 'この PC が LAN に繋がっていません' };
 	try {
-		await publishRemoteSession();
+		await publishRemoteSession(syncedAt);
 		startHeartbeat();
 		return { ...status, published: true };
 	} catch (error) {
