@@ -13,7 +13,7 @@
 
 import type { Event } from '../../../../base/common/event.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
-import type { CloudChange, CloudPullRequestInfo, CloudPullRequestResult, CloudSession, CloudSessionEvent, CreateCloudPullRequestParams, GitHubRepo } from '../common/cloudAgentTypes.js';
+import type { CloudChange, CloudGoalLoopMode, CloudPullRequestInfo, CloudPullRequestResult, CloudSession, CloudSessionEvent, CreateCloudPullRequestParams, GitHubRepo } from '../common/cloudAgentTypes.js';
 
 
 /** 「変更を取り込む」の結果 (パスはワークスペースからの相対パス) */
@@ -155,6 +155,8 @@ export type CloudAgentState = {
 	githubPick: CloudGitHubPick | null;
 	/** 最後に選んだモデル。null = まだ選んだことがない (パネルは使用中の Division プロジェクトがあれば Division Project を既定にする) */
 	modelPick: CloudModelPick | null;
+	/** 新しいエージェントの目標ループ (覚えておいて次回の初期値にする)。既定は auto */
+	goalLoopPick: CloudGoalLoopMode;
 	/** session id → pull request state (only for GitHub-repo sessions that were looked at) */
 	pullRequestById: Record<string, CloudPullRequestState>;
 };
@@ -189,6 +191,8 @@ export type CreateCloudSessionsOptions = {
 	 * coder の割り当てをモデルに使う (model を指定したときは model が優先)。空なら送らない
 	 */
 	projectId?: string;
+	/** 目標ループ。省略時は goalLoopPick (覚えている選択) */
+	goalLoop?: CloudGoalLoopMode;
 	/** false なら、起動したセッションを選択しない (カンバンからの起動など、見ている画面を切り替えたくないとき)。既定は true */
 	select?: boolean;
 };
@@ -202,7 +206,8 @@ export interface ICloudAgentService {
 	refresh(): Promise<void>;
 	createSession(opts: CreateCloudSessionsOptions): Promise<CloudSession[]>;
 	select(id: string | null): void;
-	sendMessage(id: string, text: string): Promise<boolean>;
+	/** 追加の指示。continueGoal: 目標ループが「毎回確認」で止まっているとき次のラウンドへ進める (text は空でもよい) */
+	sendMessage(id: string, text: string, opts?: { continueGoal?: boolean }): Promise<boolean>;
 	stop(id: string): Promise<void>;
 	/** 動いているセッションをすべて止める。止めた数を返す */
 	stopAll(): Promise<number>;
@@ -235,6 +240,8 @@ export interface ICloudAgentService {
 
 	/** 選んだモデルを覚える (次回の初期値になる)。null で忘れる */
 	setModelPick(pick: CloudModelPick | null): void;
+	/** 選んだ目標ループを覚える (次回の初期値になる) */
+	setGoalLoopPick(mode: CloudGoalLoopMode): void;
 
 	// --- Pull requests (GitHub-repo sessions only) ---
 

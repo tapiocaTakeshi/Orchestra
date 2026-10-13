@@ -58,9 +58,11 @@ import {
 	PanelRight,
 	Plus,
 	RefreshCw,
+	Repeat,
 	Search,
 	Square,
 	SquareTerminal,
+	Target,
 	Workflow,
 	Wrench,
 	X,
@@ -76,11 +78,14 @@ import {
 	CLOUD_DIVISION_PROJECT_MODEL,
 	CLOUD_PR_TITLE_MAX,
 	CloudChange,
+	CloudGoalEventData,
+	CloudGoalLoopMode,
 	CloudPlanEventData,
 	CloudPlanTask,
 	CloudPullRequest,
 	CloudPullRequestEventData,
 	CloudPullRequestStatus,
+	CloudReviewEventData,
 	CloudSession,
 	CloudSessionEvent,
 	CloudSessionStatus,
@@ -88,6 +93,7 @@ import {
 	GITHUB_NOT_CONNECTED,
 	GitHubRepo,
 	cloudRepoLabel,
+	pausedGoalReview,
 	formatCloudCostUsd,
 	isCloudSessionActive,
 	isGitHubRepoSession,
@@ -1270,7 +1276,10 @@ ModelPickerPopover.displayName = 'ModelPickerPopover';
 /** パネルが閉じている間に来た「入力欄にフォーカス」の要求も拾えるよう、最後に処理した番号を覚えておく */
 let lastHandledFocusRequest = 0;
 
-type ComposerMenu = 'source' | 'parallel' | 'project' | 'model' | null;
+type ComposerMenu = 'source' | 'parallel' | 'project' | 'model' | 'loop' | null;
+
+const GOAL_LOOP_MODES: CloudGoalLoopMode[] = ['auto', 'confirm', 'off'];
+const goalLoopLabelKey = (mode: CloudGoalLoopMode): TranslationKey => `cloudAgents.goal.mode.${mode}` as TranslationKey;
 
 const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 	draft: NewAgentDraft;
@@ -1347,6 +1356,7 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 			prompt,
 			title: title.trim() || undefined,
 			model,
+			goalLoop: state.goalLoopPick,
 			...(projectId ? { projectId } : {}),
 			source: effectiveSource,
 			includeWorkspace: effectiveSource === 'workspace',
@@ -1359,7 +1369,7 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 			// 並列で起動したときは 1 本目を開く
 			cloudAgentService.select(created[0].id);
 		}
-	}, [canLaunch, sourceReady, modelReady, cloudAgentService, prompt, title, modelPick, projectId, effectiveSource, state.githubPick, repoUrl, urlBranch, count, setDraft]);
+	}, [canLaunch, sourceReady, modelReady, cloudAgentService, prompt, title, modelPick, projectId, effectiveSource, state.githubPick, state.goalLoopPick, repoUrl, urlBranch, count, setDraft]);
 
 	const sourceHint =
 		effectiveSource === 'workspace' && state.workspaceName ? t('cloudAgents.new.includeWorkspaceHint').replace('{name}', state.workspaceName)
@@ -1465,6 +1475,30 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 				</div>
 			</Popover>
 		);
+	} else if (menu === 'loop') {
+		popover = (
+			<Popover ref={popoverRef} onClose={() => setMenu(null)} width='360px'>
+				<PopoverTitle>{t('cloudAgents.goal.loopTitle')}</PopoverTitle>
+				<div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+					{GOAL_LOOP_MODES.map(mode => (
+						<button
+							key={mode}
+							type='button'
+							className='oca-option'
+							data-selected={state.goalLoopPick === mode}
+							onClick={() => { cloudAgentService.setGoalLoopPick(mode); setMenu(null); textareaRef.current?.focus(); }}
+						>
+							<span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '1px' }}>
+								<span>{t(goalLoopLabelKey(mode))}</span>
+								<span style={{ fontSize: '11px', color: C.fgMuted, whiteSpace: 'normal', lineHeight: 1.35 }}>{t(`${goalLoopLabelKey(mode)}.hint` as TranslationKey)}</span>
+							</span>
+							{state.goalLoopPick === mode && <CheckCircle2 size={12} style={{ flexShrink: 0 }} />}
+						</button>
+					))}
+				</div>
+				<div style={{ fontSize: '11px', color: C.fgMuted, lineHeight: 1.4 }}>{t('cloudAgents.goal.loopHint')}</div>
+			</Popover>
+		);
 	} else if (menu === 'model') {
 		popover = (
 			<ModelPickerPopover
@@ -1527,6 +1561,11 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 						<Layers size={12} />
 						<span style={ellipsis}>{projectLabel ?? t('cloudAgents.project.none')}</span>
 						{divisionMode ? <Lock size={10} style={{ flexShrink: 0, opacity: 0.7 }} /> : <ChevronDown size={11} style={{ flexShrink: 0, opacity: 0.7 }} />}
+					</button>
+					<button type='button' className='oca-chip' data-active={menu === 'loop'} title={`${t('cloudAgents.goal.loopTitle')}: ${t(`${goalLoopLabelKey(state.goalLoopPick)}.hint` as TranslationKey)}`} onClick={() => toggleMenu('loop')}>
+						<Repeat size={12} />
+						<span style={ellipsis}>{t('cloudAgents.goal.loop')} · {t(goalLoopLabelKey(state.goalLoopPick))}</span>
+						<ChevronDown size={11} style={{ flexShrink: 0, opacity: 0.7 }} />
 					</button>
 				</div>
 			}
@@ -2056,6 +2095,7 @@ const CompletionCard = ({ data, onReview }: { data: any; onReview: () => void })
 			<div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', fontWeight: 600, color: C.success }}>
 				<CheckCircle2 size={14} />
 				{t('cloudAgents.done.title')}
+				{typeof data?.round === 'number' && <span style={{ fontWeight: 400, color: C.fgMuted }}>· {t('cloudAgents.goal.round').replace('{round}', String(data.round))}</span>}
 				<span style={{ fontWeight: 400, color: C.fgMuted }}>
 					· {changed > 0 ? t('cloudAgents.filesChanged').replace('{count}', String(changed)) : t('cloudAgents.done.noChanges')}
 				</span>
@@ -2626,13 +2666,123 @@ const TaskEventRow = ({ data, position }: { data: CloudTaskEventData; position: 
 	);
 };
 
-const EventView = ({ event, onReview, division, active }: {
+// --- 目標ループ (目標 → ラウンドごとの作業 → レビュー → 未達なら次のラウンド) ---
+
+/** goal イベント: リーダーが立てた目標と達成条件 */
+const GoalCard = ({ data }: { data: CloudGoalEventData }) => {
+	const { t } = useTranslation();
+	const criteria = (Array.isArray(data?.criteria) ? data.criteria : []).filter(c => typeof c === 'string' && c.trim());
+	return (
+		<div style={{ border: `1px solid ${tint(C.accent, 40)}`, borderRadius: '8px', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '4px', background: tint(C.accent, 6) }}>
+			<div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
+				<Target size={13} style={{ color: C.accent, flexShrink: 0 }} />
+				<span style={{ fontSize: '12.5px', fontWeight: 600, color: C.fg, flexShrink: 0 }}>{t('cloudAgents.goal.title')}</span>
+				{data?.model && <span title={data.model} style={{ fontSize: '11px', color: C.fgMuted, minWidth: 0, ...ellipsis }}>{t('cloudAgents.plan.leader').replace('{model}', data.model)}</span>}
+				<span style={{ flex: 1 }} />
+				{typeof data?.maxRounds === 'number' && (
+					<span style={{ fontSize: '11px', color: C.fgMuted, flexShrink: 0, whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+						<Repeat size={10} />
+						{t(goalLoopLabelKey(data.mode === 'confirm' ? 'confirm' : 'auto'))} · {t('cloudAgents.goal.maxRounds').replace('{n}', String(data.maxRounds))}
+					</span>
+				)}
+			</div>
+			<div style={{ fontSize: '13px', lineHeight: 1.55, color: C.fg, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{String(data?.goal ?? '')}</div>
+			{criteria.length > 0 && (
+				<>
+					<div style={{ fontSize: '11px', fontWeight: 600, color: C.fgMuted, marginTop: '2px' }}>{t('cloudAgents.goal.criteria')}</div>
+					{criteria.map((c, i) => (
+						<div key={i} style={{ display: 'flex', gap: '6px', fontSize: '12.5px', lineHeight: 1.5, color: C.fg }}>
+							<span style={{ color: C.fgMuted, fontFamily: C.monoFont, fontSize: '11px', marginTop: '2px', flexShrink: 0 }}>{i + 1}.</span>
+							<span style={{ minWidth: 0, wordBreak: 'break-word' }}>{c}</span>
+						</div>
+					))}
+				</>
+			)}
+		</div>
+	);
+};
+
+/** review (start): ラウンドのレビューの区切り */
+const ReviewStartRow = ({ data, roleName }: { data: Extract<CloudReviewEventData, { status: 'start' }>; roleName: string }) => {
+	const { t } = useTranslation();
+	return (
+		<div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0, marginTop: '10px', padding: '0 2px', fontSize: '12px' }}>
+			<Target size={12} style={{ color: C.accent, flexShrink: 0 }} />
+			<span style={{ color: C.fg, fontWeight: 600, flexShrink: 0 }}>{t('cloudAgents.goal.reviewing').replace('{round}', String(data.round))}</span>
+			<RoleChip role={data.role || 'reviewer'} name={roleName} />
+			{data.model && <span title={data.model} style={{ color: C.fgMuted, fontSize: '11px', flex: '0 2 auto', minWidth: '30px', ...ellipsis }}>({data.model})</span>}
+			<span style={{ flex: 1, minWidth: '16px', height: '1px', background: C.border }} />
+		</div>
+	);
+};
+
+/** review (done): 条件ごとの ✅ / ❌ と、次にどうなるか。止まっているときは「次のラウンドへ進む」 */
+const ReviewCard = ({ data, onContinue, continueBusy }: {
+	data: Extract<CloudReviewEventData, { status: 'done' }>;
+	/** 確認待ちのまま最新のレビューなら、次のラウンドへ進めるボタンを出す */
+	onContinue?: () => void;
+	continueBusy?: boolean;
+}) => {
+	const { t } = useTranslation();
+	const criteria = Array.isArray(data?.criteria) ? data.criteria : [];
+	const max = typeof data?.maxRounds === 'number' ? data.maxRounds : undefined;
+	const round = Number(data?.round) || 1;
+	const outcome =
+		data.next === 'achieved' ? t('cloudAgents.goal.next.achieved').replace('{round}', String(round))
+			: data.next === 'continue' ? t('cloudAgents.goal.next.continue').replace('{next}', String(round + 1)).replace('{max}', String(max ?? '?'))
+				: data.next === 'paused' ? t('cloudAgents.goal.next.paused').replace('{round}', String(round)).replace('{max}', String(max ?? '?'))
+					: t('cloudAgents.goal.next.limit').replace('{round}', String(round));
+	const color = data.next === 'achieved' ? C.success : data.next === 'limit' ? C.error : C.warning;
+	return (
+		<div style={{ border: `1px solid ${tint(color, 45)}`, borderRadius: '8px', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '5px', background: C.bgSide }}>
+			<div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: C.fgMuted }}>
+				<Target size={12} />
+				{t('cloudAgents.goal.check')}
+				<span style={{ fontWeight: 400 }}>· {t('cloudAgents.goal.round').replace('{round}', String(round))}</span>
+			</div>
+			{criteria.map(c => (
+				<div key={c.index} style={{ display: 'flex', alignItems: 'flex-start', gap: '7px', fontSize: '12.5px', lineHeight: 1.5 }}>
+					<span style={{ display: 'inline-flex', marginTop: '3px', flexShrink: 0 }}>
+						{c.met ? <CheckCircle2 size={13} style={{ color: C.success }} /> : <XCircle size={13} style={{ color: C.error }} />}
+					</span>
+					<span style={{ minWidth: 0, wordBreak: 'break-word', color: C.fg }}>
+						{c.index}. {c.text}
+						{c.reason && <span style={{ color: C.fgMuted }}> — {c.reason}</span>}
+					</span>
+				</div>
+			))}
+			{typeof data.summary === 'string' && data.summary.trim() && (
+				<div className='oca-md' style={{ fontSize: '12.5px', lineHeight: 1.55, color: C.fg }}>
+					<ChatMarkdownRender string={data.summary} chatMessageLocation={undefined} isApplyEnabled={false} isLinkDetectionEnabled={false} />
+				</div>
+			)}
+			<div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', fontWeight: 600, color }}>
+				{data.next === 'achieved' ? <CheckCircle2 size={13} /> : data.next === 'limit' ? <XCircle size={13} /> : <Repeat size={13} />}
+				{outcome}
+			</div>
+			{onContinue && (
+				<div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+					<button type='button' disabled={continueBusy} onClick={onContinue} style={buttonStyle('primary', continueBusy)}>
+						{continueBusy ? <Spinner size={11} /> : <Repeat size={12} />}
+						{t('cloudAgents.goal.continue')}
+					</button>
+					<span style={{ fontSize: '11px', color: C.fgMuted, lineHeight: 1.4 }}>{t('cloudAgents.goal.continueHint')}</span>
+				</div>
+			)}
+		</div>
+	);
+};
+
+const EventView = ({ event, onReview, division, active, onContinueGoal, continueBusy }: {
 	event: CloudSessionEvent;
 	onReview: () => void;
 	/** Division Project モードの計画とタスクの進み具合 (plan / task / role 付きの発言の表示に使う) */
 	division?: DivisionInfo;
 	/** セッションが動いている (計画の「作業中」をくるくるにする) */
 	active?: boolean;
+	/** このイベントが確認待ちのレビューなら、次のラウンドへ進める */
+	onContinueGoal?: () => void;
+	continueBusy?: boolean;
 }) => {
 	const { t } = useTranslation();
 	const data = event.data ?? {};
@@ -2650,13 +2800,13 @@ const EventView = ({ event, onReview, division, active }: {
 		case 'assistant': {
 			const text = typeof data.text === 'string' ? data.text.trim() : '';
 			if (!text) return null;
-			// Division Project モードでは、どのロールの発言かを小さなチップで横に出す
-			const role = typeof data.role === 'string' ? data.role : '';
+			// Division Project モードでは、どのロールの発言かを小さなチップで横に出す (目標ループのレビュアーも)
+			const role = typeof data.role === 'string' && data.role ? data.role : data.phase === 'review' ? 'reviewer' : '';
 			return (
 				<div className='oca-md' style={{ fontSize: '13px', lineHeight: 1.65, color: C.fg, padding: '0 2px' }}>
 					{role && (
 						<span style={{ float: 'left', margin: '2px 7px 0 0', display: 'inline-flex' }}>
-							<RoleChip role={role} name={division?.roleNames.get(role) || role} />
+							<RoleChip role={role} name={division?.roleNames.get(role) || (data.phase === 'review' ? t('cloudAgents.goal.reviewer') : role)} />
 						</span>
 					)}
 					<ChatMarkdownRender string={text} chatMessageLocation={undefined} isApplyEnabled={false} isLinkDetectionEnabled={false} />
@@ -2696,6 +2846,12 @@ const EventView = ({ event, onReview, division, active }: {
 			return <CompletionCard data={data} onReview={onReview} />;
 		case 'pull_request':
 			return <PullRequestEventCard data={data as CloudPullRequestEventData} />;
+		case 'goal':
+			return <GoalCard data={data as CloudGoalEventData} />;
+		case 'review':
+			return data.status === 'start'
+				? <ReviewStartRow data={data} roleName={division?.roleNames.get(data.role || 'reviewer') || t('cloudAgents.goal.reviewer')} />
+				: data.status === 'done' ? <ReviewCard data={data} onContinue={onContinueGoal} continueBusy={continueBusy} /> : null;
 		default:
 			return null;
 	}
@@ -2760,6 +2916,17 @@ const Stream = ({ session, events, onReview, footer }: {
 	const items = useMemo(() => buildStreamItems(withChangedFiles(events ?? [], session.changedFiles)), [events, session.changedFiles]);
 	const division = useMemo(() => buildDivisionInfo(events ?? []), [events]);
 	const lastSeq = events?.length ? events[events.length - 1].seq : -1;
+	const accessor = useAccessor();
+	const cloudAgentService = accessor.get('ICloudAgentService');
+	const state = useCloudAgentState();
+	// 目標ループが「毎回確認」で止まっている: 最後のレビューに「次のラウンドへ進む」を出す
+	const pausedReviewSeq = useMemo(() => {
+		if (!events || !pausedGoalReview(events)) return null;
+		for (let i = events.length - 1; i >= 0; i--) if (events[i].type === 'review' && events[i].data?.status === 'done') return events[i].seq;
+		return null;
+	}, [events]);
+	const canContinueGoal = pausedReviewSeq !== null && !isCloudSessionActive(session.status) && state.isLoggedIn;
+	const continueGoal = useCallback(() => { void cloudAgentService.sendMessage(session.id, '', { continueGoal: true }); }, [cloudAgentService, session.id]);
 
 	const scrollToBottom = useCallback(() => {
 		const el = scrollRef.current;
@@ -2803,7 +2970,15 @@ const Stream = ({ session, events, onReview, footer }: {
 						</>
 					) : items.map(item => item.kind === 'tools'
 						? <ToolGroupRow key={item.key} events={item.events} />
-						: <EventView key={item.key} event={item.event} onReview={onReview} division={division} active={active} />)}
+						: <EventView
+							key={item.key}
+							event={item.event}
+							onReview={onReview}
+							division={division}
+							active={active}
+							onContinueGoal={canContinueGoal && item.event.seq === pausedReviewSeq ? continueGoal : undefined}
+							continueBusy={!!state.sendingById[session.id]}
+						/>)}
 					{events !== undefined && footer}
 					{active && (
 						<div style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '12px', color: C.fgMuted, padding: '2px 6px' }}>
@@ -2855,6 +3030,14 @@ const FollowUpComposer = ({ session, value, setValue }: { session: CloudSession;
 		const ok = await cloudAgentService.sendMessage(session.id, value);
 		if (ok) setValue('');
 	};
+	// 目標ループが確認待ち: 書いた内容を追加の指示として次のラウンドへ進める
+	const events = state.eventsById[session.id];
+	const goalPaused = !active && !!events && !!pausedGoalReview(events);
+	const continueGoal = async () => {
+		if (!state.isLoggedIn || sending) return;
+		const ok = await cloudAgentService.sendMessage(session.id, value, { continueGoal: true });
+		if (ok) setValue('');
+	};
 
 	return (
 		<ComposerBox
@@ -2872,6 +3055,12 @@ const FollowUpComposer = ({ session, value, setValue }: { session: CloudSession;
 			actions={
 				<>
 					{active && <StopButton title={t('cloudAgents.composer.stop')} onClick={() => { void cloudAgentService.stop(session.id); }} />}
+					{goalPaused && (
+						<button type='button' disabled={!state.isLoggedIn || sending} title={t('cloudAgents.goal.continueHint')} onClick={() => { void continueGoal(); }} style={buttonStyle('secondary', !state.isLoggedIn || sending)}>
+							<Repeat size={12} />
+							{t('cloudAgents.goal.continue')}
+						</button>
+					)}
 					{(!active || value.trim()) && <SendButton disabled={!canSend} busy={sending} title={t('cloudAgents.followup.send')} onClick={() => { void send(); }} />}
 				</>
 			}
