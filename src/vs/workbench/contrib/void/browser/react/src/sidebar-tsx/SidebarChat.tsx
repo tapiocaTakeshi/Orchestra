@@ -4520,6 +4520,7 @@ const FlowReviewComponent = ({ chatMessage, isCheckpointGhost }: {
 }) => {
 	const accessor = useAccessor()
 	const chatThreadsService = accessor.get('IChatThreadService')
+	const commandService = accessor.get('ICommandService')
 
 	const flowOutputs = chatMessage.allFlowOutputs || [
 		{ role: chatMessage.flowRole, mdFileName: chatMessage.mdFileName, mdFilePath: chatMessage.mdFilePath, mdContent: chatMessage.mdContent }
@@ -4615,6 +4616,15 @@ const FlowReviewComponent = ({ chatMessage, isCheckpointGhost }: {
 							title={o.mdFileName}
 							roleLabel={roleLabel}
 							defaultOpen={false}
+							rightAction={/(^|[\\/])DESIGN\.md$/i.test(o.mdFileName) && o.mdFilePath ? (
+								<button
+									onClick={() => commandService.executeCommand('orchestra.designPreview.open', o.mdFilePath)}
+									className='text-[11px] px-1.5 py-0.5 rounded text-void-fg-3 hover:text-void-fg-1 hover:bg-void-bg-3 cursor-pointer'
+									title='Markdown + HTML プレビュー'
+								>
+									プレビュー
+								</button>
+							) : undefined}
 						>
 							{status === 'pending' && isEditing ? (
 								<textarea

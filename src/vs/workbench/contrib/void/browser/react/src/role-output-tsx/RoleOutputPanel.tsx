@@ -4,9 +4,9 @@
  *--------------------------------------------------------------------------------------*/
 
 import React, { useMemo, useState } from 'react';
-import { useChatThreadsState, useSettingsState } from '../util/services.js';
+import { useAccessor, useChatThreadsState, useSettingsState } from '../util/services.js';
 import { ChatMarkdownRender, ChatMessageLocation } from '../markdown/ChatMarkdownRender.js';
-import { ChevronDown, ChevronRight, FileText, Layers } from 'lucide-react';
+import { ChevronDown, ChevronRight, Eye, FileText, Layers } from 'lucide-react';
 import { ChatMessage } from '../../../../common/chatThreadServiceTypes.js';
 import { roleDisplayConfig } from '../conductor-tsx/ConductorTypes.js';
 import { AgentRole } from '../../../../common/voidSettingsTypes.js';
@@ -14,6 +14,7 @@ import { AgentRole } from '../../../../common/voidSettingsTypes.js';
 type RoleOutput = {
 	role: string;
 	mdFileName?: string;
+	mdFilePath?: string;
 	mdContent: string;
 	status?: 'pending' | 'approved' | 'rejected';
 	provider?: string;
@@ -72,6 +73,7 @@ function extractRoleOutputs(messages: ChatMessage[]): RoleOutput[] {
 			outputs.push({
 				role: msg.flowRole,
 				mdFileName: msg.mdFileName,
+				mdFilePath: msg.mdFilePath,
 				mdContent: msg.mdContent,
 				status: msg.status,
 				messageIdx: idx,
@@ -157,8 +159,18 @@ function buildCombinedMarkdown(outputs: RoleOutput[]): string {
 	return sections.join('\n\n---\n\n');
 }
 
+// DESIGN.md は「Markdown + HTML プレビュー」(orchestra.designPreview.open) で ```html ブロックごと表示できる
+const isDesignMd = (name: string | undefined) => !!name && /(^|[\\/])DESIGN\.md$/i.test(name);
+
 const RoleCard = ({ output, threadId }: { output: RoleOutput; threadId: string }) => {
 	const [isExpanded, setIsExpanded] = useState(true);
+	const accessor = useAccessor();
+	const commandService = accessor.get('ICommandService');
+	const openDesignPreview = (e: React.SyntheticEvent) => {
+		e.stopPropagation();
+		e.preventDefault();
+		commandService.executeCommand('orchestra.designPreview.open', output.mdFilePath);
+	};
 	const roleLower = output.role.toLowerCase() as AgentRole;
 	const config = roleDisplayConfig[roleLower];
 	const accentColor = config?.color || 'var(--vscode-focusBorder)';
@@ -218,6 +230,24 @@ const RoleCard = ({ output, threadId }: { output: RoleOutput; threadId: string }
 							}}>
 								<FileText size={11} />
 								{output.mdFileName}
+							</span>
+						)}
+						{isDesignMd(output.mdFileName) && output.mdFilePath && (
+							<span
+								role='button'
+								tabIndex={0}
+								title='Markdown + HTML プレビュー'
+								onClick={openDesignPreview}
+								onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') openDesignPreview(e); }}
+								style={{
+									display: 'flex', alignItems: 'center', gap: '4px',
+									fontSize: '11px', color: 'var(--vscode-textLink-foreground)',
+									background: 'var(--void-bg-2)', padding: '2px 8px', borderRadius: '4px',
+									cursor: 'pointer',
+								}}
+							>
+								<Eye size={11} />
+								プレビュー
 							</span>
 						)}
 						{output.status && (
