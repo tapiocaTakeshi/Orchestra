@@ -41,7 +41,10 @@ import {
 	CLOUD_AGENTS_MAX_PARALLEL,
 	CLOUD_AGENTS_OPEN_ACTION_ID,
 	CLOUD_DIVISION_PROJECT_MODEL,
+	CLOUD_GOAL_LOOP_DEFAULT,
 	CLOUD_SESSIONS_API_PREFIX,
+	CloudGoalLoopMode,
+	isCloudGoalLoopMode,
 	CloudAgentResponse,
 	CloudAgentUploadResult,
 	CloudChange,
@@ -119,6 +122,8 @@ const GITHUB_CONNECT_TIMEOUT_MS = 5 * 60_000;
 const GITHUB_PICK_STORAGE_KEY = 'orchestra.cloudAgents.githubPick';
 /** 最後に選んだモデル (StorageScope.APPLICATION) */
 const MODEL_PICK_STORAGE_KEY = 'orchestra.cloudAgents.modelPick';
+/** 最後に選んだ目標ループ (StorageScope.APPLICATION) */
+const GOAL_LOOP_PICK_STORAGE_KEY = 'orchestra.cloudAgents.goalLoop';
 
 /** 覚えておけるモデルの選択か (壊れた値・古い形式は null) */
 const toModelPick = (raw: any): CloudModelPick | null => {
@@ -343,6 +348,7 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		githubBranchesByRepo: {},
 		githubPick: null,
 		modelPick: null,
+		goalLoopPick: CLOUD_GOAL_LOOP_DEFAULT,
 		pullRequestById: {},
 	};
 	get state(): CloudAgentState { return this._state; }
@@ -391,7 +397,7 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		this._main = ProxyChannel.toService<ICloudAgentMainService>(mainProcessService.getChannel(CLOUD_AGENT_CHANNEL_NAME));
 
 		this._lastToken = this._tokenSignature();
-		this._state = { ...this._state, isLoggedIn: this._isLoggedIn(), workspaceName: this._workspaceFolder()?.name ?? null, githubPick: this._loadGitHubPick(), modelPick: this._loadModelPick() };
+		this._state = { ...this._state, isLoggedIn: this._isLoggedIn(), workspaceName: this._workspaceFolder()?.name ?? null, githubPick: this._loadGitHubPick(), modelPick: this._loadModelPick(), goalLoopPick: this._loadGoalLoopPick() };
 
 		this._register(this._settingsService.onDidChangeState(() => this._onSettingsChanged()));
 		this._register(this._workspaceService.onDidChangeWorkspaceFolders(() => {
@@ -792,6 +798,7 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		const model = (opts.model ?? '').trim();
 		const projectId = (opts.projectId ?? '').trim();
 		const selectCreated = opts.select !== false;
+		const goalLoop: CloudGoalLoopMode = isCloudGoalLoopMode(opts.goalLoop) ? opts.goalLoop : this._state.goalLoopPick;
 		if (model === CLOUD_DIVISION_PROJECT_MODEL && !projectId) {
 			// サーバーも 400 を返すが、サンドボックスを作る前に日本語で弾く
 			this._setState({ lastError: 'Division Project をモデルにするには、Division と同期したプロジェクトを選んでください。' });
@@ -813,6 +820,7 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 				...(model ? { model } : {}),
 				...(projectId ? { projectId } : {}),
 				...(workspaceName ? { workspaceName } : {}),
+				goalLoop,
 			}, CREATE_TIMEOUT_MS);
 			const session = created.ok ? created.data?.session as CloudSession | undefined : undefined;
 			if (!session?.id) {
@@ -895,12 +903,14 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		}
 	}
 
-	async sendMessage(id: string, text: string): Promise<boolean> {
+	async sendMessage(id: string, text: string, opts?: { continueGoal?: boolean }): Promise<boolean> {
 		const trimmed = text.trim();
-		if (!trimmed || this._state.sendingById[id]) return false;
+		const continueGoal = opts?.continueGoal === true;
+		if ((!trimmed && !continueGoal) || this._state.sendingById[id]) return false;
 		this._setState({ sendingById: { ...this._state.sendingById, [id]: true } });
 		try {
-			const res = await this._request('POST', this._sessionPath(id, '/messages'), { text: trimmed });
+			const body = continueGoal ? { continueGoal: true, ...(trimmed ? { text: trimmed } : {}) } : { text: trimmed };
+			const res = await this._request('POST', this._sessionPath(id, '/messages'), body);
 			if (!res.ok) {
 				this._setState({ lastError: describeCloudAgentError(res) });
 				return false;
@@ -1569,6 +1579,23 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 			if (next) this._storageService.store(MODEL_PICK_STORAGE_KEY, JSON.stringify(next), StorageScope.APPLICATION, StorageTarget.MACHINE);
 			else this._storageService.remove(MODEL_PICK_STORAGE_KEY, StorageScope.APPLICATION);
 		} catch { /* 覚えられなくても選択はできている */ }
+	}
+
+	setGoalLoopPick(mode: CloudGoalLoopMode): void {
+		if (!isCloudGoalLoopMode(mode)) return;
+		this._setState({ goalLoopPick: mode });
+		try {
+			this._storageService.store(GOAL_LOOP_PICK_STORAGE_KEY, mode, StorageScope.APPLICATION, StorageTarget.MACHINE);
+		} catch { /* 覚えられなくても選択はできている */ }
+	}
+
+	private _loadGoalLoopPick(): CloudGoalLoopMode {
+		try {
+			const raw = this._storageService.get(GOAL_LOOP_PICK_STORAGE_KEY, StorageScope.APPLICATION);
+			return isCloudGoalLoopMode(raw) ? raw : CLOUD_GOAL_LOOP_DEFAULT;
+		} catch {
+			return CLOUD_GOAL_LOOP_DEFAULT;
+		}
 	}
 
 	private _loadModelPick(): CloudModelPick | null {

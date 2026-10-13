@@ -11,14 +11,16 @@
 // createDecorator 以外の実行時依存を持たせないこと。
 //
 // サーバー側の API 契約 (Division ⇄ Orchestra) に合わせてある:
-//   POST /api/cloud-sessions                  { prompt, title?, model?, projectId?, workspaceName? } → { session }
+//   POST /api/cloud-sessions                  { prompt, title?, model?, projectId?, workspaceName?, goalLoop?, maxRounds? } → { session }
 //        model: "provider/model" (単体のモデル) / "division-project" (projectId 必須。Division Project として動く) / 省略 (プロジェクトの coder)
+//        goalLoop: "auto" (既定。目標を立てて達成するまでラウンドを繰り返す) / "confirm" (未達のラウンドごとに止まる) / "off"
 //   POST /api/cloud-sessions/:id/upload       { index, total, data(base64) }
 //   POST /api/cloud-sessions/:id/start        { workspaceInfo?, repo? } → { session }
 //   GET  /api/cloud-sessions?limit=50         → { sessions }
 //   GET  /api/cloud-sessions/:id              → { session }
 //   GET  /api/cloud-sessions/:id/events?after=&limit=  → { events, session }
 //   POST /api/cloud-sessions/:id/messages     { text } → { session }
+//        { continueGoal: true, text? }: 目標ループが「毎回確認」で止まっているとき、次のラウンドへ進める (text は追加の指示)
 //   POST /api/cloud-sessions/:id/stop         {} → { session }
 //   POST /api/cloud-sessions/:id/archive      {} → { ok }
 //   GET  /api/cloud-sessions/:id/changes      → { changes, patch, patchTruncated }
@@ -95,9 +97,13 @@ export interface CloudSession {
 	 * so an absent value must not wipe a known one.
 	 */
 	pullRequest?: CloudPullRequest | null;
+	/** 目標ループ。この機能より前のサーバー・セッションには無い (= 'off') */
+	goalLoop?: CloudGoalLoopMode;
+	/** 目標ループのラウンド数の上限 */
+	goalMaxRounds?: number;
 }
 
-export type CloudSessionEventType = 'user' | 'assistant' | 'tool' | 'status' | 'error' | 'done' | 'plan' | 'task' | 'pull_request';
+export type CloudSessionEventType = 'user' | 'assistant' | 'tool' | 'status' | 'error' | 'done' | 'plan' | 'task' | 'pull_request' | 'goal' | 'review';
 
 export interface CloudSessionEvent {
 	seq: number;
@@ -113,6 +119,9 @@ export interface CloudSessionEvent {
 	 *  - plan:      CloudPlanEventData (Division Project モードのみ。リーダーの計画)
 	 *  - task:      CloudTaskEventData (Division Project モードのみ。ロールごとのタスクの開始 / 完了 / 失敗)
 	 *  - pull_request: CloudPullRequestEventData (a PR was created / updated from this session)
+	 *  - goal:      CloudGoalEventData (目標ループ。作業の前にリーダーが立てた目標と達成条件)
+	 *  - review:    CloudReviewEventData (目標ループ。ラウンドの終わりのレビュー。status: start → done)
+	 *  目標ループでは各ラウンドのイベントに round が付き、レビュアーの assistant / tool には phase: 'review' が付く。
 	 *  Division Project モードでは assistant に role?: string (ロールの slug) も付く。
 	 *  assistant / tool は直前に start した task に属する。
 	 */
@@ -156,6 +165,65 @@ export type CloudTaskEventData = {
 	model: string;
 	status: 'start' | 'done' | 'failed';
 	summary?: string;
+};
+
+/**
+ * 目標ループ (IDE の Division フローの「ループ」と同じ):
+ *  - auto:    目標を達成するまで、未達なら自動で次のラウンドへ進む
+ *  - confirm: 未達のラウンドが終わるたびに止まり (idle)、「次のラウンドへ進む」(continueGoal) を待つ
+ *  - off:     目標を立てずに 1 回だけ作業する
+ */
+export type CloudGoalLoopMode = 'auto' | 'confirm' | 'off';
+export const CLOUD_GOAL_LOOP_DEFAULT: CloudGoalLoopMode = 'auto';
+export const isCloudGoalLoopMode = (v: unknown): v is CloudGoalLoopMode => v === 'auto' || v === 'confirm' || v === 'off';
+
+/** goal イベントの data */
+export type CloudGoalEventData = {
+	goal: string;
+	criteria: string[];
+	maxRounds: number;
+	mode: CloudGoalLoopMode;
+	/** 目標を立てたモデル ("Provider · modelId" など) */
+	model?: string;
+};
+
+/** review イベントの 1 条件の判定 */
+export type CloudReviewCriterion = {
+	/** 1 始まり */
+	index: number;
+	text: string;
+	met: boolean;
+	reason: string;
+};
+
+/**
+ * review イベントの data。next:
+ *  - continue: 未達 → 次のラウンドへ / achieved: 達成 / limit: 上限で未達のまま終了 / paused: 未達で確認待ち
+ */
+export type CloudReviewEventData =
+	| { round: number; status: 'start'; model?: string; role?: string }
+	| {
+		round: number;
+		status: 'done';
+		achieved: boolean;
+		criteria: CloudReviewCriterion[];
+		summary: string;
+		next: 'continue' | 'achieved' | 'limit' | 'paused';
+		maxRounds?: number;
+		model?: string;
+		role?: string;
+	};
+
+/**
+ * 「次のラウンドへ進む」を出すべきレビュー: 最後のレビューが paused で、そのあとにユーザーの発言が無い。無ければ null
+ */
+export const pausedGoalReview = (events: readonly CloudSessionEvent[]): Extract<CloudReviewEventData, { status: 'done' }> | null => {
+	for (let i = events.length - 1; i >= 0; i--) {
+		const ev = events[i];
+		if (ev.type === 'user' || ev.type === 'goal') return null;
+		if (ev.type === 'review' && ev.data?.status === 'done') return ev.data.next === 'paused' ? ev.data : null;
+	}
+	return null;
 };
 
 /** A pull request opened from a session (CloudSession.pullRequest, GET/POST .../pull-request) */
