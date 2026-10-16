@@ -64,6 +64,7 @@ export interface IVoidSettingsService {
 	setModelSelectionOfFeature: SetModelSelectionOfFeatureFn;
 	setOptionsOfModelSelection: SetOptionsOfModelSelection;
 	setGlobalSetting: SetGlobalSettingFn;
+	setGlobalSettings(settings: Partial<GlobalSettings>): Promise<void>;
 	// setMCPServerStates: (newStates: MCPServerStates) => Promise<void>;
 
 	// setting to undefined CLEARS it, unlike others:
@@ -528,11 +529,15 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 	}
 
 	setGlobalSetting: SetGlobalSettingFn = async (settingName, newVal) => {
+		await this.setGlobalSettings({ [settingName]: newVal });
+	}
+
+	async setGlobalSettings(settings: Partial<GlobalSettings>): Promise<void> {
 		const newState: VoidSettingsState = {
 			...this.state,
 			globalSettings: {
 				...this.state.globalSettings,
-				[settingName]: newVal
+				...settings
 			}
 		}
 		this.state = _validatedModelState(newState)

@@ -52,7 +52,7 @@ export const LoginScreen = ({ onClose }: { onClose: () => void }) => {
 		setPasswordConfirm('');
 	};
 
-	const persistAuthResult = (result: {
+	const persistAuthResult = async (result: {
 		userId: string;
 		email: string;
 		accessToken: string;
@@ -60,23 +60,22 @@ export const LoginScreen = ({ onClose }: { onClose: () => void }) => {
 		apiKey: string;
 		plan: 'free' | 'plus';
 	}) => {
-		voidSettingsService.setGlobalSetting('divisionUserId', result.userId);
-		voidSettingsService.setGlobalSetting('divisionUserEmail', result.email);
-		voidSettingsService.setGlobalSetting('divisionAccessToken', result.accessToken);
-		voidSettingsService.setGlobalSetting('divisionRefreshToken', result.refreshToken);
-		voidSettingsService.setGlobalSetting('divisionPlan', result.plan);
-		// 既存のDivision API呼び出し経路との互換性を保ちつつ、
-		// 実際に保存・送信する値はAPIキーではなくSupabase JWTに統一する。
-		voidSettingsService.setGlobalSetting('divisionApiKey', result.accessToken);
-		// ユーザー専用の長期 API キー (ak_…)。JWT と違って期限切れにならないので、
-		// クラウドエージェントのポーリングなど長く続く呼び出しはこちらを使う。
-		voidSettingsService.setGlobalSetting('divisionUserApiKey', result.apiKey || '');
-		voidSettingsService.setGlobalSetting('isLoggedIn', true);
+		// Publish the account and both tokens together, after encrypted persistence.
+		await voidSettingsService.setGlobalSettings({
+			divisionUserId: result.userId,
+			divisionUserEmail: result.email,
+			divisionAccessToken: result.accessToken,
+			divisionRefreshToken: result.refreshToken,
+			divisionPlan: result.plan,
+			divisionApiKey: result.accessToken,
+			divisionUserApiKey: result.apiKey || '',
+			isLoggedIn: true,
+		});
 	};
 
 	const handleLogin = async () => {
 		const result = await signInWithDivision(email.trim(), password);
-		persistAuthResult(result);
+		await persistAuthResult(result);
 		onClose();
 	};
 
@@ -89,7 +88,7 @@ export const LoginScreen = ({ onClose }: { onClose: () => void }) => {
 		}
 		const res = await signUpWithDivision(email.trim(), password);
 		if (res.kind === 'signedIn') {
-			persistAuthResult(res.auth);
+			await persistAuthResult(res.auth);
 			onClose();
 			return;
 		}

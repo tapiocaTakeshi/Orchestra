@@ -36,6 +36,7 @@ import { IStorageService, StorageScope, StorageTarget } from '../../../../platfo
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
 import { IVoidModelService } from '../common/voidModelService.js';
 import { DIVISION_API_BASE_URL } from '../common/divisionAuthConfig.js';
+import { ensureDivisionSession } from '../common/divisionSession.js';
 import {
 	CLOUD_AGENT_CHANNEL_NAME,
 	CLOUD_AGENTS_MAX_PARALLEL,
@@ -548,7 +549,9 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 	// -----------------------------------------------------------------------
 
 	private async _request(method: 'GET' | 'POST', path: string, body?: unknown, timeoutMs?: number): Promise<CloudAgentResponse> {
+		await ensureDivisionSession(this._settingsService);
 		if (!this._token()) return { ok: false, status: 401, data: null, error: 'not logged in' };
+		let didRefresh = false;
 		for (;;) {
 			const token = this._token();
 			let res: CloudAgentResponse | undefined;
@@ -561,6 +564,11 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 			if (res.status !== 401) return res;
 			// この認証情報は使えない。次の候補があればそれで試し直す
 			this._rejectedTokens.add(token);
+			if (!didRefresh && token === this._settingsService.state.globalSettings.divisionAccessToken) {
+				didRefresh = true;
+				const session = await ensureDivisionSession(this._settingsService, token);
+				if (session && session.access_token !== token) continue;
+			}
 			if (this._candidateTokens().every(t => this._rejectedTokens.has(t))) {
 				// どれも通らない: ログインし直す (認証情報が変わる) までポーリングしない
 				this._authFailedToken = this._tokenSignature();
