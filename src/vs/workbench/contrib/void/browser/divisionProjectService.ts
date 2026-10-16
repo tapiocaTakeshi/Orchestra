@@ -20,6 +20,10 @@ import { AgentRole, defaultRoleAssignments, displayInfoOfProviderName, normalize
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
 import { divisionProviderIdOfRoleProvider } from '../common/divisionModelCatalog.js';
 import * as dom from '../../../../base/browser/dom.js';
+import { ProxyChannel } from '../../../../base/parts/ipc/common/ipc.js';
+import { IMainProcessService } from '../../../../platform/ipc/common/mainProcessService.js';
+import { CLOUD_AGENT_CHANNEL_NAME, CloudAgentResponse, DIVISION_PROJECTS_API_PREFIX, ICloudAgentMainService } from '../common/cloudAgentTypes.js';
+import { DIVISION_API_BASE_URL } from '../common/divisionAuthConfig.js';
 
 
 // --- Auto-pull configuration ---
@@ -159,6 +163,16 @@ export type DivisionProjectConfig = {
 	agents: RoleAssignment[];
 };
 
+/** Division API の RoleAssignment (Role / Provider を埋め込んだもの) */
+type RemoteAssignment = {
+	roleId: string;
+	providerId: string;
+	priority: number;
+	config: string;
+	Role?: { id: string; slug?: string; name?: string } | null;
+	Provider?: { id: string; name?: string; displayName?: string } | null;
+};
+
 /** On-disk format for .division/projects.json */
 export type DivisionProjectsFile = {
 	activeProjectIds: string[];
@@ -255,6 +269,8 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 	private _autoPullIntervalId: number | undefined;
 	private _isAutoPulling = false;
 
+	private readonly _main: ICloudAgentMainService;
+
 	get projectConfig(): DivisionProjectConfig | null {
 		const firstActiveId = this._activeProjectIds[0];
 		if (!firstActiveId) return null;
@@ -272,8 +288,10 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 		@IFileService private readonly fileService: IFileService,
 		@IWorkspaceContextService private readonly workspaceContextService: IWorkspaceContextService,
 		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService,
+		@IMainProcessService mainProcessService: IMainProcessService,
 	) {
 		super();
+		this._main = ProxyChannel.toService<ICloudAgentMainService>(mainProcessService.getChannel(CLOUD_AGENT_CHANNEL_NAME));
 
 		// Sync active projects' config to globalSettings and Supabase when they change
 		this._register(this._onDidChangeProject.event(() => {
@@ -823,32 +841,82 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 	}
 
 	/**
+	 * Project / RoleAssignment は RLS でサーバー専用になっていて、anon キーでは 0 件しか返らない。
+	 * ログイン中アカウントの認証情報で Division API から読む。Division API は CORS を返さないので
+	 * クラウドエージェントと同じく main プロセス経由で呼ぶ。
+	 * 401 になった認証情報は飛ばして次の候補を試す (古い ak_ キーが残っているアカウントがある)。
+	 */
+	private async _divisionApiGet(path: string): Promise<CloudAgentResponse> {
+		const g = this.voidSettingsService.state.globalSettings;
+		const tokens = [...new Set([g.divisionUserApiKey, g.divisionAccessToken, g.divisionApiKey].filter((t): t is string => !!t))];
+		if (!g.isLoggedIn || tokens.length === 0) {
+			return { ok: false, status: 401, data: null, error: 'Sign in to Division to pull the projects of your account' };
+		}
+		const endpoint = (this.voidSettingsService.state.settingsOfProvider.divisionAPI?.endpoint || DIVISION_API_BASE_URL).trim().replace(/\/+$/, '');
+		let res: CloudAgentResponse = { ok: false, status: 0, data: null, error: 'request failed' };
+		for (const token of tokens) {
+			try {
+				res = await this._main.request({ endpoint, token, method: 'GET', path });
+			} catch (e) {
+				res = { ok: false, status: 0, data: null, error: e instanceof Error ? e.message : String(e) };
+			}
+			if (res.status !== 401) return res;
+		}
+		return res;
+	}
+
+	private _describeApiError(res: CloudAgentResponse): string {
+		if (res.status === 401) return res.error && !res.data ? res.error : 'Division rejected the sign-in. Sign in to Division again';
+		const detail = (res.data && typeof res.data.error === 'string') ? res.data.error : res.error;
+		return `HTTP ${res.status}${detail ? `: ${detail}` : ''}`;
+	}
+
+	/** GET /api/projects/:id — プロジェクトとロール割り当て (Role / Provider 付き) */
+	private async _fetchRemoteProject(projectId: string): Promise<
+		| { ok: true; name: string | undefined; assignments: RemoteAssignment[] }
+		| { ok: false; status: number; error: string }
+	> {
+		const res = await this._divisionApiGet(`${DIVISION_PROJECTS_API_PREFIX}/${encodeURIComponent(projectId)}`);
+		if (!res.ok || !res.data || typeof res.data !== 'object') {
+			return { ok: false, status: res.status, error: this._describeApiError(res) };
+		}
+		const raw: any[] = Array.isArray(res.data.assignments) ? res.data.assignments : [];
+		const assignments: RemoteAssignment[] = raw
+			.filter(a => a && typeof a.roleId === 'string' && typeof a.providerId === 'string')
+			.map(a => ({
+				roleId: a.roleId,
+				providerId: a.providerId,
+				priority: typeof a.priority === 'number' ? a.priority : 0,
+				config: typeof a.config === 'string' ? a.config : '',
+				Role: a.role ?? null,
+				Provider: a.provider ?? null,
+			}))
+			// API はロール名順で返すので、従来どおり priority 昇順に並べる
+			.sort((x, y) => x.priority - y.priority);
+		return { ok: true, name: typeof res.data.name === 'string' ? res.data.name : undefined, assignments };
+	}
+
+	/**
 	 * 1 プロジェクト分の RoleAssignment を取得して RoleAssignment[] に変換する。
 	 * 取得自体に失敗した場合は null（呼び出し側でローカル値を維持するため、空配列と区別する）。
 	 */
-	private async _fetchAgentsFromSupabase(
+	private async _fetchRemoteAgents(
 		projectId: string,
 		maps: { roleIdToSlug: Map<string, string>; providerIdToName: Map<string, string> },
 	): Promise<RoleAssignment[] | null> {
-		// Fetch RoleAssignment with embedded Role and Provider relations
-		const assignRes = await fetch(
-			`${SUPABASE_URL}/rest/v1/RoleAssignment?projectId=eq.${encodeURIComponent(projectId)}&select=roleId,providerId,priority,config,Role(id,slug,name),Provider(id,name,displayName)&order=priority.asc`,
-			{ headers: SUPABASE_READ_HEADERS }
-		);
-		if (!assignRes.ok) {
-			console.warn(`[DivisionProjectService] RoleAssignment fetch failed for ${projectId}: ${assignRes.status}`);
+		const project = await this._fetchRemoteProject(projectId);
+		if (!project.ok) {
+			console.warn(`[DivisionProjectService] RoleAssignment fetch failed for ${projectId}: ${project.error}`);
 			return null;
 		}
-		const assignments: Array<{
-			roleId: string;
-			providerId: string;
-			config: string;
-			Role?: { id: string; slug?: string; name?: string } | null;
-			Provider?: { id: string; name?: string; displayName?: string } | null;
-		}> = await assignRes.json();
+		console.log(`[DivisionProjectService] Fetched ${project.assignments.length} assignments for project ${projectId}:`, JSON.stringify(project.assignments).substring(0, 500));
+		return this._assignmentsToAgents(project.assignments, maps);
+	}
 
-		console.log(`[DivisionProjectService] Fetched ${assignments.length} assignments for project ${projectId}:`, JSON.stringify(assignments).substring(0, 500));
-
+	private _assignmentsToAgents(
+		assignments: RemoteAssignment[],
+		maps: { roleIdToSlug: Map<string, string>; providerIdToName: Map<string, string> },
+	): RoleAssignment[] {
 		return assignments.map(a => {
 			let model = '';
 			let effort: ReasoningEffort | undefined;
@@ -890,21 +958,18 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 	 * ログイン中アカウントが所有する Division プロジェクトを Supabase から取得し、
 	 * projects.json にマージする（ローカルにしか無いプロジェクトは残す）。
 	 */
-	private async _pullAccountProjectsFromSupabase(userId: string): Promise<{ success: boolean; message: string }> {
+	private async _pullAccountProjectsFromSupabase(): Promise<{ success: boolean; message: string }> {
 		try {
 			// Project.ownerId / Project.userId のどちらにユーザー ID が入っているかは
 			// 作成経路（IDE 同期 / Web）で異なるため、両方を OR で引く。
-			const uid = encodeURIComponent(userId);
-			const projectsRes = await fetch(
-				`${SUPABASE_URL}/rest/v1/Project?or=(ownerId.eq.${uid},userId.eq.${uid})&select=id,name,updatedAt&order=updatedAt.desc`,
-				{ headers: SUPABASE_READ_HEADERS }
-			);
+			const projectsRes = await this._divisionApiGet(DIVISION_PROJECTS_API_PREFIX);
 			if (!projectsRes.ok) {
-				const body = await projectsRes.text().catch(() => '');
-				return { success: false, message: `Project fetch failed (${projectsRes.status}): ${body}` };
+				return { success: false, message: `Project fetch failed (${this._describeApiError(projectsRes)})` };
 			}
 
-			const rows: Array<{ id?: string; name?: string }> = await projectsRes.json();
+			const rows: Array<{ id?: string; name?: string; updatedAt?: string }> = Array.isArray(projectsRes.data) ? projectsRes.data : [];
+			// 新しく更新されたものから (先頭が既定のアクティブプロジェクトになる)
+			rows.sort((a, b) => String(b.updatedAt ?? '').localeCompare(String(a.updatedAt ?? '')));
 			const remoteProjects = rows.filter((r): r is { id: string; name?: string } => typeof r.id === 'string' && !!r.id);
 			if (remoteProjects.length === 0) {
 				return { success: false, message: 'No division projects found for the signed-in account' };
@@ -921,7 +986,7 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 			for (const row of remoteProjects) {
 				const idx = this._projects.findIndex(p => p.projectId === row.id);
 				const existing = idx >= 0 ? this._projects[idx] : null;
-				const agents = await this._fetchAgentsFromSupabase(row.id, maps);
+				const agents = await this._fetchRemoteAgents(row.id, maps);
 
 				const merged: DivisionProjectConfig = {
 					projectId: row.id,
@@ -974,25 +1039,21 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 			const maps = await this._buildRoleProviderMaps();
 
 			let totalUpdated = 0;
+			let lastError = '';
 
 			for (const project of targetProjects) {
-				const projectRes = await fetch(
-					`${SUPABASE_URL}/rest/v1/Project?id=eq.${encodeURIComponent(project.projectId)}&select=*`,
-					{ headers: SUPABASE_READ_HEADERS }
-				);
-				if (!projectRes.ok) {
-					console.warn(`[DivisionProjectService] Project fetch failed for ${project.projectId}: ${projectRes.status}`);
+				const remote = await this._fetchRemoteProject(project.projectId);
+				if (!remote.ok) {
+					console.warn(`[DivisionProjectService] Project fetch failed for ${project.projectId}: ${remote.error}`);
+					lastError = remote.error;
 					continue;
 				}
-				const projectRows = await projectRes.json();
-				const projectData = projectRows[0];
 
-				const agents = await this._fetchAgentsFromSupabase(project.projectId, maps);
-				if (agents === null) continue;
+				const agents = this._assignmentsToAgents(remote.assignments, maps);
 
 				const updatedProject: DivisionProjectConfig = {
 					...project,
-					name: projectData?.name || project.name,
+					name: remote.name || project.name,
 					agents: agents.length > 0 ? agents : project.agents,
 				};
 
@@ -1001,7 +1062,7 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 			}
 
 			if (totalUpdated === 0) {
-				return { success: false, message: 'No projects found in Supabase' };
+				return { success: false, message: lastError ? `Project fetch failed (${lastError})` : 'No projects found in Division' };
 			}
 			return { success: true, message: `${totalUpdated} project(s) synced from Supabase` };
 		} catch (e) {
@@ -1020,15 +1081,11 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 
 		// ログイン済みなら、そのアカウントが所有する Division プロジェクトを取得する。
 		if (isLoggedIn && divisionUserId) {
-			return this._pullAccountProjectsFromSupabase(divisionUserId);
+			return this._pullAccountProjectsFromSupabase();
 		}
 
-		// 未ログイン時は projects.json に書かれている Project ID の更新にフォールバックする。
-		const localIds = this._projects.filter(p => p.projectId).map(p => p.projectId);
-		if (localIds.length === 0) {
-			return { success: false, message: 'Sign in to Division to pull the projects of your account' };
-		}
-		return this._refreshLocalProjectsFromSupabase(localIds);
+		// Project / RoleAssignment はログイン中アカウントの認証情報でしか読めない (RLS でサーバー専用)。
+		return { success: false, message: 'Sign in to Division to pull the projects of your account' };
 	}
 
 	async fetchAndUpdateFromAPI(localProjectId: string): Promise<{ success: boolean; message: string }> {

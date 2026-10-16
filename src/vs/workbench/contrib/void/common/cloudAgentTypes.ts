@@ -422,6 +422,8 @@ export const sumCloudCostUsd = (sessions: readonly { costUsd?: number }[]): numb
 export const CLOUD_SESSIONS_API_PREFIX = '/api/cloud-sessions';
 /** GitHub アカウント連携の API */
 export const GITHUB_API_PREFIX = '/api/github';
+/** ログイン中アカウントの Division プロジェクトとロール割り当て (Pull from Remote が読む) */
+export const DIVISION_PROJECTS_API_PREFIX = '/api/projects';
 
 /** 1 回の起動で並列に走らせられるセッション数の上限 */
 export const CLOUD_AGENTS_MAX_PARALLEL = 10;
@@ -520,7 +522,7 @@ export type CloudAgentRequestParams = {
 	endpoint: string;
 	token: string;
 	method: 'GET' | 'POST';
-	/** `/api/cloud-sessions` か `/api/github` で始まるパス (クエリ文字列を含んでよい) */
+	/** `/api/cloud-sessions` / `/api/github` / `/api/projects` で始まるパス (クエリ文字列を含んでよい) */
 	path: string;
 	body?: unknown;
 	timeoutMs?: number;
