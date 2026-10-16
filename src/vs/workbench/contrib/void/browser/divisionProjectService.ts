@@ -179,9 +179,11 @@ export type DivisionProjectsFile = {
 	projects: DivisionProjectConfig[];
 };
 
+const DEFAULT_DIVISION_PROJECT_NAME = 'Default Division Project';
+
 const defaultDivisionProjectConfig = (): DivisionProjectConfig => ({
 	projectId: '',
-	name: 'Default Division Project',
+	name: DEFAULT_DIVISION_PROJECT_NAME,
 	agents: [...defaultRoleAssignments],
 });
 
@@ -975,8 +977,13 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 				return { success: false, message: 'No division projects found for the signed-in account' };
 			}
 
-			// 未設定のまま自動生成された既定プロジェクト 1 件だけの状態なら、pull 結果で置き換える。
-			const hadOnlyPlaceholder = this._projects.length === 1 && !this._projects[0].projectId;
+			// 新しいワークスペースで自動生成された既定プロジェクトは、アカウントのプロジェクトを pull したら消す。
+			// ログイン時に ID が振られているので空 ID では見分けられない。名前で見分け、リモートにあるものは残す。
+			const remoteIds = new Set(remoteProjects.map(r => r.id));
+			const isPlaceholder = (p: DivisionProjectConfig) =>
+				p.name === DEFAULT_DIVISION_PROJECT_NAME && !remoteIds.has(p.projectId);
+			const removedPlaceholders = this._projects.filter(isPlaceholder).length;
+			this._projects = this._projects.filter(p => !isPlaceholder(p));
 
 			const maps = await this._buildRoleProviderMaps();
 
@@ -1006,10 +1013,6 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 				}
 			}
 
-			if (hadOnlyPlaceholder) {
-				this._projects = this._projects.filter(p => p.projectId);
-			}
-
 			const validIds = new Set(this._projects.map(p => p.projectId));
 			this._activeProjectIds = this._activeProjectIds.filter(id => validIds.has(id));
 			if (this._activeProjectIds.length === 0) {
@@ -1021,7 +1024,8 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 
 			return {
 				success: true,
-				message: `Pulled ${remoteProjects.length} division project(s) from your account (${added} added, ${updated} updated)`,
+				message: `Pulled ${remoteProjects.length} division project(s) from your account (${added} added, ${updated} updated`
+					+ (removedPlaceholders > 0 ? `, removed the default project)` : ')'),
 			};
 		} catch (e) {
 			return { success: false, message: `Supabase fetch error: ${e}` };
