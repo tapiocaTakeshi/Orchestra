@@ -24,6 +24,8 @@ import { ProxyChannel } from '../../../../base/parts/ipc/common/ipc.js';
 import { IMainProcessService } from '../../../../platform/ipc/common/mainProcessService.js';
 import { CLOUD_AGENT_CHANNEL_NAME, CloudAgentResponse, DIVISION_PROJECTS_API_PREFIX, ICloudAgentMainService } from '../common/cloudAgentTypes.js';
 import { DIVISION_API_BASE_URL } from '../common/divisionAuthConfig.js';
+import { ensureDivisionSession } from '../common/divisionSession.js';
+import { bindDivisionSession } from './react/out/division-session/index.js';
 
 
 // --- Auto-pull configuration ---
@@ -294,6 +296,7 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 	) {
 		super();
 		this._main = ProxyChannel.toService<ICloudAgentMainService>(mainProcessService.getChannel(CLOUD_AGENT_CHANNEL_NAME));
+		this._register(bindDivisionSession(voidSettingsService));
 
 		// Sync active projects' config to globalSettings and Supabase when they change
 		this._register(this._onDidChangeProject.event(() => {
@@ -849,6 +852,7 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 	 * 401 になった認証情報は飛ばして次の候補を試す (古い ak_ キーが残っているアカウントがある)。
 	 */
 	private async _divisionApiGet(path: string): Promise<CloudAgentResponse> {
+		await ensureDivisionSession(this.voidSettingsService);
 		const g = this.voidSettingsService.state.globalSettings;
 		const tokens = [...new Set([g.divisionUserApiKey, g.divisionAccessToken, g.divisionApiKey].filter((t): t is string => !!t))];
 		if (!g.isLoggedIn || tokens.length === 0) {
@@ -863,6 +867,17 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 				res = { ok: false, status: 0, data: null, error: e instanceof Error ? e.message : String(e) };
 			}
 			if (res.status !== 401) return res;
+			if (token === g.divisionAccessToken) {
+				const session = await ensureDivisionSession(this.voidSettingsService, token);
+				if (session && session.access_token !== token) {
+					try {
+						res = await this._main.request({ endpoint, token: session.access_token, method: 'GET', path });
+					} catch (e) {
+						res = { ok: false, status: 0, data: null, error: e instanceof Error ? e.message : String(e) };
+					}
+					if (res.status !== 401) return res;
+				}
+			}
 		}
 		return res;
 	}

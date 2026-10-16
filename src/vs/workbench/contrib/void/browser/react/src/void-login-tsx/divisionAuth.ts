@@ -3,16 +3,15 @@
  *  Licensed under the MIT License. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { getDivisionSupabase } from '../division-session/index.js';
+import { restoreDivisionAuthSession } from '../../../../common/divisionSession.js';
+export { getDivisionSupabase } from '../division-session/index.js';
 import {
 	DIVISION_API_BASE_URL,
 	DIVISION_API_KEY_TABLE,
-	DIVISION_SUPABASE_ANON_KEY,
-	DIVISION_SUPABASE_URL,
 	DIVISION_PROFILES_TABLE,
 } from '../../../../common/divisionAuthConfig.js';
 
-let _client: SupabaseClient | null = null;
 let _profileUnsubscribe: (() => void) | null = null;
 
 type RemoteSessionAuth = {
@@ -49,22 +48,6 @@ export const syncMobileRemoteSession = async (auth: RemoteSessionAuth | null): P
 	}
 };
 
-/**
- * Division (Supabase) クライアントのシングルトン。
- * Anon Key で初期化し、ユーザーのJWTはDivision APIのBearer認証に使う。
- */
-export const getDivisionSupabase = (): SupabaseClient => {
-	if (_client) return _client;
-	_client = createClient(DIVISION_SUPABASE_URL, DIVISION_SUPABASE_ANON_KEY, {
-		auth: {
-			persistSession: false,
-			autoRefreshToken: true,
-			detectSessionInUrl: false,
-		},
-	});
-	return _client;
-};
-
 export type DivisionAuthResult = {
 	userId: string;
 	email: string;
@@ -72,15 +55,6 @@ export type DivisionAuthResult = {
 	refreshToken: string;
 	apiKey: string;
 	plan: 'free' | 'plus';
-};
-
-/**
- * 指定された access_token / refresh_token で Supabase クライアントの
- * セッションを復元する（次のクエリから JWT 認証として扱われる）。
- */
-const restoreSession = async (accessToken: string, refreshToken: string) => {
-	const sb = getDivisionSupabase();
-	await sb.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
 };
 
 /**
@@ -258,7 +232,7 @@ export const restoreDivisionSession = async (
 ): Promise<DivisionAuthResult | null> => {
 	if (!accessToken && !refreshToken) return null;
 	try {
-		await restoreSession(accessToken, refreshToken);
+		if (!await restoreDivisionAuthSession(accessToken, refreshToken)) return null;
 		const sb = getDivisionSupabase();
 		const { data, error } = await sb.auth.getUser();
 		if (error || !data.user) return null;

@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import { getDivisionSupabase } from './divisionAuth.js';
+import { restoreDivisionAuthSession } from '../../../../common/divisionSession.js';
 import {
 	DIVISION_FUNCTIONS_BASE_URL,
 	DIVISION_PROFILES_TABLE,
@@ -47,7 +48,7 @@ export const fetchDivisionProfile = async (
 ): Promise<DivisionProfile | null> => {
 	if (!accessToken) return null;
 	const sb = getDivisionSupabase();
-	await sb.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+	if (!await restoreDivisionAuthSession(accessToken, refreshToken)) return null;
 
 	const { data: userData, error: userError } = await sb.auth.getUser();
 	if (userError || !userData.user) return null;
