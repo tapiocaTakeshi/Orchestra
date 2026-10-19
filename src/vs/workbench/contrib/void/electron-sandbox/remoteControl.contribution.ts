@@ -48,7 +48,9 @@ import {
 	RemoteControlIpcResponse,
 	RemoteDivisionState,
 	RemoteFileEntry,
+	RemoteGoalLoopMode,
 	RemoteIdeInfo,
+	RemotePendingReview,
 	RemoteSessionInfo,
 	RemoteThreadSummary,
 } from '../common/remoteControlTypes.js';
@@ -402,18 +404,28 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 			this._switchThread(threadId);
 			return this._chatState();
 		});
-		this._route('POST', '/api/chat/approve', (_, { body }) => {
+		// 止まっている理由がフローのレビュー (目標ループの「毎回確認」など) なら、ツールではなくそちらを進める
+		this._route('POST', '/api/chat/approve', async (_, { body }) => {
 			chat();
 			const threadId = this._threadIdFrom(body);
 			this._requireAwaitingApproval(threadId);
-			this._chatThreadService.approveLatestToolRequest(threadId);
+			if (this._pendingFlowReview(threadId)) await this._chatThreadService.approveFlowReview(threadId);
+			else this._chatThreadService.approveLatestToolRequest(threadId);
 			return this._chatState();
 		});
 		this._route('POST', '/api/chat/reject', (_, { body }) => {
 			chat();
 			const threadId = this._threadIdFrom(body);
 			this._requireAwaitingApproval(threadId);
-			this._chatThreadService.rejectLatestToolRequest(threadId);
+			if (this._pendingFlowReview(threadId)) this._chatThreadService.rejectFlowReview(threadId);
+			else this._chatThreadService.rejectLatestToolRequest(threadId);
+			return this._chatState();
+		});
+		this._route('POST', '/api/chat/goal-loop', async (_, { body }) => {
+			chat();
+			const mode = asObject(body).mode;
+			if (mode !== 'auto' && mode !== 'confirm') throw new HttpError(400, 'invalid_request', 'mode は auto か confirm を指定してください。');
+			await this._settingsService.setGlobalSetting('divisionGoalLoopMode', mode);
 			return this._chatState();
 		});
 
@@ -557,13 +569,38 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 			messages.push({ role: 'tool', text: '実行中…', toolName: stream.toolInfo.toolName });
 		}
 
+		const awaitingApproval = stream?.isRunning === 'awaiting_user';
+		const review = awaitingApproval ? this._pendingFlowReview(threadId) : undefined;
+		const pendingReview: RemotePendingReview | null = review ? {
+			flowRole: review.flowRole,
+			title: review.flowRole === 'goal-loop' ? '目標はまだ達成されていません' : review.mdFileName,
+			content: truncate(review.mdContent),
+			completed: review.completedTaskIndex + 1,
+			total: review.totalTasks,
+		} : null;
+
 		return {
 			threadId,
 			messages: messages.slice(-MAX_MESSAGES),
 			isRunning: !!stream?.isRunning,
-			awaitingApproval: stream?.isRunning === 'awaiting_user',
+			awaitingApproval,
+			pendingReview,
+			goalLoopMode: this._goalLoopMode(),
 			error: stream?.error?.message,
 		};
+	}
+
+	/** 最後のメッセージが未回答のフローのレビューなら、それを返す */
+	private _pendingFlowReview(threadId: string) {
+		const messages = this._chatThreadService.state.allThreads[threadId]?.messages ?? [];
+		const last = messages[messages.length - 1];
+		return last?.role === 'flow_review' && last.status === 'pending' ? last : undefined;
+	}
+
+	private _goalLoopMode(): RemoteGoalLoopMode | null {
+		const { modelSelectionOfFeature, globalSettings } = this._settingsService.state;
+		if (modelSelectionOfFeature.Chat?.providerName !== 'divisionAPI') return null;
+		return globalSettings.divisionGoalLoopMode ?? 'auto';
 	}
 
 	private _toRemoteMessage(message: ChatMessage): RemoteChatMessage | undefined {
