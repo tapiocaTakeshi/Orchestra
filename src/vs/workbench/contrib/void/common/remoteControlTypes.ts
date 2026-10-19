@@ -70,11 +70,31 @@ export type RemoteChatMessage = {
 	toolName?: string;
 };
 
+/** 目標ループの進め方。PC のチャット欄の「ループ」と同じ設定 (divisionGoalLoopMode) */
+export type RemoteGoalLoopMode = 'auto' | 'confirm';
+
+/**
+ * ツール承認ではなく、フローのレビューで止まっているときの中身。
+ * goal-loop は「毎回確認」で未達のラウンドが終わったとき。承認 = 次のラウンドへ、却下 = ここで止める。
+ */
+export type RemotePendingReview = {
+	flowRole: string;
+	title: string;
+	content: string;
+	/** 終わったラウンド (goal-loop) / タスク (それ以外) の数 */
+	completed: number;
+	total: number;
+};
+
 export type RemoteChatState = {
 	threadId: string;
 	messages: RemoteChatMessage[];
 	isRunning: boolean;
 	awaitingApproval: boolean;
+	/** 止まっている理由がフローのレビューなら、その中身。ツール承認なら null */
+	pendingReview: RemotePendingReview | null;
+	/** 目標ループの設定。チャットのモデルが Division API でない (ループが無い) ときは null */
+	goalLoopMode: RemoteGoalLoopMode | null;
 	error?: string;
 };
 
