@@ -48,8 +48,10 @@ import {
 	isCloudGoalLoopMode,
 	CloudAgentResponse,
 	CloudAgentUploadResult,
+	CloudApprovalAction,
 	CloudChange,
 	CloudFileResponse,
+	CloudPendingApproval,
 	CloudPullRequest,
 	CloudPullRequestInfo,
 	CloudPullRequestResult,
@@ -80,6 +82,7 @@ import {
 	CloudAgentState,
 	CloudApiError,
 	CloudApplyResult,
+	CloudApprovalState,
 	CloudChangesState,
 	CloudGitHubBranchesState,
 	CloudGitHubPick,
@@ -125,6 +128,8 @@ const GITHUB_PICK_STORAGE_KEY = 'orchestra.cloudAgents.githubPick';
 const MODEL_PICK_STORAGE_KEY = 'orchestra.cloudAgents.modelPick';
 /** 最後に選んだ目標ループ (StorageScope.APPLICATION) */
 const GOAL_LOOP_PICK_STORAGE_KEY = 'orchestra.cloudAgents.goalLoop';
+/** 最後に選んだ承認モード (StorageScope.APPLICATION) */
+const APPROVAL_MODE_PICK_STORAGE_KEY = 'orchestra.cloudAgents.approvalMode';
 
 /** 覚えておけるモデルの選択か (壊れた値・古い形式は null) */
 const toModelPick = (raw: any): CloudModelPick | null => {
@@ -350,6 +355,8 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		githubPick: null,
 		modelPick: null,
 		goalLoopPick: CLOUD_GOAL_LOOP_DEFAULT,
+		approvalModePick: false,
+		approvalById: {},
 		pullRequestById: {},
 	};
 	get state(): CloudAgentState { return this._state; }
@@ -398,7 +405,7 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		this._main = ProxyChannel.toService<ICloudAgentMainService>(mainProcessService.getChannel(CLOUD_AGENT_CHANNEL_NAME));
 
 		this._lastToken = this._tokenSignature();
-		this._state = { ...this._state, isLoggedIn: this._isLoggedIn(), workspaceName: this._workspaceFolder()?.name ?? null, githubPick: this._loadGitHubPick(), modelPick: this._loadModelPick(), goalLoopPick: this._loadGoalLoopPick() };
+		this._state = { ...this._state, isLoggedIn: this._isLoggedIn(), workspaceName: this._workspaceFolder()?.name ?? null, githubPick: this._loadGitHubPick(), modelPick: this._loadModelPick(), goalLoopPick: this._loadGoalLoopPick(), approvalModePick: this._loadApprovalModePick() };
 
 		this._register(this._settingsService.onDidChangeState(() => this._onSettingsChanged()));
 		this._register(this._workspaceService.onDidChangeWorkspaceFolders(() => {
@@ -428,6 +435,11 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 	private _setChanges(id: string, partial: Partial<CloudChangesState>) {
 		const prev = this._state.changesById[id] ?? { loading: false };
 		this._setState({ changesById: { ...this._state.changesById, [id]: { ...prev, ...partial } } });
+	}
+
+	private _setApproval(id: string, partial: Partial<CloudApprovalState>) {
+		const prev = this._state.approvalById[id] ?? { loading: false, submitting: false };
+		this._setState({ approvalById: { ...this._state.approvalById, [id]: { ...prev, ...partial } } });
 	}
 
 	private _setPullRequest(id: string, partial: Partial<CloudPullRequestState>) {
@@ -480,7 +492,7 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 				// ログアウト: 他人に見えないよう、手元の一覧も消す
 				this._lastSeqById.clear();
 				this._listLoadedOnce = false;
-				this._setState({ isLoggedIn: false, sessions: [], eventsById: {}, changesById: {}, pullRequestById: {}, selectedId: null, lastError: null, sendingById: {} });
+				this._setState({ isLoggedIn: false, sessions: [], eventsById: {}, changesById: {}, pullRequestById: {}, approvalById: {}, selectedId: null, lastError: null, sendingById: {} });
 			}
 			if (this._state.github.loaded || this._state.github.waitingForAuth || this._state.githubRepos.loaded) this._resetGitHub();
 			this._clearListTimer();
@@ -514,23 +526,26 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		if (prev) this._maybeNotifyTransition(prev, merged);
 	}
 
-	/** 実行中 → 待機 / 失敗 に変わったら知らせる (パネルでそのセッションを見ているときは出さない) */
+	/** 実行中 → 待機 / 承認待ち / 失敗 に変わったら知らせる (パネルでそのセッションを見ているときは出さない) */
 	private _maybeNotifyTransition(prev: CloudSession, next: CloudSession) {
 		if (!isCloudSessionActive(prev.status)) return;
-		if (next.status !== 'idle' && next.status !== 'failed') return;
+		if (next.status !== 'idle' && next.status !== 'failed' && next.status !== 'awaiting_approval') return;
+		if (next.status === 'awaiting_approval') this._setApproval(next.id, { approval: undefined });
 		if (this._paneVisible && this._state.selectedId === next.id) return;
 
 		const title = next.title || firstLine(next.prompt).slice(0, 60) || next.id;
 		const message = next.status === 'idle'
 			? `クラウドエージェント「${title}」が作業を終えました。${next.changedFiles ? ` (変更 ${next.changedFiles} ファイル)` : ''}`
-			: `クラウドエージェント「${title}」が失敗しました。${next.errorMsg ? ` ${next.errorMsg}` : ''}`;
+			: next.status === 'awaiting_approval'
+				? `クラウドエージェント「${title}」の成果物が承認待ちです。内容を確認して承認してください。`
+				: `クラウドエージェント「${title}」が失敗しました。${next.errorMsg ? ` ${next.errorMsg}` : ''}`;
 		this._notificationService.notify({
-			severity: next.status === 'idle' ? Severity.Info : Severity.Warning,
+			severity: next.status === 'failed' ? Severity.Warning : Severity.Info,
 			message,
 			actions: {
 				primary: [{
 					id: 'orchestra.cloudAgents.showSession',
-					label: '結果を見る',
+					label: next.status === 'awaiting_approval' ? '確認する' : '結果を見る',
 					tooltip: '',
 					class: undefined,
 					enabled: true,
@@ -744,6 +759,7 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 			eventsById: omitKey(this._state.eventsById, id),
 			changesById: omitKey(this._state.changesById, id),
 			pullRequestById: omitKey(this._state.pullRequestById, id),
+			approvalById: omitKey(this._state.approvalById, id),
 			selectedId: this._state.selectedId === id ? null : this._state.selectedId,
 		});
 	}
@@ -807,6 +823,7 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		const projectId = (opts.projectId ?? '').trim();
 		const selectCreated = opts.select !== false;
 		const goalLoop: CloudGoalLoopMode = isCloudGoalLoopMode(opts.goalLoop) ? opts.goalLoop : this._state.goalLoopPick;
+		const approvalMode = typeof opts.approvalMode === 'boolean' ? opts.approvalMode : this._state.approvalModePick;
 		if (model === CLOUD_DIVISION_PROJECT_MODEL && !projectId) {
 			// サーバーも 400 を返すが、サンドボックスを作る前に日本語で弾く
 			this._setState({ lastError: 'Division Project をモデルにするには、Division と同期したプロジェクトを選んでください。' });
@@ -829,6 +846,7 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 				...(projectId ? { projectId } : {}),
 				...(workspaceName ? { workspaceName } : {}),
 				goalLoop,
+				...(model === CLOUD_DIVISION_PROJECT_MODEL && approvalMode ? { approvalMode: true } : {}),
 			}, CREATE_TIMEOUT_MS);
 			const session = created.ok ? created.data?.session as CloudSession | undefined : undefined;
 			if (!session?.id) {
@@ -981,6 +999,62 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 			changesTruncated: !!res.data?.changesTruncated,
 			error: undefined,
 		});
+	}
+
+	async loadApproval(id: string): Promise<void> {
+		if (this._state.approvalById[id]?.loading) return;
+		this._setApproval(id, { loading: true, error: undefined });
+		const res = await this._request('GET', this._sessionPath(id, '/approval'), undefined, CHANGES_TIMEOUT_MS);
+		if (!res.ok) {
+			this._setApproval(id, { loading: false, error: describeCloudAgentError(res) });
+			return;
+		}
+		const raw = res.data?.approval;
+		const approval: CloudPendingApproval | null = raw && typeof raw === 'object' && typeof raw.taskSeq === 'number' && typeof raw.file === 'string'
+			? {
+				taskSeq: raw.taskSeq,
+				index: Number(raw.index) || 0,
+				role: String(raw.role ?? ''),
+				roleName: String(raw.roleName ?? raw.role ?? ''),
+				title: String(raw.title ?? ''),
+				file: raw.file,
+				summary: String(raw.summary ?? ''),
+				content: typeof raw.content === 'string' ? raw.content : null,
+				...(raw.tooLarge ? { tooLarge: true } : {}),
+			}
+			: null;
+		this._setApproval(id, { loading: false, approval });
+	}
+
+	async resolveApproval(id: string, params: { taskSeq: number; action: CloudApprovalAction; content?: string; feedback?: string }): Promise<boolean> {
+		if (this._state.approvalById[id]?.submitting) return false;
+		const feedback = (params.feedback ?? '').trim();
+		if (params.action === 'revise' && !feedback) {
+			this._setApproval(id, { error: '差し戻すときは、どう直してほしいかを書いてください。' });
+			return false;
+		}
+		this._setApproval(id, { submitting: true, error: undefined });
+		try {
+			const res = await this._request('POST', this._sessionPath(id, '/approval'), {
+				taskSeq: params.taskSeq,
+				action: params.action,
+				...(params.content !== undefined ? { content: params.content } : {}),
+				...(feedback ? { feedback } : {}),
+			});
+			if (!res.ok) {
+				this._setApproval(id, { error: describeCloudAgentError(res) });
+				// 別の画面で先に承認された / 次の成果物に変わった: 今の承認待ちを取り直す
+				if (res.status === 409) void this.loadApproval(id);
+				return false;
+			}
+			this._setApproval(id, { approval: null });
+			if (res.data?.session) this._upsertSession(res.data.session as CloudSession);
+			this._scheduleList(LIST_INTERVAL_ACTIVE_MS);
+			void this._fetchEvents(id);
+			return true;
+		} finally {
+			this._setApproval(id, { submitting: false });
+		}
 	}
 
 	private async _fetchFile(id: string, relPath: string, ref: 'current' | 'base'): Promise<{ exists: boolean; buffer: VSBuffer } | { error: string }> {
@@ -1595,6 +1669,21 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		try {
 			this._storageService.store(GOAL_LOOP_PICK_STORAGE_KEY, mode, StorageScope.APPLICATION, StorageTarget.MACHINE);
 		} catch { /* 覚えられなくても選択はできている */ }
+	}
+
+	setApprovalModePick(on: boolean): void {
+		this._setState({ approvalModePick: !!on });
+		try {
+			this._storageService.store(APPROVAL_MODE_PICK_STORAGE_KEY, !!on, StorageScope.APPLICATION, StorageTarget.MACHINE);
+		} catch { /* 覚えられなくても選択はできている */ }
+	}
+
+	private _loadApprovalModePick(): boolean {
+		try {
+			return this._storageService.getBoolean(APPROVAL_MODE_PICK_STORAGE_KEY, StorageScope.APPLICATION, false);
+		} catch {
+			return false;
+		}
 	}
 
 	private _loadGoalLoopPick(): CloudGoalLoopMode {

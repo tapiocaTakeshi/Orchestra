@@ -13,7 +13,7 @@
 
 import type { Event } from '../../../../base/common/event.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
-import type { CloudChange, CloudGoalLoopMode, CloudPullRequestInfo, CloudPullRequestResult, CloudSession, CloudSessionEvent, CreateCloudPullRequestParams, GitHubRepo } from '../common/cloudAgentTypes.js';
+import type { CloudApprovalAction, CloudChange, CloudGoalLoopMode, CloudPendingApproval, CloudPullRequestInfo, CloudPullRequestResult, CloudSession, CloudSessionEvent, CreateCloudPullRequestParams, GitHubRepo } from '../common/cloudAgentTypes.js';
 
 
 /** 「変更を取り込む」の結果 (パスはワークスペースからの相対パス) */
@@ -45,6 +45,17 @@ export type CloudChangesState = {
  * A failed cloud API call, with the server's `{ error, code }` (code is '' when the server sent none).
  * `error` is already user-facing Japanese text.
  */
+/** 承認モードの承認待ち (セッションごと) */
+export type CloudApprovalState = {
+	/** GET .../approval の最中 */
+	loading: boolean;
+	/** 承認待ちの成果物。null = 承認待ちのものは無い */
+	approval?: CloudPendingApproval | null;
+	/** POST .../approval の最中 */
+	submitting: boolean;
+	error?: string;
+};
+
 export type CloudApiError = { ok: false; error: string; code: string; status: number };
 
 export type CloudPullRequestInfoResult = ({ ok: true } & CloudPullRequestInfo) | CloudApiError;
@@ -157,6 +168,10 @@ export type CloudAgentState = {
 	modelPick: CloudModelPick | null;
 	/** 新しいエージェントの目標ループ (覚えておいて次回の初期値にする)。既定は auto */
 	goalLoopPick: CloudGoalLoopMode;
+	/** 新しい Division Project エージェントの承認モード (覚えておいて次回の初期値にする)。既定は off */
+	approvalModePick: boolean;
+	/** session id → 承認待ちの成果物 (承認モード。見たセッションだけ) */
+	approvalById: Record<string, CloudApprovalState>;
 	/** session id → pull request state (only for GitHub-repo sessions that were looked at) */
 	pullRequestById: Record<string, CloudPullRequestState>;
 };
@@ -193,6 +208,8 @@ export type CreateCloudSessionsOptions = {
 	projectId?: string;
 	/** 目標ループ。省略時は goalLoopPick (覚えている選択) */
 	goalLoop?: CloudGoalLoopMode;
+	/** 承認モード (model が Division Project のときだけ送る)。省略時は approvalModePick */
+	approvalMode?: boolean;
 	/** false なら、起動したセッションを選択しない (カンバンからの起動など、見ている画面を切り替えたくないとき)。既定は true */
 	select?: boolean;
 };
@@ -242,6 +259,18 @@ export interface ICloudAgentService {
 	setModelPick(pick: CloudModelPick | null): void;
 	/** 選んだ目標ループを覚える (次回の初期値になる) */
 	setGoalLoopPick(mode: CloudGoalLoopMode): void;
+	/** 承認モードの選択を覚える (次回の初期値になる) */
+	setApprovalModePick(on: boolean): void;
+
+	// --- 承認モード (Division Project) ---
+
+	/** GET .../approval: 承認待ちの成果物を approvalById に読み込む */
+	loadApproval(id: string): Promise<void>;
+	/**
+	 * POST .../approval: 承認して次のタスクへ (approve) / フィードバックを付けて差し戻す (revise)。
+	 * content は編集した成果物 (変えたときだけ渡す)。成功したら true
+	 */
+	resolveApproval(id: string, params: { taskSeq: number; action: CloudApprovalAction; content?: string; feedback?: string }): Promise<boolean>;
 
 	// --- Pull requests (GitHub-repo sessions only) ---
 
