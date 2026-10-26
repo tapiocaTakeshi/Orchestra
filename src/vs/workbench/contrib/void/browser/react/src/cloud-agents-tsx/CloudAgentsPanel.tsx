@@ -33,6 +33,8 @@ import {
 	Book,
 	CheckCircle2,
 	ChevronDown,
+	ClipboardCheck,
+	CornerUpLeft,
 	Circle,
 	Coins,
 	ChevronRight,
@@ -63,6 +65,7 @@ import {
 	Square,
 	SquareTerminal,
 	Target,
+	Undo2,
 	Workflow,
 	Wrench,
 	X,
@@ -77,6 +80,7 @@ import {
 	CLOUD_AGENTS_MAX_PARALLEL,
 	CLOUD_DIVISION_PROJECT_MODEL,
 	CLOUD_PR_TITLE_MAX,
+	CloudApprovalEventData,
 	CloudChange,
 	CloudGoalEventData,
 	CloudGoalLoopMode,
@@ -206,6 +210,7 @@ const statusColor: Record<CloudSessionStatus, string> = {
 	provisioning: C.accent,
 	uploading: C.accent,
 	running: C.accent,
+	awaiting_approval: C.warning,
 	idle: C.success,
 	failed: C.error,
 	cancelled: C.fgFaint,
@@ -1357,6 +1362,7 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 			title: title.trim() || undefined,
 			model,
 			goalLoop: state.goalLoopPick,
+			approvalMode: state.approvalModePick,
 			...(projectId ? { projectId } : {}),
 			source: effectiveSource,
 			includeWorkspace: effectiveSource === 'workspace',
@@ -1369,7 +1375,7 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 			// 並列で起動したときは 1 本目を開く
 			cloudAgentService.select(created[0].id);
 		}
-	}, [canLaunch, sourceReady, modelReady, cloudAgentService, prompt, title, modelPick, projectId, effectiveSource, state.githubPick, state.goalLoopPick, repoUrl, urlBranch, count, setDraft]);
+	}, [canLaunch, sourceReady, modelReady, cloudAgentService, prompt, title, modelPick, projectId, effectiveSource, state.githubPick, state.goalLoopPick, state.approvalModePick, repoUrl, urlBranch, count, setDraft]);
 
 	const sourceHint =
 		effectiveSource === 'workspace' && state.workspaceName ? t('cloudAgents.new.includeWorkspaceHint').replace('{name}', state.workspaceName)
@@ -1567,6 +1573,20 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 						<span style={ellipsis}>{t('cloudAgents.goal.loop')} · {t(goalLoopLabelKey(state.goalLoopPick))}</span>
 						<ChevronDown size={11} style={{ flexShrink: 0, opacity: 0.7 }} />
 					</button>
+					{/* 承認モードは Division Project のときだけ (coder 以外のロールの .division ファイルを承認する) */}
+					{divisionMode && (
+						<button
+							type='button'
+							className='oca-chip'
+							data-active={state.approvalModePick}
+							aria-pressed={state.approvalModePick}
+							title={t('cloudAgents.approval.toggleHint')}
+							onClick={() => { cloudAgentService.setApprovalModePick(!state.approvalModePick); textareaRef.current?.focus(); }}
+						>
+							<ClipboardCheck size={12} />
+							<span style={ellipsis}>{t('cloudAgents.approval.chip')} · {t(state.approvalModePick ? 'cloudAgents.approval.on' : 'cloudAgents.approval.off')}</span>
+						</button>
+					)}
 				</div>
 			}
 			actions={
@@ -1650,7 +1670,8 @@ const SECTIONS: { id: SectionId; label: TranslationKey }[] = [
 	{ id: 'done', label: 'cloudAgents.section.done' },
 	{ id: 'stopped', label: 'cloudAgents.section.stopped' },
 ];
-const sectionOf = (s: CloudSessionStatus): SectionId => isCloudSessionActive(s) ? 'running' : s === 'idle' ? 'done' : 'stopped';
+// 承認待ちは手を動かす必要があるので、実行中と一緒に上に出す
+const sectionOf = (s: CloudSessionStatus): SectionId => isCloudSessionActive(s) || s === 'awaiting_approval' ? 'running' : s === 'idle' ? 'done' : 'stopped';
 
 /** 変更の小さなチップ: 読み込み済みなら +N / −M、まだなら「N ファイル」 */
 const ChangesChip = ({ session, changes }: { session: CloudSession; changes: CloudChangesState | undefined }) => {
@@ -2773,6 +2794,158 @@ const ReviewCard = ({ data, onContinue, continueBusy }: {
 	);
 };
 
+// --- 承認モード (coder 以外のロールの .division ファイルを、編集してから承認 / 差し戻す) ---
+
+/** approval イベント: 「REVIEW.md を承認 (編集あり)」/「差し戻し: フィードバック」 */
+const ApprovalEventRow = ({ data }: { data: CloudApprovalEventData }) => {
+	const { t } = useTranslation();
+	const file = String(data?.file ?? '').split('/').pop() || String(data?.file ?? '');
+	const revised = data?.status === 'revised';
+	return (
+		<div style={{ display: 'flex', alignItems: 'flex-start', gap: '7px', minWidth: 0, padding: '2px 6px', fontSize: '12px' }}>
+			<span style={{ display: 'inline-flex', marginTop: '2px', flexShrink: 0 }}>
+				{revised ? <CornerUpLeft size={13} style={{ color: C.warning }} /> : <ClipboardCheck size={13} style={{ color: C.success }} />}
+			</span>
+			<div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+				<span style={{ color: C.fgMuted, fontSize: '11.5px' }}>
+					{t(revised ? 'cloudAgents.approval.revisedLine' : 'cloudAgents.approval.approvedLine').replace('{file}', file)}
+					{data?.edited && <span style={{ marginLeft: '6px', color: C.accent }}>({t('cloudAgents.approval.editedTag')})</span>}
+				</span>
+				{revised && data?.feedback && (
+					<span style={{ color: C.fg, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{data.feedback}</span>
+				)}
+			</div>
+		</div>
+	);
+};
+
+/** 承認待ちのカード: 成果物を読み込み、その場で編集して承認 / フィードバックを付けて差し戻す */
+const ApprovalCard = ({ session }: { session: CloudSession }) => {
+	const { t } = useTranslation();
+	const accessor = useAccessor();
+	const cloudAgentService = accessor.get('ICloudAgentService');
+	const state = useCloudAgentState();
+	const approvalState = state.approvalById[session.id];
+	const approval = approvalState?.approval;
+	const submitting = !!approvalState?.submitting;
+
+	// 承認待ちになるたび (lastSeq が進むたび) に取り直す
+	useEffect(() => {
+		if (session.status === 'awaiting_approval') void cloudAgentService.loadApproval(session.id);
+	}, [cloudAgentService, session.id, session.status, session.lastSeq]);
+
+	// 編集中の内容は承認待ちの成果物 (taskSeq) ごと。別の成果物に変わったら読み込んだ内容から始める
+	const [draft, setDraft] = useState<{ taskSeq: number; content: string } | null>(null);
+	const [feedback, setFeedback] = useState('');
+	const [mode, setMode] = useState<'edit' | 'preview'>('preview');
+	const original = approval?.content ?? null;
+	const editable = !!approval && original !== null;
+	const content = draft && approval && draft.taskSeq === approval.taskSeq ? draft.content : (original ?? '');
+	const edited = editable && content !== original;
+	const isHtml = !!approval?.file.toLowerCase().endsWith('.html');
+	useEffect(() => { setFeedback(''); setMode('preview'); }, [approval?.taskSeq]);
+
+	if (session.status !== 'awaiting_approval') return null;
+	if (!approval) {
+		return (
+			<div style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '12px', color: approvalState?.error ? C.error : C.fgMuted, padding: '2px 6px' }}>
+				{approvalState?.error ? <AlertTriangle size={13} /> : <Spinner />}
+				<span style={{ minWidth: 0 }}>{approvalState?.error ?? t('cloudAgents.approval.loading')}</span>
+			</div>
+		);
+	}
+
+	const resolve = async (action: 'approve' | 'revise') => {
+		const ok = await cloudAgentService.resolveApproval(session.id, {
+			taskSeq: approval.taskSeq,
+			action,
+			...(edited ? { content } : {}),
+			...(action === 'revise' ? { feedback } : {}),
+		});
+		if (ok) { setDraft(null); setFeedback(''); }
+	};
+	const busy = submitting || !state.isLoggedIn;
+
+	return (
+		<div style={{ border: `1px solid ${tint(C.warning, 45)}`, borderRadius: '8px', padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px', background: tint(C.warning, 5) }}>
+			<div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
+				<ClipboardCheck size={14} style={{ color: C.warning, flexShrink: 0 }} />
+				<span style={{ fontSize: '12.5px', fontWeight: 600, color: C.fg, minWidth: 0, ...ellipsis }}>
+					{t('cloudAgents.approval.title').replace('{role}', approval.roleName || approval.role)}
+				</span>
+				<span style={{ flex: 1 }} />
+				{editable && (
+					<div style={{ display: 'inline-flex', gap: '2px', flexShrink: 0 }}>
+						{!isHtml && (
+							<button type='button' className='oca-chip' data-active={mode === 'preview'} onClick={() => setMode('preview')}>
+								<FileText size={12} />{t('cloudAgents.approval.preview')}
+							</button>
+						)}
+						<button type='button' className='oca-chip' data-active={mode === 'edit' || isHtml} onClick={() => setMode('edit')}>
+							<FilePen size={12} />{t('cloudAgents.approval.edit')}
+						</button>
+					</div>
+				)}
+			</div>
+			<div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0, fontSize: '11.5px', color: C.fgMuted }}>
+				<RoleChip role={approval.role} name={approval.roleName || approval.role} />
+				{approval.title && <span title={approval.title} style={{ color: C.fg, minWidth: 0, ...ellipsis }}>{approval.title}</span>}
+				<span style={{ color: C.fgFaint, flexShrink: 0 }}>·</span>
+				<span title={approval.file} style={{ fontFamily: C.monoFont, minWidth: 0, ...ellipsis }}>{approval.file}</span>
+				{edited && <span style={{ color: C.accent, flexShrink: 0 }}>{t('cloudAgents.approval.edited')}</span>}
+				{edited && (
+					<button type='button' className='oca-link' style={{ fontSize: '11px', flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: '3px' }} onClick={() => setDraft(null)}>
+						<Undo2 size={11} />{t('cloudAgents.approval.reset')}
+					</button>
+				)}
+			</div>
+			{!editable ? (
+				<div style={{ fontSize: '12px', color: C.warning }}>{t(approval.tooLarge ? 'cloudAgents.approval.tooLarge' : 'cloudAgents.approval.missing')}</div>
+			) : mode === 'preview' && !isHtml ? (
+				<div className='oca-md' style={{ fontSize: '12.5px', lineHeight: 1.6, color: C.fg, maxHeight: '420px', overflowY: 'auto', padding: '8px 10px', borderRadius: '6px', border: `1px solid ${C.border}`, background: C.bgInput }}>
+					<ChatMarkdownRender string={content} chatMessageLocation={undefined} isApplyEnabled={false} isLinkDetectionEnabled={false} />
+				</div>
+			) : (
+				<textarea
+					value={content}
+					onChange={e => setDraft({ taskSeq: approval.taskSeq, content: e.target.value })}
+					spellCheck={false}
+					style={{ ...inputStyle, minHeight: '260px', maxHeight: '520px', resize: 'vertical', fontFamily: C.monoFont, fontSize: '12px', lineHeight: 1.5 }}
+				/>
+			)}
+			<textarea
+				value={feedback}
+				onChange={e => setFeedback(e.target.value)}
+				placeholder={t('cloudAgents.approval.feedbackPlaceholder')}
+				rows={2}
+				style={{ ...inputStyle, resize: 'vertical' }}
+			/>
+			{approvalState?.error && (
+				<div style={{ display: 'flex', gap: '6px', fontSize: '12px', color: C.error }}>
+					<AlertTriangle size={13} style={{ marginTop: '2px', flexShrink: 0 }} />
+					<span style={{ whiteSpace: 'pre-wrap' }}>{approvalState.error}</span>
+				</div>
+			)}
+			<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px', flexWrap: 'wrap' }}>
+				<button
+					type='button'
+					disabled={busy || !feedback.trim()}
+					title={t('cloudAgents.approval.reviseHint')}
+					onClick={() => { void resolve('revise'); }}
+					style={buttonStyle('secondary', busy || !feedback.trim())}
+				>
+					<CornerUpLeft size={12} />
+					{t('cloudAgents.approval.revise')}
+				</button>
+				<button type='button' disabled={busy} onClick={() => { void resolve('approve'); }} style={buttonStyle('primary', busy)}>
+					{submitting ? <Spinner size={11} /> : <CheckCircle2 size={12} />}
+					{t(edited ? 'cloudAgents.approval.approveEdited' : 'cloudAgents.approval.approve')}
+				</button>
+			</div>
+		</div>
+	);
+};
+
 const EventView = ({ event, onReview, division, active, onContinueGoal, continueBusy }: {
 	event: CloudSessionEvent;
 	onReview: () => void;
@@ -2818,6 +2991,8 @@ const EventView = ({ event, onReview, division, active, onContinueGoal, continue
 			return <PlanCard data={data as CloudPlanEventData} progress={division?.progressByPlan.get(event.seq)} active={!!active} />;
 		case 'task':
 			return <TaskEventRow data={data as CloudTaskEventData} position={division?.positionByTask.get(event.seq)} />;
+		case 'approval':
+			return <ApprovalEventRow data={data as CloudApprovalEventData} />;
 		case 'tool':
 			return <ToolRow data={data} />;
 		case 'status': {
@@ -2979,6 +3154,7 @@ const Stream = ({ session, events, onReview, footer }: {
 							onContinueGoal={canContinueGoal && item.event.seq === pausedReviewSeq ? continueGoal : undefined}
 							continueBusy={!!state.sendingById[session.id]}
 						/>)}
+					{events !== undefined && <ApprovalCard session={session} />}
 					{events !== undefined && footer}
 					{active && (
 						<div style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '12px', color: C.fgMuted, padding: '2px 6px' }}>
@@ -3021,7 +3197,9 @@ const FollowUpComposer = ({ session, value, setValue }: { session: CloudSession;
 	const state = useCloudAgentState();
 	const sending = !!state.sendingById[session.id];
 	const active = isCloudSessionActive(session.status);
-	const canSend = state.isLoggedIn && !sending && !!value.trim();
+	// 承認待ちの間はサーバーが追加の指示を受け付けない (上のカードで承認 / 差し戻す)
+	const awaitingApproval = session.status === 'awaiting_approval';
+	const canSend = state.isLoggedIn && !sending && !awaitingApproval && !!value.trim();
 	const projectLabelOf = useProjectLabel();
 	const modelLabel = sessionModelLabel(session, projectLabelOf(session.projectId), t('cloudAgents.detail.modelDefault'));
 
@@ -3044,8 +3222,8 @@ const FollowUpComposer = ({ session, value, setValue }: { session: CloudSession;
 			value={value}
 			onChange={setValue}
 			onSubmit={() => { void send(); }}
-			disabled={!state.isLoggedIn}
-			placeholder={state.isLoggedIn ? t('cloudAgents.followup.placeholder') : t('cloudAgents.followup.loginRequired')}
+			disabled={!state.isLoggedIn || awaitingApproval}
+			placeholder={!state.isLoggedIn ? t('cloudAgents.followup.loginRequired') : awaitingApproval ? t('cloudAgents.approval.composerHint') : t('cloudAgents.followup.placeholder')}
 			toolbar={
 				<span title={modelLabel} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: C.fgMuted, padding: '0 6px', minWidth: 0 }}>
 					<ModelIcon division={isDivisionProjectSession(session)} size={11} />
@@ -3054,7 +3232,7 @@ const FollowUpComposer = ({ session, value, setValue }: { session: CloudSession;
 			}
 			actions={
 				<>
-					{active && <StopButton title={t('cloudAgents.composer.stop')} onClick={() => { void cloudAgentService.stop(session.id); }} />}
+					{(active || awaitingApproval) && <StopButton title={t('cloudAgents.composer.stop')} onClick={() => { void cloudAgentService.stop(session.id); }} />}
 					{goalPaused && (
 						<button type='button' disabled={!state.isLoggedIn || sending} title={t('cloudAgents.goal.continueHint')} onClick={() => { void continueGoal(); }} style={buttonStyle('secondary', !state.isLoggedIn || sending)}>
 							<Repeat size={12} />
@@ -3065,7 +3243,7 @@ const FollowUpComposer = ({ session, value, setValue }: { session: CloudSession;
 				</>
 			}
 			hintLeft={t('cloudAgents.composer.hintSend')}
-			hintRight={!active && state.isLoggedIn ? t('cloudAgents.followup.restartHint') : undefined}
+			hintRight={!active && !awaitingApproval && state.isLoggedIn ? t('cloudAgents.followup.restartHint') : undefined}
 		/>
 	);
 };

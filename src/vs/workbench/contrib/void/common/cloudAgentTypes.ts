@@ -11,9 +11,10 @@
 // createDecorator 以外の実行時依存を持たせないこと。
 //
 // サーバー側の API 契約 (Division ⇄ Orchestra) に合わせてある:
-//   POST /api/cloud-sessions                  { prompt, title?, model?, projectId?, workspaceName?, goalLoop?, maxRounds? } → { session }
+//   POST /api/cloud-sessions                  { prompt, title?, model?, projectId?, workspaceName?, goalLoop?, maxRounds?, approvalMode? } → { session }
 //        model: "provider/model" (単体のモデル) / "division-project" (projectId 必須。Division Project として動く) / 省略 (プロジェクトの coder)
 //        goalLoop: "auto" (既定。目標を立てて達成するまでラウンドを繰り返す) / "confirm" (未達のラウンドごとに止まる) / "off"
+//        approvalMode: true (Division Project のみ): coder 以外のロールの成果物 (.division/*.md) ができるたびに止まり、承認を待つ
 //   POST /api/cloud-sessions/:id/upload       { index, total, data(base64) }
 //   POST /api/cloud-sessions/:id/start        { workspaceInfo?, repo? } → { session }
 //   GET  /api/cloud-sessions?limit=50         → { sessions }
@@ -21,6 +22,10 @@
 //   GET  /api/cloud-sessions/:id/events?after=&limit=  → { events, session }
 //   POST /api/cloud-sessions/:id/messages     { text } → { session }
 //        { continueGoal: true, text? }: 目標ループが「毎回確認」で止まっているとき、次のラウンドへ進める (text は追加の指示)
+//   GET  /api/cloud-sessions/:id/approval     → { approval: CloudPendingApproval | null }  (status が awaiting_approval のとき)
+//   POST /api/cloud-sessions/:id/approval     { taskSeq, action: "approve" | "revise", content?, feedback? } → { session }
+//        content: 編集した成果物 (変えたときだけ送る)。approve で次のタスクへ、revise (feedback 必須) で同じロールがやり直す
+//        承認待ちの間 /messages は 409 { code: "awaiting_approval" }
 //   POST /api/cloud-sessions/:id/stop         {} → { session }
 //   POST /api/cloud-sessions/:id/archive      {} → { ok }
 //   GET  /api/cloud-sessions/:id/changes      → { changes, patch, patchTruncated }
@@ -52,6 +57,7 @@ export type CloudSessionStatus =
 	| 'provisioning'  // サンドボックス作成中
 	| 'uploading'     // ワークスペースのアップロード + /start 待ち
 	| 'running'       // エージェントが作業中
+	| 'awaiting_approval' // 承認モード: ロールの成果物 (.division/*.md) の承認待ち
 	| 'idle'          // 1 ターン終わった (追加の指示を送れる)
 	| 'failed'        // 失敗した (追加の指示を送ると再開する)
 	| 'cancelled';    // ユーザーが止めた (追加の指示を送ると再開する)
@@ -101,9 +107,11 @@ export interface CloudSession {
 	goalLoop?: CloudGoalLoopMode;
 	/** 目標ループのラウンド数の上限 */
 	goalMaxRounds?: number;
+	/** 承認モード (Division Project のみ)。この機能より前のサーバーには無い (= false) */
+	approvalMode?: boolean;
 }
 
-export type CloudSessionEventType = 'user' | 'assistant' | 'tool' | 'status' | 'error' | 'done' | 'plan' | 'task' | 'pull_request' | 'goal' | 'review';
+export type CloudSessionEventType = 'user' | 'assistant' | 'tool' | 'status' | 'error' | 'done' | 'plan' | 'task' | 'approval' | 'pull_request' | 'goal' | 'review';
 
 export interface CloudSessionEvent {
 	seq: number;
@@ -118,6 +126,7 @@ export interface CloudSessionEvent {
 	 *  - done:      { summary, changedFiles }
 	 *  - plan:      CloudPlanEventData (Division Project モードのみ。リーダーの計画)
 	 *  - task:      CloudTaskEventData (Division Project モードのみ。ロールごとのタスクの開始 / 完了 / 失敗)
+	 *  - approval:  CloudApprovalEventData (承認モード。ユーザーが成果物を承認した / 差し戻した)
 	 *  - pull_request: CloudPullRequestEventData (a PR was created / updated from this session)
 	 *  - goal:      CloudGoalEventData (目標ループ。作業の前にリーダーが立てた目標と達成条件)
 	 *  - review:    CloudReviewEventData (目標ループ。ラウンドの終わりのレビュー。status: start → done)
@@ -165,7 +174,41 @@ export type CloudTaskEventData = {
 	model: string;
 	status: 'start' | 'done' | 'failed';
 	summary?: string;
+	/** 承認モード: この結果 (ロールの .division ファイル) はユーザーの承認待ち */
+	needsApproval?: boolean;
 };
+
+/** GET .../approval: 承認待ちの成果物 */
+export type CloudPendingApproval = {
+	/** 結果の task イベントの seq。承認するときにそのまま返す */
+	taskSeq: number;
+	index: number;
+	role: string;
+	roleName: string;
+	title: string;
+	/** ワークスペースからの相対パス (例: .division/REVIEW.md) */
+	file: string;
+	summary: string;
+	/** ファイルの中身。無い / 大きすぎる (tooLarge) ときは null */
+	content: string | null;
+	tooLarge?: boolean;
+};
+
+/** approval イベント: ユーザーが成果物を承認した / 差し戻した */
+export type CloudApprovalEventData = {
+	taskSeq: number;
+	index: number;
+	role: string;
+	roleName: string;
+	title: string;
+	file: string;
+	status: 'approved' | 'revised';
+	/** ユーザーがファイルを編集してから承認 / 差し戻しした */
+	edited: boolean;
+	feedback?: string;
+};
+
+export type CloudApprovalAction = 'approve' | 'revise';
 
 /**
  * 目標ループ (IDE の Division フローの「ループ」と同じ):

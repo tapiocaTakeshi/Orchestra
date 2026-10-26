@@ -1035,7 +1035,8 @@ class KanbanService extends Disposable implements IKanbanService {
 				continue;
 			}
 			entry.missingSince = undefined;
-			if (isCloudSessionActive(session.status)) continue;
+			// 承認待ち (承認モード) はまだ終わっていない: ユーザーが承認したら続きが動く
+			if (isCloudSessionActive(session.status) || session.status === 'awaiting_approval') continue;
 
 			this._cloudRuns.delete(taskId);
 			changed = true;
