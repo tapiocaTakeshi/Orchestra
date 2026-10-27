@@ -1,7 +1,8 @@
 # リモートコントロール API
 
-Orchestra Mobile から IDE を操作するための LAN 内 HTTP API です。接続とアカウントの
-仕組みは [ORCHESTRA-MOBILE-REMOTE.md](./ORCHESTRA-MOBILE-REMOTE.md) を参照してください。
+Orchestra Mobile から IDE を操作するための HTTP API です。同じ LAN では直接、外出先からは
+Supabase Realtime の中継 (エンドツーエンド暗号化) を通して、同じエンドポイントを使います。
+接続とアカウントの仕組みは [ORCHESTRA-MOBILE-REMOTE.md](./ORCHESTRA-MOBILE-REMOTE.md) を参照してください。
 
 ## 仕組み
 
@@ -13,6 +14,8 @@ Orchestra Mobile ──HTTP──▶ メインプロセス (:39231)          ─
                                                                        remoteControl.contribution.ts
 ```
 
+- 外出先からのリクエストは `orchestraMobileRelay.ts` が中継から受け取り、LAN と同じ確認を通して
+  ワークベンチへ渡します (`/api/internal/*` は中継からは使えません)。
 - `GET /api/ping` 以外はすべて `X-Orchestra-Token` と `X-Division-Access-Token` が必要です。
   トークン違いは `401 invalid_token`、PC と別アカウントなら `403 account_mismatch`。
 - 確認を通ったリクエストは、フォーカス中 (無ければ最後にフォーカスされた) ウィンドウへ渡します。

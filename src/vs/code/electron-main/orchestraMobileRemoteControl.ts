@@ -9,6 +9,7 @@ import { promises as fs } from 'fs';
 import { join } from '../../base/common/path.js';
 import { app, BrowserWindow, clipboard, IpcMainEvent, WebContents } from 'electron';
 import { validatedIpcMain } from '../../base/parts/ipc/electron-main/ipcMain.js';
+import { OrchestraMobileRelay } from './orchestraMobileRelay.js';
 
 const PORT = 39231;
 const PROTOCOL_VERSION = 1;
@@ -38,6 +39,8 @@ let server: Server | undefined;
 let pairing: PairingInfo | undefined;
 let account: DivisionAccount | undefined;
 let heartbeat: ReturnType<typeof setInterval> | undefined;
+/** Reaches the phone through Supabase Realtime when it is not on the same LAN. Runs while signed in. */
+let relay: OrchestraMobileRelay | undefined;
 /** Why the LAN server is not listening, shown in the chat reply to `/remote-control`. */
 let listenError: string | undefined;
 
@@ -200,7 +203,7 @@ function deviceLabel(): string {
 }
 
 /** Mirrors RemoteGatewayStatus in vs/workbench/contrib/void/browser/remoteSessionSyncService.ts. */
-type GatewayStatus = { listening: boolean; url: string; deviceLabel: string; accountEmail: string | null; published: boolean; error?: string };
+type GatewayStatus = { listening: boolean; url: string; deviceLabel: string; accountEmail: string | null; published: boolean; relayConnected: boolean; error?: string };
 
 /**
  * `/remote-control` in the chat: republish the RemoteSession right away instead of
@@ -216,6 +219,7 @@ async function announce(_event: unknown, rawSyncedAt?: unknown): Promise<Gateway
 		deviceLabel: deviceLabel(),
 		accountEmail: account ? (account.email || account.userId) : null,
 		published: false,
+		relayConnected: !!relay?.connected,
 	};
 	if (!status.listening) return { ...status, error: listenError };
 	if (!account || !pairing) return status;
@@ -241,9 +245,11 @@ async function setDivisionAccount(next: DivisionAccount | undefined): Promise<vo
 	if (!next) {
 		if (heartbeat) clearInterval(heartbeat);
 		heartbeat = undefined;
+		await stopRelay();
 		return;
 	}
 	if (!pairing) return;
+	startRelay(pairing.token);
 	// RemoteSession rows are owner-scoped by RLS. Give a different account a
 	// fresh primary key instead of trying to update another user's row.
 	if (pairing.remoteSessionOwner !== next.userId) {
@@ -283,15 +289,48 @@ async function authenticateDivisionAccount(raw: unknown): Promise<DivisionAccoun
 	return { userId: input.userId, accessToken: input.accessToken, email: user.email };
 }
 
-async function isMatchingMobileAccount(req: IncomingMessage): Promise<boolean> {
+async function isMatchingMobileAccount(rawToken: unknown): Promise<boolean> {
 	if (!account) return false;
-	const rawToken = req.headers['x-division-access-token'];
 	if (typeof rawToken !== 'string' || !rawToken) return false;
 	try {
 		return (await getDivisionTokenUser(rawToken)).userId === account.userId;
 	} catch {
 		return false;
 	}
+}
+
+function startRelay(token: string): void {
+	if (relay) return;
+	relay = new OrchestraMobileRelay(token, SUPABASE_URL, SUPABASE_ANON_KEY, request =>
+		handleApiRequest(request.method, request.path, request.query, request.body, request.token, request.accessToken));
+	relay.start();
+}
+
+async function stopRelay(): Promise<void> {
+	const active = relay;
+	relay = undefined;
+	await active?.stop();
+}
+
+/**
+ * Answers one `/api/*` request from the phone, whether it came over the LAN or the relay:
+ * checks the pairing token and the Division account, then hands it to the workbench.
+ */
+async function handleApiRequest(method: string, path: string, query: Record<string, string>, body: unknown, orchestraToken: unknown, divisionAccessToken: unknown): Promise<{ status: number; body: unknown }> {
+	if (method === 'GET' && path === '/api/ping') {
+		return { status: 200, body: { ok: true, app: 'Orchestra', protocolVersion: PROTOCOL_VERSION } };
+	}
+	if (!pairing || orchestraToken !== pairing.token) {
+		return { status: 401, body: { error: 'invalid_token' } };
+	}
+	if (!await isMatchingMobileAccount(divisionAccessToken)) {
+		return { status: 403, body: { error: 'account_mismatch', detail: '同じ Division アカウントでログインしてください。' } };
+	}
+	if (path.startsWith('/api/') && !path.startsWith('/api/internal/') && ALLOWED_METHODS.has(method)) {
+		const response = await forwardToWorkbench(method, path, query, body);
+		return { status: response.status, body: response.body };
+	}
+	return { status: 404, body: { error: 'not_found' } };
 }
 
 /**
@@ -356,26 +395,11 @@ export async function startOrchestraMobileRemoteControl(): Promise<void> {
 				send(res, 405, { error: 'method_not_allowed' });
 				return;
 			}
-			if (req.method === 'GET' && path === '/api/ping') {
-				send(res, 200, { ok: true, app: 'Orchestra', protocolVersion: PROTOCOL_VERSION });
-				return;
-			}
-			if (req.headers['x-orchestra-token'] !== token) {
-				send(res, 401, { error: 'invalid_token' });
-				return;
-			}
-			if (!await isMatchingMobileAccount(req)) {
-				send(res, 403, { error: 'account_mismatch', detail: '同じ Division アカウントでログインしてください。' });
-				return;
-			}
-			if (path.startsWith('/api/') && ALLOWED_METHODS.has(req.method ?? '')) {
-				const requestUrl = new URL(req.url ?? '/', url);
-				const query = Object.fromEntries(requestUrl.searchParams.entries());
-				const response = await forwardToWorkbench(req.method!, path, query, await readBody(req));
-				send(res, response.status, response.body);
-				return;
-			}
-			send(res, 404, { error: 'not_found' });
+			const method = req.method ?? '';
+			const query = Object.fromEntries(new URL(req.url ?? '/', url).searchParams.entries());
+			const body = method === 'GET' ? undefined : await readBody(req);
+			const response = await handleApiRequest(method, path, query, body, req.headers['x-orchestra-token'], req.headers['x-division-access-token']);
+			send(res, response.status, response.body);
 		} catch (error) {
 			send(res, 400, { error: 'invalid_request', detail: error instanceof Error ? error.message : String(error) });
 		}
@@ -398,6 +422,7 @@ export async function startOrchestraMobileRemoteControl(): Promise<void> {
 export async function stopOrchestraMobileRemoteControl(): Promise<void> {
 	if (heartbeat) clearInterval(heartbeat);
 	heartbeat = undefined;
+	await stopRelay();
 	await removeRemoteSession();
 	account = undefined;
 	pairing = undefined;

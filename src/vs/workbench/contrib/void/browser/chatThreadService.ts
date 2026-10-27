@@ -172,6 +172,9 @@ const describeRemoteGateway = (status: RemoteGatewayStatus | undefined): string[
 		'スマホで開くには:',
 		`1. Orchestra Mobile に ${status.accountEmail} でログインする`,
 		`2. 「見つかったデバイス」から「${status.deviceLabel}」を選ぶ (接続済みならそのままこのチャットに切り替わります)`,
+		status.relayConnected
+			? '外出先 (モバイルデータや別の Wi-Fi) からも、暗号化した中継経由でそのまま操作できます。'
+			: '※ 外出先から繋ぐための中継にまだ接続できていません。同じ Wi-Fi の中からは操作できます。',
 	];
 	if (!status.published) {
 		lines.push('', `※ 接続先の登録に失敗しました${status.error ? ` (${status.error})` : ''}。見つからないときは、通知の「ペアリングリンクをコピー」からリンクを送って手入力で接続してください。`);

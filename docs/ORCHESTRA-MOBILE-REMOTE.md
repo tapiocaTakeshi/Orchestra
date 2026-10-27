@@ -1,7 +1,8 @@
 # Orchestra Mobile remote control
 
 Orchestra starts a token-protected LAN server at `http://<PC-IP>:39231` when the
-desktop app starts. Sign in to the desktop and Orchestra Mobile using the same
+desktop app starts, and an end-to-end encrypted relay so the phone can also
+control it from outside the LAN. Sign in to the desktop and Orchestra Mobile using the same
 Division account. The desktop verifies its Division session locally, then
 publishes a short-lived `RemoteSession` for that account. Mobile lists only its
 own account's sessions (enforced by Supabase RLS), so another account cannot
@@ -22,8 +23,31 @@ not available. Open the file on the desktop and copy its `pairingLink` value
 into Orchestra Mobile's **手入力・ペアリングリンクで接続** screen. The token is
 random, persists across restarts, and must be kept private.
 
-Both devices must be on the same trusted LAN. iOS needs the Local Network
-permission and Android needs the app's local-network access enabled.
+## Away from home (relay)
+
+When the phone cannot reach the desktop on the LAN (mobile data, another Wi-Fi),
+it switches to a relay over Supabase Realtime automatically, and switches back to
+the LAN once it is reachable again (checked every 30 seconds). Nothing needs to be
+set up: the desktop joins the relay while it is signed in to Division.
+
+- The broadcast channel name and an AES-256-GCM key are derived (HKDF-SHA256) from
+  the pairing token, which only the account's own devices can read from
+  `RemoteSession`. Every request and response is end-to-end encrypted, so Supabase
+  only relays opaque bytes.
+- Each request still carries the phone's Division JWT and is checked exactly like a
+  LAN request (`401 invalid_token` / `403 account_mismatch`). Requests older than
+  five minutes and repeated request ids are dropped.
+- Large messages are compressed and split into chunks below Supabase's broadcast
+  size limit. The phone polls a little less often over the relay (5 s, 2 s while
+  something is running).
+- A new pairing token (delete `orchestra-mobile-remote.json` and restart) also
+  moves the relay to a new channel and key.
+
+The implementation is `src/vs/code/electron-main/orchestraMobileRelay.ts`; the
+phone side is `src/api/relay.ts` and `src/api/relayCodec.ts` in Orchestra Mobile.
+
+On the LAN, iOS needs the Local Network permission and Android needs the app's
+local-network access enabled.
 
 The server answers `GET /api/ping` itself and forwards every other authenticated
 `/api/*` request to the open Orchestra window, which drives the agent chat, the
