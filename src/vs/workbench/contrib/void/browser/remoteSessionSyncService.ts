@@ -37,6 +37,8 @@ export type RemoteGatewayStatus = {
 	accountEmail: string | null;
 	/** アカウントの RemoteSession に今回載せられたか (モバイルから見つけられるか) */
 	published: boolean;
+	/** 外出先 (別のネットワーク) からも繋がる中継 (Supabase Realtime) に参加できているか */
+	relayConnected?: boolean;
 	error?: string;
 };
 
