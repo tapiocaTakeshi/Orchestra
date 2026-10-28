@@ -5393,7 +5393,7 @@ const CostTuningDropdown = ({ isOpen, setIsOpen, prompt, onOpen }: {
 					>
 						<AutoRouting
 							prompt={prompt}
-							endpoint={settingsState.settingsOfProvider.divisionAPI.endpoint || 'https://api.division.he-ro.jp'}
+							endpoint={settingsState.settingsOfProvider.divisionAPI.endpoint || 'https://api.division.he-ro.io'}
 							accessToken={settingsState.globalSettings.divisionAccessToken}
 							refreshToken={settingsState.globalSettings.divisionRefreshToken}
 							policy={policy}

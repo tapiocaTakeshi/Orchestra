@@ -1117,7 +1117,7 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 		}
 
 		try {
-			const endpoint = (this.voidSettingsService.state.settingsOfProvider as any).divisionAPI?.endpoint || 'https://api.division.he-ro.jp';
+			const endpoint = (this.voidSettingsService.state.settingsOfProvider as any).divisionAPI?.endpoint || 'https://api.division.he-ro.io';
 			const response = await fetch(`${endpoint}/api/projects/${encodeURIComponent(project.projectId)}`);
 			if (!response.ok) {
 				return { success: false, message: `API error: ${response.status}` };

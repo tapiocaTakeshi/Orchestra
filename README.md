@@ -13,7 +13,7 @@
 
 ---
 
-**Orchestra** は、[Division API](https://api.division.he-ro.jp) を搭載したAIエージェント統合型IDEです。
+**Orchestra** は、[Division API](https://api.division.he-ro.io) を搭載したAIエージェント統合型IDEです。
 1つのプロンプトを送信するだけで、Orchestraのマルチエージェント・オーケストレーションが「検索」「プロンプト設計」「コーディング」「レビュー」といった各タスクに最適なAIモデル（Claude, GPT-4, Gemini, Perplexity等）を自動で割り当て、最高品質のコードを生成します。
 
 ## ✨ 主な機能 (Features)
@@ -31,7 +31,7 @@
 
 ## 🚀 Division API について
 
-Orchestraの頭脳である **Division API** (`https://api.division.he-ro.jp`) は、Leader AI (Gemini 2.5 Flash等) がユーザーの指示を解析・タスク分解し、複数のAIに並行・順次処理させるオーケストレーションシステムです。
+Orchestraの頭脳である **Division API** (`https://api.division.he-ro.io`) は、Leader AI (Gemini 2.5 Flash等) がユーザーの指示を解析・タスク分解し、複数のAIに並行・順次処理させるオーケストレーションシステムです。
 
 利用可能なモデル一覧やMCP（Model Context Protocol）連携の詳細などについては、[DIVISION-API.md](./DIVISION-API.md) をご参照ください。
 

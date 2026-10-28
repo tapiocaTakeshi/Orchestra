@@ -17,7 +17,7 @@ import { AutoRouting } from './AutoRouting.js';
 import { fetchDivisionProfile, divisionPlans, type DivisionProfile } from '../void-login-tsx/divisionBilling.js';
 import { formatCloudCostUsd, sumCloudCostUsd } from '../../../../common/cloudAgentTypes.js';
 
-const DEFAULT_DIVISION_ENDPOINT = 'https://api.division.he-ro.jp';
+const DEFAULT_DIVISION_ENDPOINT = 'https://api.division.he-ro.io';
 
 const Card = ({ title, subtitle, action, children }: { title: string; subtitle?: string; action?: React.ReactNode; children: React.ReactNode }) => (
 	<div className='flex flex-col gap-3'>

@@ -19,7 +19,7 @@ import { dirname, join, resolve as resolvePath } from '../../../base/common/path
 
 // Division API base URL. Defaults to the hosted service; set DIVISION_API_BASE_URL to point at
 // a local dev instance instead.
-const DIVISION_API_BASE_URL = process.env['DIVISION_API_BASE_URL'] || 'https://api.division.he-ro.jp';
+const DIVISION_API_BASE_URL = process.env['DIVISION_API_BASE_URL'] || 'https://api.division.he-ro.io';
 
 // Duplicated from workbench/contrib/void/browser/divisionProjectService.ts: platform code must
 // not depend on workbench code. These are the public Supabase anon-key values already exposed

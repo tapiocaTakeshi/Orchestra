@@ -30,7 +30,7 @@ Leader AI がユーザーのリクエストを分析し、「検索」「設計�
 
 ## エンドポイント
 
-**Base URL**: `https://api.division.he-ro.jp`
+**Base URL**: `https://api.division.he-ro.io`
 
 ### `POST /api/agent/run` — エージェント実行
 
@@ -127,7 +127,7 @@ Cursor / Antigravity / Claude Desktop のMCP設定に追加するだけで使え
 {
   "mcpServers": {
     "division": {
-      "url": "https://api.division.he-ro.jp/mcp"
+      "url": "https://api.division.he-ro.io/mcp"
     }
   }
 }

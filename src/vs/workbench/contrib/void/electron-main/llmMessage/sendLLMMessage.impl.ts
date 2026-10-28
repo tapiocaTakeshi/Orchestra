@@ -3094,7 +3094,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 	const routingOptions: DivisionRoutingOptions = { policy: params.divisionAutoRouting, requestId: routingRequestId() };
 
 	try {
-		const endpointBase = settingsOfProvider.divisionAPI.endpoint || 'https://api.division.he-ro.jp';
+		const endpointBase = settingsOfProvider.divisionAPI.endpoint || 'https://api.division.he-ro.io';
 		const projectId = divisionProjectIdParam || '';
 		const prompt = buildPromptFromMessages(messages, separateSystemMessage);
 
@@ -3112,7 +3112,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			const apiKey = divisionApiKey || process.env.DIVISION_API_KEY || '';
 			if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
 			await Promise.all(ids.map(sessionId =>
-				fetch(`${settingsOfProvider.divisionAPI.endpoint || 'https://api.division.he-ro.jp'}/api/tasks/stop`, {
+				fetch(`${settingsOfProvider.divisionAPI.endpoint || 'https://api.division.he-ro.io'}/api/tasks/stop`, {
 					method: 'POST',
 					headers,
 					body: JSON.stringify({ projectId: divisionProjectIdParam || '', sessionId }),
