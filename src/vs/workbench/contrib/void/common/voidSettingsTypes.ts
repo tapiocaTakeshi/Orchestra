@@ -120,7 +120,7 @@ export const displayInfoOfProviderName = (providerName: ProviderName): DisplayIn
 
 export const subTextMdOfProviderName = (providerName: ProviderName): string => {
 
-	if (providerName === 'divisionAPI') return 'Division API automatically assigns the optimal AI model for each task. [Learn more](https://api.division.he-ro.jp).'
+	if (providerName === 'divisionAPI') return 'Division API automatically assigns the optimal AI model for each task. [Learn more](https://api.division.he-ro.io).'
 	if (providerName === 'anthropic') return 'Get your [API Key here](https://console.anthropic.com/settings/keys).'
 	if (providerName === 'openAI') return 'Get your [API Key here](https://platform.openai.com/api-keys).'
 	if (providerName === 'deepseek') return 'Get your [API Key here](https://platform.deepseek.com/api_keys).'

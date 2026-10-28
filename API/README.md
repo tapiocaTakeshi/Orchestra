@@ -50,7 +50,7 @@ Leader AI がユーザーのリクエストを分析し、「検索」「設計�
 
 ## エンドポイント
 
-**Base URL**: `https://api.division.he-ro.jp`
+**Base URL**: `https://api.division.he-ro.io`
 
 ### エージェント実行
 
@@ -66,7 +66,7 @@ Step 2: POST /api/tasks/execute  → 合成 (Coder/Writer) + レビュー (Revie
 Leader AIがユーザーのリクエストを分析・分解し、各サブタスクを実行して結果を返します。
 
 ```bash
-curl -X POST https://api.division.he-ro.jp/api/tasks/create \
+curl -X POST https://api.division.he-ro.io/api/tasks/create \
   -H "Authorization: Bearer div_..." \
   -H "Content-Type: application/json" \
   -d '{
@@ -102,7 +102,7 @@ curl -X POST https://api.division.he-ro.jp/api/tasks/create \
 プロジェクトに割り当てられたロールを1つだけ実行します。合成ステップ（Coder/Writer）とレビューステップ（Reviewer）で使用します。`stream: true` 指定時は SSE でストリーミング、未指定時は JSON で完了後にまとめて返却されます。
 
 ```bash
-curl -N -X POST https://api.division.he-ro.jp/api/tasks/execute \
+curl -N -X POST https://api.division.he-ro.io/api/tasks/execute \
   -H "Authorization: Bearer div_..." \
   -H "Content-Type: application/json" \
   -d '{
@@ -244,7 +244,7 @@ Cursor / Antigravity / Claude Desktop のMCP設定に追加するだけで使え
 {
   "mcpServers": {
     "division": {
-      "url": "https://api.division.he-ro.jp/mcp?key=div_..."
+      "url": "https://api.division.he-ro.io/mcp?key=div_..."
     }
   }
 }
