@@ -5,24 +5,30 @@
 
 import React, { useState } from 'react';
 import { useAccessor, useIsDark, useSettingsState } from '../util/services.js';
-import { X, LogIn, KeyRound, Loader2, ExternalLink } from 'lucide-react';
+import { X, LogIn, KeyRound, Loader2, ExternalLink, MonitorSmartphone, Copy, Check } from 'lucide-react';
+import type { DivisionDeviceLoginInfo } from '../../../divisionBrowserLoginService.js';
 import { completeDivisionBrowserLogin } from './divisionAuth.js';
 
 // ログインは Division の Web サイトで行う。ここではブラウザを開き、サイトからの
 // orchestra://division-auth リダイレクト (divisionBrowserLoginService) を待つだけ。
-type LoginPhase = 'idle' | 'waiting' | 'completing';
+// ブラウザが別のマシンにある場合は 'device' (コードを入力して承認) を使う。
+type LoginPhase = 'idle' | 'waiting' | 'device' | 'completing';
 
 export const LoginScreen = ({ onClose }: { onClose: () => void }) => {
 	const isDark = useIsDark();
 	const accessor = useAccessor();
 	const voidSettingsService = accessor.get('IVoidSettingsService');
 	const browserLoginService = accessor.get('IDivisionBrowserLoginService');
+	const clipboardService = accessor.get('IClipboardService');
+	const openerService = accessor.get('IOpenerService');
 	const settingsState = useSettingsState();
 
 	const isLoggedIn = settingsState.globalSettings.isLoggedIn;
 
 	const [phase, setPhase] = useState<LoginPhase>('idle');
 	const [error, setError] = useState('');
+	const [deviceInfo, setDeviceInfo] = useState<DivisionDeviceLoginInfo | null>(null);
+	const [copied, setCopied] = useState(false);
 
 	React.useEffect(() => {
 		if (isLoggedIn) {
@@ -60,6 +66,15 @@ export const LoginScreen = ({ onClose }: { onClose: () => void }) => {
 		return () => listener.dispose();
 	}, [browserLoginService, voidSettingsService, onClose]);
 
+	React.useEffect(() => {
+		const listener = browserLoginService.onDidFailDeviceLogin((message) => {
+			setError(message);
+			setDeviceInfo(null);
+			setPhase('idle');
+		});
+		return () => listener.dispose();
+	}, [browserLoginService]);
+
 	// Esc でも閉じられるようにする (セッション交換中は途中で閉じない)。
 	React.useEffect(() => {
 		const onKeyDown = (e: KeyboardEvent) => {
@@ -82,8 +97,32 @@ export const LoginScreen = ({ onClose }: { onClose: () => void }) => {
 		}
 	};
 
+	const startDeviceLogin = async () => {
+		setError('');
+		setCopied(false);
+		try {
+			const info = await browserLoginService.startDeviceLogin();
+			setDeviceInfo(info);
+			setPhase('device');
+		} catch (err: any) {
+			setError(err?.message || 'ログインコードを発行できませんでした。');
+		}
+	};
+
+	const copyDeviceCode = async () => {
+		if (!deviceInfo) return;
+		await clipboardService.writeText(deviceInfo.userCode);
+		setCopied(true);
+	};
+
+	const openDevicePage = () => {
+		if (!deviceInfo) return;
+		openerService.open(deviceInfo.verificationUriComplete, { openExternal: true });
+	};
+
 	const cancelWaiting = () => {
 		browserLoginService.cancel();
+		setDeviceInfo(null);
 		setPhase('idle');
 	};
 
@@ -128,6 +167,63 @@ export const LoginScreen = ({ onClose }: { onClose: () => void }) => {
 								ブラウザでログイン
 								<ExternalLink size={14} className="opacity-80" />
 							</button>
+						)}
+
+						{phase === 'idle' && (
+							<button
+								type="button"
+								onClick={startDeviceLogin}
+								className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-md border border-void-border-2 text-xs text-void-fg-2 hover:bg-void-bg-3 transition-colors"
+							>
+								<MonitorSmartphone size={14} />
+								別の端末のブラウザでログイン（コードを使う）
+							</button>
+						)}
+
+						{phase === 'device' && deviceInfo && (
+							<>
+								<div className="text-xs text-void-fg-2 bg-void-bg-2 border border-void-border-2 rounded-md px-3 py-2.5 flex flex-col gap-2">
+									<span>
+										任意の端末のブラウザで次のページを開き、Division にログインして下のコードを入力してください。
+									</span>
+									<span className="font-mono text-void-fg-1 break-all select-text">{deviceInfo.verificationUri}</span>
+								</div>
+								<div className="w-full flex items-center justify-center gap-2">
+									<span className="font-mono text-3xl font-bold tracking-[0.2em] text-void-fg-1 select-text">
+										{deviceInfo.userCode}
+									</span>
+									<button
+										type="button"
+										onClick={copyDeviceCode}
+										className="p-1.5 rounded-md text-void-fg-3 hover:text-void-fg-1 hover:bg-void-bg-3 transition-colors"
+										aria-label="コードをコピー"
+										title="コードをコピー"
+									>
+										{copied ? <Check size={16} /> : <Copy size={16} />}
+									</button>
+								</div>
+								<div className="text-[11px] text-void-fg-3 flex items-center justify-center gap-1.5">
+									<Loader2 size={12} className="animate-spin" />
+									承認を待っています（{new Date(deviceInfo.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} まで有効）
+								</div>
+								<div className="flex gap-2">
+									<button
+										type="button"
+										onClick={openDevicePage}
+										className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-md border border-void-border-2 text-xs text-void-fg-2 hover:bg-void-bg-3 transition-colors"
+									>
+										<ExternalLink size={12} />
+										このPCのブラウザで開く
+									</button>
+									<button
+										type="button"
+										onClick={cancelWaiting}
+										className="flex-1 px-3 py-2 rounded-md border border-void-border-2 text-xs text-void-fg-3 hover:bg-void-bg-3 transition-colors"
+									>
+										キャンセル
+									</button>
+								</div>
+							</>
 						)}
 
 						{phase === 'waiting' && (
