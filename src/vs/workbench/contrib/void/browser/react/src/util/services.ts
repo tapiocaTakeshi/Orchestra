@@ -59,6 +59,7 @@ import { IMCPService } from '../../../../common/mcpService.js';
 import { ISkillService } from '../../../../common/skillService.js';
 import { IKanbanService } from '../../../kanbanService.js';
 import { ICloudAgentService } from '../../../cloudAgentServiceInterface.js';
+import { IDivisionBrowserLoginService } from '../../../divisionBrowserLoginService.js';
 import type { CloudAgentState } from '../../../cloudAgentServiceInterface.js';
 import { IObsidianService } from '../../../../common/obsidianService.js';
 import { IStorageService, StorageScope } from '../../../../../../../platform/storage/common/storage.js'
@@ -322,6 +323,7 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		ISkillService: accessor.get(ISkillService),
 		IKanbanService: accessor.get(IKanbanService),
 		ICloudAgentService: accessor.get(ICloudAgentService),
+		IDivisionBrowserLoginService: accessor.get(IDivisionBrowserLoginService),
 		IObsidianService: accessor.get(IObsidianService),
 
 		IStorageService: accessor.get(IStorageService),

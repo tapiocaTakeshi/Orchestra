@@ -15,6 +15,9 @@ export const DIVISION_SUPABASE_URL = 'https://wmhrbhcnxglvqwvnbxlt.supabase.co';
 export const DIVISION_SUPABASE_ANON_KEY =
 	'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndtaHJiaGNueGdsdnF3dm5ieGx0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3OTg1MDAsImV4cCI6MjA5MTM3NDUwMH0.4qjCIOjFwm4XnmtqZN_N0zcZlhjGc2GQ4-x7ygMa3hM';
 
+// Division の Web サイト。IDE のログインはここで行う (ブラウザでログイン → orchestra:// へリダイレクト)
+export const DIVISION_WEBSITE_URL = 'https://division.he-ro.io';
+
 // Division API のベース URL（API キーの作成時など）
 export const DIVISION_API_BASE_URL = 'https://api.division.he-ro.io';
 

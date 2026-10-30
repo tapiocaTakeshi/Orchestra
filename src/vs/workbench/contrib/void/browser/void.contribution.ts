@@ -96,6 +96,9 @@ import './kanbanActions.js'
 import './cloudAgentService.js'
 import './cloudAgentsPane.js'
 
+// register Division の Web サイトでログインするためのリダイレクト (orchestra://division-auth) 受け口
+import './divisionBrowserLoginService.js'
+
 // ---------- common (unclear if these actually need to be imported, because they're already imported wherever they're used) ----------
 
 // llmMessage
