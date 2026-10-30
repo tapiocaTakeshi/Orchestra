@@ -5,26 +5,24 @@
 
 import React, { useState } from 'react';
 import { useAccessor, useIsDark, useSettingsState } from '../util/services.js';
-import { X, LogIn, UserPlus, KeyRound, Loader2, Mail } from 'lucide-react';
-import { signInWithDivision, signUpWithDivision } from './divisionAuth.js';
+import { X, LogIn, KeyRound, Loader2, ExternalLink } from 'lucide-react';
+import { completeDivisionBrowserLogin } from './divisionAuth.js';
 
-type AuthMode = 'login' | 'signup';
+// ログインは Division の Web サイトで行う。ここではブラウザを開き、サイトからの
+// orchestra://division-auth リダイレクト (divisionBrowserLoginService) を待つだけ。
+type LoginPhase = 'idle' | 'waiting' | 'completing';
 
 export const LoginScreen = ({ onClose }: { onClose: () => void }) => {
 	const isDark = useIsDark();
 	const accessor = useAccessor();
 	const voidSettingsService = accessor.get('IVoidSettingsService');
+	const browserLoginService = accessor.get('IDivisionBrowserLoginService');
 	const settingsState = useSettingsState();
 
 	const isLoggedIn = settingsState.globalSettings.isLoggedIn;
 
-	const [mode, setMode] = useState<AuthMode>('login');
-	const [email, setEmail] = useState('');
-	const [password, setPassword] = useState('');
-	const [passwordConfirm, setPasswordConfirm] = useState('');
-	const [submitting, setSubmitting] = useState(false);
+	const [phase, setPhase] = useState<LoginPhase>('idle');
 	const [error, setError] = useState('');
-	const [info, setInfo] = useState('');
 
 	React.useEffect(() => {
 		if (isLoggedIn) {
@@ -32,102 +30,62 @@ export const LoginScreen = ({ onClose }: { onClose: () => void }) => {
 		}
 	}, [isLoggedIn, onClose]);
 
-	// Esc でも閉じられるようにする (送信中は途中で閉じない)。
+	// 画面を閉じたら、待っていたログインは取り消す (古いタブからのリダイレクトを受け付けない)
+	React.useEffect(() => () => browserLoginService.cancel(), [browserLoginService]);
+
+	React.useEffect(() => {
+		const listener = browserLoginService.onDidReceiveToken(async ({ tokenHash }) => {
+			setPhase('completing');
+			setError('');
+			try {
+				const result = await completeDivisionBrowserLogin(tokenHash);
+				// Publish the account and both tokens together, after encrypted persistence.
+				await voidSettingsService.setGlobalSettings({
+					divisionUserId: result.userId,
+					divisionUserEmail: result.email,
+					divisionAccessToken: result.accessToken,
+					divisionRefreshToken: result.refreshToken,
+					divisionPlan: result.plan,
+					divisionApiKey: result.accessToken,
+					divisionUserApiKey: result.apiKey || '',
+					isLoggedIn: true,
+				});
+				onClose();
+			} catch (err: any) {
+				console.error('Division browser login failed:', err);
+				setError(err?.message || 'ログインに失敗しました。');
+				setPhase('idle');
+			}
+		});
+		return () => listener.dispose();
+	}, [browserLoginService, voidSettingsService, onClose]);
+
+	// Esc でも閉じられるようにする (セッション交換中は途中で閉じない)。
 	React.useEffect(() => {
 		const onKeyDown = (e: KeyboardEvent) => {
-			if (e.key === 'Escape' && !submitting) {
+			if (e.key === 'Escape' && phase !== 'completing') {
 				e.stopPropagation();
 				onClose();
 			}
 		};
 		window.addEventListener('keydown', onKeyDown, true);
 		return () => window.removeEventListener('keydown', onKeyDown, true);
-	}, [onClose, submitting]);
+	}, [onClose, phase]);
 
-	const switchMode = (next: AuthMode) => {
-		if (submitting || mode === next) return;
-		setMode(next);
+	const openBrowserLogin = async () => {
 		setError('');
-		setInfo('');
-		setPasswordConfirm('');
-	};
-
-	const persistAuthResult = async (result: {
-		userId: string;
-		email: string;
-		accessToken: string;
-		refreshToken: string;
-		apiKey: string;
-		plan: 'free' | 'plus';
-	}) => {
-		// Publish the account and both tokens together, after encrypted persistence.
-		await voidSettingsService.setGlobalSettings({
-			divisionUserId: result.userId,
-			divisionUserEmail: result.email,
-			divisionAccessToken: result.accessToken,
-			divisionRefreshToken: result.refreshToken,
-			divisionPlan: result.plan,
-			divisionApiKey: result.accessToken,
-			divisionUserApiKey: result.apiKey || '',
-			isLoggedIn: true,
-		});
-	};
-
-	const handleLogin = async () => {
-		const result = await signInWithDivision(email.trim(), password);
-		await persistAuthResult(result);
-		onClose();
-	};
-
-	const handleSignUp = async () => {
-		if (password !== passwordConfirm) {
-			throw new Error('パスワードが一致しません。');
-		}
-		if (password.length < 6) {
-			throw new Error('パスワードは 6 文字以上で設定してください。');
-		}
-		const res = await signUpWithDivision(email.trim(), password);
-		if (res.kind === 'signedIn') {
-			await persistAuthResult(res.auth);
-			onClose();
-			return;
-		}
-		// needsEmailConfirmation: 画面はそのまま、案内を表示してログインタブに戻す
-		setInfo(`${res.email} に確認メールを送信しました。メール内のリンクで認証を完了してから「ログイン」タブから再度サインインしてください。`);
-		setMode('login');
-		setPassword('');
-		setPasswordConfirm('');
-	};
-
-	const handleSubmit = async (e: React.FormEvent) => {
-		e.preventDefault();
-		if (submitting) return;
-
-		setError('');
-		setInfo('');
-
-		if (!email.trim() || !password) {
-			setError('メールアドレスとパスワードを入力してください。');
-			return;
-		}
-
-		setSubmitting(true);
 		try {
-			if (mode === 'login') {
-				await handleLogin();
-			} else {
-				await handleSignUp();
-			}
+			await browserLoginService.start();
+			setPhase('waiting');
 		} catch (err: any) {
-			console.error(`Division ${mode} failed:`, err);
-			const fallback = mode === 'login' ? 'ログインに失敗しました。' : 'アカウント作成に失敗しました。';
-			setError(err?.message || fallback);
-		} finally {
-			setSubmitting(false);
+			setError(err?.message || 'ブラウザを開けませんでした。');
 		}
 	};
 
-	const isLogin = mode === 'login';
+	const cancelWaiting = () => {
+		browserLoginService.cancel();
+		setPhase('idle');
+	};
 
 	return (
 		<div className={`@@void-scope ${isDark ? 'dark' : ''}`}>
@@ -136,6 +94,7 @@ export const LoginScreen = ({ onClose }: { onClose: () => void }) => {
 
 					<button
 						onClick={onClose}
+						disabled={phase === 'completing'}
 						className="absolute top-4 right-4 text-void-fg-3 hover:text-void-fg-1 p-1 rounded-md transition-colors"
 						type="button"
 						aria-label="閉じる"
@@ -154,82 +113,56 @@ export const LoginScreen = ({ onClose }: { onClose: () => void }) => {
 							Welcome to Orchestra
 						</h1>
 						<p className="text-sm text-void-fg-3">
-							{isLogin
-								? '有料プラン（Plus）でログインすると、API キーが自動で設定されます。'
-								: '有料プラン（Plus）でサインアップすると、API キーが自動で発行されます。'}
+							Division アカウントでログインします。ログインはブラウザ（Division の Web サイト）で行います。
 						</p>
 					</div>
 
-					{/* Login / Sign Up タブ切替 */}
-					<div className="w-full inline-flex rounded-lg border border-void-border-2 bg-void-bg-2 p-1">
-						<button
-							type="button"
-							onClick={() => switchMode('login')}
-							disabled={submitting}
-							className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-								isLogin
-									? 'bg-[#dc2626] text-white shadow-sm'
-									: 'text-void-fg-3 hover:text-void-fg-1 hover:bg-void-bg-3'
-							}`}
-						>
-							<LogIn size={13} />
-							ログイン
-						</button>
-						<button
-							type="button"
-							onClick={() => switchMode('signup')}
-							disabled={submitting}
-							className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-								!isLogin
-									? 'bg-[#dc2626] text-white shadow-sm'
-									: 'text-void-fg-3 hover:text-void-fg-1 hover:bg-void-bg-3'
-							}`}
-						>
-							<UserPlus size={13} />
-							新規登録
-						</button>
-					</div>
+					<div className="w-full flex flex-col gap-3">
+						{phase === 'idle' && (
+							<button
+								type="button"
+								onClick={openBrowserLogin}
+								className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[#dc2626] hover:bg-[#b91c1c] text-white text-sm font-semibold transition-all shadow-md"
+							>
+								<LogIn size={16} />
+								ブラウザでログイン
+								<ExternalLink size={14} className="opacity-80" />
+							</button>
+						)}
 
-					<form onSubmit={handleSubmit} className="w-full flex flex-col gap-3">
-						<label className="flex flex-col gap-1 text-xs text-void-fg-2">
-							メールアドレス
-							<input
-								type="email"
-								autoComplete="email"
-								className="w-full px-3 py-2 rounded-md bg-void-bg-2 border border-void-border-2 text-void-fg-1 text-sm focus:outline-none focus:border-[#dc2626] transition-colors"
-								value={email}
-								onChange={(e) => setEmail(e.target.value)}
-								disabled={submitting}
-								placeholder="you@example.com"
-							/>
-						</label>
+						{phase === 'waiting' && (
+							<>
+								<div className="text-xs text-void-fg-2 bg-void-bg-2 border border-void-border-2 rounded-md px-3 py-2.5 flex items-start gap-2">
+									<Loader2 size={14} className="animate-spin flex-shrink-0 mt-0.5" />
+									<span>
+										ブラウザで Division にログインし、「Orchestra にログイン」を押してください。完了すると自動で Orchestra に戻ります。
+									</span>
+								</div>
+								<div className="flex gap-2">
+									<button
+										type="button"
+										onClick={openBrowserLogin}
+										className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-md border border-void-border-2 text-xs text-void-fg-2 hover:bg-void-bg-3 transition-colors"
+									>
+										<ExternalLink size={12} />
+										ブラウザをもう一度開く
+									</button>
+									<button
+										type="button"
+										onClick={cancelWaiting}
+										className="flex-1 px-3 py-2 rounded-md border border-void-border-2 text-xs text-void-fg-3 hover:bg-void-bg-3 transition-colors"
+									>
+										キャンセル
+									</button>
+								</div>
+							</>
+						)}
 
-						<label className="flex flex-col gap-1 text-xs text-void-fg-2">
-							パスワード
-							<input
-								type="password"
-								autoComplete={isLogin ? 'current-password' : 'new-password'}
-								className="w-full px-3 py-2 rounded-md bg-void-bg-2 border border-void-border-2 text-void-fg-1 text-sm focus:outline-none focus:border-[#dc2626] transition-colors"
-								value={password}
-								onChange={(e) => setPassword(e.target.value)}
-								disabled={submitting}
-								placeholder={isLogin ? '••••••••' : '6 文字以上'}
-							/>
-						</label>
-
-						{!isLogin && (
-							<label className="flex flex-col gap-1 text-xs text-void-fg-2">
-								パスワード（確認）
-								<input
-									type="password"
-									autoComplete="new-password"
-									className="w-full px-3 py-2 rounded-md bg-void-bg-2 border border-void-border-2 text-void-fg-1 text-sm focus:outline-none focus:border-[#dc2626] transition-colors"
-									value={passwordConfirm}
-									onChange={(e) => setPasswordConfirm(e.target.value)}
-									disabled={submitting}
-									placeholder="同じパスワードを再入力"
-								/>
-							</label>
+						{phase === 'completing' && (
+							<div className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-void-bg-2 border border-void-border-2 text-sm text-void-fg-2">
+								<Loader2 size={16} className="animate-spin" />
+								ログイン中…
+							</div>
 						)}
 
 						{error && (
@@ -238,36 +171,11 @@ export const LoginScreen = ({ onClose }: { onClose: () => void }) => {
 							</div>
 						)}
 
-						{info && (
-							<div className="text-[11px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded-md px-2 py-1.5 flex items-start gap-1.5">
-								<Mail size={12} className="flex-shrink-0 mt-0.5" />
-								<span>{info}</span>
-							</div>
-						)}
-
-						<button
-							type="submit"
-							disabled={submitting}
-							className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[#dc2626] hover:bg-[#b91c1c] disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-semibold transition-all shadow-md"
-						>
-							{submitting ? (
-								<>
-									<Loader2 size={16} className="animate-spin" />
-									{isLogin ? 'ログイン中…' : 'アカウント作成中…'}
-								</>
-							) : (
-								<>
-									{isLogin ? <LogIn size={16} /> : <UserPlus size={16} />}
-									{isLogin ? 'ログイン' : 'アカウントを作成'}
-								</>
-							)}
-						</button>
-
 						<div className="text-[10px] text-void-fg-3 text-center mt-1 inline-flex items-center justify-center gap-1">
 							<KeyRound size={10} />
-							Plus プランのみ API キーが自動設定されます
+							アカウントの新規登録もブラウザで行えます。Plus プランのみ API キーが自動設定されます
 						</div>
-					</form>
+					</div>
 				</div>
 			</div>
 		</div>

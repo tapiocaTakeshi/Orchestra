@@ -135,16 +135,14 @@ const fetchOrCreateDivisionApiKey = async (
 };
 
 /**
- * Email / Password で Supabase にサインインし、Division API キーまで取得する。
- * 有料プラン（Plus）のユーザーのみ API キーを自動設定する。
+ * Division の Web サイトでのログイン (リダイレクト方式) を完了する。
+ * サイトが orchestra://division-auth/callback に載せてきた 1 回限りの token_hash を
+ * verifyOtp で IDE 専用の Supabase セッションに交換し、プランと API キーまで取得する。
  */
-export const signInWithDivision = async (
-	email: string,
-	password: string,
-): Promise<DivisionAuthResult> => {
+export const completeDivisionBrowserLogin = async (tokenHash: string): Promise<DivisionAuthResult> => {
 	const sb = getDivisionSupabase();
 
-	const { data, error } = await sb.auth.signInWithPassword({ email, password });
+	const { data, error } = await sb.auth.verifyOtp({ token_hash: tokenHash, type: 'magiclink' });
 	if (error) throw new Error(error.message);
 
 	const session = data.session;
@@ -157,68 +155,18 @@ export const signInWithDivision = async (
 	let apiKey = embeddedApiKey ?? '';
 
 	// 有料プラン（Plus）の場合のみ API キーを自動設定
-	// 埋め込みキーがなければ、API キーを作成または取得
 	if (plan === 'plus' && !apiKey) {
 		apiKey = await fetchOrCreateDivisionApiKey(user.id, session.access_token);
 	}
 
 	return {
 		userId: user.id,
-		email: user.email ?? email,
+		email: user.email ?? '',
 		accessToken: session.access_token,
 		refreshToken: session.refresh_token ?? '',
 		apiKey,
 		plan,
 	};
-};
-
-export type DivisionSignUpResult =
-	| { kind: 'signedIn'; auth: DivisionAuthResult }
-	// Supabase 側で「Confirm email」が ON のとき: signUp しても session が無い状態。
-	// ユーザーにメール確認を促し、確認後に signIn し直してもらう。
-	| { kind: 'needsEmailConfirmation'; email: string };
-
-/**
- * Email / Password で Supabase に新規アカウントを作成する。
- *  - 即時セッションが返れば signedIn (有料プランの場合は API キーも取得)
- *  - メール確認が必要な構成では needsEmailConfirmation を返す
- */
-export const signUpWithDivision = async (
-	email: string,
-	password: string,
-): Promise<DivisionSignUpResult> => {
-	const sb = getDivisionSupabase();
-
-	const { data, error } = await sb.auth.signUp({ email, password });
-	if (error) throw new Error(error.message);
-
-	const session = data.session;
-	const user = data.user;
-
-	if (session && user) {
-		// 自動ログイン構成: プラン情報をチェックして、有料プランの場合のみ API キーを取得
-		const { plan, apiKey: embeddedApiKey } = await fetchUserPlanAndApiKey(user.id, session.access_token);
-		let apiKey = embeddedApiKey ?? '';
-
-		if (plan === 'plus' && !apiKey) {
-			apiKey = await fetchOrCreateDivisionApiKey(user.id, session.access_token);
-		}
-
-		return {
-			kind: 'signedIn',
-			auth: {
-				userId: user.id,
-				email: user.email ?? email,
-				accessToken: session.access_token,
-				refreshToken: session.refresh_token ?? '',
-				apiKey,
-				plan,
-			},
-		};
-	}
-
-	// 「Confirm email」が ON: ユーザーにメール確認を案内する
-	return { kind: 'needsEmailConfirmation', email };
 };
 
 /**
