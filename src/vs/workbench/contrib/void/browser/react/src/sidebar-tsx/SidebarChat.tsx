@@ -41,6 +41,7 @@ import { acceptAllBg, acceptBorder, buttonFontSize, buttonTextColor, rejectAllBg
 import { builtinToolNames, isABuiltinToolName, MAX_FILE_CHARS_PAGE, MAX_TERMINAL_INACTIVE_TIME } from '../../../../common/prompt/prompts.js';
 import { AgentPlanStep, agentPlanProgress } from '../../../../common/agentPlan.js';
 import { PatchHunk } from '../../../../common/applyPatch.js';
+import { ChatSlashCommand, matchSlashCommands } from '../../../../common/slashCommands.js';
 import { RawToolCallObj } from '../../../../common/sendLLMMessageTypes.js';
 import ErrorBoundary from './ErrorBoundary.js';
 import { ToolApprovalTypeSwitch } from '../void-settings-tsx/Settings.js';
@@ -2375,12 +2376,32 @@ const detectFlowPhases = (messages: ChatMessage[], isRunning: IsRunningType, rea
 	return activatedPhases;
 };
 
-const FlowIndicator = ({ messages, isRunning, reasoningSoFar }: {
+/** 1 回の実行 (送信してから止まるまで) の経過秒数。ステップの合間 ('idle') も実行中として数える (Codex の "Working (12s)") */
+const useRunElapsedSeconds = (isRunning: IsRunningType): number | null => {
+	const runActive = isRunning !== undefined && isRunning !== 'awaiting_user'
+	const startRef = useRef<number | null>(null)
+	const [, setTick] = useState(0)
+	if (runActive && startRef.current === null) startRef.current = Date.now()
+	if (!runActive && startRef.current !== null) startRef.current = null
+	useEffect(() => {
+		if (!runActive) return
+		const id = setInterval(() => setTick(t => t + 1), 1000)
+		return () => clearInterval(id)
+	}, [runActive])
+	return startRef.current === null ? null : Math.floor((Date.now() - startRef.current) / 1000)
+}
+
+const formatElapsed = (s: number) => s < 60 ? `${s}秒` : `${Math.floor(s / 60)}分${String(s % 60).padStart(2, '0')}秒`
+
+const FlowIndicator = ({ messages, isRunning, reasoningSoFar, compacting }: {
 	messages: ChatMessage[],
 	isRunning: IsRunningType,
 	reasoningSoFar?: string,
 	displayContentSoFar?: string, // 後方互換: 旧シグネチャを温存
+	/** 自動コンパクション / /compact で要約を書いている */
+	compacting?: boolean,
 }) => {
+	const elapsed = useRunElapsedSeconds(isRunning)
 	const settingsState = useSettingsState()
 	const modelSelection = settingsState.modelSelectionOfFeature['Chat']
 	const roleAssignments = settingsState.globalSettings.roleAssignments
@@ -2392,10 +2413,9 @@ const FlowIndicator = ({ messages, isRunning, reasoningSoFar }: {
 		[messages, isRunning, reasoningSoFar, isDivision, roleAssignments]
 	);
 
-	if (!isChatActivelyRunning(isRunning) || phases.length === 0) return null;
-
 	const activePhase = phases.find(p => p.status === 'active');
-	if (!activePhase) return null;
+	const label = compacting ? '会話を要約しています' : isChatActivelyRunning(isRunning) ? activePhase?.label : undefined
+	if (!label) return null;
 
 	return (
 		<div className="flex items-center gap-1.5 text-[11px] text-void-fg-3 py-1">
@@ -2404,8 +2424,10 @@ const FlowIndicator = ({ messages, isRunning, reasoningSoFar }: {
 				className="inline-block w-1.5 h-1.5 rounded-full bg-[var(--vscode-focusBorder)]"
 				style={{ boxShadow: '0 0 6px var(--vscode-focusBorder)' }}
 			/>
-			<span data-orchestra-shimmer=''>{activePhase.label}</span>
+			<span data-orchestra-shimmer=''>{label}</span>
 			<IconLoading />
+			{/* Codex の "Working (12s • esc to interrupt)" と同じく、経過時間と止め方を添える */}
+			{elapsed !== null && <span className='text-void-fg-4 tabular-nums'>({formatElapsed(elapsed)} · Esc で中断)</span>}
 		</div>
 	);
 };
@@ -5610,6 +5632,59 @@ const CostTuningDropdown = ({ isOpen, setIsOpen, prompt, onOpen }: {
 // 「キューに追加」されたユーザーメッセージのリスト表示。
 // 入力欄の真上に出して、現在の応答が終わると上から順に自動送信される旨をユーザーに示す。
 type QueueListItem = { id: string; text: string; selections: StagingSelectionItem[] }
+/**
+ * 残りコンテキスト (Codex の "100% context left")。推定値で、少なくなると自動で要約する (自動コンパクション)。
+ */
+const ContextLeftIndicator = ({ messages }: { messages: ChatMessage[] }) => {
+	const accessor = useAccessor()
+	const convertService = accessor.get('IConvertToLLMMessageService')
+	const modelSelection = useSettingsState().modelSelectionOfFeature['Chat']
+	const usage = useMemo(
+		() => messages.length === 0 ? null : convertService.estimateContextUsage({ chatMessages: messages, modelSelection }),
+		[convertService, messages, modelSelection],
+	)
+	// Division のオーケストレーターはサーバー側で文脈を管理するので出さない
+	if (!usage || (modelSelection?.providerName === 'divisionAPI' && modelSelection.modelName.includes('division-orchestrator'))) return null
+	const k = (chars: number) => `${Math.max(1, Math.round(chars / 4 / 1000))}K`
+	const low = usage.leftPercent <= 20
+	return <span
+		className={`text-[11px] tabular-nums whitespace-nowrap select-none px-1 ${low ? 'text-void-warning' : 'text-void-fg-4'}`}
+		title={`コンテキストの残り (推定): 約 ${k(usage.usedChars)} / ${k(usage.budgetChars)} トークンを使用。\n少なくなると、ここまでの会話を自動で要約します。/compact で今すぐ要約できます。`}
+	>
+		残り {usage.leftPercent}%
+	</span>
+}
+
+/** 入力欄に "/" と打ったときのコマンド候補 (Codex のスラッシュコマンドと同じ見た目: 選択中の行に › を付ける) */
+const SlashCommandPopup = ({ commands, selectedIdx, onPick, onHover }: {
+	commands: ChatSlashCommand[],
+	selectedIdx: number,
+	onPick: (c: ChatSlashCommand) => void,
+	onHover: (idx: number) => void,
+}) => {
+	return <div
+		role='listbox'
+		className='mx-2 mb-1 rounded-md border border-void-border-3 bg-void-bg-2 py-1 shadow-lg text-xs select-none'
+	>
+		{commands.map((c, i) => (
+			<div
+				key={c.name}
+				role='option'
+				aria-selected={i === selectedIdx}
+				className={`flex items-baseline gap-2 px-2 py-0.5 cursor-pointer ${i === selectedIdx ? 'bg-void-bg-3 text-void-fg-1' : 'text-void-fg-2'}`}
+				onMouseEnter={() => onHover(i)}
+				// mousedown: 入力欄のフォーカスを失う前に選ぶ
+				onMouseDown={(e) => { e.preventDefault(); onPick(c) }}
+			>
+				<span className='w-3 flex-shrink-0 text-void-fg-3'>{i === selectedIdx ? '›' : ''}</span>
+				<span className='font-semibold w-28 flex-shrink-0'>{c.name}</span>
+				<span className='text-void-fg-3 truncate'>{c.description}</span>
+			</div>
+		))}
+		<div className='px-2 pt-1 text-[10px] text-void-fg-4'>↑↓ で選択 · Enter で実行 · Tab で入力 · Esc で閉じる</div>
+	</div>
+}
+
 const MessageQueueList = ({
 	items,
 	onRemove,
@@ -5729,6 +5804,11 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 	const initVal = ''
 	const [instructionsAreEmpty, setInstructionsAreEmpty] = useState(!initVal)
 	const [composerPrompt, setComposerPrompt] = useState('')
+	// スラッシュコマンドの候補 (Codex と同じ)。Esc で閉じたら、入力が変わるまで出さない
+	const [slashIdx, setSlashIdx] = useState(0)
+	const [slashDismissedFor, setSlashDismissedFor] = useState<string | null>(null)
+	const slashCommands = slashDismissedFor === composerPrompt ? null : matchSlashCommands(composerPrompt)
+	useEffect(() => { setSlashIdx(0) }, [composerPrompt])
 	const [showCostTuning, setShowCostTuning] = useState(false)
 	useEffect(() => { setShowCostTuning(false); setComposerPrompt(''); }, [currentThread.id])
 
@@ -5950,6 +6030,7 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 				isRunning={isRunning}
 				reasoningSoFar={reasoningSoFar}
 				displayContentSoFar={displayContentSoFar}
+				compacting={currThreadStreamState?.isRunning === 'idle' && !!currThreadStreamState.compacting}
 			/>
 
 			{/* 「生成中」ピルは廃止。進行状況は FlowIndicator が 1 行で示すので、
@@ -5976,7 +6057,38 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 		setInstructionsAreEmpty(!newStr)
 		setComposerPrompt(newStr)
 	}, [setInstructionsAreEmpty])
+	// /compact と /remote-control は実行中でもすぐ効く (キューに積まない)。それ以外は普通のメッセージと同じ
+	const runSlashCommand = useCallback((c: ChatSlashCommand) => {
+		if (isRunning && c.name === '/init') { textAreaFnsRef.current?.setValue(c.name); setComposerPrompt(c.name); onQueue(); return }
+		void onSubmit(c.name)
+	}, [isRunning, onSubmit, onQueue, textAreaFnsRef])
+
 	const onKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
+		if (slashCommands && !e.nativeEvent.isComposing) {
+			const n = slashCommands.length
+			if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+				e.preventDefault()
+				setSlashIdx(i => (i + (e.key === 'ArrowDown' ? 1 : n - 1)) % n)
+				return
+			}
+			const picked = slashCommands[Math.min(slashIdx, n - 1)]
+			if (e.key === 'Tab') {
+				e.preventDefault()
+				textAreaFnsRef.current?.setValue(picked.name)
+				setComposerPrompt(picked.name)
+				return
+			}
+			if (e.key === 'Enter' && !e.shiftKey) {
+				e.preventDefault()
+				runSlashCommand(picked)
+				return
+			}
+			if (e.key === 'Escape') {
+				e.preventDefault()
+				setSlashDismissedFor(composerPrompt)
+				return
+			}
+		}
 		if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
 			// 実行中なら通常の送信ではなく「キューに追加」へフォールバック (Cursor 風)
 			if (isRunning) {
@@ -5987,7 +6099,7 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 		} else if (e.key === 'Escape' && isRunning) {
 			onAbort()
 		}
-	}, [onSubmit, onQueue, onAbort, isRunning])
+	}, [onSubmit, onQueue, onAbort, isRunning, slashCommands, slashIdx, composerPrompt, runSlashCommand, textAreaFnsRef])
 
 	const queueListHTML = currentQueue.length > 0 ? (
 		<MessageQueueList
@@ -6038,6 +6150,7 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 					/>
 				)
 			})()}
+			<ContextLeftIndicator messages={previousMessages} />
 		</>}
 	>
 		<VoidInputBox2
@@ -6062,6 +6175,13 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 
 
 	const isLandingPage = previousMessages.length === 0
+
+	const slashPopupHTML = slashCommands ? <SlashCommandPopup
+		commands={slashCommands}
+		selectedIdx={Math.min(slashIdx, slashCommands.length - 1)}
+		onHover={setSlashIdx}
+		onPick={runSlashCommand}
+	/> : null
 
 
 	// 上級者モードだけで出す例。エージェントモードの例はホーム画面 (editorGroupWatermark.ts) にまとめてあり、チャットでは重ねて出さない。
@@ -6114,6 +6234,7 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 		</div>
 		{queueListHTML && <div className='px-2'>{queueListHTML}</div>}
 		<div className='px-2 pb-2'>
+			{slashPopupHTML}
 			{inputChatArea}
 		</div>
 	</div>
@@ -6141,6 +6262,7 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 		{queueListHTML && <div className='px-2 pt-2'>{queueListHTML}</div>}
 		{agentGreetingHTML}
 		<div className={isAgentUi ? 'pt-0' : 'pt-8'}>
+			{slashPopupHTML}
 			{inputChatArea}
 		</div>
 		{isAgentUi && (

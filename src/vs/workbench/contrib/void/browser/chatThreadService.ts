@@ -14,6 +14,7 @@ import { chat_userMessageContent, isABuiltinToolName } from '../common/prompt/pr
 import { AnthropicReasoning, getErrorMessage, RawToolCallObj, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
 import { ChatMode, FeatureName, ModelSelection, ModelSelectionOptions } from '../common/voidSettingsTypes.js';
+import { INIT_COMMAND_PROMPT, isInitCommand } from '../common/slashCommands.js';
 import { assistantStepsSinceCompaction, cleanSummary, isCompactCommand, MIN_ASSISTANT_STEPS_BETWEEN_COMPACTIONS, MIN_SUMMARY_CHARS } from '../common/chatCompaction.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, ToolCallParams, ToolName, ToolResult } from '../common/toolsServiceTypes.js';
@@ -293,6 +294,8 @@ export type ThreadStreamState = {
 		llmInfo?: undefined;
 		toolInfo?: undefined;
 		interrupt: 'not_needed' | Promise<() => void>; // calling this should have no effect on state - would be too confusing. it just cancels the tool
+		/** The model is writing a compaction summary (auto or /compact). */
+		compacting?: boolean;
 	}
 }
 
@@ -1520,7 +1523,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 	}
 
 
-	private async _addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId, featureNameOverride }: { userMessage: string, _chatSelections?: StagingSelectionItem[], threadId: string, featureNameOverride?: FeatureName }) {
+	private async _addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId, featureNameOverride, displayOverride }: { userMessage: string, _chatSelections?: StagingSelectionItem[], threadId: string, featureNameOverride?: FeatureName, /** shown in the chat instead of userMessage (e.g. "/init") */ displayOverride?: string }) {
 		const thread = this.state.allThreads[threadId]
 		if (!thread) return // should never happen
 
@@ -1540,7 +1543,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 		const currSelns: StagingSelectionItem[] = _chatSelections ?? thread.state.stagingSelections
 
 		const userMessageContent = await chat_userMessageContent(instructions, currSelns, { directoryStrService: this._directoryStringService, fileService: this._fileService }) // user message + names of files (NOT content)
-		const userHistoryElt: ChatMessage = { role: 'user', content: userMessageContent, displayContent: instructions, selections: currSelns, state: defaultMessageState }
+		const userHistoryElt: ChatMessage = { role: 'user', content: userMessageContent, displayContent: displayOverride ?? instructions, selections: currSelns, state: defaultMessageState }
 		this._addMessageToThread(threadId, userHistoryElt)
 
 		this._setThreadState(threadId, { currCheckpointIdx: null }) // no longer at a checkpoint because started streaming
@@ -1653,6 +1656,12 @@ We only need to do it for files that were edited since `from`, ie files between 
 			};
 			this._storeAllThreads(newThreads);
 			this._setState({ allThreads: newThreads });
+		}
+
+		// `/init` は AGENTS.md を作る依頼に置き換える (Codex と同じ)。チャットには "/init" とだけ出す
+		if (isInitCommand(userMessage)) {
+			await this._addUserMessageAndStreamResponse({ userMessage: INIT_COMMAND_PROMPT, _chatSelections, threadId, featureNameOverride, displayOverride: '/init' });
+			return;
 		}
 
 		// Now call the original method to add the user message and stream the response
@@ -2201,7 +2210,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 		})
 		if (!requestId) return 'skipped'
 		// Shown as "working"; stopping the chat cancels the summary.
-		this._setStreamState(threadId, { isRunning: 'idle', interrupt: Promise.resolve(() => this._llmMessageService.abort(requestId)) })
+		this._setStreamState(threadId, { isRunning: 'idle', interrupt: Promise.resolve(() => this._llmMessageService.abort(requestId)), compacting: true })
 		const res = await done
 		// Stopped by the user (abortRunning clears the stream state), or a newer request took over.
 		if (res.type === 'aborted' || this.streamState[threadId]?.isRunning !== 'idle') return 'aborted'
