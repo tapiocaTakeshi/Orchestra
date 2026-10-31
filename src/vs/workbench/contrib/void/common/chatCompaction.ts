@@ -42,6 +42,9 @@ Be concise, structured, and focused on helping the next LLM seamlessly continue 
 
 export const SUMMARY_PREFIX = `Another language model started to solve this problem and produced a summary of its work so far. You also have access to the state of the workspace it changed. Use this to build on the work that has already been done and avoid duplicating work. Here is the summary produced by the other language model:`
 
+/** The `/compact` command (as in Codex): summarize the conversation now. */
+export const isCompactCommand = (text: string): boolean => /^\/compact\s*$/i.test(text.trim())
+
 export type ChatCompactionMessage = Extract<ChatMessage, { role: 'compaction' }>
 
 const truncateMiddle = (s: string, max: number) => {

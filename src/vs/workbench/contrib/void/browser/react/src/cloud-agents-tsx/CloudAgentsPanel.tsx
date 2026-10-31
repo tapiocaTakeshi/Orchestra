@@ -2780,6 +2780,16 @@ const CompactionRow = ({ data, roleName }: { data: any; roleName?: string }) => 
 	const { t } = useTranslation();
 	const [open, setOpen] = useState(false);
 	const summary = typeof data?.summary === 'string' ? data.summary : '';
+	if (data?.requested === true || data?.failed === true) {
+		// /compact の依頼と、要約できなかったときの答え
+		const text = data.failed ? `${t('cloudAgents.compaction.failed')}${data.reason ? ` — ${data.reason}` : ''}` : t('cloudAgents.compaction.requested');
+		return (
+			<div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', color: data.failed ? C.error : C.fgMuted, padding: '2px 6px' }}>
+				<Layers size={12} style={{ flexShrink: 0 }} />
+				<span style={{ minWidth: 0, ...ellipsis }} title={text}>{text}</span>
+			</div>
+		);
+	}
 	if (!summary) return null;
 	const chars = typeof data?.beforeChars === 'number' ? data.beforeChars : 0;
 	return (
@@ -2798,7 +2808,7 @@ const CompactionRow = ({ data, roleName }: { data: any; roleName?: string }) => 
 			>
 				<Layers size={12} style={{ flexShrink: 0 }} />
 				{roleName && <RoleChip role={String(data?.role ?? '')} name={roleName} />}
-				<span style={{ flex: 1, minWidth: 0, ...ellipsis }}>{t('cloudAgents.compaction.title')}</span>
+				<span style={{ flex: 1, minWidth: 0, ...ellipsis }}>{t(data?.auto === false ? 'cloudAgents.compaction.manualTitle' : 'cloudAgents.compaction.title')}</span>
 				{chars > 0 && <span style={{ fontSize: '10px', flexShrink: 0 }}>{t('cloudAgents.compaction.size').replace('{k}', String(Math.round(chars / 1000)))}</span>}
 				{open ? <ChevronDown size={12} style={{ flexShrink: 0 }} /> : <ChevronRight size={12} style={{ flexShrink: 0, opacity: 0.6 }} />}
 			</button>
@@ -3385,7 +3395,10 @@ const FollowUpComposer = ({ session, value, setValue }: { session: CloudSession;
 
 	const send = async () => {
 		if (!canSend) return;
-		const ok = await cloudAgentService.sendMessage(session.id, value);
+		// /compact はエージェントへの指示ではなく、ここまでの会話の要約の依頼 (Codex と同じ)
+		const ok = /^\/compact\s*$/i.test(value.trim())
+			? await cloudAgentService.compact(session.id)
+			: await cloudAgentService.sendMessage(session.id, value);
 		if (ok) setValue('');
 	};
 	// 目標ループが確認待ち: 書いた内容を追加の指示として次のラウンドへ進める

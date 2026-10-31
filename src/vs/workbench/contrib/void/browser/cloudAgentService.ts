@@ -950,6 +950,24 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		}
 	}
 
+	async compact(id: string): Promise<boolean> {
+		if (this._state.sendingById[id]) return false;
+		this._setState({ sendingById: { ...this._state.sendingById, [id]: true } });
+		try {
+			const res = await this._request('POST', this._sessionPath(id, '/compact'), {});
+			if (!res.ok) {
+				this._setState({ lastError: describeCloudAgentError(res) });
+				return false;
+			}
+			if (res.data?.session) this._upsertSession(res.data.session as CloudSession);
+			this._scheduleList(LIST_INTERVAL_ACTIVE_MS);
+			void this._fetchEvents(id);
+			return true;
+		} finally {
+			this._setState({ sendingById: omitKey(this._state.sendingById, id) });
+		}
+	}
+
 	async stop(id: string): Promise<void> {
 		const res = await this._request('POST', this._sessionPath(id, '/stop'), {});
 		if (!res.ok) {
