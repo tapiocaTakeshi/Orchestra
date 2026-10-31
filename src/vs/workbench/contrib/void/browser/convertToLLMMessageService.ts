@@ -22,6 +22,7 @@ import { ISkillService } from '../common/skillService.js';
 import { IObsidianService } from '../common/obsidianService.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { AGENTS_MD_FILENAMES, budgetProjectInstructionDocs, formatProjectInstructionDocs } from '../common/agentsMd.js';
+import { applyChatCompaction, chatMessagesChars, COMPACT_AT_RATIO, COMPACTION_PROMPT } from '../common/chatCompaction.js';
 
 export const EMPTY_MESSAGE = '(empty message)'
 
@@ -528,6 +529,10 @@ export interface IConvertToLLMMessageService {
 	prepareLLMSimpleMessages: (opts: { simpleMessages: SimpleLLMMessage[], systemMessage: string, modelSelection: ModelSelection | null, featureName: FeatureName }) => { messages: LLMChatMessage[], separateSystemMessage: string | undefined }
 	prepareLLMChatMessages: (opts: { chatMessages: ChatMessage[], chatMode: ChatMode, modelSelection: ModelSelection | null }) => Promise<{ messages: LLMChatMessage[], separateSystemMessage: string | undefined }>
 	prepareFIMMessage(opts: { messages: LLMFIMMessage, }): { prefix: string, suffix: string, stopTokens: string[] }
+	/** Whether the thread is close enough to the model's context window to auto-compact it. */
+	checkChatCompaction: (opts: { chatMessages: ChatMessage[], chatMode: ChatMode, modelSelection: ModelSelection | null }) => Promise<{ shouldCompact: boolean, chars: number, budgetChars: number }>
+	/** The thread plus the compaction request, ready to send (the model replies with the handoff summary). */
+	prepareLLMCompactionMessages: (opts: { chatMessages: ChatMessage[], chatMode: ChatMode, modelSelection: ModelSelection | null }) => Promise<{ messages: LLMChatMessage[], separateSystemMessage: string | undefined }>
 }
 
 export const IConvertToLLMMessageService = createDecorator<IConvertToLLMMessageService>('ConvertToLLMMessageService');
@@ -703,8 +708,41 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		})
 		return { messages, separateSystemMessage };
 	}
-	prepareLLMChatMessages: IConvertToLLMMessageService['prepareLLMChatMessages'] = async ({ chatMessages, chatMode, modelSelection }) => {
+	checkChatCompaction: IConvertToLLMMessageService['checkChatCompaction'] = async ({ chatMessages, chatMode, modelSelection }) => {
+		if (modelSelection === null) return { shouldCompact: false, chars: 0, budgetChars: 0 }
+		const { overridesOfModel } = this.voidSettingsService.state
+		const { providerName, modelName } = modelSelection
+		const { contextWindow } = getModelCapabilities(providerName, modelName, overridesOfModel)
+		const modelSelectionOptions = this.voidSettingsService.state.optionsOfModelSelection['Chat'][providerName]?.[modelName]
+		const isReasoningEnabled = getIsReasoningEnabledState('Chat', providerName, modelName, modelSelectionOptions, overridesOfModel)
+		const reserved = getReservedOutputTokenSpace(providerName, modelName, { isReasoningEnabled, overridesOfModel })
+		// Same input budget prepareMessages trims to.
+		const budgetChars = (contextWindow - Math.max(contextWindow / 2, reserved ?? 4_096)) * CHARS_PER_TOKEN
+		const threshold = budgetChars * COMPACT_AT_RATIO
+		const messageChars = chatMessagesChars(applyChatCompaction(chatMessages))
+		// Cheap exit on most steps: building the system message lists the workspace, so only do it near the threshold.
+		if (budgetChars <= 0 || messageChars < threshold - 100_000) return { shouldCompact: false, chars: messageChars, budgetChars }
+		const systemChars = (await this._generateChatMessagesSystemMessage(chatMode, getModelCapabilities(providerName, modelName, overridesOfModel).specialToolFormat)).length
+			+ this._getCombinedAIInstructions().length
+		const chars = messageChars + systemChars
+		// Only when the conversation itself is a big share (summarizing cannot shrink a large system message).
+		return { shouldCompact: chars > threshold && messageChars > threshold * 0.4, chars, budgetChars }
+	}
+
+	prepareLLMCompactionMessages: IConvertToLLMMessageService['prepareLLMCompactionMessages'] = async ({ chatMessages, chatMode, modelSelection }) => {
+		// The request goes in as one more user message; prepareMessages still trims the rest to fit.
+		const last = chatMessages[chatMessages.length - 1]
+		const withRequest: ChatMessage[] = last?.role === 'user'
+			// Never two user turns in a row: add the request to the user's last message.
+			? [...chatMessages.slice(0, -1), { ...last, content: `${last.content}\n\n---\n\n${COMPACTION_PROMPT}` }]
+			: [...chatMessages, { role: 'user', content: COMPACTION_PROMPT, displayContent: '', selections: null, state: { stagingSelections: [], isBeingEdited: false } }]
+		return this.prepareLLMChatMessages({ chatMessages: withRequest, chatMode, modelSelection })
+	}
+
+	prepareLLMChatMessages: IConvertToLLMMessageService['prepareLLMChatMessages'] = async ({ chatMessages: chatMessages_, chatMode, modelSelection }) => {
 		if (modelSelection === null) return { messages: [], separateSystemMessage: undefined }
+		// After an auto-compaction, the messages before it are replaced by the user's messages + the summary.
+		const chatMessages = applyChatCompaction(chatMessages_)
 
 		const { overridesOfModel } = this.voidSettingsService.state
 

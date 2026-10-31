@@ -4670,7 +4670,38 @@ const _ChatBubble = ({ threadId, chatMessage, currCheckpointIdx, isCommitted, me
 		/>
 	}
 
+	else if (role === 'compaction') {
+		return <div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
+			<CompactionNotice chatMessage={chatMessage} />
+		</div>
+	}
+
 	return null
+}
+
+/** 自動コンパクション: 会話が長くなったので、ここまでの経緯をモデルが要約した (押すと要約が開く) */
+const CompactionNotice = ({ chatMessage }: { chatMessage: ChatMessage & { role: 'compaction' } }) => {
+	const [isOpen, setIsOpen] = useState(false)
+	const k = Math.round(chatMessage.beforeChars / 1000)
+	return <div className='px-2 my-1'>
+		<div
+			className='flex items-center gap-2 text-xs text-void-fg-3 cursor-pointer select-none'
+			title='これより前のやり取りの代わりに、この要約をモデルに渡して作業を続けます (Codex と同じ自動コンパクション)'
+			onClick={() => setIsOpen(v => !v)}
+		>
+			<div className='flex-1 h-px bg-void-border-3' />
+			<span className='flex items-center gap-1 flex-shrink-0'>
+				{isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+				会話が長くなったので、ここまでの経緯を要約しました{k > 0 ? ` (${k}k 文字)` : ''}
+			</span>
+			<div className='flex-1 h-px bg-void-border-3' />
+		</div>
+		{isOpen && <div className='mt-1 px-3 py-2 rounded border border-void-border-3 bg-void-bg-2 text-xs !select-text cursor-auto'>
+			<SmallProseWrapper>
+				<ChatMarkdownRender string={chatMessage.summary} chatMessageLocation={undefined} />
+			</SmallProseWrapper>
+		</div>}
+	</div>
 }
 
 const FlowReviewComponent = ({ chatMessage, isCheckpointGhost }: {
@@ -4869,6 +4900,10 @@ const formatChatThreadAsText = (messages: ChatMessage[] | undefined): string => 
 				lines.push(`## Tool (${name})`)
 				if (body.trim()) lines.push(body.trim())
 				lines.push('')
+				break
+			}
+			case 'compaction': {
+				lines.push('## Summary (auto-compaction)', m.summary.trim(), '')
 				break
 			}
 			case 'flow_review': {
