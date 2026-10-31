@@ -194,8 +194,6 @@ const PANEL_CSS = `
 .oca-textarea::placeholder, .oca-input::placeholder { color: ${C.fgMuted}; }
 .oca-tool { border-radius: 6px; }
 .oca-tool:hover { background: ${C.hover}; }
-.oca-example { border: 1px solid ${C.border}; background: transparent; color: ${C.fg}; border-radius: 14px; padding: 5px 12px; font-size: 12px; font-family: inherit; cursor: pointer; }
-.oca-example:hover { background: ${C.hover}; border-color: ${C.focus}; }
 .oca-option { display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box; padding: 6px 8px; border: none; border-radius: 5px; background: transparent; color: ${C.fg}; font-size: 12px; font-family: inherit; cursor: pointer; text-align: left; }
 .oca-option:hover:not(:disabled) { background: ${C.hover}; }
 .oca-option:disabled { opacity: 0.5; cursor: default; }
@@ -1617,12 +1615,6 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 // 中央: 新しいエージェント (何を任せますか？)
 // ---------------------------------------------------------------------------
 
-const EXAMPLES: { label: TranslationKey; prompt: TranslationKey }[] = [
-	{ label: 'cloudAgents.hero.example1.label', prompt: 'cloudAgents.hero.example1.prompt' },
-	{ label: 'cloudAgents.hero.example2.label', prompt: 'cloudAgents.hero.example2.prompt' },
-	{ label: 'cloudAgents.hero.example3.label', prompt: 'cloudAgents.hero.example3.prompt' },
-];
-
 // ---------------------------------------------------------------------------
 // Decision Inbox: 人間の判断が要るものだけを、セッションを横断して 1 か所に
 // ---------------------------------------------------------------------------
@@ -1736,33 +1728,15 @@ const NewAgentView = ({ leftSlot, draft, setDraft }: {
 	const hasInbox = !decisions.unsupported && decisions.items.length > 0;
 	return (
 		<div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-			<div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 14px', height: '44px', flexShrink: 0, borderBottom: `1px solid ${C.border}` }}>
-				{leftSlot}
-				<Plus size={14} style={{ color: C.fgMuted }} />
-				<span style={{ fontSize: '13px', fontWeight: 600, color: C.fg }}>{t('cloudAgents.sidebar.newAgent')}</span>
-			</div>
+			{/* 見出しは一覧を畳んでいるとき (一覧を開くボタンが要るとき) だけ */}
+			{leftSlot ? (
+				<div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 14px', height: '44px', flexShrink: 0 }}>
+					{leftSlot}
+				</div>
+			) : null}
 			<div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: hasInbox ? 'flex-start' : 'center', gap: '28px', padding: '24px 20px' }}>
 				{hasInbox ? <div style={{ maxWidth: '620px', width: '100%' }}><DecisionInboxSection /></div> : null}
-				<div style={{ maxWidth: '620px', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', textAlign: 'center' }}>
-					<span style={{ width: '44px', height: '44px', borderRadius: '12px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: C.hover, color: C.fg }}>
-						<Cloud size={22} />
-					</span>
-					<div style={{ fontSize: '20px', fontWeight: 600, color: C.fg }}>{t('cloudAgents.hero.title')}</div>
-					<div style={{ fontSize: '12.5px', lineHeight: 1.6, color: C.fgMuted, maxWidth: '520px' }}>{t('cloudAgents.subtitle')} {t('cloudAgents.hero.subtitle')}</div>
-					<div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', justifyContent: 'center', marginTop: '6px' }}>
-						{EXAMPLES.map(ex => (
-							<button
-								key={ex.label}
-								type='button'
-								className='oca-example'
-								title={t(ex.prompt)}
-								onClick={() => { setDraft({ prompt: t(ex.prompt) }); textareaRef.current?.focus(); }}
-							>
-								{t(ex.label)}
-							</button>
-						))}
-					</div>
-				</div>
+				<div style={{ maxWidth: '620px', width: '100%', textAlign: 'center', fontSize: '20px', fontWeight: 600, color: C.fg }}>{t('cloudAgents.hero.title')}</div>
 			</div>
 			<NewAgentComposer draft={draft} setDraft={setDraft} textareaRef={textareaRef} />
 		</div>
@@ -1895,6 +1869,9 @@ const WorkspaceNav = ({ compact }: { compact?: boolean }) => {
 	);
 };
 
+/** これ以上エージェントがあるときだけ、一覧の上に検索欄を出す */
+const SEARCH_MIN_SESSIONS = 8;
+
 const AgentSidebar = ({ width, onNew, onSelect, style }: {
 	width: number | string;
 	onNew: () => void;
@@ -1909,7 +1886,6 @@ const AgentSidebar = ({ width, onNew, onSelect, style }: {
 	// 行ごとにタイマーを持たせないよう、「◯分前」はここで 1 つだけ
 	const relTime = useRelativeTime();
 	const projectLabel = useProjectLabel();
-	const commandService = accessor.get('ICommandService');
 	const [query, setQuery] = useState('');
 	const [collapsed, setCollapsed] = useState<Record<SectionId, boolean>>({ running: false, done: false, stopped: false });
 
@@ -1923,6 +1899,8 @@ const AgentSidebar = ({ width, onNew, onSelect, style }: {
 	const totalCost = sumCloudCostUsd(filtered);
 	const email = settings.globalSettings.divisionUserEmail;
 	const newSelected = state.selectedId === null;
+	// 検索欄はエージェントが多いときだけ出す (少ないうちは一覧を見れば足りる)
+	const showSearch = state.sessions.length >= SEARCH_MIN_SESSIONS || !!query;
 	// 判断が必要な項目 (押すと「新しいエージェント」の画面の上に受信箱を出す)
 	const inboxOpen = state.decisions.unsupported ? 0 : state.decisions.items.filter(d => d.status === 'open').length;
 
@@ -1931,9 +1909,7 @@ const AgentSidebar = ({ width, onNew, onSelect, style }: {
 			<div style={{ display: 'flex', alignItems: 'center', gap: '7px', padding: '0 8px 0 14px', height: '44px', flexShrink: 0 }}>
 				<Cloud size={14} style={{ color: C.fg, flexShrink: 0 }} />
 				<span style={{ flex: 1, minWidth: 0, fontSize: '13px', fontWeight: 600, color: C.fg, ...ellipsis }}>{t('cloudAgents.title')}</span>
-				<button type='button' className='oca-iconbtn' title={t('cloudAgents.list.refresh')} aria-label={t('cloudAgents.list.refresh')} onClick={() => { void cloudAgentService.refresh(); }} style={{ width: '24px', height: '24px' }}>
-					{state.loading ? <Spinner size={12} /> : <RefreshCw size={12} />}
-				</button>
+				{state.loading ? <Spinner size={12} /> : null}
 			</div>
 			<div style={{ padding: '0 10px 8px', display: 'flex', flexDirection: 'column', gap: '8px', flexShrink: 0 }}>
 				<button
@@ -1963,19 +1939,21 @@ const AgentSidebar = ({ width, onNew, onSelect, style }: {
 						<span style={{ fontSize: '10.5px', fontWeight: 600, padding: '0 6px', borderRadius: '8px', background: tint(C.error, 18), color: C.error }}>{inboxOpen}</span>
 					</button>
 				) : null}
-				<div style={{ position: 'relative' }}>
-					<Search size={12} style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: C.fgMuted, pointerEvents: 'none' }} />
-					<input
-						className='oca-input'
-						value={query}
-						onChange={e => setQuery(e.target.value)}
-						onKeyDown={e => { if (e.key === 'Escape') setQuery(''); }}
-						placeholder={t('cloudAgents.sidebar.search')}
-						aria-label={t('cloudAgents.sidebar.search')}
-						spellCheck={false}
-						style={{ ...inputStyle, paddingLeft: '26px', borderRadius: '6px' }}
-					/>
-				</div>
+				{showSearch ? (
+					<div style={{ position: 'relative' }}>
+						<Search size={12} style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: C.fgMuted, pointerEvents: 'none' }} />
+						<input
+							className='oca-input'
+							value={query}
+							onChange={e => setQuery(e.target.value)}
+							onKeyDown={e => { if (e.key === 'Escape') setQuery(''); }}
+							placeholder={t('cloudAgents.sidebar.search')}
+							aria-label={t('cloudAgents.sidebar.search')}
+							spellCheck={false}
+							style={{ ...inputStyle, paddingLeft: '26px', borderRadius: '6px' }}
+						/>
+					</div>
+				) : null}
 			</div>
 			<div style={{ flex: 1, minHeight: 0, overflowY: 'auto', paddingBottom: '8px' }}>
 				{state.sessions.length === 0 ? (
@@ -2013,20 +1991,6 @@ const AgentSidebar = ({ width, onNew, onSelect, style }: {
 					</div>
 				))}
 			</div>
-			<WorkspaceNav />
-			{totalCost !== null && (
-				<div title={t('cloudAgents.cost.totalHint').replace('{count}', String(filtered.length))} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 10px 6px 14px', borderTop: `1px solid ${C.border}`, fontSize: '11px', color: C.fgMuted, flexShrink: 0, minWidth: 0 }}>
-					<Coins size={11} style={{ flexShrink: 0 }} />
-					<span style={{ flex: 1, minWidth: 0, ...ellipsis }}>
-						{t('cloudAgents.cost.total').split('{cost}')[0]}
-						<span style={{ fontFamily: C.monoFont, color: C.fg }}>{formatCloudCostUsd(totalCost)}</span>
-						{t('cloudAgents.cost.total').split('{cost}')[1] ?? ''}
-					</span>
-					<button type='button' className='oca-link' style={{ fontSize: '11px', flexShrink: 0 }} onClick={() => { void commandService.executeCommand(ORCHESTRA_OPEN_COST_MANAGEMENT_ACTION_ID); }}>
-						{t('cloudAgents.cost.manage')}
-					</button>
-				</div>
-			)}
 			<div style={{ borderTop: `1px solid ${C.border}`, padding: '8px 10px 8px 14px', display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, minWidth: 0 }}>
 				<span style={{ width: '20px', height: '20px', borderRadius: '50%', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: C.hover, color: C.fg, fontSize: '10px', fontWeight: 700 }}>
 					{(email || 'O').slice(0, 1).toUpperCase()}
@@ -2034,7 +1998,8 @@ const AgentSidebar = ({ width, onNew, onSelect, style }: {
 				<span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
 					<span title={email} style={{ fontSize: '11.5px', color: C.fg, ...ellipsis }}>{email || 'Orchestra'}</span>
 					<span style={{ fontSize: '10px', color: running > 0 ? statusColor.running : C.fgMuted }}>
-						{running > 0 ? t('cloudAgents.list.running').replace('{count}', String(running)) : t('cloudAgents.sidebar.account')}
+						{running > 0 ? t('cloudAgents.list.running').replace('{count}', String(running))
+							: totalCost !== null ? `${t('cloudAgents.cost.total').replace('{cost}', formatCloudCostUsd(totalCost))}` : t('cloudAgents.sidebar.account')}
 					</span>
 				</span>
 				{running > 0 && (

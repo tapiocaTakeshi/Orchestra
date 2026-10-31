@@ -8,7 +8,7 @@
 // 「クラウドエージェントモード (cloud)」が既定。クラウドで動くエージェントだけを扱う画面 (Cursor の Agents 画面のような形)。
 // VS Code 由来の IDE 的な部品 (アクティビティバー・ステータスバー・ミニマップ・パンくず・
 // レイアウトコントロール等) を隠したうえで、サイドバー・パネル・右のチャット (補助バー) を閉じ、
-// エディタ領域いっぱいにクラウドエージェントのパネル (cloudAgentsPane.ts) を出す。
+// タイトルバーの下の画面全体をクラウドエージェントの画面にする (エディタのタブではない。cloudAgentsPane.ts の CloudAgentsFullscreen)。
 // このモードのあいだ、右のチャットは「強制非表示」: ショートカットや他のコマンドで開かれても、すぐに隠し直す。
 // 上級者モードに切り替えると、チャットと (入る前に開いていた) サイドバー・パネルを戻す。
 //
@@ -36,7 +36,6 @@ import { KeybindingWeight } from '../../../../platform/keybinding/common/keybind
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { IWorkbenchLayoutService, Parts } from '../../../services/layout/browser/layoutService.js';
 import { IViewsService } from '../../../services/views/common/viewsService.js';
-import { GroupsArrangement, IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
 import { VOID_OPEN_SIDEBAR_ACTION_ID, VOID_VIEW_CONTAINER_ID } from './sidebarPane.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { VIEWLET_ID as EXPLORER_VIEWLET_ID } from '../../files/common/files.js';
@@ -187,10 +186,10 @@ registerWorkbenchContribution2(OrchestraUiModeContribution.ID, OrchestraUiModeCo
 //
 // 入ったとき (切り替えたとき・起動時にクラウドエージェントモードだったとき):
 //   - 右のチャット (補助バー)・サイドバー・パネルを閉じる
-//   - クラウドエージェントのパネルをエディタ領域に開き、エディタグループが複数あればそのグループを最大化する
+//   - クラウドエージェントの画面は cloudAgentsPane.ts の CloudAgentsFullscreen が画面全体に出す (ここでは開かない)
 //   - このモードのあいだは、補助バーやチャットが表示されたらすぐに隠し直す (強制非表示)
 // 出たとき (上級者モードへ):
-//   - チャットを戻し、入る前に開いていたサイドバー・パネルも戻す。最大化したグループは元に戻す
+//   - チャットを戻し、入る前に開いていたサイドバー・パネルも戻す
 class OrchestraCloudModeLayout extends Disposable implements IWorkbenchContribution {
 	static readonly ID = 'workbench.contrib.orchestraCloudModeLayout';
 	/** 入る前のサイドバー・パネルの表示状態 (ワークスペースごと。再起動をまたいでも出るときに戻せるように) */
@@ -200,15 +199,11 @@ class OrchestraCloudModeLayout extends Disposable implements IWorkbenchContribut
 	/** クラウドエージェントモードのあいだだけ持つリスナー (強制非表示) */
 	private readonly cloudListeners = this._register(new DisposableStore());
 	private rehideScheduled = false;
-	/** このクラスがグループを最大化したか (出るときにだけ戻す。ユーザーが自分で最大化したものは触らない) */
-	private maximizedByUs = false;
 
 	constructor(
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IWorkbenchLayoutService private readonly layoutService: IWorkbenchLayoutService,
 		@IViewsService private readonly viewsService: IViewsService,
-		@IEditorGroupsService private readonly editorGroupsService: IEditorGroupsService,
-		@ICommandService private readonly commandService: ICommandService,
 		@IStorageService private readonly storageService: IStorageService,
 	) {
 		super();
@@ -265,8 +260,6 @@ class OrchestraCloudModeLayout extends Disposable implements IWorkbenchContribut
 				this.scheduleRehide();
 			}
 		}));
-
-		void this.openCloudPane();
 	}
 
 	private leave(): void {
@@ -281,10 +274,6 @@ class OrchestraCloudModeLayout extends Disposable implements IWorkbenchContribut
 		this.storageService.remove(OrchestraCloudModeLayout.SAVED_LAYOUT_KEY, StorageScope.WORKSPACE);
 
 		try {
-			if (this.maximizedByUs && this.editorGroupsService.mainPart.hasMaximizedGroup()) {
-				this.editorGroupsService.toggleMaximizeGroup();
-			}
-			this.maximizedByUs = false;
 			// チャット (= エージェントへの指示欄) を戻す
 			this.layoutService.setPartHidden(false, Parts.AUXILIARYBAR_PART);
 			void this.viewsService.openViewContainer(VOID_VIEW_CONTAINER_ID);
@@ -325,22 +314,6 @@ class OrchestraCloudModeLayout extends Disposable implements IWorkbenchContribut
 				console.warn('[Orchestra] チャットを隠せませんでした', err);
 			}
 		});
-	}
-
-	private async openCloudPane(): Promise<void> {
-		try {
-			await this.commandService.executeCommand(CLOUD_AGENTS_OPEN_ACTION_ID);
-			if (this.mode !== 'cloud') {
-				return;
-			}
-			// エディタを分割していたら、クラウドエージェントのグループだけを見せる
-			if (this.editorGroupsService.count > 1 && !this.editorGroupsService.mainPart.hasMaximizedGroup()) {
-				this.editorGroupsService.arrangeGroups(GroupsArrangement.MAXIMIZE, this.editorGroupsService.activeGroup);
-				this.maximizedByUs = true;
-			}
-		} catch (err) {
-			console.warn('[Orchestra] クラウドエージェントのパネルを開けませんでした', err);
-		}
 	}
 }
 registerWorkbenchContribution2(OrchestraCloudModeLayout.ID, OrchestraCloudModeLayout, WorkbenchPhase.AfterRestored);

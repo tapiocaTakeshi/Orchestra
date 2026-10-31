@@ -7,8 +7,14 @@
 //
 // Cursor の Agents 画面のような 3 列: 左にエージェントの一覧 (実行中 / 完了 / 停止・失敗)、
 // 中央に選んだエージェントとの会話と入力欄、右に変更ファイルと差分 (React: react/src/cloud-agents-tsx)。
-// どの表示モードでも Ctrl+Alt+A で開ける。タイトルバーの ☁ は「クラウドエージェントモードへ切り替える」
-// (orchestraUiMode.ts) で、クラウドエージェントモードのあいだだけ、このパネルを前面に出すボタンになる。
+//
+// 出し方はモードで変わる:
+//  - クラウドエージェントモード: エディタのタブではなく、タイトルバーの下の画面全体をクラウドエージェントの画面にする
+//    (CloudAgentsFullscreen)。カンバンや取り込んだ差分などエディタ領域に何かが開いたら、その間だけ画面を下げ、
+//    右下の「クラウドエージェントに戻る」かタイトルバーの ☁ (Ctrl+Alt+A) で戻る。
+//  - 上級者モード (IDE 表示): これまでどおりエディタのタブとして開く。
+// タイトルバーの ☁ は「クラウドエージェントモードへ切り替える」(orchestraUiMode.ts) で、
+// クラウドエージェントモードのあいだだけ、この画面を前面に出すボタンになる。
 
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { EditorInput } from '../../../common/editor/editorInput.js';
@@ -28,16 +34,18 @@ import { ServicesAccessor } from '../../../../editor/browser/editorExtensions.js
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 import { URI } from '../../../../base/common/uri.js';
 import { Codicon } from '../../../../base/common/codicons.js';
-import { Disposable, toDisposable } from '../../../../base/common/lifecycle.js';
+import { Disposable, DisposableStore, toDisposable } from '../../../../base/common/lifecycle.js';
 import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 import { KeybindingWeight } from '../../../../platform/keybinding/common/keybindingsRegistry.js';
 import { ContextKeyExpr, IContextKeyService, RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
+import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
+import { IWorkbenchLayoutService } from '../../../services/layout/browser/layoutService.js';
 
 import { mountCloudAgents } from './react/out/cloud-agents-tsx/index.js';
 import { ICloudAgentService } from './cloudAgentServiceInterface.js';
-import { ORCHESTRA_UI_MODE_CONTEXT_KEY } from './orchestraUiModeTypes.js';
+import { ORCHESTRA_UI_MODE_CONTEXT_KEY, ORCHESTRA_UI_MODE_SETTING, parseOrchestraUiMode } from './orchestraUiModeTypes.js';
 import {
 	CLOUD_AGENTS_NEW_ACTION_ID,
 	CLOUD_AGENTS_OPEN_ACTION_ID,
@@ -124,8 +132,145 @@ Registry.as<IEditorPaneRegistry>(EditorExtensions.EditorPane).registerEditorPane
 );
 
 
-/** 既に開いていれば前面に出し、なければ今のエディタグループに開く */
+// ---------------------------------------------------------------------------
+// クラウドエージェントモード: 画面全体をクラウドエージェントの画面にする
+// ---------------------------------------------------------------------------
+
+/** 起動中の全画面表示 (クラウドエージェントモードのあいだだけある) */
+let fullscreen: CloudAgentsFullscreen | undefined;
+
+class CloudAgentsFullscreen extends Disposable implements IWorkbenchContribution {
+	static readonly ID = 'workbench.contrib.orchestraCloudAgentsFullscreen';
+
+	/** タイトルバーの下を覆う画面。クラウドエージェントモードのあいだだけ作る */
+	private root: HTMLElement | undefined;
+	/** エディタ領域に何かを開いて画面を下げているときに出す「クラウドエージェントに戻る」 */
+	private backButton: HTMLElement | undefined;
+	private readonly mounted = this._register(new DisposableStore());
+	private shown = false;
+
+	constructor(
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IWorkbenchLayoutService private readonly layoutService: IWorkbenchLayoutService,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IEditorService private readonly editorService: IEditorService,
+		@IEditorGroupsService private readonly editorGroupsService: IEditorGroupsService,
+		@ICloudAgentService private readonly cloudAgentService: ICloudAgentService,
+	) {
+		super();
+		fullscreen = this;
+		this._register(toDisposable(() => { if (fullscreen === this) fullscreen = undefined; }));
+		this.sync();
+		this._register(this.configurationService.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration(ORCHESTRA_UI_MODE_SETTING)) this.sync();
+		}));
+		// タイトルバーの高さが変わったら (全画面表示・ズームなど) 合わせる
+		this._register(this.layoutService.onDidLayoutMainContainer(() => this.position()));
+		// エディタ領域に何かが開いたら (カンバン・コスト管理・取り込んだ差分など)、それが見えるよう画面を下げる
+		// (既に開いているものを開き直したときは active が変わらないので、開く前のイベントも見る)
+		this._register(this.editorService.onWillOpenEditor(e => {
+			if (this.shown && e.editor.typeId !== CloudAgentsInput.ID) this.hide();
+		}));
+		this._register(this.editorService.onDidActiveEditorChange(() => {
+			const active = this.editorService.activeEditor;
+			if (this.shown && active && active.typeId !== CloudAgentsInput.ID) this.hide();
+		}));
+	}
+
+	get isActive(): boolean { return !!this.root; }
+
+	private isCloudMode(): boolean {
+		return parseOrchestraUiMode(this.configurationService.getValue(ORCHESTRA_UI_MODE_SETTING)) === 'cloud';
+	}
+
+	private sync(): void {
+		if (this.isCloudMode()) {
+			this.create();
+			this.show();
+		} else {
+			this.destroy();
+		}
+	}
+
+	private create(): void {
+		if (this.root) return;
+		const doc = this.layoutService.mainContainer.ownerDocument;
+		const root = doc.createElement('div');
+		root.className = 'orchestra-cloud-agents-fullscreen';
+		// エディタ・サイドバーなどの上、メニュー・クイック入力・通知・ダイアログの下
+		Object.assign(root.style, { position: 'absolute', left: '0', right: '0', bottom: '0', zIndex: '40', display: 'none' });
+		this.layoutService.mainContainer.appendChild(root);
+		this.root = root;
+
+		const back = doc.createElement('button');
+		back.type = 'button';
+		back.textContent = nls.localize('cloudAgentsFullscreen.back', "☁ クラウドエージェントに戻る");
+		Object.assign(back.style, {
+			position: 'absolute', right: '20px', bottom: '20px', zIndex: '40', display: 'none',
+			padding: '8px 14px', borderRadius: '999px', border: '1px solid var(--vscode-contrastBorder, transparent)', cursor: 'pointer',
+			background: 'var(--vscode-button-background)', color: 'var(--vscode-button-foreground)', font: 'inherit', fontSize: '12.5px',
+			boxShadow: '0 4px 14px rgba(0, 0, 0, 0.3)',
+		});
+		back.addEventListener('click', () => this.show());
+		this.layoutService.mainContainer.appendChild(back);
+		this.backButton = back;
+
+		this.position();
+		this.instantiationService.invokeFunction(accessor => {
+			const disposeFn = mountCloudAgents(root, accessor)?.dispose;
+			this.mounted.add(toDisposable(() => disposeFn?.()));
+		});
+		// 前回タブとして開いていたものは閉じる (同じ画面が 2 つにならないように)
+		for (const { editor, groupId } of this.editorService.findEditors(CloudAgentsInput.RESOURCE)) {
+			void this.editorGroupsService.getGroup(groupId)?.closeEditor(editor);
+		}
+	}
+
+	private destroy(): void {
+		if (!this.root) return;
+		this.mounted.clear();
+		this.root.remove();
+		this.backButton?.remove();
+		this.root = undefined;
+		this.backButton = undefined;
+		this.shown = false;
+		this.cloudAgentService.setPaneVisible(false);
+	}
+
+	private position(): void {
+		if (!this.root) return;
+		this.root.style.top = `${this.layoutService.mainContainerOffset.top}px`;
+	}
+
+	show(): void {
+		if (!this.root) return;
+		this.position();
+		this.root.style.display = '';
+		if (this.backButton) this.backButton.style.display = 'none';
+		this.shown = true;
+		this.cloudAgentService.setPaneVisible(true);
+	}
+
+	private hide(): void {
+		if (!this.root) return;
+		this.root.style.display = 'none';
+		if (this.backButton) this.backButton.style.display = '';
+		this.shown = false;
+		this.cloudAgentService.setPaneVisible(false);
+	}
+}
+registerWorkbenchContribution2(CloudAgentsFullscreen.ID, CloudAgentsFullscreen, WorkbenchPhase.AfterRestored);
+
+
+/**
+ * クラウドエージェントモードなら全画面の画面を前面に出す。
+ * 上級者モードでは、既に開いていれば前面に出し、なければ今のエディタグループにタブとして開く
+ */
 const openCloudAgentsPane = async (accessor: ServicesAccessor): Promise<void> => {
+	if (fullscreen?.isActive) {
+		fullscreen.show();
+		return;
+	}
 	const editorService = accessor.get(IEditorService);
 	const editorGroupService = accessor.get(IEditorGroupsService);
 	const instantiationService = accessor.get(IInstantiationService);
