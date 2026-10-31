@@ -50,6 +50,7 @@ import {
 	GitBranch,
 	GitPullRequest,
 	Github,
+	Inbox,
 	Kanban,
 	Layers,
 	ListChecks,
@@ -83,6 +84,8 @@ import {
 	CLOUD_PR_TITLE_MAX,
 	CloudApprovalEventData,
 	CloudChange,
+	CloudDecision,
+	CloudDecisionOption,
 	CloudGoalEventData,
 	CloudGoalLoopMode,
 	CloudPlanEventData,
@@ -99,6 +102,7 @@ import {
 	GitHubRepo,
 	cloudRepoLabel,
 	pausedGoalReview,
+	primaryDecisionOption,
 	formatCloudCostUsd,
 	isCloudSessionActive,
 	isGitHubRepoSession,
@@ -1619,6 +1623,108 @@ const EXAMPLES: { label: TranslationKey; prompt: TranslationKey }[] = [
 	{ label: 'cloudAgents.hero.example3.label', prompt: 'cloudAgents.hero.example3.prompt' },
 ];
 
+// ---------------------------------------------------------------------------
+// Decision Inbox: 人間の判断が要るものだけを、セッションを横断して 1 か所に
+// ---------------------------------------------------------------------------
+//
+// 承認待ち・変更の確認待ち (PR 前)・失敗したセッションと、監視中のリポジトリで検出された CI 失敗・修正依頼。
+// カードは「何が起きたか / 根拠 / まだ不確かなこと / 推奨」と、その場で取れる操作だけを出す。
+// 「AI に調査・修正させる」はサーバーが用意した調査用の指示でエージェントを起動する (PR は人がセッションから作る)。
+
+const INBOX_COLLAPSED = 4;
+
+const decisionTone = (d: CloudDecision): string =>
+	d.status === 'in_progress' ? C.accent : d.priority === 'high' ? C.error : d.priority === 'medium' ? C.warning : C.fgMuted;
+
+const DecisionCard = ({ decision, busy, onOption }: { decision: CloudDecision; busy: boolean; onOption: (o: CloudDecisionOption) => void }) => {
+	const { t } = useTranslation();
+	const tone = decisionTone(decision);
+	const working = decision.status === 'in_progress';
+	const primary = primaryDecisionOption(decision);
+	const secondary = working ? [] : decision.options.filter(o => o.id !== primary?.id);
+	const btn: React.CSSProperties = { padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontFamily: 'inherit', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 };
+	return (
+		<div style={{ textAlign: 'left', border: `1px solid ${C.border}`, borderLeft: `3px solid ${tone}`, borderRadius: '8px', padding: '10px 12px', background: C.bgWidget, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+			<div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+				<span style={{ fontSize: '10.5px', fontWeight: 600, color: tone, padding: '1px 6px', borderRadius: '6px', background: tint(tone, 14), flexShrink: 0 }}>
+					{working ? t('cloudAgents.inbox.working') : t(`cloudAgents.inbox.kind.${decision.kind}` as TranslationKey)}
+				</span>
+				<span style={{ fontSize: '12.5px', fontWeight: 600, color: C.fg, ...ellipsis }} title={decision.title}>{decision.title}</span>
+			</div>
+			{decision.summary ? <div style={{ fontSize: '12px', lineHeight: 1.55, color: C.fgMuted }}>{decision.summary}</div> : null}
+			{decision.evidence.length ? (
+				<div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', fontSize: '11.5px' }}>
+					{decision.evidence.slice(0, 4).map((e, i) => e.url ? (
+						<a key={i} href='#' onClick={ev => { ev.preventDefault(); onOption({ id: 'open_url', label: e.label, url: e.url }); }} style={{ color: C.link, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+							<ExternalLink size={11} />{e.label}{e.detail ? `: ${e.detail}` : ''}
+						</a>
+					) : (
+						<span key={i} style={{ color: C.fgMuted }}>{e.label}{e.detail ? `: ${e.detail}` : ''}</span>
+					))}
+				</div>
+			) : null}
+			{decision.risks.map(r => (
+				<div key={r} style={{ display: 'flex', gap: '5px', alignItems: 'flex-start', fontSize: '11.5px', color: C.warning }}>
+					<AlertTriangle size={12} style={{ flexShrink: 0, marginTop: '2px' }} />{r}
+				</div>
+			))}
+			{!working && decision.recommendation ? (
+				<div style={{ fontSize: '11.5px', color: C.fg }}>{t('cloudAgents.inbox.recommendation')} {decision.recommendation}</div>
+			) : null}
+			{primary || secondary.length ? (
+				<div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '2px' }}>
+					{primary ? (
+						<button type='button' disabled={busy} onClick={() => onOption(primary)} style={{ ...btn, background: C.buttonBg, color: C.buttonFg, border: '1px solid transparent', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+							{busy ? <Spinner size={11} /> : null}{primary.label}
+						</button>
+					) : null}
+					{secondary.map(o => (
+						<button key={`${o.id}-${o.label}`} type='button' disabled={busy} onClick={() => onOption(o)} style={{ ...btn, background: C.button2Bg, color: C.button2Fg, border: `1px solid ${C.borderInput}` }}>
+							{o.label}
+						</button>
+					))}
+				</div>
+			) : null}
+		</div>
+	);
+};
+
+/** 判断が必要な項目のカード一覧。項目が無いとき・サーバーが未対応のときは何も描かない */
+const DecisionInboxSection = () => {
+	const { t } = useTranslation();
+	const accessor = useAccessor();
+	const cloudAgentService = accessor.get('ICloudAgentService');
+	const state = useCloudAgentState();
+	const [expanded, setExpanded] = useState(false);
+	const { items, headline, busyId, unsupported } = state.decisions;
+	if (unsupported || items.length === 0) return null;
+	const visible = expanded ? items : items.slice(0, INBOX_COLLAPSED);
+	const onOption = (d: CloudDecision, o: CloudDecisionOption) => {
+		switch (o.id) {
+			case 'open_url': if (o.url) void cloudAgentService.openPullRequest(o.url); return;
+			case 'open_session':
+			case 'create_pr': if (d.sessionId) cloudAgentService.select(d.sessionId); return;
+			case 'dismiss': void cloudAgentService.dismissDecision(d.id); return;
+			case 'investigate': void cloudAgentService.investigateDecision(d.id); return;
+		}
+	};
+	return (
+		<div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+			<div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 600, color: C.fg }}>
+				<Inbox size={14} />{t('cloudAgents.inbox.title')}
+				<span style={{ fontSize: '10.5px', fontWeight: 600, padding: '0 6px', borderRadius: '8px', background: tint(C.error, 18), color: C.error }}>{items.filter(d => d.status === 'open').length}</span>
+			</div>
+			{headline ? <div style={{ fontSize: '12px', color: C.fgMuted, textAlign: 'left' }}>{headline}</div> : null}
+			{visible.map(d => <DecisionCard key={d.id} decision={d} busy={busyId === d.id} onOption={o => onOption(d, o)} />)}
+			{items.length > INBOX_COLLAPSED ? (
+				<button type='button' onClick={() => setExpanded(v => !v)} style={{ alignSelf: 'flex-start', border: 'none', background: 'transparent', color: C.link, cursor: 'pointer', fontSize: '12px', padding: 0, fontFamily: 'inherit' }}>
+					{expanded ? t('cloudAgents.inbox.less') : t('cloudAgents.inbox.more').replace('{count}', String(items.length - INBOX_COLLAPSED))}
+				</button>
+			) : null}
+		</div>
+	);
+};
+
 const NewAgentView = ({ leftSlot, draft, setDraft }: {
 	leftSlot?: React.ReactNode;
 	draft: NewAgentDraft;
@@ -1626,6 +1732,8 @@ const NewAgentView = ({ leftSlot, draft, setDraft }: {
 }) => {
 	const { t } = useTranslation();
 	const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+	const decisions = useCloudAgentState().decisions;
+	const hasInbox = !decisions.unsupported && decisions.items.length > 0;
 	return (
 		<div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
 			<div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 14px', height: '44px', flexShrink: 0, borderBottom: `1px solid ${C.border}` }}>
@@ -1633,7 +1741,8 @@ const NewAgentView = ({ leftSlot, draft, setDraft }: {
 				<Plus size={14} style={{ color: C.fgMuted }} />
 				<span style={{ fontSize: '13px', fontWeight: 600, color: C.fg }}>{t('cloudAgents.sidebar.newAgent')}</span>
 			</div>
-			<div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px' }}>
+			<div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: hasInbox ? 'flex-start' : 'center', gap: '28px', padding: '24px 20px' }}>
+				{hasInbox ? <div style={{ maxWidth: '620px', width: '100%' }}><DecisionInboxSection /></div> : null}
 				<div style={{ maxWidth: '620px', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', textAlign: 'center' }}>
 					<span style={{ width: '44px', height: '44px', borderRadius: '12px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: C.hover, color: C.fg }}>
 						<Cloud size={22} />
@@ -1814,6 +1923,8 @@ const AgentSidebar = ({ width, onNew, onSelect, style }: {
 	const totalCost = sumCloudCostUsd(filtered);
 	const email = settings.globalSettings.divisionUserEmail;
 	const newSelected = state.selectedId === null;
+	// 判断が必要な項目 (押すと「新しいエージェント」の画面の上に受信箱を出す)
+	const inboxOpen = state.decisions.unsupported ? 0 : state.decisions.items.filter(d => d.status === 'open').length;
 
 	return (
 		<div style={{ width, flexShrink: 0, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${C.border}`, background: C.bgSide, minHeight: 0, ...style }}>
@@ -1839,6 +1950,19 @@ const AgentSidebar = ({ width, onNew, onSelect, style }: {
 					<span style={{ flex: 1, textAlign: 'left' }}>{t('cloudAgents.sidebar.newAgent')}</span>
 					<span style={{ fontSize: '10.5px', fontWeight: 400, opacity: 0.75 }}>{isMac ? '⌘N' : 'Ctrl+N'}</span>
 				</button>
+				{inboxOpen > 0 ? (
+					<button
+						type='button'
+						className='oca-row'
+						onClick={onNew}
+						title={state.decisions.headline}
+						style={{ display: 'flex', alignItems: 'center', gap: '7px', width: '100%', boxSizing: 'border-box', padding: '5px 10px', borderRadius: '7px', border: 'none', background: 'transparent', color: C.fg, cursor: 'pointer', fontFamily: 'inherit', fontSize: '12.5px' }}
+					>
+						<Inbox size={14} style={{ color: C.error }} />
+						<span style={{ flex: 1, textAlign: 'left' }}>{t('cloudAgents.inbox.open')}</span>
+						<span style={{ fontSize: '10.5px', fontWeight: 600, padding: '0 6px', borderRadius: '8px', background: tint(C.error, 18), color: C.error }}>{inboxOpen}</span>
+					</button>
+				) : null}
 				<div style={{ position: 'relative' }}>
 					<Search size={12} style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: C.fgMuted, pointerEvents: 'none' }} />
 					<input

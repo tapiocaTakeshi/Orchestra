@@ -13,7 +13,7 @@
 
 import type { Event } from '../../../../base/common/event.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
-import type { CloudApprovalAction, CloudChange, CloudGoalLoopMode, CloudPendingApproval, CloudPullRequestInfo, CloudPullRequestResult, CloudSession, CloudSessionEvent, CreateCloudPullRequestParams, GitHubRepo } from '../common/cloudAgentTypes.js';
+import type { CloudApprovalAction, CloudChange, CloudDecision, CloudGoalLoopMode, CloudPendingApproval, CloudPullRequestInfo, CloudPullRequestResult, CloudSession, CloudSessionEvent, CreateCloudPullRequestParams, GitHubRepo } from '../common/cloudAgentTypes.js';
 
 
 /** 「変更を取り込む」の結果 (パスはワークスペースからの相対パス) */
@@ -174,6 +174,20 @@ export type CloudAgentState = {
 	approvalById: Record<string, CloudApprovalState>;
 	/** session id → pull request state (only for GitHub-repo sessions that were looked at) */
 	pullRequestById: Record<string, CloudPullRequestState>;
+	/** Decision Inbox: 判断が必要な項目 (セッション横断・検出された CI 失敗など) */
+	decisions: CloudDecisionsState;
+};
+
+export type CloudDecisionsState = {
+	/** 一度でも読めたか */
+	loaded: boolean;
+	/** 一行のまとめ (「3 件の問題を検出しました。…」) */
+	headline: string;
+	items: CloudDecision[];
+	/** サーバーが未対応 (404)。パネルは受信箱を出さない */
+	unsupported: boolean;
+	/** 操作中の項目 id (二重押し防止) */
+	busyId: string | null;
 };
 
 /**
@@ -282,6 +296,18 @@ export interface ICloudAgentService {
 	createPullRequest(id: string, params: CreateCloudPullRequestParams): Promise<CloudPullRequestCreateResult>;
 	/** Opens a pull request URL (https only) in the system browser */
 	openPullRequest(url: string): Promise<void>;
+
+	// --- Decision Inbox ---
+
+	/** GET /api/decisions を読み直す */
+	refreshDecisions(): Promise<void>;
+	/** 対応不要として閉じる */
+	dismissDecision(id: string): Promise<void>;
+	/**
+	 * 検出された項目の investigation (調査用の指示とリポジトリ) でクラウドエージェントを起動し、
+	 * 項目を「AI が対応中」にする。起動したセッションを選択する
+	 */
+	investigateDecision(id: string): Promise<boolean>;
 }
 
 export const ICloudAgentService = createDecorator<ICloudAgentService>('cloudAgentService');

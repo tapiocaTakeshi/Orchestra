@@ -44,6 +44,9 @@ import {
 	CLOUD_DIVISION_PROJECT_MODEL,
 	CLOUD_GOAL_LOOP_DEFAULT,
 	CLOUD_SESSIONS_API_PREFIX,
+	DECISIONS_API_PREFIX,
+	decisionInboxSignature,
+	toCloudDecision,
 	CloudGoalLoopMode,
 	isCloudGoalLoopMode,
 	CloudAgentResponse,
@@ -100,6 +103,8 @@ import {
 
 const LIST_INTERVAL_ACTIVE_MS = 4_000;
 const LIST_INTERVAL_IDLE_MS = 30_000;
+/** Decision Inbox: 検出された項目 (CI 失敗など) はセッションと関係なく届くので、この間隔では読み直す */
+const DECISIONS_INTERVAL_MS = 60_000;
 const EVENTS_INTERVAL_MS = 2_000;
 const EVENTS_PAGE_LIMIT = 500;
 /**
@@ -358,6 +363,7 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		approvalModePick: false,
 		approvalById: {},
 		pullRequestById: {},
+		decisions: { loaded: false, headline: '', items: [], unsupported: false, busyId: null },
 	};
 	get state(): CloudAgentState { return this._state; }
 
@@ -492,7 +498,8 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 				// ログアウト: 他人に見えないよう、手元の一覧も消す
 				this._lastSeqById.clear();
 				this._listLoadedOnce = false;
-				this._setState({ isLoggedIn: false, sessions: [], eventsById: {}, changesById: {}, pullRequestById: {}, approvalById: {}, selectedId: null, lastError: null, sendingById: {} });
+				this._setState({ isLoggedIn: false, sessions: [], eventsById: {}, changesById: {}, pullRequestById: {}, approvalById: {}, selectedId: null, lastError: null, sendingById: {}, decisions: { loaded: false, headline: '', items: [], unsupported: false, busyId: null } });
+				this._decisionsSignature = null;
 			}
 			if (this._state.github.loaded || this._state.github.waitingForAuth || this._state.githubRepos.loaded) this._resetGitHub();
 			this._clearListTimer();
@@ -671,6 +678,7 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 			const prev = prevById.get(s.id);
 			if (prev) this._maybeNotifyTransition(prev, s);
 		}
+		this._maybeRefreshDecisions(sessions);
 	}
 
 	private _scheduleEvents(delayMs: number) {
@@ -1383,6 +1391,88 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		const next = newerPullRequest(pullRequest, session.pullRequest);
 		if (next === session.pullRequest) return;
 		this._setState({ sessions: this._state.sessions.map(s => s.id === id ? { ...s, pullRequest: next } : s) });
+	}
+
+	// -----------------------------------------------------------------------
+	// Decision Inbox
+	// -----------------------------------------------------------------------
+
+	/** 最後に受信箱を読んだときのセッションの目印。null = まだ読んでいない */
+	private _decisionsSignature: string | null = null;
+	private _decisionsLoadedAt = 0;
+	private _decisionsInFlight = false;
+
+	/** セッションの状態が変わったとき (と、検出された項目のために 1 分ごと) だけ読み直す */
+	private _maybeRefreshDecisions(sessions: readonly CloudSession[]) {
+		if (this._state.decisions.unsupported) return;
+		const signature = decisionInboxSignature(sessions);
+		if (signature === this._decisionsSignature && Date.now() - this._decisionsLoadedAt < DECISIONS_INTERVAL_MS) return;
+		this._decisionsSignature = signature;
+		void this.refreshDecisions();
+	}
+
+	async refreshDecisions(): Promise<void> {
+		if (this._decisionsInFlight || !this._canPoll()) return;
+		this._decisionsInFlight = true;
+		try {
+			const res = await this._request('GET', DECISIONS_API_PREFIX);
+			this._decisionsLoadedAt = Date.now();
+			if (res.ok && Array.isArray(res.data?.decisions)) {
+				const items = (res.data.decisions as unknown[]).map(toCloudDecision).filter((d): d is NonNullable<typeof d> => !!d);
+				this._setState({ decisions: { ...this._state.decisions, loaded: true, unsupported: false, headline: typeof res.data.headline === 'string' ? res.data.headline : '', items } });
+			} else if (res.status === 404) {
+				// 受信箱に未対応の Division サーバー: 黙って出さない
+				this._setState({ decisions: { ...this._state.decisions, unsupported: true } });
+			}
+		} finally {
+			this._decisionsInFlight = false;
+		}
+	}
+
+	async dismissDecision(id: string): Promise<void> {
+		if (this._state.decisions.busyId) return;
+		this._setState({ decisions: { ...this._state.decisions, busyId: id } });
+		try {
+			const res = await this._request('POST', `${DECISIONS_API_PREFIX}/${encodeURIComponent(id)}/dismiss`, {});
+			if (!res.ok) {
+				this._setState({ lastError: describeCloudAgentError(res) });
+				return;
+			}
+			this._setState({ decisions: { ...this._state.decisions, items: this._state.decisions.items.filter(d => d.id !== id) } });
+		} finally {
+			this._setState({ decisions: { ...this._state.decisions, busyId: null } });
+		}
+	}
+
+	async investigateDecision(id: string): Promise<boolean> {
+		const decision = this._state.decisions.items.find(d => d.id === id);
+		if (!decision?.investigation || decision.status !== 'open' || this._state.decisions.busyId) return false;
+		this._setState({ decisions: { ...this._state.decisions, busyId: id } });
+		try {
+			const inv = decision.investigation;
+			// 外部への変更 (PR・マージ) はしない: 調査と修正はサンドボックスの中だけで、PR は人がセッションの画面から作る
+			const created = await this.createSession({
+				prompt: inv.prompt,
+				title: inv.title || decision.title,
+				source: 'github',
+				repo: { fullName: inv.repo.fullName, ...(inv.repo.branch ? { branch: inv.repo.branch } : {}) },
+				count: 1,
+				select: true,
+			});
+			const session = created[0];
+			if (!session) return false;
+			const res = await this._request('POST', `${DECISIONS_API_PREFIX}/${encodeURIComponent(id)}/act`, { action: 'investigate', sessionId: session.id });
+			const updated = res.ok ? toCloudDecision(res.data?.decision) : null;
+			this._setState({
+				decisions: {
+					...this._state.decisions,
+					items: this._state.decisions.items.map(d => (d.id === id ? (updated ?? { ...d, status: 'in_progress', sessionId: session.id }) : d)),
+				},
+			});
+			return true;
+		} finally {
+			this._setState({ decisions: { ...this._state.decisions, busyId: null } });
+		}
 	}
 
 	async openPullRequest(url: string): Promise<void> {
