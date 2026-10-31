@@ -19,6 +19,7 @@ import { RawToolParamsObj } from '../common/sendLLMMessageTypes.js'
 import { MAX_CHILDREN_URIs_PAGE, MAX_FILE_CHARS_PAGE, MAX_TERMINAL_BG_COMMAND_TIME, MAX_TERMINAL_INACTIVE_TIME } from '../common/prompt/prompts.js'
 import { IVoidSettingsService } from '../common/voidSettingsService.js'
 import { generateUuid } from '../../../../base/common/uuid.js'
+import { agentPlanProgress, parseAgentPlan } from '../common/agentPlan.js'
 
 
 // tool use for AI
@@ -289,6 +290,11 @@ export class ToolsService implements IToolsService {
 				const persistentTerminalId = validateProposedTerminalId(terminalIdUnknown);
 				return { persistentTerminalId };
 			},
+			update_plan: (params: RawToolParamsObj) => {
+				// Native tool calls may pass the plan as an array even though the schema says string.
+				const { plan, explanation } = params as Record<string, unknown>
+				return parseAgentPlan(plan, explanation)
+			},
 
 		}
 
@@ -463,6 +469,10 @@ export class ToolsService implements IToolsService {
 				await this.terminalToolService.killPersistentTerminal(persistentTerminalId)
 				return { result: {} }
 			},
+			// Nothing to run: the validated plan is the result, and the chat shows it as a checklist.
+			update_plan: async (params) => {
+				return { result: params }
+			},
 		}
 
 
@@ -565,6 +575,10 @@ export class ToolsService implements IToolsService {
 			},
 			kill_persistent_terminal: (params, _result) => {
 				return `Successfully closed terminal "${params.persistentTerminalId}".`;
+			},
+			update_plan: (_params, result) => {
+				const { done, total } = agentPlanProgress(result.plan)
+				return `Plan updated (${done}/${total} completed).`
 			},
 		}
 

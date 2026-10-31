@@ -52,6 +52,7 @@ import {
 	Github,
 	Kanban,
 	Layers,
+	ListChecks,
 	Link,
 	Loader2,
 	Lock,
@@ -2647,6 +2648,69 @@ const PlanCard = ({ data, progress, active }: { data: CloudPlanEventData; progre
 	);
 };
 
+type AgentPlanStep = { step: string; status: 'pending' | 'in_progress' | 'completed' };
+
+/** update_plan の tool イベントなら、エージェントが立てた計画 (チェックリスト) を返す */
+const agentPlanOf = (data: any): { plan: AgentPlanStep[]; explanation: string } | null => {
+	if (data?.name !== 'update_plan' || data?.ok === false || !Array.isArray(data?.plan)) return null;
+	const plan = (data.plan as any[]).filter(s => s && typeof s.step === 'string').map(s => ({
+		step: s.step as string,
+		status: s.status === 'completed' || s.status === 'in_progress' ? s.status : 'pending',
+	}) as AgentPlanStep);
+	return plan.length ? { plan, explanation: typeof data.explanation === 'string' ? data.explanation : '' } : null;
+};
+
+/**
+ * update_plan イベント: エージェント自身の計画のチェックリスト (Codex の update_plan と同じ)。
+ * 最新の計画は開いたまま、それより前の更新は 1 行に畳む (押すと開く)。
+ */
+const AgentPlanCard = ({ plan, explanation, latest, active }: { plan: AgentPlanStep[]; explanation: string; latest: boolean; active: boolean }) => {
+	const { t } = useTranslation();
+	const [open, setOpen] = useState(latest);
+	useEffect(() => { setOpen(latest); }, [latest]);
+	const done = plan.filter(s => s.status === 'completed').length;
+	const current = plan.find(s => s.status === 'in_progress');
+	const icon = (s: AgentPlanStep) => {
+		const box = (node: React.ReactNode, label: string) => <span title={label} style={{ width: '14px', height: '14px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{node}</span>;
+		if (s.status === 'completed') return box(<CheckCircle2 size={13} style={{ color: C.success }} />, t('cloudAgents.task.done'));
+		if (s.status === 'in_progress') return box(latest && active ? <Spinner size={12} color={C.accent} /> : <Circle size={12} style={{ color: C.accent }} />, t('cloudAgents.task.running'));
+		return box(<Circle size={12} style={{ color: C.fgFaint }} />, t('cloudAgents.task.pending'));
+	};
+	return (
+		<div style={{ border: `1px solid ${latest ? C.border : 'transparent'}`, borderRadius: '8px', padding: latest ? '8px 10px' : '0 6px', display: 'flex', flexDirection: 'column', gap: '2px', background: latest ? C.bgSide : 'transparent' }}>
+			<button
+				type='button'
+				onClick={() => setOpen(v => !v)}
+				aria-expanded={open}
+				style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0, padding: latest ? '0 0 4px' : '3px 0', border: 'none', background: 'transparent', color: C.fg, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', minHeight: '24px' }}
+			>
+				<ListChecks size={13} style={{ color: C.fgMuted, flexShrink: 0 }} />
+				<span style={{ fontSize: latest ? '12.5px' : '12px', fontWeight: latest ? 600 : 400, color: latest ? C.fg : C.fgMuted, flexShrink: 0 }}>{t(latest ? 'cloudAgents.agentPlan.title' : 'cloudAgents.agentPlan.updated')}</span>
+				{!open && current && <span title={current.step} style={{ fontSize: '11.5px', color: C.fgMuted, minWidth: 0, ...ellipsis }}>{current.step}</span>}
+				<span style={{ flex: 1 }} />
+				<span style={{ fontSize: '11px', color: C.fgMuted, flexShrink: 0, whiteSpace: 'nowrap' }}>
+					{t('cloudAgents.plan.progress').replace('{done}', String(done)).replace('{total}', String(plan.length))}
+				</span>
+				{open ? <ChevronDown size={12} style={{ flexShrink: 0, color: C.fgMuted }} /> : <ChevronRight size={12} style={{ flexShrink: 0, color: C.fgMuted, opacity: 0.6 }} />}
+			</button>
+			{open && explanation && <div style={{ fontSize: '11.5px', color: C.fgMuted, padding: '0 2px 4px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{explanation}</div>}
+			{open && plan.map((s, i) => (
+				<div key={i} title={s.step} style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, minHeight: '22px', padding: '1px 2px' }}>
+					{icon(s)}
+					<span style={{
+						flex: 1, minWidth: 0, fontSize: '12.5px', ...ellipsis,
+						color: s.status === 'completed' ? C.fgMuted : C.fg,
+						textDecoration: s.status === 'completed' ? 'line-through' : 'none',
+						fontWeight: s.status === 'in_progress' ? 600 : 400,
+					}}>
+						{s.step}
+					</span>
+				</div>
+			))}
+		</div>
+	);
+};
+
 /** task イベント: start は区切りの見出し (「2/4 · 実装 (Claude Opus) — タイトル」)、done / failed は結果の短い行 */
 const TaskEventRow = ({ data, position }: { data: CloudTaskEventData; position: { pos: number; total: number } | undefined }) => {
 	const { t } = useTranslation();
@@ -2946,8 +3010,10 @@ const ApprovalCard = ({ session }: { session: CloudSession }) => {
 	);
 };
 
-const EventView = ({ event, onReview, division, active, onContinueGoal, continueBusy }: {
+const EventView = ({ event, onReview, division, active, onContinueGoal, continueBusy, latestAgentPlan }: {
 	event: CloudSessionEvent;
+	/** このイベントがエージェントの最新の計画 (update_plan) */
+	latestAgentPlan?: boolean;
 	onReview: () => void;
 	/** Division Project モードの計画とタスクの進み具合 (plan / task / role 付きの発言の表示に使う) */
 	division?: DivisionInfo;
@@ -2993,8 +3059,11 @@ const EventView = ({ event, onReview, division, active, onContinueGoal, continue
 			return <TaskEventRow data={data as CloudTaskEventData} position={division?.positionByTask.get(event.seq)} />;
 		case 'approval':
 			return <ApprovalEventRow data={data as CloudApprovalEventData} />;
-		case 'tool':
+		case 'tool': {
+			const agentPlan = agentPlanOf(data);
+			if (agentPlan) return <AgentPlanCard plan={agentPlan.plan} explanation={agentPlan.explanation} latest={!!latestAgentPlan} active={!!active} />;
 			return <ToolRow data={data} />;
+		}
 		case 'status': {
 			const status = data.status as CloudSessionStatus | undefined;
 			const text = `${status ? t('cloudAgents.transcript.status').replace('{status}', t(statusKey(status))) : ''}${data.message ? `${status ? ' — ' : ''}${data.message}` : ''}`;
@@ -3090,6 +3159,12 @@ const Stream = ({ session, events, onReview, footer }: {
 	const [atBottom, setAtBottom] = useState(true);
 	const items = useMemo(() => buildStreamItems(withChangedFiles(events ?? [], session.changedFiles)), [events, session.changedFiles]);
 	const division = useMemo(() => buildDivisionInfo(events ?? []), [events]);
+	// エージェントの最新の計画 (update_plan)。これだけ開いて出し、前の更新は畳む
+	const latestAgentPlanSeq = useMemo(() => {
+		const list = events ?? [];
+		for (let i = list.length - 1; i >= 0; i--) if (list[i].type === 'tool' && agentPlanOf(list[i].data)) return list[i].seq;
+		return null;
+	}, [events]);
 	const lastSeq = events?.length ? events[events.length - 1].seq : -1;
 	const accessor = useAccessor();
 	const cloudAgentService = accessor.get('ICloudAgentService');
@@ -3151,6 +3226,7 @@ const Stream = ({ session, events, onReview, footer }: {
 							onReview={onReview}
 							division={division}
 							active={active}
+							latestAgentPlan={item.event.seq === latestAgentPlanSeq}
 							onContinueGoal={canContinueGoal && item.event.seq === pausedReviewSeq ? continueGoal : undefined}
 							continueBusy={!!state.sendingById[session.id]}
 						/>)}
