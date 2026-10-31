@@ -225,6 +225,8 @@ export interface ICloudAgentService {
 	select(id: string | null): void;
 	/** 追加の指示。continueGoal: 目標ループが「毎回確認」で止まっているとき次のラウンドへ進める (text は空でもよい) */
 	sendMessage(id: string, text: string, opts?: { continueGoal?: boolean }): Promise<boolean>;
+	/** /compact (Codex と同じ): ここまでの会話をエージェントに要約させる。サーバーは動いていれば次のステップの前に、待機中ならすぐ要約する */
+	compact(id: string): Promise<boolean>;
 	stop(id: string): Promise<void>;
 	/** 動いているセッションをすべて止める。止めた数を返す */
 	stopAll(): Promise<number>;

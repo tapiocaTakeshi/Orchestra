@@ -4692,7 +4692,7 @@ const CompactionNotice = ({ chatMessage }: { chatMessage: ChatMessage & { role: 
 			<div className='flex-1 h-px bg-void-border-3' />
 			<span className='flex items-center gap-1 flex-shrink-0'>
 				{isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-				会話が長くなったので、ここまでの経緯を要約しました{k > 0 ? ` (${k}k 文字)` : ''}
+				{chatMessage.auto ? '会話が長くなったので、ここまでの経緯を要約しました' : '/compact で、ここまでの経緯を要約しました'}{k > 0 ? ` (${k}k 文字)` : ''}
 			</span>
 			<div className='flex-1 h-px bg-void-border-3' />
 		</div>

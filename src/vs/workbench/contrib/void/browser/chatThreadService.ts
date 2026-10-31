@@ -14,7 +14,7 @@ import { chat_userMessageContent, isABuiltinToolName } from '../common/prompt/pr
 import { AnthropicReasoning, getErrorMessage, RawToolCallObj, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
 import { ChatMode, FeatureName, ModelSelection, ModelSelectionOptions } from '../common/voidSettingsTypes.js';
-import { assistantStepsSinceCompaction, cleanSummary, MIN_ASSISTANT_STEPS_BETWEEN_COMPACTIONS, MIN_SUMMARY_CHARS } from '../common/chatCompaction.js';
+import { assistantStepsSinceCompaction, cleanSummary, isCompactCommand, MIN_ASSISTANT_STEPS_BETWEEN_COMPACTIONS, MIN_SUMMARY_CHARS } from '../common/chatCompaction.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, ToolCallParams, ToolName, ToolResult } from '../common/toolsServiceTypes.js';
 import { IToolsService } from './toolsService.js';
@@ -983,7 +983,13 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			this._setStreamState(threadId, { isRunning: 'idle', interrupt: idleInterruptor })
 
 			// Auto-compaction (as in Codex): summarize the conversation when it nears the context window.
-			const compaction = await this._maybeCompactThread({ threadId, modelSelection, modelSelectionOptions, chatMode })
+			// A /compact typed while the agent was working is handled here, before the next model call.
+			const forceCompaction = !!this._compactRequested[threadId]
+			delete this._compactRequested[threadId]
+			const compaction = await this._maybeCompactThread({ threadId, modelSelection, modelSelectionOptions, chatMode, force: forceCompaction })
+			if (forceCompaction && compaction !== 'compacted' && compaction !== 'aborted') {
+				this._notificationService.warn(this._manualCompactionBlocker(threadId, modelSelection) ?? 'ここまでの会話を要約できませんでした。そのまま作業を続けます。')
+			}
 			if (compaction === 'aborted' || interruptedWhenIdle) {
 				this._setStreamState(threadId, undefined)
 				return
@@ -1602,6 +1608,12 @@ We only need to do it for files that were edited since `from`, ie files between 
 			return;
 		}
 
+		// `/compact` は LLM に送らず、ここまでの会話を要約する (Codex と同じ)
+		if (isCompactCommand(userMessage)) {
+			await this._runCompactCommand(threadId);
+			return;
+		}
+
 		// === Division orchestration が直前ターンで Reviewer 出力を埋め込んでいれば、
 		// それを次のユーザーメッセージに自動 prepend する (一度きりの自動添付)。
 		// Reviewer 出力は <!-- DIVISION_REVIEWER_BEGIN -->...<!-- DIVISION_REVIEWER_END -->
@@ -2108,22 +2120,65 @@ We only need to do it for files that were edited since `from`, ie files between 
 	 * If the thread is close to the model's context window, ask the model for a handoff summary and add a
 	 * `compaction` message (see common/chatCompaction.ts). On failure the old trimming still applies.
 	 */
-	private async _maybeCompactThread({ threadId, modelSelection, modelSelectionOptions, chatMode }: {
+	/** /compact typed while the agent was running: compact before its next model call. */
+	private readonly _compactRequested: { [threadId: string]: boolean } = {}
+
+	/** Why a manual /compact cannot run now (undefined = it can). */
+	private _manualCompactionBlocker(threadId: string, modelSelection: ModelSelection | null): string | undefined {
+		if (!modelSelection) return 'モデルが選ばれていないため要約できません。'
+		if (modelSelection.providerName === 'divisionAPI' && modelSelection.modelName.includes('division-orchestrator')) {
+			return 'Division Project (オーケストレーター) では要約できません。単体のモデルを選んでから /compact してください。'
+		}
+		const messages = this.state.allThreads[threadId]?.messages ?? []
+		if (assistantStepsSinceCompaction(messages) === 0) return '要約するやり取りがまだありません (前回の要約以降、AI の返答がありません)。'
+		return undefined
+	}
+
+	/** `/compact` (as in Codex): summarize the thread now, whatever its size. */
+	private async _runCompactCommand(threadId: string) {
+		const thread = this.state.allThreads[threadId]
+		if (!thread) return
+		if (this.streamState[threadId]?.isRunning) {
+			this._compactRequested[threadId] = true
+			this._notificationService.info('次のステップの前に、ここまでの会話を要約します。')
+			return
+		}
+		if (thread.state.currCheckpointIdx !== null) {
+			this._notificationService.warn('チェックポイントを表示している間は要約できません。最新の状態に戻してから /compact してください。')
+			return
+		}
+		const { modelSelection, modelSelectionOptions } = this._currentModelSelectionProps(threadId)
+		const blocker = this._manualCompactionBlocker(threadId, modelSelection)
+		if (blocker) {
+			this._notificationService.warn(blocker)
+			return
+		}
+		const { chatMode } = this._settingsService.state.globalSettings
+		const r = await this._maybeCompactThread({ threadId, modelSelection, modelSelectionOptions, chatMode, force: true })
+		if (r === 'aborted') return // stopped by the user (abortRunning already cleared the state)
+		if (r === 'compacted') this._setStreamState(threadId, undefined)
+		else this._setStreamState(threadId, { isRunning: undefined, error: { message: 'ここまでの会話を要約できませんでした (モデルの呼び出しに失敗したか、要約が空でした)。', fullError: null } })
+	}
+
+	private async _maybeCompactThread({ threadId, modelSelection, modelSelectionOptions, chatMode, force }: {
 		threadId: string,
 		modelSelection: ModelSelection | null,
 		modelSelectionOptions: ModelSelectionOptions | undefined,
 		chatMode: ChatMode,
+		/** Manual /compact: skip the size and spacing checks. */
+		force?: boolean,
 	}): Promise<'compacted' | 'skipped' | 'aborted'> {
 		if (!modelSelection) return 'skipped'
 		// The Division orchestrator runs a whole team per request; summarizing through it would be slow and costly.
 		if (modelSelection.providerName === 'divisionAPI' && modelSelection.modelName.includes('division-orchestrator')) return 'skipped'
 		const chatMessages = this.state.allThreads[threadId]?.messages ?? []
-		if (assistantStepsSinceCompaction(chatMessages) < MIN_ASSISTANT_STEPS_BETWEEN_COMPACTIONS) return 'skipped'
+		const steps = assistantStepsSinceCompaction(chatMessages)
+		if (steps < (force ? 1 : MIN_ASSISTANT_STEPS_BETWEEN_COMPACTIONS)) return 'skipped'
 		const failedAt = this._compactionFailedAtLength[threadId]
-		if (failedAt !== undefined && chatMessages.length - failedAt < 10) return 'skipped'
+		if (!force && failedAt !== undefined && chatMessages.length - failedAt < 10) return 'skipped'
 
 		const check = await this._convertToLLMMessagesService.checkChatCompaction({ chatMessages, chatMode, modelSelection })
-		if (!check.shouldCompact) return 'skipped'
+		if (!check.shouldCompact && !force) return 'skipped'
 
 		const { messages, separateSystemMessage } = await this._convertToLLMMessagesService.prepareLLMCompactionMessages({ chatMessages, chatMode, modelSelection })
 		const { overridesOfModel } = this._settingsService.state
@@ -2156,8 +2211,8 @@ We only need to do it for files that were edited since `from`, ie files between 
 			return 'skipped'
 		}
 		delete this._compactionFailedAtLength[threadId]
-		this._addMessageToThread(threadId, { role: 'compaction', summary, beforeChars: check.chars, auto: true, createdAt: new Date().toISOString() })
-		this._metricsService.capture('Chat Compaction', { chars: check.chars, budgetChars: check.budgetChars })
+		this._addMessageToThread(threadId, { role: 'compaction', summary, beforeChars: check.chars, auto: !force, createdAt: new Date().toISOString() })
+		this._metricsService.capture('Chat Compaction', { chars: check.chars, budgetChars: check.budgetChars, manual: !!force })
 		return 'compacted'
 	}
 
