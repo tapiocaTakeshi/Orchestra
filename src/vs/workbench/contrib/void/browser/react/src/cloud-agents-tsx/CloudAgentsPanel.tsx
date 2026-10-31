@@ -64,6 +64,7 @@ import {
 	RefreshCw,
 	Repeat,
 	Search,
+	SlidersHorizontal,
 	Square,
 	SquareTerminal,
 	Target,
@@ -81,6 +82,7 @@ import { ChatMarkdownRender } from '../markdown/ChatMarkdownRender.js';
 import {
 	CLOUD_AGENTS_MAX_PARALLEL,
 	CLOUD_DIVISION_PROJECT_MODEL,
+	CLOUD_GOAL_LOOP_DEFAULT,
 	CLOUD_PR_TITLE_MAX,
 	CloudApprovalEventData,
 	CloudChange,
@@ -1302,6 +1304,8 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 	/** GitHub: 選んだリポジトリがあっても一覧から選び直している (「変更」) */
 	const [choosingRepo, setChoosingRepo] = useState(false);
 	const [menu, setMenu] = useState<ComposerMenu>(null);
+	/** 並列数・プロジェクト・目標ループ・承認モードを出しているか (普段は「場所」と「モデル」だけ) */
+	const [moreOpen, setMoreOpen] = useState(false);
 	const popoverRef = useRef<HTMLDivElement | null>(null);
 	const toolbarRef = useRef<HTMLDivElement | null>(null);
 	useDismiss(menu !== null, [popoverRef, toolbarRef], () => setMenu(null));
@@ -1549,35 +1553,41 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 						<span style={ellipsis}>{sourceChip.label}</span>
 						<ChevronDown size={11} style={{ flexShrink: 0, opacity: 0.7 }} />
 					</button>
-					<button type='button' className='oca-chip' data-active={menu === 'parallel'} title={t('cloudAgents.new.parallelHint')} onClick={() => toggleMenu('parallel')}>
-						<span style={{ fontFamily: C.monoFont }}>×{count}</span>
-						<ChevronDown size={11} style={{ flexShrink: 0, opacity: 0.7 }} />
-					</button>
+					{(moreOpen || count > 1) && (
+						<button type='button' className='oca-chip' data-active={menu === 'parallel'} title={t('cloudAgents.new.parallelHint')} onClick={() => toggleMenu('parallel')}>
+							<span style={{ fontFamily: C.monoFont }}>×{count}</span>
+							<ChevronDown size={11} style={{ flexShrink: 0, opacity: 0.7 }} />
+						</button>
+					)}
 					<button type='button' className='oca-chip' data-active={menu === 'model'} data-warn={!modelReady} title={`${t('cloudAgents.model.label')}: ${modelChip.title}`} onClick={() => toggleMenu('model')}>
 						<ModelIcon division={divisionMode} />
 						<span style={{ ...ellipsis, fontFamily: modelChip.mono ? C.monoFont : 'inherit' }}>{modelChip.label}</span>
 						<ChevronDown size={11} style={{ flexShrink: 0, opacity: 0.7 }} />
 					</button>
-					{/* Division Project のときはプロジェクトもモデルで選んだものに決まるので、ここでは変えられない (鍵) */}
-					<button
-						type='button'
-						className='oca-chip'
-						data-active={menu === 'project'}
-						disabled={divisionMode}
-						title={divisionMode ? t('cloudAgents.project.lockedByModel') : `${t('cloudAgents.project.label')}: ${projectLabel ?? t('cloudAgents.project.none')}`}
-						onClick={() => toggleMenu('project')}
-					>
-						<Layers size={12} />
-						<span style={ellipsis}>{projectLabel ?? t('cloudAgents.project.none')}</span>
-						{divisionMode ? <Lock size={10} style={{ flexShrink: 0, opacity: 0.7 }} /> : <ChevronDown size={11} style={{ flexShrink: 0, opacity: 0.7 }} />}
-					</button>
-					<button type='button' className='oca-chip' data-active={menu === 'loop'} title={`${t('cloudAgents.goal.loopTitle')}: ${t(`${goalLoopLabelKey(state.goalLoopPick)}.hint` as TranslationKey)}`} onClick={() => toggleMenu('loop')}>
-						<Repeat size={12} />
-						<span style={ellipsis}>{t('cloudAgents.goal.loop')} · {t(goalLoopLabelKey(state.goalLoopPick))}</span>
-						<ChevronDown size={11} style={{ flexShrink: 0, opacity: 0.7 }} />
-					</button>
+					{/* Division Project のときはプロジェクトもモデルで選んだものに決まるので出さない */}
+					{(moreOpen || draft.projectId !== null) && !divisionMode && (
+						<button
+							type='button'
+							className='oca-chip'
+							data-active={menu === 'project'}
+							disabled={divisionMode}
+							title={divisionMode ? t('cloudAgents.project.lockedByModel') : `${t('cloudAgents.project.label')}: ${projectLabel ?? t('cloudAgents.project.none')}`}
+							onClick={() => toggleMenu('project')}
+						>
+							<Layers size={12} />
+							<span style={ellipsis}>{projectLabel ?? t('cloudAgents.project.none')}</span>
+							{divisionMode ? <Lock size={10} style={{ flexShrink: 0, opacity: 0.7 }} /> : <ChevronDown size={11} style={{ flexShrink: 0, opacity: 0.7 }} />}
+						</button>
+					)}
+					{(moreOpen || state.goalLoopPick !== CLOUD_GOAL_LOOP_DEFAULT) && (
+						<button type='button' className='oca-chip' data-active={menu === 'loop'} title={`${t('cloudAgents.goal.loopTitle')}: ${t(`${goalLoopLabelKey(state.goalLoopPick)}.hint` as TranslationKey)}`} onClick={() => toggleMenu('loop')}>
+							<Repeat size={12} />
+							<span style={ellipsis}>{t('cloudAgents.goal.loop')} · {t(goalLoopLabelKey(state.goalLoopPick))}</span>
+							<ChevronDown size={11} style={{ flexShrink: 0, opacity: 0.7 }} />
+						</button>
+					)}
 					{/* 承認モードは Division Project のときだけ (coder 以外のロールの .division ファイルを承認する) */}
-					{divisionMode && (
+					{divisionMode && (moreOpen || state.approvalModePick) && (
 						<button
 							type='button'
 							className='oca-chip'
@@ -1590,6 +1600,17 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 							<span style={ellipsis}>{t('cloudAgents.approval.chip')} · {t(state.approvalModePick ? 'cloudAgents.approval.on' : 'cloudAgents.approval.off')}</span>
 						</button>
 					)}
+					<button
+						type='button'
+						className='oca-chip'
+						data-active={moreOpen}
+						aria-pressed={moreOpen}
+						title={t('cloudAgents.new.moreOptions')}
+						aria-label={t('cloudAgents.new.moreOptions')}
+						onClick={() => { setMoreOpen(v => !v); setMenu(null); }}
+					>
+						<SlidersHorizontal size={12} />
+					</button>
 				</div>
 			}
 			actions={
@@ -1604,7 +1625,7 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 				? <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}><Spinner size={10} /> {state.creatingProgress}</span>
 				: needsRepo ? <span style={{ color: C.warning }}>{t('cloudAgents.github.pickRepo')}</span>
 					: !modelReady ? <span style={{ color: C.warning }}>{t('cloudAgents.model.needsProject')}</span>
-						: t('cloudAgents.composer.hintLaunch')}
+						: null}
 			hintRight={t('cloudAgents.billing')}
 		/>
 	);
@@ -3574,16 +3595,14 @@ const Conversation = ({ session, leftSlot, reviewOpen, onToggleReview, onReview,
 				{leftSlot}
 				<div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '1px' }}>
 					<div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-						<span title={session.prompt} style={{ fontSize: '13px', fontWeight: 600, color: C.fg, minWidth: 0, ...ellipsis }}>{sessionTitle(session)}</span>
+						<span
+							// モデル・プロジェクトは普段は見なくてよいので、見出しにマウスを載せたときだけ出す
+							title={[session.prompt, `${t('cloudAgents.detail.model')}: ${sessionModelLabel(session, projectLabel(session.projectId), t('cloudAgents.detail.modelDefault'))}`, !isDivisionProjectSession(session) && projectLabel(session.projectId) ? `${t('cloudAgents.project.label')}: ${projectLabel(session.projectId)}` : ''].filter(Boolean).join('\n')}
+							style={{ fontSize: '13px', fontWeight: 600, color: C.fg, minWidth: 0, ...ellipsis }}
+						>{sessionTitle(session)}</span>
 						<StatusPill status={session.status} />
 					</div>
 					<div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '11px', color: C.fgMuted, minWidth: 0 }}>
-						<span title={t('cloudAgents.detail.model')} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', minWidth: 0, flexShrink: 1 }}>
-							<ModelIcon division={isDivisionProjectSession(session)} size={10} />
-							<span style={ellipsis}>{sessionModelLabel(session, projectLabel(session.projectId), t('cloudAgents.detail.modelDefault'))}</span>
-						</span>
-						{/* Division Project のときはモデル名 (Division Project · <名前>) にプロジェクトが入っている */}
-						{!isDivisionProjectSession(session) && <ProjectTag label={projectLabel(session.projectId)} />}
 						<span style={{ display: 'flex', minWidth: 0, flexShrink: 1 }}><SessionSource session={session} size={10} /></span>
 						<CostTag costUsd={session.costUsd} withIcon />
 						{session.workspaceInfo && session.workspaceInfo.skipped > 0 && !sessionRepoLabel(session) && (

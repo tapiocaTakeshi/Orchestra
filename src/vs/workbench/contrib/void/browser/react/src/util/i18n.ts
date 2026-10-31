@@ -531,6 +531,7 @@ export const translations = {
 	'cloudAgents.hero.example3.label': { en: 'Add a README', ja: 'README を書いて' },
 	'cloudAgents.hero.example3.prompt': { en: 'Write (or update) README.md: what the project is, how to set it up, how to run it and how to run the tests. Check the commands actually work before writing them down.', ja: 'README.md を作成 (または更新) してください。何のプロジェクトか、セットアップ方法、起動方法、テストの実行方法を書き、書いたコマンドが実際に動くことを確認してください。' },
 	'cloudAgents.composer.hintSend': { en: 'Enter to send · Shift+Enter for a new line', ja: 'Enter で送信 · Shift+Enter で改行' },
+	'cloudAgents.new.moreOptions': { en: 'More options', ja: '詳細な設定' },
 	'cloudAgents.composer.hintLaunch': { en: 'Enter to launch · Shift+Enter for a new line', ja: 'Enter で起動 · Shift+Enter で改行' },
 	'cloudAgents.composer.stop': { en: 'Stop the agent', ja: 'エージェントを止める' },
 	'cloudAgents.composer.modelDefault': { en: 'Default model', ja: '既定のモデル' },
