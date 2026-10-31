@@ -24,6 +24,7 @@ import {
 	CLOUD_SESSIONS_API_PREFIX,
 	GITHUB_API_PREFIX,
 	DIVISION_PROJECTS_API_PREFIX,
+	DECISIONS_API_PREFIX,
 	CloudAgentRequestParams,
 	CloudAgentResponse,
 	CloudAgentUploadParams,
@@ -61,7 +62,7 @@ const normalizeEndpoint = (endpoint: unknown): string =>
 	typeof endpoint === 'string' ? endpoint.trim().replace(/\/+$/, '') : '';
 
 /** 中継してよい API のパス (この下だけ。汎用のプロキシにしない) */
-const ALLOWED_API_PREFIXES = [CLOUD_SESSIONS_API_PREFIX, GITHUB_API_PREFIX, DIVISION_PROJECTS_API_PREFIX];
+const ALLOWED_API_PREFIXES = [CLOUD_SESSIONS_API_PREFIX, GITHUB_API_PREFIX, DIVISION_PROJECTS_API_PREFIX, DECISIONS_API_PREFIX];
 
 /** prefix そのものか、prefix + '/...' か (`/api/github-evil` のような前方一致は通さない) */
 const isUnderPrefix = (pathname: string, prefix: string): boolean => {

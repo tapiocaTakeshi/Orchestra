@@ -472,6 +472,8 @@ export const CLOUD_SESSIONS_API_PREFIX = '/api/cloud-sessions';
 export const GITHUB_API_PREFIX = '/api/github';
 /** ログイン中アカウントの Division プロジェクトとロール割り当て (Pull from Remote が読む) */
 export const DIVISION_PROJECTS_API_PREFIX = '/api/projects';
+/** Decision Inbox (判断が必要な項目をセッション横断で集めたもの) */
+export const DECISIONS_API_PREFIX = '/api/decisions';
 
 /** 1 回の起動で並列に走らせられるセッション数の上限 */
 export const CLOUD_AGENTS_MAX_PARALLEL = 10;
@@ -605,3 +607,102 @@ export interface ICloudAgentMainService {
 }
 
 export const ICloudAgentMainService = createDecorator<ICloudAgentMainService>('cloudAgentMainService');
+
+
+// ---------------------------------------------------------------------------
+// Decision Inbox (Division API の /api/decisions)
+// ---------------------------------------------------------------------------
+//
+// 人間の判断が要るものだけをセッション横断で 1 つにまとめた一覧。
+//  - source 'session' … 承認待ち / 変更の確認待ち (PR 前) / 失敗。サーバーがセッションの状態から毎回組み立てる
+//  - source 'signal'  … 監視中のリポジトリで検出された CI 失敗・修正依頼 (Friction Detector)。
+//                       investigation (調査用の指示とリポジトリ) が付いていて、ワンタップで AI に調査させられる
+
+export type CloudDecisionKind = 'approval' | 'review_changes' | 'session_failed' | 'ci_failure' | 'changes_requested';
+export type CloudDecisionStatus = 'open' | 'in_progress' | 'resolved' | 'dismissed';
+export type CloudDecisionPriority = 'low' | 'medium' | 'high';
+export type CloudDecisionOptionId = 'open_session' | 'create_pr' | 'investigate' | 'open_url' | 'dismiss';
+
+export type CloudDecisionOption = { id: CloudDecisionOptionId; label: string; primary?: boolean; url?: string };
+export type CloudDecisionEvidence = { label: string; url?: string; detail?: string };
+export type CloudDecisionInvestigation = { title: string; prompt: string; repo: { fullName: string; branch?: string } };
+
+export type CloudDecision = {
+	id: string;
+	source: 'session' | 'signal';
+	kind: CloudDecisionKind;
+	status: CloudDecisionStatus;
+	priority: CloudDecisionPriority;
+	title: string;
+	summary: string;
+	recommendation: string | null;
+	evidence: CloudDecisionEvidence[];
+	risks: string[];
+	options: CloudDecisionOption[];
+	investigation: CloudDecisionInvestigation | null;
+	sessionId: string | null;
+	createdAt: string;
+};
+
+export const CLOUD_DECISION_KIND_LABELS: Record<CloudDecisionKind, string> = {
+	approval: '承認',
+	review_changes: '変更の確認',
+	session_failed: '停止',
+	ci_failure: 'CI 失敗',
+	changes_requested: '修正依頼',
+};
+
+const DECISION_KINDS: CloudDecisionKind[] = ['approval', 'review_changes', 'session_failed', 'ci_failure', 'changes_requested'];
+const DECISION_STATUSES: CloudDecisionStatus[] = ['open', 'in_progress', 'resolved', 'dismissed'];
+const DECISION_PRIORITIES: CloudDecisionPriority[] = ['low', 'medium', 'high'];
+const DECISION_OPTION_IDS: CloudDecisionOptionId[] = ['open_session', 'create_pr', 'investigate', 'open_url', 'dismiss'];
+
+const decisionStr = (v: unknown): string => (typeof v === 'string' ? v : '');
+const isHttpsUrl = (v: unknown): v is string => typeof v === 'string' && /^https:\/\/\S+$/i.test(v);
+
+/** サーバーの DTO を読む。欠けた値・知らない値・https 以外のリンクは捨てる (画面が落ちない・危ない URL を開かない)。 */
+export const toCloudDecision = (raw: unknown): CloudDecision | null => {
+	const d = (raw ?? {}) as Record<string, unknown>;
+	if (!decisionStr(d.id) || !decisionStr(d.title)) return null;
+	const inv = (d.investigation ?? {}) as Record<string, unknown>;
+	const invRepo = (inv.repo ?? {}) as Record<string, unknown>;
+	const investigation: CloudDecisionInvestigation | null = decisionStr(inv.prompt).trim() && /^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/.test(decisionStr(invRepo.fullName))
+		? { title: decisionStr(inv.title), prompt: decisionStr(inv.prompt), repo: { fullName: decisionStr(invRepo.fullName), ...(decisionStr(invRepo.branch) ? { branch: decisionStr(invRepo.branch) } : {}) } }
+		: null;
+	const options: CloudDecisionOption[] = [];
+	for (const o of Array.isArray(d.options) ? d.options as Record<string, unknown>[] : []) {
+		if (!o || !DECISION_OPTION_IDS.includes(o.id as CloudDecisionOptionId)) continue;
+		if (o.id === 'open_url' && !isHttpsUrl(o.url)) continue;
+		if (o.id === 'investigate' && !investigation) continue;
+		options.push({ id: o.id as CloudDecisionOptionId, label: decisionStr(o.label) || String(o.id), ...(o.primary === true ? { primary: true } : {}), ...(isHttpsUrl(o.url) ? { url: o.url } : {}) });
+	}
+	return {
+		id: decisionStr(d.id),
+		source: d.source === 'signal' ? 'signal' : 'session',
+		kind: DECISION_KINDS.includes(d.kind as CloudDecisionKind) ? d.kind as CloudDecisionKind : 'review_changes',
+		status: DECISION_STATUSES.includes(d.status as CloudDecisionStatus) ? d.status as CloudDecisionStatus : 'open',
+		priority: DECISION_PRIORITIES.includes(d.priority as CloudDecisionPriority) ? d.priority as CloudDecisionPriority : 'medium',
+		title: decisionStr(d.title),
+		summary: decisionStr(d.summary),
+		recommendation: decisionStr(d.recommendation) || null,
+		evidence: (Array.isArray(d.evidence) ? d.evidence as Record<string, unknown>[] : [])
+			.filter(e => e && decisionStr(e.label))
+			.map(e => ({ label: decisionStr(e.label), ...(isHttpsUrl(e.url) ? { url: e.url } : {}), ...(decisionStr(e.detail) ? { detail: decisionStr(e.detail) } : {}) })),
+		risks: (Array.isArray(d.risks) ? d.risks : []).filter((r): r is string => typeof r === 'string' && !!r),
+		options,
+		investigation,
+		sessionId: decisionStr(d.sessionId) || null,
+		createdAt: decisionStr(d.createdAt),
+	};
+};
+
+/** カードの主ボタン (対応中のものは押させない)。 */
+export const primaryDecisionOption = (d: CloudDecision): CloudDecisionOption | null =>
+	d.status !== 'open' ? null : d.options.find(o => o.primary) ?? d.options.find(o => o.id !== 'dismiss') ?? null;
+
+/**
+ * 受信箱を読み直すべきかの目印。セッションの状態 (承認待ち・変更・PR) が変わったときだけ変わる
+ * (一覧のポーリングのたびには読み直さない)。
+ */
+export const decisionInboxSignature = (sessions: readonly { id: string; status: string; changedFiles?: number; pullRequest?: { number?: number } | null }[]): string =>
+	sessions.map(s => `${s.id}:${s.status}:${s.changedFiles ?? 0}:${s.pullRequest?.number ?? ''}`).join('|');
