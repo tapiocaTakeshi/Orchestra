@@ -829,6 +829,12 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			// once validated, add checkpoint for edit
 			if (toolName === 'edit_file') { this._addToolEditCheckpoint({ threadId, uri: (toolParams as BuiltinToolCallParams['edit_file']).uri }) }
 			if (toolName === 'rewrite_file') { this._addToolEditCheckpoint({ threadId, uri: (toolParams as BuiltinToolCallParams['rewrite_file']).uri }) }
+			if (toolName === 'apply_patch') {
+				// One checkpoint covering every existing file the patch touches, so the edit can be undone as a whole.
+				const uris = Object.values((toolParams as BuiltinToolCallParams['apply_patch']).uriOfPath)
+				for (const uri of uris) { await this._voidModelService.initializeModel(uri) }
+				this._addToolEditCheckpointForUris({ threadId, uris })
+			}
 
 			// 2. if tool requires approval, break from the loop, awaiting approval
 
@@ -1251,6 +1257,24 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		})
 	}
 	// call this right after LLM edits a file
+	private _addToolEditCheckpointForUris({ threadId, uris }: { threadId: string, uris: URI[] }) {
+		const thread = this.state.allThreads[threadId]
+		if (!thread) return
+		const voidFileSnapshotOfURI: { [fsPath: string]: ReturnType<IEditCodeService['getVoidFileSnapshot']> } = {}
+		for (const uri of uris) {
+			const { model } = this._voidModelService.getModel(uri)
+			if (!model) continue // a file the patch creates
+			voidFileSnapshotOfURI[uri.fsPath] = this._editCodeService.getVoidFileSnapshot(uri)
+		}
+		if (Object.keys(voidFileSnapshotOfURI).length === 0) return
+		this._addCheckpoint(threadId, {
+			role: 'checkpoint',
+			type: 'tool_edit',
+			voidFileSnapshotOfURI,
+			userModifications: { voidFileSnapshotOfURI: {} },
+		})
+	}
+
 	private _addToolEditCheckpoint({ threadId, uri, }: { threadId: string, uri: URI }) {
 		const thread = this.state.allThreads[threadId]
 		if (!thread) return

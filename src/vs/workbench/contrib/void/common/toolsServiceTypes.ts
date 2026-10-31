@@ -3,12 +3,15 @@ import { RawMCPToolCall } from './mcpServiceTypes.js';
 import { builtinTools } from './prompt/prompts.js';
 import { RawToolParamsObj } from './sendLLMMessageTypes.js';
 import { AgentPlan } from './agentPlan.js';
+import { PatchHunk } from './applyPatch.js';
 
 
 
 export type TerminalResolveReason = { type: 'timeout' } | { type: 'done', exitCode: number }
 
 export type LintErrorItem = { code: string, message: string, startLineNumber: number, endLineNumber: number }
+
+export type ApplyPatchFileResult = { kind: 'add' | 'update' | 'delete', uri: URI, fromUri: URI | null, added: number, removed: number }
 
 // Partial of IFileStat
 export type ShallowDirectoryItem = {
@@ -24,6 +27,7 @@ export const approvalTypeOfBuiltinToolName: Partial<{ [T in BuiltinToolName]?: '
 	'delete_file_or_folder': 'edits',
 	'rewrite_file': 'edits',
 	'edit_file': 'edits',
+	'apply_patch': 'edits',
 	'run_command': 'terminal',
 	'run_persistent_command': 'terminal',
 	'open_persistent_terminal': 'terminal',
@@ -54,6 +58,7 @@ export type BuiltinToolCallParams = {
 	// ---
 	'rewrite_file': { uri: URI, newContent: string },
 	'edit_file': { uri: URI, searchReplaceBlocks: string },
+	'apply_patch': { patch: string, hunks: PatchHunk[], uriOfPath: { [pathInPatch: string]: URI } },
 	'create_file_or_folder': { uri: URI, isFolder: boolean },
 	'delete_file_or_folder': { uri: URI, isRecursive: boolean, isFolder: boolean },
 	// ---
@@ -77,6 +82,7 @@ export type BuiltinToolResultType = {
 	// ---
 	'rewrite_file': Promise<{ lintErrors: LintErrorItem[] | null }>,
 	'edit_file': Promise<{ lintErrors: LintErrorItem[] | null }>,
+	'apply_patch': Promise<{ files: ApplyPatchFileResult[], lintErrors: { uri: URI, lintErrors: LintErrorItem[] }[] }>,
 	'create_file_or_folder': {},
 	'delete_file_or_folder': {},
 	// ---

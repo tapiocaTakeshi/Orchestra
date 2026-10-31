@@ -34,12 +34,13 @@ import { WarningBox } from '../void-settings-tsx/WarningBox.js';
 import { getModelCapabilities, getIsReasoningEnabledState } from '../../../../common/modelCapabilities.js';
 import { AlertTriangle, File, Ban, Check, ChevronDown, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text, Image as ImageIcon, Paperclip, Palette, Blocks, SendHorizontal, Code, Package, RotateCcw, Loader2, ListPlus, Sun, Moon, Flame, ClipboardCheck, CornerUpLeft, CheckCircle2, Circle, CircleDot, Download as DownloadIcon, ExternalLink as ExternalLinkIcon, Bot, SlidersHorizontal, Coins, Repeat, LogIn } from 'lucide-react';
 import { ChatMessage, CheckpointEntry, StagingSelectionItem, ToolMessage } from '../../../../common/chatThreadServiceTypes.js';
-import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, ToolName, LintErrorItem, ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsServiceTypes.js';
+import { approvalTypeOfBuiltinToolName, ApplyPatchFileResult, BuiltinToolCallParams, BuiltinToolName, ToolName, LintErrorItem, ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsServiceTypes.js';
 import { CopyButton, EditToolAcceptRejectButtonsHTML, IconShell1, JumpToFileButton, JumpToTerminalButton, StatusIndicator, StatusIndicatorForApplyButton, useApplyStreamState, useEditToolStreamState } from '../markdown/ApplyBlockHoverButtons.js';
 import type { IsRunningType } from '../../../chatThreadService.js';
 import { acceptAllBg, acceptBorder, buttonFontSize, buttonTextColor, rejectAllBg, rejectBg, rejectBorder } from '../../../../common/helpers/colors.js';
 import { builtinToolNames, isABuiltinToolName, MAX_FILE_CHARS_PAGE, MAX_TERMINAL_INACTIVE_TIME } from '../../../../common/prompt/prompts.js';
 import { AgentPlanStep, agentPlanProgress } from '../../../../common/agentPlan.js';
+import { PatchHunk } from '../../../../common/applyPatch.js';
 import { RawToolCallObj } from '../../../../common/sendLLMMessageTypes.js';
 import ErrorBoundary from './ErrorBoundary.js';
 import { ToolApprovalTypeSwitch } from '../void-settings-tsx/Settings.js';
@@ -3344,6 +3345,7 @@ const titleOfBuiltinToolName = {
 	'read_lint_errors': { done: `リンターエラーを読み込みました`, proposed: 'リンターエラーの読み込み', running: loadingTitleWrapper('リンターエラーを読み込み中') },
 	'search_in_file': { done: 'ファイル内を検索しました', proposed: 'ファイル内を検索', running: loadingTitleWrapper('ファイル内を検索中') },
 	'update_plan': { done: '計画を更新しました', proposed: '計画の更新', running: loadingTitleWrapper('計画を更新中') },
+	'apply_patch': { done: 'パッチを適用しました', proposed: 'パッチの適用', running: loadingTitleWrapper('パッチを適用中') },
 } as const satisfies Record<BuiltinToolName, { done: any, proposed: any, running: any }>
 
 
@@ -3482,6 +3484,15 @@ const toolNameToDesc = (toolName: BuiltinToolName, _toolParams: BuiltinToolCallP
 			return {
 				desc1: getBasename(toolParams.uri.fsPath),
 				desc1Info: getRelative(toolParams.uri, accessor),
+			}
+		},
+		'apply_patch': () => {
+			const toolParams = _toolParams as BuiltinToolCallParams['apply_patch']
+			const paths = toolParams.hunks.map(h => h.type === 'update' && h.movePath ? h.movePath : h.path)
+			const unique = [...new Set(paths)]
+			return {
+				desc1: unique.length === 1 ? getBasename(unique[0]) : `${unique.length} ファイル`,
+				desc1Info: unique.join('\n'),
 			}
 		},
 		'update_plan': () => {
@@ -3847,6 +3858,44 @@ const MCPToolWrapper = ({ toolMessage }: WrapperProps<string>) => {
 
 type ResultWrapper<T extends ToolName> = (props: WrapperProps<T>) => React.ReactNode
 
+const patchKindLabel = { add: '追加', update: '変更', delete: '削除' } as const
+const patchKindClass = { add: 'text-green-500', update: 'text-void-fg-2', delete: 'text-red-500' } as const
+
+/** apply_patch で変わる / 変わったファイルの一覧 (押すと開く) */
+const PatchFileList = ({ files }: { files: { kind: 'add' | 'update' | 'delete', path: string, uri: URI | null, fromPath: string | null, added: number | null, removed: number | null }[] }) => {
+	const accessor = useAccessor()
+	return <div className='flex flex-col gap-0.5 px-2 py-1'>
+		{files.map((f, i) => (
+			<div
+				key={i}
+				className={`flex items-center gap-2 text-xs leading-5 min-w-0 ${f.uri && f.kind !== 'delete' ? 'cursor-pointer hover:brightness-125' : ''}`}
+				title={f.fromPath ? `${f.fromPath} → ${f.path}` : f.path}
+				onClick={() => { if (f.uri && f.kind !== 'delete') voidOpenFileFn(f.uri, accessor) }}
+			>
+				<span className={`flex-shrink-0 w-8 ${patchKindClass[f.kind]}`}>{patchKindLabel[f.kind]}</span>
+				<span className={`min-w-0 truncate ${f.kind === 'delete' ? 'line-through text-void-fg-4' : 'text-void-fg-1'}`}>{getBasename(f.path)}</span>
+				{f.fromPath && <span className='flex-shrink-0 text-void-fg-4'>← {getBasename(f.fromPath)}</span>}
+				<span className='flex-1' />
+				{f.added !== null && f.added > 0 && <span className='flex-shrink-0 text-green-500'>+{f.added}</span>}
+				{f.removed !== null && f.removed > 0 && <span className='flex-shrink-0 text-red-500'>-{f.removed}</span>}
+			</div>
+		))}
+	</div>
+}
+
+const patchFilesFromHunks = (hunks: PatchHunk[], uriOfPath: { [p: string]: URI }) => hunks.map(h => ({
+	kind: h.type,
+	path: h.type === 'update' && h.movePath ? h.movePath : h.path,
+	uri: uriOfPath[h.type === 'update' && h.movePath ? h.movePath : h.path] ?? null,
+	fromPath: h.type === 'update' && h.movePath ? h.path : null,
+	added: h.type === 'add' ? h.contents.split('\n').length - 1 : h.type === 'update' ? h.chunks.reduce((n, c) => n + c.newLines.length - c.contextLineIndices.length, 0) : 0,
+	removed: h.type === 'update' ? h.chunks.reduce((n, c) => n + c.oldLines.length - c.contextLineIndices.length, 0) : null,
+}))
+
+const patchFilesFromResult = (files: ApplyPatchFileResult[]) => files.map(f => ({
+	kind: f.kind, path: f.uri.fsPath, uri: f.uri, fromPath: f.fromUri?.fsPath ?? null, added: f.added, removed: f.removed,
+}))
+
 /** update_plan の計画 (エージェント自身のチェックリスト。Codex の update_plan と同じ) */
 const AgentPlanChecklist = ({ plan, explanation }: { plan: AgentPlanStep[], explanation: string | null }) => {
 	return <div className='flex flex-col gap-0.5 px-2 py-1'>
@@ -3867,6 +3916,50 @@ const AgentPlanChecklist = ({ plan, explanation }: { plan: AgentPlanStep[], expl
 }
 
 const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: ResultWrapper<T>, } } = {
+	'apply_patch': {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor()
+			const title = getTitle(toolMessage)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
+			const isRejected = toolMessage.type === 'rejected'
+			const componentParams: ToolHeaderParams = { title, desc1, desc1Info, isError: false, icon: null, isRejected }
+			const { params } = toolMessage
+
+			if (toolMessage.type === 'success') {
+				const { result } = toolMessage
+				componentParams.children = <>
+					<PatchFileList files={patchFilesFromResult(result.files)} />
+					{result.lintErrors.map((x, i) => <div key={i} className='px-2 pb-1'>
+						<div className='text-xs text-void-fg-3'>{getBasename(x.uri.fsPath)}</div>
+						<LintErrorChildren lintErrors={x.lintErrors} />
+					</div>)}
+				</>
+				componentParams.isOpen = true
+			}
+			else {
+				// 承認待ち・実行中・拒否・失敗: パッチの中身 (どのファイルをどう変えるか) を見せる
+				componentParams.children = <>
+					<PatchFileList files={patchFilesFromHunks(params.hunks, params.uriOfPath)} />
+					<ToolChildrenWrapper className='bg-void-bg-3'>
+						<div className='!select-text cursor-auto'>
+							<SmallProseWrapper>
+								<ChatMarkdownRender string={`\`\`\`\`diff\n${params.patch}\n\`\`\`\``} chatMessageLocation={undefined} />
+							</SmallProseWrapper>
+						</div>
+					</ToolChildrenWrapper>
+				</>
+				if (toolMessage.type === 'tool_request') componentParams.isOpen = true
+				if (toolMessage.type === 'tool_error') {
+					componentParams.bottomChildren = <BottomChildren title='Error'>
+						<CodeChildren>
+							{toolMessage.result}
+						</CodeChildren>
+					</BottomChildren>
+				}
+			}
+			return <ToolHeaderWrapper {...componentParams} />
+		},
+	},
 	'update_plan': {
 		resultWrapper: ({ toolMessage, threadId, messageIdx }) => {
 			const accessor = useAccessor()

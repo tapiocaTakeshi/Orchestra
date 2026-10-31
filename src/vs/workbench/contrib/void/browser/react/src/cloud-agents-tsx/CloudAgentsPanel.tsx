@@ -1979,6 +1979,41 @@ const preStyle: React.CSSProperties = {
 	maxHeight: '320px', overflow: 'auto',
 };
 
+type PatchFile = { kind: 'add' | 'update' | 'delete'; path: string; fromPath: string | null; added: number; removed: number };
+
+/** apply_patch の tool イベントなら、変えたファイルの一覧 (サーバーが data.files に載せる) */
+const patchFilesOf = (data: any): PatchFile[] | null => {
+	if (data?.name !== 'apply_patch' || !Array.isArray(data?.files)) return null;
+	return (data.files as any[]).filter(f => f && typeof f.path === 'string').map(f => ({
+		kind: f.kind === 'add' || f.kind === 'delete' ? f.kind : 'update',
+		path: f.path,
+		fromPath: typeof f.fromPath === 'string' ? f.fromPath : null,
+		added: typeof f.added === 'number' ? f.added : 0,
+		removed: typeof f.removed === 'number' ? f.removed : 0,
+	}));
+};
+
+/** apply_patch で変えたファイル (A / M / D と +/- 行数) */
+const PatchFileRows = ({ files }: { files: PatchFile[] }) => {
+	const { t } = useTranslation();
+	const kindColor = { add: C.success, update: C.fgMuted, delete: C.error } as const;
+	const kindLabel = { add: t('cloudAgents.patch.added'), update: t('cloudAgents.patch.modified'), delete: t('cloudAgents.patch.deleted') } as const;
+	return (
+		<div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+			{files.map((f, i) => (
+				<div key={i} title={f.fromPath ? `${f.fromPath} → ${f.path}` : f.path} style={{ display: 'flex', alignItems: 'baseline', gap: '8px', minWidth: 0, fontSize: '11.5px', lineHeight: 1.6 }}>
+					<span style={{ color: kindColor[f.kind], flexShrink: 0, width: '34px' }}>{kindLabel[f.kind]}</span>
+					<span style={{ color: f.kind === 'delete' ? C.fgMuted : C.fg, textDecoration: f.kind === 'delete' ? 'line-through' : 'none', fontFamily: C.monoFont, minWidth: 0, ...ellipsis }}>{f.path}</span>
+					{f.fromPath && <span style={{ color: C.fgMuted, flexShrink: 0, fontFamily: C.monoFont, ...ellipsis }}>← {f.fromPath}</span>}
+					<span style={{ flex: 1 }} />
+					{f.added > 0 && <span style={{ color: C.success, flexShrink: 0, fontFamily: C.monoFont }}>+{f.added}</span>}
+					{f.removed > 0 && <span style={{ color: C.error, flexShrink: 0, fontFamily: C.monoFont }}>-{f.removed}</span>}
+				</div>
+			))}
+		</div>
+	);
+};
+
 /** ツールの実行 1 件 (1 行。押すと出力が開く) */
 const ToolRow = ({ data }: { data: any }) => {
 	const { t } = useTranslation();
@@ -1989,8 +2024,27 @@ const ToolRow = ({ data }: { data: any }) => {
 	const ok = data?.ok !== false;
 	const output = typeof data?.output === 'string' && data.output ? data.output : '';
 
+	const patchFiles = patchFilesOf(data);
+	const patchText = name === 'apply_patch' && typeof data?.args?.patch === 'string' ? data.args.patch : '';
+
 	let label: React.ReactNode;
-	switch (kind) {
+	switch (patchFiles ? 'patch' : kind) {
+		case 'patch': {
+			const files = patchFiles!;
+			const added = files.reduce((n, f) => n + f.added, 0);
+			const removed = files.reduce((n, f) => n + f.removed, 0);
+			label = (
+				<span style={{ display: 'flex', alignItems: 'baseline', gap: '6px', minWidth: 0 }}>
+					<span style={{ color: C.fgMuted, flexShrink: 0 }}>{t('cloudAgents.tool.edit')}</span>
+					<span title={files.map(f => f.path).join('\n')} style={{ color: C.fg, fontWeight: 600, ...ellipsis }}>
+						{files.length === 1 ? basename(files[0].path) : t('cloudAgents.patch.files').replace('{n}', String(files.length))}
+					</span>
+					{added > 0 && <span style={{ color: C.success, fontSize: '11px', flexShrink: 0, fontFamily: C.monoFont }}>+{added}</span>}
+					{removed > 0 && <span style={{ color: C.error, fontSize: '11px', flexShrink: 0, fontFamily: C.monoFont }}>-{removed}</span>}
+				</span>
+			);
+			break;
+		}
 		case 'command':
 			label = <span style={{ fontFamily: C.monoFont, fontSize: '11.5px', color: C.fg, ...ellipsis }}>{keyArg || name}</span>;
 			break;
@@ -2043,7 +2097,17 @@ const ToolRow = ({ data }: { data: any }) => {
 			</button>
 			{open && (
 				<div style={{ padding: '4px 6px 8px 25px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-					{kind === 'command' ? (
+					{patchFiles ? (
+						<>
+							<PatchFileRows files={patchFiles} />
+							{patchText && <pre style={preStyle}>{patchText}</pre>}
+						</>
+					) : name === 'apply_patch' && !ok ? (
+						<>
+							{patchText && <pre style={preStyle}>{patchText}</pre>}
+							<pre style={{ ...preStyle, color: C.error }}>{output || t('cloudAgents.transcript.noOutput')}</pre>
+						</>
+					) : kind === 'command' ? (
 						<pre style={{ ...preStyle, color: ok ? C.fg : C.error }}>
 							<span style={{ color: C.fgMuted }}>$ </span>{keyArg}{'\n'}{output || t('cloudAgents.transcript.noOutput')}
 						</pre>

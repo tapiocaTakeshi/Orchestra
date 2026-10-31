@@ -9,6 +9,7 @@ import { IDirectoryStrService } from '../directoryStrService.js';
 import { StagingSelectionItem } from '../chatThreadServiceTypes.js';
 import { os } from '../helpers/systemInfo.js';
 import { RawToolParamsObj } from '../sendLLMMessageTypes.js';
+import { APPLY_PATCH_FORMAT_HELP } from '../applyPatch.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, BuiltinToolResultType, ToolName } from '../toolsServiceTypes.js';
 import { ChatMode, contextTags, contextTagGroups } from '../voidSettingsTypes.js';
 
@@ -295,6 +296,14 @@ export const builtinTools: {
 		},
 	},
 
+	apply_patch: {
+		name: 'apply_patch',
+		description: `Edit, create, delete or rename one or more files at once with a patch (OpenAI Codex's patch format). Prefer this for changes that span several files, and for renaming or deleting files together with edits. All-or-nothing: if any part does not apply, nothing is changed.\n\n${APPLY_PATCH_FORMAT_HELP}`,
+		params: {
+			patch: { description: `The whole patch, from "*** Begin Patch" to "*** End Patch".` },
+		},
+	},
+
 	rewrite_file: {
 		name: 'rewrite_file',
 		description: `Edits a file, deleting all the old contents and replacing them with your new contents. Use this tool if you want to edit a file you just created.`,
@@ -493,6 +502,7 @@ ${directoryStr}
 		details.push(`You will OFTEN need to gather context before making a change. Do not immediately make a change unless you have ALL relevant context.`)
 		details.push(`ALWAYS have maximal certainty in a change BEFORE you make it. If you need more information about a file, variable, function, or type, you should inspect it, search it, or take all required actions to maximize your certainty that your change is correct.`)
 		details.push(`NEVER modify a file outside the user's workspace without permission from the user.`)
+		details.push(`To change several files at once (or to rename or delete files as part of a change), prefer apply_patch: one all-or-nothing patch instead of many separate edits. For a small change to a single file, edit_file is fine. You do not need to re-read a file after a successful edit.`)
 		details.push(`For a task with several distinct steps (roughly three or more, or anything that touches several files), call update_plan early with short, verifiable steps, before you start changing code. Keep exactly one step in progress; when a step is finished, mark it completed and start the next one in the same update. If you change course, update the plan and give the reason in "explanation". Before your final answer, update the plan so every step you did is completed. Skip the plan for simple one-step tasks and questions, and do not repeat the plan in your prose (the user already sees it).`)
 	}
 
