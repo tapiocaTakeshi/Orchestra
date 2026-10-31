@@ -533,6 +533,11 @@ export interface IConvertToLLMMessageService {
 	checkChatCompaction: (opts: { chatMessages: ChatMessage[], chatMode: ChatMode, modelSelection: ModelSelection | null }) => Promise<{ shouldCompact: boolean, chars: number, budgetChars: number }>
 	/** The thread plus the compaction request, ready to send (the model replies with the handoff summary). */
 	prepareLLMCompactionMessages: (opts: { chatMessages: ChatMessage[], chatMode: ChatMode, modelSelection: ModelSelection | null }) => Promise<{ messages: LLMChatMessage[], separateSystemMessage: string | undefined }>
+	/**
+	 * Rough share of the model's input budget the thread uses (for the "context left" indicator, as in Codex).
+	 * Cheap and synchronous: the system message size is the one measured on the last request.
+	 */
+	estimateContextUsage: (opts: { chatMessages: ChatMessage[], modelSelection: ModelSelection | null }) => { usedChars: number, budgetChars: number, leftPercent: number } | null
 }
 
 export const IConvertToLLMMessageService = createDecorator<IConvertToLLMMessageService>('ConvertToLLMMessageService');
@@ -708,16 +713,34 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		})
 		return { messages, separateSystemMessage };
 	}
-	checkChatCompaction: IConvertToLLMMessageService['checkChatCompaction'] = async ({ chatMessages, chatMode, modelSelection }) => {
-		if (modelSelection === null) return { shouldCompact: false, chars: 0, budgetChars: 0 }
+	/** System message + instructions size on the last chat request (estimateContextUsage uses it). */
+	private _lastSystemChars = 8_000
+
+	/** Same input budget prepareMessages trims to (characters). */
+	private _inputBudgetChars(modelSelection: ModelSelection): number {
 		const { overridesOfModel } = this.voidSettingsService.state
 		const { providerName, modelName } = modelSelection
 		const { contextWindow } = getModelCapabilities(providerName, modelName, overridesOfModel)
 		const modelSelectionOptions = this.voidSettingsService.state.optionsOfModelSelection['Chat'][providerName]?.[modelName]
 		const isReasoningEnabled = getIsReasoningEnabledState('Chat', providerName, modelName, modelSelectionOptions, overridesOfModel)
 		const reserved = getReservedOutputTokenSpace(providerName, modelName, { isReasoningEnabled, overridesOfModel })
-		// Same input budget prepareMessages trims to.
-		const budgetChars = (contextWindow - Math.max(contextWindow / 2, reserved ?? 4_096)) * CHARS_PER_TOKEN
+		return (contextWindow - Math.max(contextWindow / 2, reserved ?? 4_096)) * CHARS_PER_TOKEN
+	}
+
+	estimateContextUsage: IConvertToLLMMessageService['estimateContextUsage'] = ({ chatMessages, modelSelection }) => {
+		if (modelSelection === null) return null
+		const budgetChars = this._inputBudgetChars(modelSelection)
+		if (budgetChars <= 0) return null
+		const usedChars = chatMessagesChars(applyChatCompaction(chatMessages)) + this._lastSystemChars
+		const leftPercent = Math.max(0, Math.min(100, Math.round(100 * (1 - usedChars / budgetChars))))
+		return { usedChars, budgetChars, leftPercent }
+	}
+
+	checkChatCompaction: IConvertToLLMMessageService['checkChatCompaction'] = async ({ chatMessages, chatMode, modelSelection }) => {
+		if (modelSelection === null) return { shouldCompact: false, chars: 0, budgetChars: 0 }
+		const { overridesOfModel } = this.voidSettingsService.state
+		const { providerName, modelName } = modelSelection
+		const budgetChars = this._inputBudgetChars(modelSelection)
 		const threshold = budgetChars * COMPACT_AT_RATIO
 		const messageChars = chatMessagesChars(applyChatCompaction(chatMessages))
 		// Cheap exit on most steps: building the system message lists the workspace, so only do it near the threshold.
@@ -761,6 +784,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 
 		// Get combined AI instructions (settings, .voidrules, then the project's AGENTS.md)
 		const aiInstructions = [this._getCombinedAIInstructions(), await this._getProjectInstructions()].filter(Boolean).join('\n\n');
+		this._lastSystemChars = systemMessage.length + aiInstructions.length
 		const isReasoningEnabled = getIsReasoningEnabledState('Chat', providerName, modelName, modelSelectionOptions, overridesOfModel)
 		const reservedOutputTokenSpace = getReservedOutputTokenSpace(providerName, modelName, { isReasoningEnabled, overridesOfModel })
 		const llmMessages = this._chatMessagesToSimpleMessages(chatMessages)
