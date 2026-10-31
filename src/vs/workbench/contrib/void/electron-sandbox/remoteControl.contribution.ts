@@ -622,6 +622,8 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 				return { role: 'checkpoint', text: '' };
 			case 'flow_review':
 				return { role: 'system', text: truncate(`${message.flowRole}: ${message.mdFileName} (${message.status})`) };
+			case 'compaction':
+				return { role: 'system', text: '会話が長くなったので、ここまでの経緯を要約しました' };
 			default:
 				return undefined;
 		}

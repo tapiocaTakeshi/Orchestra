@@ -80,6 +80,17 @@ export type ChatMessage =
 		status: 'pending' | 'approved' | 'rejected';
 		allFlowOutputs?: FlowOutputEntry[];
 	}
+	| {
+		// Auto-compaction (as in Codex): the conversation got too long, so the model summarized it.
+		// Everything before this message is sent to the model as the user's messages + this summary.
+		role: 'compaction';
+		summary: string;
+		/** Characters of conversation the summary replaced. */
+		beforeChars: number;
+		/** true = triggered automatically (vs. by the user). */
+		auto: boolean;
+		createdAt: string;
+	}
 
 
 // one of the square items that indicates a selection in a chat bubble
