@@ -20,6 +20,8 @@ import { ToolName } from '../common/toolsServiceTypes.js';
 import { IMCPService } from '../common/mcpService.js';
 import { ISkillService } from '../common/skillService.js';
 import { IObsidianService } from '../common/obsidianService.js';
+import { IFileService } from '../../../../platform/files/common/files.js';
+import { AGENTS_MD_FILENAMES, budgetProjectInstructionDocs, formatProjectInstructionDocs } from '../common/agentsMd.js';
 
 export const EMPTY_MESSAGE = '(empty message)'
 
@@ -273,7 +275,7 @@ const prepareOpenAIOrAnthropicMessages = ({
 	// A COMPLETE HACK: last message is system message for context purposes
 
 	const sysMsgParts: string[] = []
-	if (aiInstructions) sysMsgParts.push(`GUIDELINES (from the user's .voidrules file):\n${aiInstructions}`)
+	if (aiInstructions) sysMsgParts.push(`GUIDELINES (from the user's settings, .voidrules and AGENTS.md files):\n${aiInstructions}`)
 	if (systemMessage) sysMsgParts.push(systemMessage)
 	const combinedSystemMessage = sysMsgParts.join('\n\n')
 
@@ -545,6 +547,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		@IMCPService private readonly mcpService: IMCPService,
 		@ISkillService private readonly skillService: ISkillService,
 		@IObsidianService private readonly obsidianService: IObsidianService,
+		@IFileService private readonly fileService: IFileService,
 	) {
 		super()
 	}
@@ -563,6 +566,34 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 			return voidRules.trim();
 		}
 		catch (e) {
+			return ''
+		}
+	}
+
+	// AGENTS.md (or AGENTS.override.md) at the root of each workspace folder, read fresh on every
+	// chat request so creating, editing or deleting the file takes effect on the next message.
+	private async _getProjectInstructions(): Promise<string> {
+		try {
+			const folders = this.workspaceContextService.getWorkspace().folders
+			const candidates: { folderName: string, fileName: string, text: string }[] = []
+			for (const folder of folders) {
+				for (const fileName of AGENTS_MD_FILENAMES) {
+					const uri = URI.joinPath(folder.uri, fileName)
+					// Unsaved edits in an open editor win over the file on disk.
+					const { model } = this.voidModelService.getModel(uri)
+					let text: string | null = model && !model.isDisposed() ? model.getValue(EndOfLinePreference.LF) : null
+					if (text === null) {
+						if (!(await this.fileService.exists(uri))) continue
+						text = (await this.fileService.readFile(uri)).value.toString()
+					}
+					candidates.push({ folderName: folder.name, fileName, text })
+					break // AGENTS.override.md wins over AGENTS.md
+				}
+			}
+			return formatProjectInstructionDocs(budgetProjectInstructionDocs(candidates), { multipleFolders: folders.length > 1 })
+		}
+		catch (e) {
+			console.warn('[ConvertToLLMMessageService] reading AGENTS.md failed:', e)
 			return ''
 		}
 	}
@@ -690,8 +721,8 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 
 		const modelSelectionOptions = this.voidSettingsService.state.optionsOfModelSelection['Chat'][modelSelection.providerName]?.[modelSelection.modelName]
 
-		// Get combined AI instructions
-		const aiInstructions = this._getCombinedAIInstructions();
+		// Get combined AI instructions (settings, .voidrules, then the project's AGENTS.md)
+		const aiInstructions = [this._getCombinedAIInstructions(), await this._getProjectInstructions()].filter(Boolean).join('\n\n');
 		const isReasoningEnabled = getIsReasoningEnabledState('Chat', providerName, modelName, modelSelectionOptions, overridesOfModel)
 		const reservedOutputTokenSpace = getReservedOutputTokenSpace(providerName, modelName, { isReasoningEnabled, overridesOfModel })
 		const llmMessages = this._chatMessagesToSimpleMessages(chatMessages)

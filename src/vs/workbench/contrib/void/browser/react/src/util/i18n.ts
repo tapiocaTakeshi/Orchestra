@@ -76,7 +76,7 @@ export const translations = {
 
 	// Settings - General - AI Instructions
 	'general.aiInstructions.title': { en: 'AI Instructions', ja: 'AI への指示' },
-	'general.aiInstructions.subtitle': { en: `System instructions to include with all AI requests. Alternatively, place a \`.voidrules\` file in the root of your workspace.`, ja: 'すべての AI リクエストに含めるシステム指示です。代わりにワークスペースのルートに `.voidrules` ファイルを置くこともできます。' },
+	'general.aiInstructions.subtitle': { en: `System instructions to include with all AI requests. Alternatively, place a \`.voidrules\` file in the root of your workspace. The agent also follows the workspace's \`AGENTS.md\` (or \`AGENTS.override.md\`).`, ja: 'すべての AI リクエストに含めるシステム指示です。代わりにワークスペースのルートに `.voidrules` ファイルを置くこともできます。エージェントはワークスペースの `AGENTS.md`（または `AGENTS.override.md`）にも従います。' },
 	'general.aiInstructions.disableSystemMessage': { en: 'Disable system message', ja: 'システムメッセージを無効化' },
 	'general.aiInstructions.disableSystemMessageDetail': { en: 'When disabled, Orchestra will not include anything in the system message except for content you specified above.', ja: '無効化すると、上記で指定した内容以外はシステムメッセージに含まれなくなります。' },
 
@@ -317,7 +317,7 @@ export const translations = {
 	'chat.suggested.summarize.hint': { en: 'Understand the whole project', ja: 'プロジェクト全体を把握' },
 	'chat.suggested.types': { en: 'How do types work in Rust?', ja: 'Rust の型システムについて教えて' },
 	'chat.suggested.types.hint': { en: 'Answer a technical question', ja: '技術的な疑問を解決' },
-	'chat.suggested.voidrules': { en: 'Create a .voidrules file for me', ja: '.voidrules ファイルを作成して' },
+	'chat.suggested.voidrules': { en: 'Create an AGENTS.md for this repository (build, test and style rules for coding agents)', ja: 'このリポジトリ用の AGENTS.md を作成して（ビルド・テスト手順とコーディング規約）' },
 	'chat.suggested.voidrules.hint': { en: 'Generate a file', ja: 'ファイルを生成' },
 	'chat.suggestedTitle': { en: 'Suggested prompts', ja: 'おすすめの質問' },
 	'chat.pastChats': { en: 'Past chats', ja: '過去のチャット' },
