@@ -336,6 +336,17 @@ export const builtinTools: {
 		name: 'kill_persistent_terminal',
 		description: `Interrupts and closes a persistent terminal that you opened with open_persistent_terminal.`,
 		params: { persistent_terminal_id: { description: `The ID of the persistent terminal.` } }
+	},
+
+	// --- planning ---
+
+	update_plan: {
+		name: 'update_plan',
+		description: `Create or update your step-by-step plan for the current task. The user sees it as a live checklist. Send the WHOLE plan every time (it replaces the previous one). At most one step may be in progress.`,
+		params: {
+			plan: { description: `The full plan as a Markdown checklist, one short step per line: "- [x] step" = completed, "- [~] step" = in progress, "- [ ] step" = pending. Example:\n- [x] Read the routing code\n- [~] Add the endpoint\n- [ ] Run the tests` },
+			explanation: { description: `Optional. One sentence on why the plan changed.` },
+		},
 	}
 
 
@@ -361,7 +372,7 @@ export const isABuiltinToolName = (toolName: string): toolName is BuiltinToolNam
 export const availableTools = (chatMode: ChatMode | null, mcpTools: InternalToolInfo[] | undefined) => {
 
 	const builtinToolNames: BuiltinToolName[] | undefined = chatMode === 'normal' ? undefined
-		: chatMode === 'gather' ? (Object.keys(builtinTools) as BuiltinToolName[]).filter(toolName => !(toolName in approvalTypeOfBuiltinToolName))
+		: chatMode === 'gather' ? (Object.keys(builtinTools) as BuiltinToolName[]).filter(toolName => !(toolName in approvalTypeOfBuiltinToolName) && toolName !== 'update_plan')
 			: chatMode === 'agent' ? Object.keys(builtinTools) as BuiltinToolName[]
 				: undefined
 
@@ -482,6 +493,7 @@ ${directoryStr}
 		details.push(`You will OFTEN need to gather context before making a change. Do not immediately make a change unless you have ALL relevant context.`)
 		details.push(`ALWAYS have maximal certainty in a change BEFORE you make it. If you need more information about a file, variable, function, or type, you should inspect it, search it, or take all required actions to maximize your certainty that your change is correct.`)
 		details.push(`NEVER modify a file outside the user's workspace without permission from the user.`)
+		details.push(`For a task with several distinct steps (roughly three or more, or anything that touches several files), call update_plan early with short, verifiable steps, before you start changing code. Keep exactly one step in progress; when a step is finished, mark it completed and start the next one in the same update. If you change course, update the plan and give the reason in "explanation". Before your final answer, update the plan so every step you did is completed. Skip the plan for simple one-step tasks and questions, and do not repeat the plan in your prose (the user already sees it).`)
 	}
 
 	if (mode === 'gather') {

@@ -573,6 +573,8 @@ export const translations = {
 	'cloudAgents.plan.title': { en: 'Plan', ja: '計画' },
 	'cloudAgents.plan.leader': { en: 'Leader: {model}', ja: 'リーダー: {model}' },
 	'cloudAgents.plan.progress': { en: '{done}/{total} done', ja: '{done}/{total} 完了' },
+	'cloudAgents.agentPlan.title': { en: 'Plan', ja: '計画' },
+	'cloudAgents.agentPlan.updated': { en: 'Updated the plan', ja: '計画を更新しました' },
 	'cloudAgents.task.done': { en: 'Done', ja: '完了' },
 	'cloudAgents.task.failed': { en: 'Failed', ja: '失敗' },
 	'cloudAgents.task.running': { en: 'Working', ja: '作業中' },

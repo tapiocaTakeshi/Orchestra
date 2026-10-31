@@ -32,13 +32,14 @@ import { AgentRole, ChatMode, displayInfoOfProviderName, contextTags, contextTag
 import { CommandsRegistry, ICommandService } from '../../../../../../../platform/commands/common/commands.js';
 import { WarningBox } from '../void-settings-tsx/WarningBox.js';
 import { getModelCapabilities, getIsReasoningEnabledState } from '../../../../common/modelCapabilities.js';
-import { AlertTriangle, File, Ban, Check, ChevronDown, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text, Image as ImageIcon, Paperclip, Palette, Blocks, SendHorizontal, Code, Package, RotateCcw, Loader2, ListPlus, Sun, Moon, Flame, ClipboardCheck, CornerUpLeft, Download as DownloadIcon, ExternalLink as ExternalLinkIcon, Bot, SlidersHorizontal, Coins, Repeat, LogIn } from 'lucide-react';
+import { AlertTriangle, File, Ban, Check, ChevronDown, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text, Image as ImageIcon, Paperclip, Palette, Blocks, SendHorizontal, Code, Package, RotateCcw, Loader2, ListPlus, Sun, Moon, Flame, ClipboardCheck, CornerUpLeft, CheckCircle2, Circle, CircleDot, Download as DownloadIcon, ExternalLink as ExternalLinkIcon, Bot, SlidersHorizontal, Coins, Repeat, LogIn } from 'lucide-react';
 import { ChatMessage, CheckpointEntry, StagingSelectionItem, ToolMessage } from '../../../../common/chatThreadServiceTypes.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, ToolName, LintErrorItem, ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsServiceTypes.js';
 import { CopyButton, EditToolAcceptRejectButtonsHTML, IconShell1, JumpToFileButton, JumpToTerminalButton, StatusIndicator, StatusIndicatorForApplyButton, useApplyStreamState, useEditToolStreamState } from '../markdown/ApplyBlockHoverButtons.js';
 import type { IsRunningType } from '../../../chatThreadService.js';
 import { acceptAllBg, acceptBorder, buttonFontSize, buttonTextColor, rejectAllBg, rejectBg, rejectBorder } from '../../../../common/helpers/colors.js';
 import { builtinToolNames, isABuiltinToolName, MAX_FILE_CHARS_PAGE, MAX_TERMINAL_INACTIVE_TIME } from '../../../../common/prompt/prompts.js';
+import { AgentPlanStep, agentPlanProgress } from '../../../../common/agentPlan.js';
 import { RawToolCallObj } from '../../../../common/sendLLMMessageTypes.js';
 import ErrorBoundary from './ErrorBoundary.js';
 import { ToolApprovalTypeSwitch } from '../void-settings-tsx/Settings.js';
@@ -3342,6 +3343,7 @@ const titleOfBuiltinToolName = {
 
 	'read_lint_errors': { done: `リンターエラーを読み込みました`, proposed: 'リンターエラーの読み込み', running: loadingTitleWrapper('リンターエラーを読み込み中') },
 	'search_in_file': { done: 'ファイル内を検索しました', proposed: 'ファイル内を検索', running: loadingTitleWrapper('ファイル内を検索中') },
+	'update_plan': { done: '計画を更新しました', proposed: '計画の更新', running: loadingTitleWrapper('計画を更新中') },
 } as const satisfies Record<BuiltinToolName, { done: any, proposed: any, running: any }>
 
 
@@ -3481,7 +3483,16 @@ const toolNameToDesc = (toolName: BuiltinToolName, _toolParams: BuiltinToolCallP
 				desc1: getBasename(toolParams.uri.fsPath),
 				desc1Info: getRelative(toolParams.uri, accessor),
 			}
-		}
+		},
+		'update_plan': () => {
+			const toolParams = _toolParams as BuiltinToolCallParams['update_plan']
+			const { done, total } = agentPlanProgress(toolParams.plan)
+			const current = toolParams.plan.find(s => s.status === 'in_progress')
+			return {
+				desc1: `${done}/${total} 完了`,
+				desc1Info: current ? `作業中: ${current.step}` : undefined,
+			}
+		},
 	}
 
 	try {
@@ -3836,7 +3847,62 @@ const MCPToolWrapper = ({ toolMessage }: WrapperProps<string>) => {
 
 type ResultWrapper<T extends ToolName> = (props: WrapperProps<T>) => React.ReactNode
 
+/** update_plan の計画 (エージェント自身のチェックリスト。Codex の update_plan と同じ) */
+const AgentPlanChecklist = ({ plan, explanation }: { plan: AgentPlanStep[], explanation: string | null }) => {
+	return <div className='flex flex-col gap-0.5 px-2 py-1'>
+		{explanation && <div className='text-void-fg-3 text-xs pb-1 whitespace-pre-wrap break-words'>{explanation}</div>}
+		{plan.map((s, i) => (
+			<div key={i} className='flex items-start gap-2 text-xs leading-5' title={s.step}>
+				<span className='flex-shrink-0 mt-[3px]'>
+					{s.status === 'completed' ? <CheckCircle2 size={13} className='text-green-500' />
+						: s.status === 'in_progress' ? <CircleDot size={13} className='text-void-fg-1' />
+							: <Circle size={13} className='text-void-fg-4' />}
+				</span>
+				<span className={`min-w-0 break-words ${s.status === 'completed' ? 'text-void-fg-4 line-through' : s.status === 'in_progress' ? 'text-void-fg-1 font-semibold' : 'text-void-fg-2'}`}>
+					{s.step}
+				</span>
+			</div>
+		))}
+	</div>
+}
+
 const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: ResultWrapper<T>, } } = {
+	'update_plan': {
+		resultWrapper: ({ toolMessage, threadId, messageIdx }) => {
+			const accessor = useAccessor()
+			const chatThreadsState = useChatThreadsState()
+
+			if (toolMessage.type === 'tool_request') return null
+			if (toolMessage.type === 'running_now') return null
+
+			// 最新の計画だけ開いて出し、それより前の更新は畳む (押すと開く)
+			const messages = chatThreadsState.allThreads[threadId]?.messages ?? []
+			let latestIdx = -1
+			for (let i = messages.length - 1; i >= 0; i--) {
+				const m = messages[i]
+				if (m.role === 'tool' && m.name === 'update_plan' && m.type === 'success') { latestIdx = i; break }
+			}
+
+			const title = getTitle(toolMessage)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
+			const isRejected = toolMessage.type === 'rejected'
+			const componentParams: ToolHeaderParams = { title, desc1, desc1Info, isError: false, icon: null, isRejected }
+
+			if (toolMessage.type === 'success') {
+				componentParams.children = <AgentPlanChecklist plan={toolMessage.result.plan} explanation={toolMessage.result.explanation} />
+				if (messageIdx === latestIdx) componentParams.isOpen = true
+			}
+			else if (toolMessage.type === 'tool_error') {
+				componentParams.bottomChildren = <BottomChildren title='Error'>
+					<CodeChildren>
+						{toolMessage.result}
+					</CodeChildren>
+				</BottomChildren>
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />
+		},
+	},
 	'read_file': {
 		resultWrapper: ({ toolMessage }) => {
 			const accessor = useAccessor()
