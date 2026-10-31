@@ -20,6 +20,7 @@ import { MAX_CHILDREN_URIs_PAGE, MAX_FILE_CHARS_PAGE, MAX_TERMINAL_BG_COMMAND_TI
 import { IVoidSettingsService } from '../common/voidSettingsService.js'
 import { generateUuid } from '../../../../base/common/uuid.js'
 import { agentPlanProgress, parseAgentPlan } from '../common/agentPlan.js'
+import { formatPatchResult, movedAwayPaths, parsePatch, PatchError, planPatch } from '../common/applyPatch.js'
 
 
 // tool use for AI
@@ -290,6 +291,30 @@ export class ToolsService implements IToolsService {
 				const persistentTerminalId = validateProposedTerminalId(terminalIdUnknown);
 				return { persistentTerminalId };
 			},
+			apply_patch: (params: RawToolParamsObj) => {
+				const { patch: patchUnknown, input: inputUnknown } = params as Record<string, unknown>
+				const patch = validateStr('patch', patchUnknown ?? inputUnknown)
+				const hunks = parsePatch(patch)
+				const folders = workspaceContextService.getWorkspace().folders
+				const uriOfPath: { [pathInPatch: string]: URI } = {}
+				const resolve = (p: string) => {
+					if (uriOfPath[p]) { return }
+					let uri: URI
+					if (p.includes('://')) { uri = validateURI(p) }
+					else if (/^(\/|[a-zA-Z]:[\\/])/.test(p)) { uri = URI.file(p) }
+					else {
+						if (folders.length === 0) { throw new PatchError(`Cannot resolve the relative path "${p}": no workspace folder is open. Use a full path.`) }
+						uri = URI.joinPath(folders[0].uri, ...p.split(/[\\/]/).filter(Boolean))
+					}
+					if (!workspaceContextService.isInsideWorkspace(uri)) { throw new PatchError(`"${p}" is outside the workspace; apply_patch only changes files inside it.`) }
+					uriOfPath[p] = uri
+				}
+				for (const h of hunks) {
+					resolve(h.path)
+					if (h.type === 'update' && h.movePath) { resolve(h.movePath) }
+				}
+				return { patch, hunks, uriOfPath }
+			},
 			update_plan: (params: RawToolParamsObj) => {
 				// Native tool calls may pass the plan as an array even though the schema says string.
 				const { plan, explanation } = params as Record<string, unknown>
@@ -469,6 +494,52 @@ export class ToolsService implements IToolsService {
 				await this.terminalToolService.killPersistentTerminal(persistentTerminalId)
 				return { result: {} }
 			},
+			apply_patch: async ({ hunks, uriOfPath }) => {
+				const uriOf = (p: string) => uriOfPath[p]
+				for (const uri of Object.values(uriOfPath)) {
+					if (this.commandBarService.getStreamState(uri) === 'streaming') {
+						throw new Error(`Another LLM is currently making changes to ${uri.fsPath}. Please stop streaming for now and ask the user to resume later.`)
+					}
+				}
+				// Work out every file's new contents first (open editors' unsaved text wins), so a patch that
+				// does not apply changes nothing.
+				const changes = await planPatch(hunks, async (p) => {
+					const uri = uriOf(p)
+					const { model } = voidModelService.getModel(uri)
+					if (model && !model.isDisposed()) { return model.getValue(EndOfLinePreference.LF) }
+					if (!(await fileService.exists(uri))) { return null }
+					return (await fileService.readFile(uri)).value.toString()
+				}, (p) => uriOf(p).toString())
+
+				// Writes go through the same path as rewrite_file, so they show up as diffs the user can accept or reject.
+				const written: URI[] = []
+				for (const c of changes) {
+					if (c.newContents === null) { continue }
+					const uri = uriOf(c.path)
+					if (!(await fileService.exists(uri))) {
+						await fileService.createFile(uri)
+						editCodeService.markFileCreatedByAgent(uri)
+					}
+					await voidModelService.initializeModel(uri)
+					await editCodeService.callBeforeApplyOrEdit(uri)
+					editCodeService.instantlyRewriteFile({ uri, newContent: c.newContents })
+					written.push(uri)
+				}
+				for (const p of [...changes.filter(c => c.kind === 'delete').map(c => c.path), ...movedAwayPaths(changes)]) {
+					const uri = uriOf(p)
+					if (await fileService.exists(uri)) { await fileService.del(uri) }
+				}
+
+				const files = changes.map(c => ({ kind: c.kind, uri: uriOf(c.path), fromUri: c.fromPath ? uriOf(c.fromPath) : null, added: c.added, removed: c.removed }))
+				const resultPromise = Promise.resolve().then(async () => {
+					await timeout(2000)
+					const lintErrors = written
+						.map(uri => ({ uri, lintErrors: this._getLintErrors(uri).lintErrors ?? [] }))
+						.filter(x => x.lintErrors.length > 0)
+					return { files, lintErrors }
+				})
+				return { result: resultPromise }
+			},
 			// Nothing to run: the validated plan is the result, and the chat shows it as a checklist.
 			update_plan: async (params) => {
 				return { result: params }
@@ -575,6 +646,11 @@ export class ToolsService implements IToolsService {
 			},
 			kill_persistent_terminal: (params, _result) => {
 				return `Successfully closed terminal "${params.persistentTerminalId}".`;
+			},
+			apply_patch: (_params, result) => {
+				const summary = formatPatchResult(result.files.map(f => ({ kind: f.kind, path: f.uri.fsPath, fromPath: f.fromUri?.fsPath ?? null, newContents: null, added: f.added, removed: f.removed })))
+				const lint = result.lintErrors.map(x => `Lint errors in ${x.uri.fsPath}:\n${stringifyLintErrors(x.lintErrors)}`).join('\n\n')
+				return lint ? `${summary}\n\n${lint}\n\n(Fix the lint errors if they were caused by your change.)` : summary
 			},
 			update_plan: (_params, result) => {
 				const { done, total } = agentPlanProgress(result.plan)

@@ -123,6 +123,7 @@ export interface CloudSessionEvent {
 	 *  - tool:      { name, args, ok, output, durationMs }
 	 *               name が 'update_plan' なら plan: { step, status: 'pending' | 'in_progress' | 'completed' }[] と explanation? も付く
 	 *               (エージェント自身の計画。Codex の update_plan と同じ。最新のものがいまの計画)
+	 *               name が 'apply_patch' なら成功時に files: { kind: 'add' | 'update' | 'delete', path, fromPath, added, removed }[] も付く
 	 *  - status:    { status, message? }
 	 *  - error:     { message }
 	 *  - done:      { summary, changedFiles }
