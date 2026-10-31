@@ -2775,6 +2775,42 @@ const AgentPlanCard = ({ plan, explanation, latest, active }: { plan: AgentPlanS
 	);
 };
 
+/** compaction イベント: 会話が長くなったので、それまでの経緯をエージェントが要約した (押すと要約が開く) */
+const CompactionRow = ({ data, roleName }: { data: any; roleName?: string }) => {
+	const { t } = useTranslation();
+	const [open, setOpen] = useState(false);
+	const summary = typeof data?.summary === 'string' ? data.summary : '';
+	if (!summary) return null;
+	const chars = typeof data?.beforeChars === 'number' ? data.beforeChars : 0;
+	return (
+		<div>
+			<button
+				type='button'
+				className='oca-tool'
+				onClick={() => setOpen(v => !v)}
+				aria-expanded={open}
+				title={t('cloudAgents.compaction.hint')}
+				style={{
+					display: 'flex', alignItems: 'center', gap: '7px', width: '100%', boxSizing: 'border-box',
+					padding: '3px 6px', border: 'none', background: 'transparent', color: C.fgMuted,
+					cursor: 'pointer', fontFamily: 'inherit', fontSize: '12px', textAlign: 'left', minHeight: '24px',
+				}}
+			>
+				<Layers size={12} style={{ flexShrink: 0 }} />
+				{roleName && <RoleChip role={String(data?.role ?? '')} name={roleName} />}
+				<span style={{ flex: 1, minWidth: 0, ...ellipsis }}>{t('cloudAgents.compaction.title')}</span>
+				{chars > 0 && <span style={{ fontSize: '10px', flexShrink: 0 }}>{t('cloudAgents.compaction.size').replace('{k}', String(Math.round(chars / 1000)))}</span>}
+				{open ? <ChevronDown size={12} style={{ flexShrink: 0 }} /> : <ChevronRight size={12} style={{ flexShrink: 0, opacity: 0.6 }} />}
+			</button>
+			{open && (
+				<div className='oca-md' style={{ margin: '2px 6px 6px 25px', padding: '8px 10px', borderRadius: '6px', border: `1px solid ${C.border}`, background: C.bgSide, fontSize: '12px', lineHeight: 1.6, color: C.fg }}>
+					<ChatMarkdownRender string={summary} chatMessageLocation={undefined} isApplyEnabled={false} isLinkDetectionEnabled={false} />
+				</div>
+			)}
+		</div>
+	);
+};
+
 /** task イベント: start は区切りの見出し (「2/4 · 実装 (Claude Opus) — タイトル」)、done / failed は結果の短い行 */
 const TaskEventRow = ({ data, position }: { data: CloudTaskEventData; position: { pos: number; total: number } | undefined }) => {
 	const { t } = useTranslation();
@@ -3156,6 +3192,10 @@ const EventView = ({ event, onReview, division, active, onContinueGoal, continue
 			return <PullRequestEventCard data={data as CloudPullRequestEventData} />;
 		case 'goal':
 			return <GoalCard data={data as CloudGoalEventData} />;
+		case 'compaction': {
+			const role = typeof data.role === 'string' && data.role ? data.role : data.phase === 'review' ? 'reviewer' : '';
+			return <CompactionRow data={data} roleName={role ? division?.roleNames.get(role) || (data.phase === 'review' ? t('cloudAgents.goal.reviewer') : role) : undefined} />;
+		}
 		case 'review':
 			return data.status === 'start'
 				? <ReviewStartRow data={data} roleName={division?.roleNames.get(data.role || 'reviewer') || t('cloudAgents.goal.reviewer')} />

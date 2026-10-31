@@ -111,7 +111,7 @@ export interface CloudSession {
 	approvalMode?: boolean;
 }
 
-export type CloudSessionEventType = 'user' | 'assistant' | 'tool' | 'status' | 'error' | 'done' | 'plan' | 'task' | 'approval' | 'pull_request' | 'goal' | 'review';
+export type CloudSessionEventType = 'user' | 'assistant' | 'tool' | 'status' | 'error' | 'done' | 'plan' | 'task' | 'approval' | 'pull_request' | 'goal' | 'review' | 'compaction';
 
 export interface CloudSessionEvent {
 	seq: number;
@@ -133,6 +133,8 @@ export interface CloudSessionEvent {
 	 *  - pull_request: CloudPullRequestEventData (a PR was created / updated from this session)
 	 *  - goal:      CloudGoalEventData (目標ループ。作業の前にリーダーが立てた目標と達成条件)
 	 *  - review:    CloudReviewEventData (目標ループ。ラウンドの終わりのレビュー。status: start → done)
+	 *  - compaction: { summary, upToSeq, beforeChars?, auto?, role?, phase? } 会話が長くなったので、upToSeq までの経緯を
+	 *               エージェントが要約した (Codex の自動コンパクション)。以後のモデルにはその要約が渡る
 	 *  目標ループでは各ラウンドのイベントに round が付き、レビュアーの assistant / tool には phase: 'review' が付く。
 	 *  Division Project モードでは assistant に role?: string (ロールの slug) も付く。
 	 *  assistant / tool は直前に start した task に属する。
