@@ -43,6 +43,7 @@ import {
 import { availableTools, InternalToolInfo } from '../../common/prompt/prompts.js';
 import { generateUuid } from '../../../../../base/common/uuid.js';
 import { extractSearchReplaceBlocks } from '../../common/helpers/extractCodeFromResult.js';
+import { extractSearchedSites, mergeSearchedSites, logSearchedSites, searchedSitesMarkdown, isDefaultWebSearchEnabled, isWebSearchRejectedError } from '../../common/searchedSites.js';
 
 const getGoogleApiKey = async () => {
 	// module‑level singleton
@@ -373,6 +374,7 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 	let toolName = ''
 	let toolId = ''
 	let toolParamsStr = ''
+	let searchedSites: string[] = []
 
 	openai.chat.completions
 		.create(options)
@@ -380,6 +382,7 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 			_setAborter(() => response.controller.abort())
 			// when receive text
 			for await (const chunk of response) {
+				searchedSites = mergeSearchedSites(searchedSites, extractSearchedSites(chunk))
 				// message
 				const newText = chunk.choices[0]?.delta?.content ?? ''
 				fullTextSoFar += newText
@@ -411,6 +414,7 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 				})
 
 			}
+			logSearchedSites(`${providerName} ${modelName}`, searchedSites)
 			// on final
 			if (!fullTextSoFar && !fullReasoningSoFar && !toolName) {
 				onError({ message: 'Void: Response from model was empty.', fullError: null })
@@ -643,8 +647,8 @@ const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessag
 
 	// tools
 	const potentialTools = anthropicTools(chatMode, mcpTools)
-	const nativeToolsObj = potentialTools && specialToolFormat === 'anthropic-style' ?
-		{ tools: potentialTools, tool_choice: { type: 'auto' } } as const
+	const nativeToolsObj: { tools?: Anthropic.Messages.ToolUnion[] } = potentialTools && specialToolFormat === 'anthropic-style' ?
+		{ tools: potentialTools as Anthropic.Messages.ToolUnion[] }
 		: {}
 
 
@@ -654,16 +658,6 @@ const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessag
 		dangerouslyAllowBrowser: true
 	});
 
-	const stream = anthropic.messages.stream({
-		system: separateSystemMessage ?? undefined,
-		messages: messages as AnthropicLLMChatMessage[],
-		model: modelName,
-		max_tokens: maxTokens ?? 4_096, // anthropic requires this
-		...includeInPayload,
-		...nativeToolsObj,
-
-	})
-
 	// manually parse out tool results if XML
 	if (!specialToolFormat) {
 		const { newOnText, newOnFinalMessage } = extractXMLToolsWrapper(onText, onFinalMessage, chatMode, mcpTools)
@@ -671,81 +665,112 @@ const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessag
 		onFinalMessage = newOnFinalMessage
 	}
 
-	// when receive text
-	let fullText = ''
-	let fullReasoning = ''
+	// Built-in web search (server tool: Anthropic runs it, so it never comes back as our tool call)
+	const webSearchTool = { type: 'web_search_20250305', name: 'web_search', max_uses: 5 }
 
-	let fullToolName = ''
-	let fullToolParams = ''
-
-
-	const runOnText = () => {
-		onText({
-			fullText,
-			fullReasoning,
-			toolCall: !fullToolName ? undefined : { name: fullToolName, rawParams: {}, isDone: false, doneParams: [], id: 'dummy' },
+	const startStream = (withWebSearch: boolean) => {
+		const tools = [
+			...(nativeToolsObj.tools ?? []),
+			...(withWebSearch ? [webSearchTool] : []),
+		]
+		const stream = anthropic.messages.stream({
+			system: separateSystemMessage ?? undefined,
+			messages: messages as AnthropicLLMChatMessage[],
+			model: modelName,
+			max_tokens: maxTokens ?? 4_096, // anthropic requires this
+			...includeInPayload,
+			...(tools.length ? { tools: tools as Anthropic.Messages.ToolUnion[], tool_choice: { type: 'auto' } as const } : {}),
 		})
+
+		// when receive text
+		let fullText = ''
+		let fullReasoning = ''
+
+		let fullToolName = ''
+		let fullToolParams = ''
+		// input_json_delta also streams the web search query (server_tool_use); only our tool_use is a tool call
+		let activeBlockType = ''
+		let emitted = false
+
+
+		const runOnText = () => {
+			emitted = true
+			onText({
+				fullText,
+				fullReasoning,
+				toolCall: !fullToolName ? undefined : { name: fullToolName, rawParams: {}, isDone: false, doneParams: [], id: 'dummy' },
+			})
+		}
+		// there are no events for tool_use, it comes in at the end
+		stream.on('streamEvent', e => {
+			// start block
+			if (e.type === 'content_block_start') {
+				activeBlockType = e.content_block.type
+				if (e.content_block.type === 'text') {
+					if (fullText) fullText += '\n\n' // starting a 2nd text block
+					fullText += e.content_block.text
+					runOnText()
+				}
+				else if (e.content_block.type === 'thinking') {
+					if (fullReasoning) fullReasoning += '\n\n' // starting a 2nd reasoning block
+					fullReasoning += e.content_block.thinking
+					runOnText()
+				}
+				else if (e.content_block.type === 'redacted_thinking') {
+					console.log('delta', e.content_block.type)
+					if (fullReasoning) fullReasoning += '\n\n' // starting a 2nd reasoning block
+					fullReasoning += '[redacted_thinking]'
+					runOnText()
+				}
+				else if (e.content_block.type === 'tool_use') {
+					fullToolName += e.content_block.name ?? '' // anthropic gives us the tool name in the start block
+					runOnText()
+				}
+			}
+
+			// delta
+			else if (e.type === 'content_block_delta') {
+				if (e.delta.type === 'text_delta') {
+					fullText += e.delta.text
+					runOnText()
+				}
+				else if (e.delta.type === 'thinking_delta') {
+					fullReasoning += e.delta.thinking
+					runOnText()
+				}
+				else if (e.delta.type === 'input_json_delta' && activeBlockType === 'tool_use') { // tool use
+					fullToolParams += e.delta.partial_json ?? '' // anthropic gives us the partial delta (string) here - https://docs.anthropic.com/en/api/messages-streaming
+					runOnText()
+				}
+			}
+		})
+
+		// on done - (or when error/fail) - this is called AFTER last streamEvent
+		stream.on('finalMessage', (response) => {
+			logSearchedSites(`Anthropic ${modelName}`, extractSearchedSites(response))
+			const anthropicReasoning = response.content.filter(c => c.type === 'thinking' || c.type === 'redacted_thinking')
+			const tools = response.content.filter(c => c.type === 'tool_use')
+			// console.log('TOOLS!!!!!!', JSON.stringify(tools, null, 2))
+			// console.log('TOOLS!!!!!!', JSON.stringify(response, null, 2))
+			const toolCall = tools[0] && rawToolCallObjOfAnthropicParams(tools[0])
+			const toolCallObj = toolCall ? { toolCall } : {}
+
+			onFinalMessage({ fullText, fullReasoning, anthropicReasoning, ...toolCallObj })
+		})
+		// on error
+		stream.on('error', (error) => {
+			// The model or the organization cannot use web search: ask again without it
+			if (withWebSearch && !emitted && isWebSearchRejectedError(error)) {
+				console.log(`[Anthropic ${modelName}] web search rejected; retrying without it: ${error}`)
+				startStream(false)
+				return
+			}
+			if (error instanceof Anthropic.APIError && error.status === 401) { onError({ message: invalidApiKeyMessage(providerName), fullError: error }) }
+			else { onError({ message: error + '', fullError: error }) }
+		})
+		_setAborter(() => stream.controller.abort())
 	}
-	// there are no events for tool_use, it comes in at the end
-	stream.on('streamEvent', e => {
-		// start block
-		if (e.type === 'content_block_start') {
-			if (e.content_block.type === 'text') {
-				if (fullText) fullText += '\n\n' // starting a 2nd text block
-				fullText += e.content_block.text
-				runOnText()
-			}
-			else if (e.content_block.type === 'thinking') {
-				if (fullReasoning) fullReasoning += '\n\n' // starting a 2nd reasoning block
-				fullReasoning += e.content_block.thinking
-				runOnText()
-			}
-			else if (e.content_block.type === 'redacted_thinking') {
-				console.log('delta', e.content_block.type)
-				if (fullReasoning) fullReasoning += '\n\n' // starting a 2nd reasoning block
-				fullReasoning += '[redacted_thinking]'
-				runOnText()
-			}
-			else if (e.content_block.type === 'tool_use') {
-				fullToolName += e.content_block.name ?? '' // anthropic gives us the tool name in the start block
-				runOnText()
-			}
-		}
-
-		// delta
-		else if (e.type === 'content_block_delta') {
-			if (e.delta.type === 'text_delta') {
-				fullText += e.delta.text
-				runOnText()
-			}
-			else if (e.delta.type === 'thinking_delta') {
-				fullReasoning += e.delta.thinking
-				runOnText()
-			}
-			else if (e.delta.type === 'input_json_delta') { // tool use
-				fullToolParams += e.delta.partial_json ?? '' // anthropic gives us the partial delta (string) here - https://docs.anthropic.com/en/api/messages-streaming
-				runOnText()
-			}
-		}
-	})
-
-	// on done - (or when error/fail) - this is called AFTER last streamEvent
-	stream.on('finalMessage', (response) => {
-		const anthropicReasoning = response.content.filter(c => c.type === 'thinking' || c.type === 'redacted_thinking')
-		const tools = response.content.filter(c => c.type === 'tool_use')
-		// console.log('TOOLS!!!!!!', JSON.stringify(tools, null, 2))
-		// console.log('TOOLS!!!!!!', JSON.stringify(response, null, 2))
-		const toolCall = tools[0] && rawToolCallObjOfAnthropicParams(tools[0])
-		const toolCallObj = toolCall ? { toolCall } : {}
-
-		onFinalMessage({ fullText, fullReasoning, anthropicReasoning, ...toolCallObj })
-	})
-	// on error
-	stream.on('error', (error) => {
-		if (error instanceof Anthropic.APIError && error.status === 401) { onError({ message: invalidApiKeyMessage(providerName), fullError: error }) }
-		else { onError({ message: error + '', fullError: error }) }
-	})
-	_setAborter(() => stream.controller.abort())
+	startStream(isDefaultWebSearchEnabled(process.env))
 }
 
 
@@ -939,79 +964,101 @@ const sendGeminiChat = async ({
 		onFinalMessage = newOnFinalMessage
 	}
 
-	// when receive text
-	let fullReasoningSoFar = ''
-	let fullTextSoFar = ''
+	// Built-in Google Search grounding. Gemini 2.x cannot mix it with function calling,
+	// so there it is only sent when no function tools are; Gemini 3+ takes both.
+	const canMixSearchWithFunctions = /gemini-([3-9]|\d{2,})/i.test(modelName)
+	const wantWebSearch = isDefaultWebSearchEnabled(process.env) && (!toolConfig || canMixSearchWithFunctions)
 
-	let toolName = ''
-	let toolParamsStr = ''
-	let toolId = ''
+	const startStream = (withWebSearch: boolean) => {
+		let fullReasoningSoFar = ''
+		let fullTextSoFar = ''
 
+		let toolName = ''
+		let toolParamsStr = ''
+		let toolId = ''
+		let searchedSites: string[] = []
+		let emitted = false
 
-	genAI.models.generateContentStream({
-		model: modelName,
-		config: {
-			systemInstruction: separateSystemMessage,
-			thinkingConfig: thinkingConfig,
-			tools: toolConfig,
-		},
-		contents: messages as GeminiLLMChatMessage[],
-	})
-		.then(async (stream) => {
-			_setAborter(() => { stream.return(fullTextSoFar); });
+		const tools: GeminiTool[] = [
+			...(toolConfig ?? []),
+			...(withWebSearch ? [{ googleSearch: {} } as GeminiTool] : []),
+		]
 
-			// Process the stream
-			for await (const chunk of stream) {
-				// message
-				const newText = chunk.text ?? ''
-				fullTextSoFar += newText
-
-				// tool call
-				const functionCalls = chunk.functionCalls
-				if (functionCalls && functionCalls.length > 0) {
-					const functionCall = functionCalls[0] // Get the first function call
-					toolName = functionCall.name ?? ''
-					toolParamsStr = JSON.stringify(functionCall.args ?? {})
-					toolId = functionCall.id ?? ''
-				}
-
-				// (do not handle reasoning yet)
-
-				// call onText
-				onText({
-					fullText: fullTextSoFar,
-					fullReasoning: fullReasoningSoFar,
-					toolCall: !toolName ? undefined : { name: toolName, rawParams: {}, isDone: false, doneParams: [], id: toolId },
-				})
-			}
-
-			// on final
-			if (!fullTextSoFar && !fullReasoningSoFar && !toolName) {
-				onError({ message: 'Void: Response from model was empty.', fullError: null })
-			} else {
-				if (!toolId) toolId = generateUuid() // ids are empty, but other providers might expect an id
-				const toolCall = rawToolCallObjOfParamsStr(toolName, toolParamsStr, toolId)
-				const toolCallObj = toolCall ? { toolCall } : {}
-				onFinalMessage({ fullText: fullTextSoFar, fullReasoning: fullReasoningSoFar, anthropicReasoning: null, ...toolCallObj });
-			}
+		genAI.models.generateContentStream({
+			model: modelName,
+			config: {
+				systemInstruction: separateSystemMessage,
+				thinkingConfig: thinkingConfig,
+				tools: tools.length ? tools : undefined,
+			},
+			contents: messages as GeminiLLMChatMessage[],
 		})
-		.catch(error => {
-			const message = error?.message
-			if (typeof message === 'string') {
+			.then(async (stream) => {
+				_setAborter(() => { stream.return(fullTextSoFar); });
 
-				if (error.message?.includes('API key')) {
-					onError({ message: invalidApiKeyMessage(providerName), fullError: error });
+				// Process the stream
+				for await (const chunk of stream) {
+					searchedSites = mergeSearchedSites(searchedSites, extractSearchedSites(chunk))
+					// message
+					const newText = chunk.text ?? ''
+					fullTextSoFar += newText
+
+					// tool call
+					const functionCalls = chunk.functionCalls
+					if (functionCalls && functionCalls.length > 0) {
+						const functionCall = functionCalls[0] // Get the first function call
+						toolName = functionCall.name ?? ''
+						toolParamsStr = JSON.stringify(functionCall.args ?? {})
+						toolId = functionCall.id ?? ''
+					}
+
+					// (do not handle reasoning yet)
+
+					// call onText
+					emitted = true
+					onText({
+						fullText: fullTextSoFar,
+						fullReasoning: fullReasoningSoFar,
+						toolCall: !toolName ? undefined : { name: toolName, rawParams: {}, isDone: false, doneParams: [], id: toolId },
+					})
 				}
-				else if (error?.message?.includes('429')) {
-					onError({ message: 'Rate limit reached. ' + error, fullError: error });
+
+				logSearchedSites(`Gemini ${modelName}`, searchedSites)
+				// on final
+				if (!fullTextSoFar && !fullReasoningSoFar && !toolName) {
+					onError({ message: 'Void: Response from model was empty.', fullError: null })
+				} else {
+					if (!toolId) toolId = generateUuid() // ids are empty, but other providers might expect an id
+					const toolCall = rawToolCallObjOfParamsStr(toolName, toolParamsStr, toolId)
+					const toolCallObj = toolCall ? { toolCall } : {}
+					onFinalMessage({ fullText: fullTextSoFar, fullReasoning: fullReasoningSoFar, anthropicReasoning: null, ...toolCallObj });
 				}
-				else
+			})
+			.catch(error => {
+				// The model cannot use Google Search here: ask again without it
+				if (withWebSearch && !emitted && isWebSearchRejectedError(error)) {
+					console.log(`[Gemini ${modelName}] web search rejected; retrying without it: ${error}`)
+					startStream(false)
+					return
+				}
+				const message = error?.message
+				if (typeof message === 'string') {
+
+					if (error.message?.includes('API key')) {
+						onError({ message: invalidApiKeyMessage(providerName), fullError: error });
+					}
+					else if (error?.message?.includes('429')) {
+						onError({ message: 'Rate limit reached. ' + error, fullError: error });
+					}
+					else
+						onError({ message: error + '', fullError: error });
+				}
+				else {
 					onError({ message: error + '', fullError: error });
-			}
-			else {
-				onError({ message: error + '', fullError: error });
-			}
-		})
+				}
+			})
+	}
+	startStream(wantWebSearch)
 };
 
 
@@ -1463,7 +1510,7 @@ const callDivisionGenerateStream = async (
 	sessionId?: string,
 	workspacePath?: string,
 	routingOptions?: DivisionRoutingOptions,
-): Promise<{ output: string; error?: string; provider?: string; durationMs?: number }> => {
+): Promise<{ output: string; error?: string; provider?: string; durationMs?: number; citations?: string[] }> => {
 	try {
 		const apiKey = divisionApiKey || process.env.DIVISION_API_KEY || '';
 		const headers: Record<string, string> = {
@@ -1521,6 +1568,7 @@ const callDivisionGenerateStream = async (
 		let fullOutput = '';
 		let provider = '';
 		let durationMs = 0;
+		let citations: string[] = [];
 
 		while (true) {
 			const { done, value } = await reader.read();
@@ -1538,6 +1586,7 @@ const callDivisionGenerateStream = async (
 					if (rawData) {
 						try {
 							const data = JSON.parse(rawData);
+							citations = mergeSearchedSites(citations, extractSearchedSites(data));
 							switch (currentEvent) {
 								case 'chunk':
 								case 'text':
@@ -1570,7 +1619,8 @@ const callDivisionGenerateStream = async (
 			}
 		}
 
-		return { output: fullOutput, provider, durationMs };
+		logSearchedSites('DivisionAPI', citations);
+		return { output: fullOutput, provider, durationMs, ...(citations.length ? { citations } : {}) };
 	} catch (e: any) {
 		if (e?.name === 'AbortError') {
 			return { output: '', error: 'Aborted' };
@@ -1753,7 +1803,7 @@ const callDivisionTaskExecute = async (
 	chatHistory?: { role: 'user' | 'assistant'; content: string }[],
 	workspacePath?: string,
 	routingOptions?: DivisionRoutingOptions,
-): Promise<{ output: string; error?: string; provider?: string; durationMs?: number }> => {
+): Promise<{ output: string; error?: string; provider?: string; durationMs?: number; citations?: string[] }> => {
 	try {
 		const apiKey = divisionApiKey || process.env.DIVISION_API_KEY || '';
 		const headers: Record<string, string> = {
@@ -1794,7 +1844,10 @@ const callDivisionTaskExecute = async (
 			const data = await response.json().catch(() => null) as any;
 			const out = (data && (data.output || data?.task?.output || data?.result)) || '';
 			if (out) onChunk(out);
+			const jsonCitations = extractSearchedSites(data);
+			logSearchedSites('DivisionAPI', jsonCitations);
 			return {
+				...(jsonCitations.length ? { citations: jsonCitations } : {}),
 				output: out,
 				provider: data?.provider || '',
 				durationMs: data?.durationMs || 0,
@@ -1810,6 +1863,7 @@ const callDivisionTaskExecute = async (
 		let fullOutput = '';
 		let provider = '';
 		let durationMs = 0;
+		let citations: string[] = [];
 
 		while (true) {
 			const { done, value } = await reader.read();
@@ -1827,6 +1881,7 @@ const callDivisionTaskExecute = async (
 					if (rawData) {
 						try {
 							const data = JSON.parse(rawData);
+							citations = mergeSearchedSites(citations, extractSearchedSites(data));
 							switch (currentEvent) {
 								case 'chunk':
 								case 'text':
@@ -1859,7 +1914,8 @@ const callDivisionTaskExecute = async (
 			}
 		}
 
-		return { output: fullOutput, provider, durationMs };
+		logSearchedSites('DivisionAPI', citations);
+		return { output: fullOutput, provider, durationMs, ...(citations.length ? { citations } : {}) };
 	} catch (e: any) {
 		if (e?.name === 'AbortError') {
 			return { output: '', error: 'Aborted' };
@@ -3198,6 +3254,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					appendText('\n```\n');
 				}
 				appendText('\n\n');
+				appendText(searchedSitesMarkdown(result.citations ?? []));
 
 				if (workspaceFolderPath) {
 					const { savedFiles, fileOperations, commands } = saveCodeBlocksFromOutput(output, `direct-${selectedModel}`, workspaceFolderPath);
@@ -4113,6 +4170,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					]),
 					workspaceFolderPath, routingOptions,
 				);
+				let taskSearchedSites = execResult.citations ?? [];
 
 				if (!execResult.error) {
 					contextLedger.recordGranted(i, roleContextBlock.grantedPaths);
@@ -4158,6 +4216,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 							]),
 							workspaceFolderPath, routingOptions,
 						);
+						taskSearchedSites = mergeSearchedSites(taskSearchedSites, execResult.citations ?? []);
 						if (execResult.error) break;
 					}
 				}
@@ -4177,6 +4236,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				const fences = (output.match(/```/g) || []).length;
 				if (fences % 2 !== 0) appendText(`\n\`\`\`\n`);
 				appendText(`\n\n`);
+				appendText(searchedSitesMarkdown(taskSearchedSites, task.role));
 
 				// Coder 系: コードブロックを実ファイルに書き出す
 				if (output && workspaceFolderPath && isCoderLikeRole(role)) {
