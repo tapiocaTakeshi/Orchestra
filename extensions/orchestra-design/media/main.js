@@ -27,8 +27,16 @@
 		/** @type {number | null} */
 		editingId: null,
 		showingProposal: false,
+		/** 右パネルの幅 (px)。null なら既定 */
+		sideWidth: typeof saved.sideWidth === 'number' ? saved.sideWidth : null,
+		/** Properties の高さ (右パネルに対する割合 0-1)。null なら既定 */
+		propsRatio: typeof saved.propsRatio === 'number' ? saved.propsRatio : null,
+		aiExpanded: saved.aiExpanded === true,
 	};
-	const persist = () => vscode.setState({ mode: state.mode, device: state.device, selectedId: state.selectedId });
+	const persist = () => vscode.setState({
+		mode: state.mode, device: state.device, selectedId: state.selectedId,
+		sideWidth: state.sideWidth, propsRatio: state.propsRatio, aiExpanded: state.aiExpanded,
+	});
 
 	// ---- エラー表示 ----
 	let errorTimer = 0;
@@ -197,6 +205,7 @@
 			case 'aiApplied':
 				endProposal();
 				ai.input.value = '';
+				ai.grow();
 				if (typeof msg.elementId === 'number') { state.selectedId = msg.elementId; }
 				break;
 		}
@@ -254,6 +263,58 @@
 		if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) { return; }
 		if (e.key === 'Escape' && state.selectedId !== null) { select(null); }
 	});
+
+	// ---- 右パネル (Properties / AI Designer) の大きさ ----
+	const side = $('od-side');
+	function applySideLayout() {
+		document.documentElement.style.setProperty('--od-side-width', state.sideWidth ? state.sideWidth + 'px' : '');
+		document.documentElement.style.setProperty('--od-props-height', state.propsRatio !== null ? (state.propsRatio * 100).toFixed(1) + '%' : '');
+		side.classList.toggle('ai-expanded', state.aiExpanded);
+		$('od-ai-expand').textContent = state.aiExpanded ? '⤡' : '⤢';
+		$('od-ai-expand').title = state.aiExpanded ? 'Properties も表示する' : 'AI Designer を右側いっぱいに広げる';
+	}
+	/** つまみをドラッグしている間 onMove を呼ぶ。iframe がマウスを奪わないよう body に印を付ける */
+	function dragHandle(/** @type {HTMLElement} */ handle, /** @type {(e: PointerEvent) => void} */ onMove) {
+		handle.addEventListener('pointerdown', (e) => {
+			e.preventDefault();
+			handle.setPointerCapture(e.pointerId);
+			handle.classList.add('dragging');
+			document.body.classList.add('od-resizing');
+			const move = (/** @type {PointerEvent} */ ev) => onMove(ev);
+			const up = () => {
+				handle.removeEventListener('pointermove', move);
+				handle.removeEventListener('pointerup', up);
+				handle.removeEventListener('pointercancel', up);
+				handle.classList.remove('dragging');
+				document.body.classList.remove('od-resizing');
+				persist();
+			};
+			handle.addEventListener('pointermove', move);
+			handle.addEventListener('pointerup', up);
+			handle.addEventListener('pointercancel', up);
+		});
+	}
+	dragHandle($('od-side-resizer'), (e) => {
+		const max = Math.round(window.innerWidth * 0.75);
+		state.sideWidth = Math.max(260, Math.min(max, Math.round(window.innerWidth - e.clientX)));
+		applySideLayout();
+	});
+	dragHandle($('od-split'), (e) => {
+		const r = side.getBoundingClientRect();
+		const minPx = 60, minAi = 140;
+		const y = Math.max(minPx, Math.min(r.height - minAi, e.clientY - r.top));
+		state.propsRatio = r.height > 0 ? y / r.height : null;
+		applySideLayout();
+	});
+	$('od-side-resizer').addEventListener('dblclick', () => { state.sideWidth = null; applySideLayout(); persist(); });
+	$('od-split').addEventListener('dblclick', () => { state.propsRatio = null; applySideLayout(); persist(); });
+	$('od-ai-expand').addEventListener('click', () => {
+		state.aiExpanded = !state.aiExpanded;
+		applySideLayout();
+		persist();
+		ai.input.focus();
+	});
+	applySideLayout();
 
 	setMode(state.mode);
 	setDevice(state.device);
