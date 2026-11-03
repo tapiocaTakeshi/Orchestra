@@ -3944,7 +3944,7 @@ const AgentPlanChecklist = ({ plan, explanation }: { plan: AgentPlanStep[], expl
 
 /** browser_use の 1 操作を短く日本語で (ツール行の右側に出す) */
 const browserUseActionLabel = (p: BuiltinToolCallParams['browser_use']): string => {
-	const ref = p.ref !== undefined ? `[${p.ref}]` : ''
+	const ref = p.ref !== undefined ? `@${p.ref}` : ''
 	const short = (t: string | undefined) => !t ? '' : t.length > 30 ? `${t.slice(0, 29)}…` : t
 	switch (p.action) {
 		case 'navigate': return `開く ${(p.url ?? '').replace(/^https?:\/\//, '')}`
@@ -3957,6 +3957,7 @@ const browserUseActionLabel = (p: BuiltinToolCallParams['browser_use']): string 
 		case 'back': return '戻る'
 		case 'forward': return '進む'
 		case 'wait': return `待機 ${p.ms ?? 1000}ms`
+		case 'dialog': return (p.text ?? '').trim().toLowerCase() === 'dismiss' ? 'ダイアログを閉じる' : 'ダイアログを承認'
 		case 'close': return 'ブラウザを閉じる'
 	}
 }

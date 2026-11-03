@@ -325,6 +325,7 @@ function packageTask(platform, arch, sourceFolderName, destinationFolderName, op
 			.pipe(createAsar(path.join(process.cwd(), 'node_modules'), [
 				'**/*.node',
 				'**/@vscode/ripgrep/bin/*',
+				'**/agent-browser/bin/agent-browser-*', // Orchestra: browser_use runs this native binary
 				'**/node-pty/build/Release/*',
 				'**/node-pty/build/Release/conpty/*',
 				'**/node-pty/lib/worker/conoutSocketWorker.js',
