@@ -3,18 +3,81 @@
  *  Licensed under the MIT License. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------------*/
 
-:root {
+/* 色は VS Code のテーマ変数 (--vscode-*) を使い、無いときはテーマの種類 (body の vscode-light /
+   vscode-dark / vscode-high-contrast) に合わせた既定の配色を使う。テーマ変数が届いていても文字と背景の
+   コントラストが足りないときは main.js が body に od-safe-colors を付け、既定の配色だけで描く。
+   (var() は宣言した要素で解決されるので、body の class で既定の配色を切り替えられるよう body に置く) */
+body {
 	--od-accent: #D43E45;
-	--od-border: var(--vscode-panel-border, rgba(128, 128, 128, .35));
-	--od-muted: var(--vscode-descriptionForeground, #888);
-	--od-bg: var(--vscode-editor-background, #1e1e1e);
-	--od-side-bg: var(--vscode-sideBar-background, var(--od-bg));
-	--od-input-bg: var(--vscode-input-background, transparent);
-	--od-input-fg: var(--vscode-input-foreground, inherit);
+	/* 既定の配色 (ダーク) */
+	--od-d-fg: #d8d4cf;
+	--od-d-muted: #9a938c;
+	--od-d-bg: #1b1918;
+	--od-d-side-bg: #161413;
+	--od-d-input-bg: #24211f;
+	--od-d-border: rgba(255, 255, 255, .14);
+	--od-d-hover: rgba(255, 255, 255, .07);
+	--od-d-selected: rgba(212, 62, 69, .32);
+	--od-d-canvas-bg: #252220;
+	--od-d-code-bg: rgba(255, 255, 255, .06);
+
+	--od-fg: var(--vscode-foreground, var(--vscode-editor-foreground, var(--od-d-fg)));
+	--od-muted: var(--vscode-descriptionForeground, var(--od-d-muted));
+	--od-bg: var(--vscode-editor-background, var(--od-d-bg));
+	--od-side-bg: var(--vscode-sideBar-background, var(--vscode-editor-background, var(--od-d-side-bg)));
+	--od-input-bg: var(--vscode-input-background, var(--od-d-input-bg));
+	--od-input-fg: var(--vscode-input-foreground, var(--od-fg));
+	--od-border: var(--vscode-panel-border, var(--vscode-widget-border, var(--od-d-border)));
 	--od-input-border: var(--vscode-input-border, var(--od-border));
-	--od-hover: var(--vscode-list-hoverBackground, rgba(128, 128, 128, .12));
-	--od-selected: var(--vscode-list-activeSelectionBackground, rgba(212, 62, 69, .25));
-	--od-selected-fg: var(--vscode-list-activeSelectionForeground, inherit);
+	--od-hover: var(--vscode-list-hoverBackground, var(--od-d-hover));
+	--od-selected: var(--vscode-list-activeSelectionBackground, var(--od-d-selected));
+	--od-selected-fg: var(--vscode-list-activeSelectionForeground, var(--od-fg));
+	--od-canvas-bg: var(--vscode-editorWidget-background, var(--od-d-canvas-bg));
+	--od-code-bg: var(--vscode-textCodeBlock-background, var(--od-d-code-bg));
+}
+/* ライトテーマ (と、テーマの種類が分からないときに OS がライトの場合) の既定の配色 */
+body.vscode-light, body.vscode-high-contrast-light {
+	--od-d-fg: #2b2522;
+	--od-d-muted: #6f655d;
+	--od-d-bg: #fcfaf7;
+	--od-d-side-bg: #f4efe8;
+	--od-d-input-bg: #ffffff;
+	--od-d-border: rgba(0, 0, 0, .14);
+	--od-d-hover: rgba(0, 0, 0, .05);
+	--od-d-selected: rgba(212, 62, 69, .16);
+	--od-d-canvas-bg: #ece6de;
+	--od-d-code-bg: rgba(0, 0, 0, .05);
+}
+@media (prefers-color-scheme: light) {
+	body:not(.vscode-dark):not(.vscode-high-contrast):not(.vscode-light):not(.vscode-high-contrast-light) {
+		--od-d-fg: #2b2522;
+		--od-d-muted: #6f655d;
+		--od-d-bg: #fcfaf7;
+		--od-d-side-bg: #f4efe8;
+		--od-d-input-bg: #ffffff;
+		--od-d-border: rgba(0, 0, 0, .14);
+		--od-d-hover: rgba(0, 0, 0, .05);
+		--od-d-selected: rgba(212, 62, 69, .16);
+		--od-d-canvas-bg: #ece6de;
+		--od-d-code-bg: rgba(0, 0, 0, .05);
+	}
+}
+body.vscode-high-contrast { --od-d-fg: #ffffff; --od-d-muted: #e0e0e0; --od-d-bg: #000000; --od-d-side-bg: #000000; --od-d-input-bg: #000000; --od-d-border: #6fc3df; }
+/* テーマ変数が読めない配色 (文字と背景が近い) のときは、既定の配色だけで描く */
+body.od-safe-colors {
+	--od-fg: var(--od-d-fg);
+	--od-muted: var(--od-d-muted);
+	--od-bg: var(--od-d-bg);
+	--od-side-bg: var(--od-d-side-bg);
+	--od-input-bg: var(--od-d-input-bg);
+	--od-input-fg: var(--od-d-fg);
+	--od-border: var(--od-d-border);
+	--od-input-border: var(--od-d-border);
+	--od-hover: var(--od-d-hover);
+	--od-selected: var(--od-d-selected);
+	--od-selected-fg: var(--od-d-fg);
+	--od-canvas-bg: var(--od-d-canvas-bg);
+	--od-code-bg: var(--od-d-code-bg);
 }
 
 * { box-sizing: border-box; }
@@ -26,11 +89,12 @@ body {
 	flex-direction: column;
 	overflow: hidden;
 	background: var(--od-bg);
-	color: var(--vscode-foreground);
-	font-family: var(--vscode-font-family);
+	color: var(--od-fg);
+	font-family: var(--vscode-font-family, system-ui, -apple-system, "Segoe UI", sans-serif);
 	font-size: var(--vscode-font-size, 13px);
 }
-button, input, select, textarea { font: inherit; color: inherit; }
+button, input, select, textarea { font: inherit; color: var(--od-fg); }
+select option { background: var(--od-input-bg); color: var(--od-input-fg); }
 button {
 	background: transparent;
 	border: 1px solid var(--od-border);
@@ -126,14 +190,14 @@ body.mode-preview .od-layers, body.mode-preview .od-side { display: none; }
 	display: flex;
 	justify-content: center;
 	overflow: auto;
-	background: var(--vscode-editorWidget-background, rgba(128, 128, 128, .08));
+	background: var(--od-canvas-bg);
 }
 .od-canvas iframe { border: 0; width: 100%; height: 100%; background: #fff; }
 .od-canvas.framed { padding: 16px; }
 .od-canvas.framed iframe { box-shadow: 0 2px 12px rgba(0, 0, 0, .25); border-radius: 6px; flex: none; }
 .od-breadcrumb { flex: none; padding: 3px 8px; border-top: 1px solid var(--od-border); min-height: 24px; white-space: nowrap; overflow: hidden; color: var(--od-muted); }
 .od-breadcrumb button { border: 0; padding: 0 2px; color: inherit; }
-.od-breadcrumb button.current { color: var(--vscode-foreground); font-weight: 600; }
+.od-breadcrumb button.current { color: var(--od-fg); font-weight: 600; }
 .od-banner, .od-error { padding: 6px 10px; flex: none; }
 .od-banner { background: rgba(212, 62, 69, .15); border-bottom: 1px solid var(--od-accent); }
 .od-error {
@@ -174,7 +238,8 @@ body.mode-preview .od-layers, body.mode-preview .od-side { display: none; }
 	font-size: 11px;
 	white-space: pre-wrap;
 	word-break: break-all;
-	background: var(--vscode-textCodeBlock-background, rgba(128, 128, 128, .1));
+	background: var(--od-code-bg);
+	color: var(--od-fg);
 }
 .od-ai-note { margin-bottom: 4px; }
 
