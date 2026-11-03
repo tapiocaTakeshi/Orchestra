@@ -134,6 +134,8 @@ import { VoidSCMService } from '../../workbench/contrib/void/electron-main/voidS
 import { IVoidSCMService } from '../../workbench/contrib/void/common/voidSCMTypes.js';
 import { CloudAgentMainService } from '../../workbench/contrib/void/electron-main/cloudAgentMainService.js';
 import { CLOUD_AGENT_CHANNEL_NAME, ICloudAgentMainService } from '../../workbench/contrib/void/common/cloudAgentTypes.js';
+import { BrowserUseMainService } from '../../workbench/contrib/void/electron-main/browserUseMainService.js';
+import { BROWSER_USE_CHANNEL_NAME, IBrowserUseMainService } from '../../workbench/contrib/void/common/browserUseTypes.js';
 import { MCPChannel } from '../../workbench/contrib/void/electron-main/mcpChannel.js';
 /**
  * The main VS Code application. There will only ever be one instance,
@@ -1108,6 +1110,7 @@ export class CodeApplication extends Disposable {
 		services.set(IVoidUpdateService, new SyncDescriptor(VoidMainUpdateService, undefined, false));
 		services.set(IVoidSCMService, new SyncDescriptor(VoidSCMService, undefined, false));
 		services.set(ICloudAgentMainService, new SyncDescriptor(CloudAgentMainService, undefined, false));
+		services.set(IBrowserUseMainService, new SyncDescriptor(BrowserUseMainService, undefined, false));
 
 		// Default Extensions Profile Init
 		services.set(IExtensionsProfileScannerService, new SyncDescriptor(ExtensionsProfileScannerService, undefined, true));
@@ -1256,6 +1259,10 @@ export class CodeApplication extends Disposable {
 		// Orchestra: クラウドエージェント (Division API への中継 + ワークスペースのアップロード)
 		const cloudAgentChannel = ProxyChannel.fromService(accessor.get(ICloudAgentMainService), disposables);
 		mainProcessElectronServer.registerChannel(CLOUD_AGENT_CHANNEL_NAME, cloudAgentChannel);
+
+		// Orchestra: browser_use (Playwright でブラウザを操作するエージェント用ツール)
+		const browserUseChannel = ProxyChannel.fromService(accessor.get(IBrowserUseMainService), disposables);
+		mainProcessElectronServer.registerChannel(BROWSER_USE_CHANNEL_NAME, browserUseChannel);
 
 		// Void added this
 		const mcpChannel = new MCPChannel();

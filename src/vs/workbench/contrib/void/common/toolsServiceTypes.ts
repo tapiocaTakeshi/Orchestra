@@ -4,6 +4,7 @@ import { builtinTools } from './prompt/prompts.js';
 import { RawToolParamsObj } from './sendLLMMessageTypes.js';
 import { AgentPlan } from './agentPlan.js';
 import { PatchHunk } from './applyPatch.js';
+import { BrowserUseAction, BrowserUseResult } from './browserUseTypes.js';
 
 
 
@@ -22,7 +23,7 @@ export type ShallowDirectoryItem = {
 }
 
 
-export const approvalTypeOfBuiltinToolName: Partial<{ [T in BuiltinToolName]?: 'edits' | 'terminal' | 'MCP tools' }> = {
+export const approvalTypeOfBuiltinToolName: Partial<{ [T in BuiltinToolName]?: 'edits' | 'terminal' | 'browser' | 'MCP tools' }> = {
 	'create_file_or_folder': 'edits',
 	'delete_file_or_folder': 'edits',
 	'rewrite_file': 'edits',
@@ -32,6 +33,7 @@ export const approvalTypeOfBuiltinToolName: Partial<{ [T in BuiltinToolName]?: '
 	'run_persistent_command': 'terminal',
 	'open_persistent_terminal': 'terminal',
 	'kill_persistent_terminal': 'terminal',
+	'browser_use': 'browser',
 }
 
 
@@ -68,6 +70,7 @@ export type BuiltinToolCallParams = {
 	'kill_persistent_terminal': { persistentTerminalId: string },
 	// ---
 	'update_plan': AgentPlan,
+	'browser_use': BrowserUseAction,
 }
 
 // RESULT OF TOOL CALL
@@ -92,6 +95,7 @@ export type BuiltinToolResultType = {
 	'kill_persistent_terminal': {},
 	// ---
 	'update_plan': AgentPlan,
+	'browser_use': BrowserUseResult,
 }
 
 

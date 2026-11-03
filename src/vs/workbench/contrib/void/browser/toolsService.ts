@@ -21,6 +21,11 @@ import { IVoidSettingsService } from '../common/voidSettingsService.js'
 import { generateUuid } from '../../../../base/common/uuid.js'
 import { agentPlanProgress, parseAgentPlan } from '../common/agentPlan.js'
 import { formatPatchResult, movedAwayPaths, parsePatch, PatchError, planPatch } from '../common/applyPatch.js'
+import { IMainProcessService } from '../../../../platform/ipc/common/mainProcessService.js'
+import { ProxyChannel } from '../../../../base/parts/ipc/common/ipc.js'
+import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js'
+import { BROWSER_USE_CHANNEL_NAME, BrowserUseAction, browserUseActions, BrowserUseActionName, IBrowserUseMainService, validateBrowserUrl } from '../common/browserUseTypes.js'
+import { BROWSER_USE_LOCAL_ONLY_SETTING, browserUseOptions, isLocalBrowserUrl } from './browserUseConfig.js'
 
 
 // tool use for AI
@@ -155,8 +160,12 @@ export class ToolsService implements IToolsService {
 		@IDirectoryStrService private readonly directoryStrService: IDirectoryStrService,
 		@IMarkerService private readonly markerService: IMarkerService,
 		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService,
+		@IMainProcessService mainProcessService: IMainProcessService,
+		@IConfigurationService configurationService: IConfigurationService,
 	) {
 		const queryBuilder = instantiationService.createInstance(QueryBuilder);
+		// Playwright のブラウザは main プロセスで動かす (browserUseMainService.ts)
+		const browserUse = ProxyChannel.toService<IBrowserUseMainService>(mainProcessService.getChannel(BROWSER_USE_CHANNEL_NAME))
 
 		this.validateParams = {
 			read_file: (params: RawToolParamsObj) => {
@@ -319,6 +328,31 @@ export class ToolsService implements IToolsService {
 				// Native tool calls may pass the plan as an array even though the schema says string.
 				const { plan, explanation } = params as Record<string, unknown>
 				return parseAgentPlan(plan, explanation)
+			},
+			browser_use: (params: RawToolParamsObj) => {
+				const p = params as Record<string, unknown>
+				const action = String(p.action ?? '').trim().toLowerCase() as BrowserUseActionName
+				if (!(browserUseActions as readonly string[]).includes(action)) {
+					throw new Error(`Invalid browser_use action "${String(p.action)}". Use one of: ${browserUseActions.join(', ')}.`)
+				}
+				const out: BrowserUseAction = { action }
+				if (action === 'navigate') {
+					out.url = validateBrowserUrl(validateStr('url', p.url ?? ''))
+					if (configurationService.getValue<boolean>(BROWSER_USE_LOCAL_ONLY_SETTING) && !isLocalBrowserUrl(out.url)) {
+						throw new Error(`browser_use is limited to localhost pages by the "${BROWSER_USE_LOCAL_ONLY_SETTING}" setting; ${out.url} was not opened.`)
+					}
+				}
+				if (action === 'click' || action === 'type' || action === 'select') {
+					const ref = validateNumber(p.ref, { default: null })
+					if (ref === null || ref < 1) { throw new Error(`browser_use ${action} needs ref: the [number] of an element in the latest snapshot.`) }
+					out.ref = ref
+				}
+				if (action === 'type' || action === 'select') { out.text = p.text === undefined || p.text === null ? '' : String(p.text) }
+				if (action === 'type') { out.submit = validateBoolean(p.submit, { default: false }) }
+				if (action === 'press') { out.key = validateStr('key', p.key ?? '') }
+				if (action === 'scroll') { out.direction = String(p.direction ?? '').toLowerCase() === 'up' ? 'up' : 'down' }
+				if (action === 'wait') { out.ms = validateNumber(p.ms, { default: 1000 }) ?? 1000 }
+				return out
 			},
 
 		}
@@ -544,6 +578,11 @@ export class ToolsService implements IToolsService {
 			update_plan: async (params) => {
 				return { result: params }
 			},
+			browser_use: async (params) => {
+				const result = browserUse.run(params, browserUseOptions(configurationService))
+				// 中断されたら、操作中のブラウザごと閉じる (次の呼び出しで開き直す)
+				return { result, interruptTool: () => { browserUse.close().catch(() => undefined) } }
+			},
 		}
 
 
@@ -655,6 +694,9 @@ export class ToolsService implements IToolsService {
 			update_plan: (_params, result) => {
 				const { done, total } = agentPlanProgress(result.plan)
 				return `Plan updated (${done}/${total} completed).`
+			},
+			browser_use: (_params, result) => {
+				return `${result.message}\n\n${result.snapshot}`
 			},
 		}
 
