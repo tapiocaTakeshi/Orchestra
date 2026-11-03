@@ -1,0 +1,76 @@
+# Orchestra Design
+
+Division の **Designer ロール**が生成した `.division/DESIGN.html` を、その場で編集する Design モードです。
+新しいデザインファイルは作らず、**DESIGN.html を唯一の保存元**として直接書き換えます。
+
+```
+Division API — Designer ロール ──生成──▶ .division/DESIGN.html ◀──編集── Orchestra Design
+                                              │                     (キャンバス / Properties / AI / Code)
+                                              └──保存──▶ Coder ロールが実アプリへ反映
+```
+
+`.division/DESIGN.md` は Designer 用のガイドで、編集対象ではありません (AI 編集時に文脈として渡します)。
+
+## 使い方
+
+- `.division/DESIGN.html` を開くと自動で Design モードになります (Custom Text Editor)。
+  コマンド **Orchestra Design: Open DESIGN.html in Design Mode** でも開けます。
+- **Design** タブ: クリックで要素を選択 → 右の Properties で色・文字・サイズ・余白・角丸などを変更。
+  ダブルクリックで文字を直接編集 (Enter で確定、Esc で取り消し)。
+- **Layers**: body 以下の要素ツリー。クリックで選択、ホバーでキャンバス上を強調。
+- **Code** タブ: 同じ DESIGN.html を通常のテキストエディタで横に開きます。どちらで編集しても同期します。
+- **Preview** タブ: 選択なしで、リンクやスクリプトが動くプレビュー。
+- **PC / Tablet / Mobile**: プレビュー幅を切り替えます (768px / 390px)。
+- **Undo / Redo / 保存**: 通常のテキスト編集と同じ履歴を使います (Ctrl+Z / Ctrl+Shift+Z / Ctrl+S)。
+- **AI Designer**: 指示を書いて「依頼」(Ctrl+Enter)。要素を選択していればその要素だけ、未選択ならページ全体を
+  Designer ロールに修正させます。返ってきた案は「変更前 / 変更後」とキャンバスのプレビューで確認し、
+  「適用」したときだけ DESIGN.html に書き込みます。
+
+## 設計上のルール
+
+- **HTML だけが保存元**。JSON などの別形式のデザインデータは持ちません。
+- **差分適用**。キャンバスでの変更は該当要素の `style` 属性・文字・属性だけを書き換える最小のテキスト差分です。
+  既存の `<style>`、スクリプト、インデント、コメントはそのまま残ります。
+  (`src/htmlPatchService.ts`。選択用の `data-od-id` はプレビューにだけ注入し、ファイルには書きません)
+- **AI には現在の HTML と選択要素を渡す**。選択要素の outerHTML・`<style>`・DESIGN.md だけを送り、
+  選択要素 1 つ分の置き換えを返させます。ファイル全体を再生成させません。
+- **プレビューは隔離**。Webview 内の `sandbox="allow-scripts"` iframe (opaque origin) で描画します。
+  DESIGN.html のスクリプトは VS Code API・拡張機能・ファイルに触れられません。
+  信頼されていないワークスペース、または `orchestraDesign.preview.runScripts: false` ではスクリプトを実行しません。
+- **クラウドとローカルの区別**。この拡張機能が編集するのは、ローカルのワークスペースにある DESIGN.html だけです。
+  クラウドエージェントがサンドボックスで生成した DESIGN.html は、先にワークスペースへ取り込んでから開きます
+  (サンドボックス上のファイルを直接書き換えることはしません)。
+
+## AI Designer の接続
+
+IDE で Division にログインしていれば追加設定は不要です。IDE 本体のコマンド
+`orchestra.design.getDesignerConnection` から、Division API のエンドポイント・認証情報・
+**design ロールに割り当てられたモデル**を受け取り、`POST /api/generate` を呼びます。
+
+| 設定 | 既定 | 説明 |
+| --- | --- | --- |
+| `orchestraDesign.designerModel` | (空) | 空なら Division 設定の design ロールのモデル |
+| `orchestraDesign.divisionEndpoint` | (空) | 空なら IDE の Division API エンドポイント |
+| `orchestraDesign.preview.runScripts` | `true` | プレビューで DESIGN.html のスクリプトを実行する |
+| `orchestraDesign.notifyOnCreate` | `true` | Designer が DESIGN.html を作成したら Design モードで開くよう通知 |
+
+IDE 外で使う場合は **Orchestra Design: Set Division API Key for AI Designer** でキーを保存できます (SecretStorage)。
+
+## 開発
+
+```sh
+cd extensions/orchestra-design
+npm run compile   # src/ → out/
+npm test          # htmlPatchService の単体テスト
+```
+
+本体のビルド (`npm run compile`) では `build/gulpfile.extensions.js` の compilations に含まれています。
+
+## 今後 (開発計画)
+
+1. ~~HTML プレビュー~~ — DESIGN.html を自動検出して Design タブで表示
+2. ~~ビジュアル編集~~ — 要素選択・Layers・Properties・差分保存・Undo/Redo
+3. ~~Designer AI 連携~~ — 選択要素の修正を依頼し、差分を確認して適用
+4. Coder ロール連携 — 承認済みの DESIGN.html を参照して実アプリ (React など) へ反映。
+   DESIGN.html の変更と本番アプリの変更は別物として扱い、反映は Coder の責任とする
+5. 複数案比較 — Designer に複数案を作らせて並べて比較
