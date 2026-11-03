@@ -1,4 +1,4 @@
-# Orchestra Design
+# <img src="media/icon.png" alt="" width="40" height="40" align="center"> Orchestra Design
 
 Division の **Designer ロール**が生成したデザイン HTML を、その場で編集する Design モードです。
 デザインは **`.division/design/` フォルダの複数の HTML ファイル (1 画面 = 1 ファイル)** で、
