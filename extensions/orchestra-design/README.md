@@ -34,6 +34,9 @@ Orchestra がそれぞれを `.division/design/<name>.html` に保存します (
 - **AI Designer**: 指示を書いて「依頼」(Ctrl+Enter)。要素を選択していればその要素だけ、未選択ならページ全体を
   Designer ロールに修正させます (他のページ名もリンクの参考として渡します)。返ってきた案は「変更前 / 変更後」と
   キャンバスのプレビューで確認し、「適用」したときだけそのページの HTML に書き込みます。
+  チャットは Division の `designer` ロールとして動き、システムプロンプトは Division に登録された
+  designer ロールのもの (Role.systemPrompt) を使います。拡張側からは「要素単位で置き換える・返答形式」
+  といったこの画面固有の指示だけを足します (`/api/generate` の `role: "designer"`)。
 
 ## 設計上のルール
 

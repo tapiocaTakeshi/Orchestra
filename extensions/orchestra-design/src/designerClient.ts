@@ -8,12 +8,17 @@
 // - 送るのは「現在の HTML から切り出した対象要素」と、見た目の手がかりになる <style>、
 //   Designer 用ガイド (.division/DESIGN.md) だけ。ファイル全体の再生成はさせない。
 // - 返ってきた HTML はそのまま書き込まず、Design 画面で差分を確認してから適用する。
+// - チャットは Division の designer ロールとして動かす。システムプロンプトは Division 側の
+//   designer ロールのもの (Role.systemPrompt) を使い、ここではこの画面固有の作業指示
+//   (要素単位の置き換え・返答の形式) だけを足す。
 
 import * as vscode from 'vscode';
 
 const BRIDGE_COMMAND = 'orchestra.design.getDesignerConnection';
 const SECRET_KEY = 'orchestraDesign.divisionApiKey';
 const DEFAULT_ENDPOINT = 'https://api.division.he-ro.io';
+/** Division のロール slug。サーバー側で Role.systemPrompt を引いてシステムプロンプトに使う。 */
+const DESIGNER_ROLE = 'designer';
 const MAX_STYLE_CHARS = 12000;
 const MAX_GUIDE_CHARS = 8000;
 const MAX_DOCUMENT_CHARS = 120000;
@@ -109,8 +114,9 @@ export class DesignerClient {
 					headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${bearer}` },
 					body: JSON.stringify({
 						provider,
+						role: DESIGNER_ROLE,
 						input: buildInput(req),
-						systemPrompt: `${SYSTEM_PROMPT}\n${SYSTEM_PROMPT_RULES}`,
+						systemPrompt: DESIGN_EDIT_INSTRUCTIONS,
 						maxTokens: req.scope === 'document' ? 32000 : 12000,
 					}),
 					signal: controller.signal,
@@ -134,15 +140,19 @@ export class DesignerClient {
 	}
 }
 
-const SYSTEM_PROMPT = `You are the Designer role of Division, editing one page of an existing HTML/CSS design in place. The design lives in .division/design/ with one self-contained HTML file per screen (index.html holds the design system and links to the other screens).
-- Keep the page consistent with the shared :root tokens. Links to other screens are relative (href="login.html").`;
-const SYSTEM_PROMPT_RULES = `
+// designer ロールのシステムプロンプト (Division 側) の後ろに付ける、この画面固有の作業指示。
+// ロールとしての振る舞いはここに書かない。
+const DESIGN_EDIT_INSTRUCTIONS = `## Task: in-place edit in Orchestra Design
+You are editing one page of an existing HTML/CSS design in place. The design lives in .division/design/ with one self-contained HTML file per screen (index.html holds the design system and links to the other screens).
+- Keep the page consistent with the shared :root tokens. Links to other screens are relative (href="login.html").
+
 Rules:
 - Change only what the instruction asks for. Keep every other attribute, class, id, text and structure as it is.
 - Return exactly ONE fenced code block (\`\`\`html ... \`\`\`) with the replacement HTML, followed by at most one short sentence describing the change.
 - When the scope is "element", the code block must contain exactly the one replacement element (same outer tag unless the instruction requires otherwise). Do not return <html>, <head> or <body>.
 - When the scope is "document", return the complete document.
-- Prefer inline style attributes or existing classes for small visual changes. Do not add external scripts or remote resources that were not already used.`;
+- Prefer inline style attributes or existing classes for small visual changes. Do not add external scripts or remote resources that were not already used.
+- These output rules take precedence over any other output format you were given (do not write files or use tools; just reply).`;
 
 function buildInput(req: DesignerRequest): string {
 	const parts: string[] = [];
