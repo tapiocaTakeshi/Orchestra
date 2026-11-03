@@ -89,6 +89,7 @@ type SendChatParams_Internal = InternalCommonMessageParams & {
 	divisionMaxReviewerIterations?: number;
 	divisionMaxReviewIterations?: number;
 	divisionFlowApprovalMode?: boolean;
+	divisionFlowApprovalCoderWriterOnly?: boolean;
 	divisionGoalLoopMode?: 'auto' | 'confirm';
 	workspaceFolderPath?: string;
 }
@@ -3155,6 +3156,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		settingsOfProvider,
 		takePendingInjection,
 		divisionFlowApprovalMode,
+		divisionFlowApprovalCoderWriterOnly,
 	} = params
 
 	// 旧フローには Brief Gate / Reviewer のリトライループ + 最大試行回数があったが、
@@ -3531,6 +3533,8 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			reviewerDone: boolean,
 		): boolean => {
 			if (!divisionFlowApprovalMode || !workspaceFolderPath) return false;
+			// 「coder / writer だけ承認」設定なら、それ以外のロールは保存だけして止めずに進む
+			if (divisionFlowApprovalCoderWriterOnly && !isCoderLikeRole(flowRole)) return false;
 			writeOrchestrationState(workspaceFolderPath, {
 				approved: false,
 				workspaceFolderPath,
@@ -3979,7 +3983,9 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				}
 				appendText(`${aiStepCount}. **reviewer** — 最終レビュー\n`);
 				if (divisionFlowApprovalMode) {
-					appendText(`\n> 🔒 **承認モード有効** — 各ステップの MD ファイルが完成するたびに一時停止し、あなたの承認を待ちます。\n`);
+					appendText(divisionFlowApprovalCoderWriterOnly
+						? `\n> 🔒 **承認モード有効 (coder / writer のみ)** — coder / writer の MD ファイルが完成したときだけ一時停止し、あなたの承認を待ちます。designer など他のロールは止まらずに進みます。\n`
+						: `\n> 🔒 **承認モード有効** — 各ステップの MD ファイルが完成するたびに一時停止し、あなたの承認を待ちます。\n`);
 				}
 			}
 			appendText(`\n`);

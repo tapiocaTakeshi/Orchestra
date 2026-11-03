@@ -656,6 +656,9 @@ export type GlobalSettings = {
 	// 生成するたびに一時停止し、ユーザーが承認 (または編集して承認 / 却下) するまで
 	// 次のステップに進まない。
 	divisionFlowApprovalMode: boolean;
+	// 承認モード時、true なら coder / writer の出力でだけ一時停止し、それ以外のロール
+	// (designer / planner / search / image / reviewer など) は承認を待たずに次へ進む。
+	divisionFlowApprovalCoderWriterOnly: boolean;
 	/** 目標ループ: 'auto' = 達成まで自動で回す / 'confirm' = ラウンドごとに続けるか確認する */
 	divisionGoalLoopMode: DivisionGoalLoopMode;
 	// Orchestra 独自 UI (設定パネル・サイドバーチャットなど) の表示言語。
@@ -719,6 +722,7 @@ export const defaultGlobalSettings: GlobalSettings = {
 	maxReviewerIterations: 5, // 目標ループの最大ラウンド数 (1 ラウンド = Leader の計画 → 各ロール → Reviewer)
 	maxReviewIterations: 10,
 	divisionFlowApprovalMode: false,
+	divisionFlowApprovalCoderWriterOnly: false,
 	divisionGoalLoopMode: 'auto',
 	uiLanguage: 'ja', // Orchestra の固定文言 (ホーム画面・チャット) は日本語なので、既定も日本語にそろえる
 	obsidian: defaultObsidianSettings,
