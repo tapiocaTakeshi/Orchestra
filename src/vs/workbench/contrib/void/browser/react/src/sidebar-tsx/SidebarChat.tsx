@@ -3368,6 +3368,7 @@ const titleOfBuiltinToolName = {
 	'search_in_file': { done: 'ファイル内を検索しました', proposed: 'ファイル内を検索', running: loadingTitleWrapper('ファイル内を検索中') },
 	'update_plan': { done: '計画を更新しました', proposed: '計画の更新', running: loadingTitleWrapper('計画を更新中') },
 	'apply_patch': { done: 'パッチを適用しました', proposed: 'パッチの適用', running: loadingTitleWrapper('パッチを適用中') },
+	'browser_use': { done: 'ブラウザを操作しました', proposed: 'ブラウザの操作', running: loadingTitleWrapper('ブラウザを操作中') },
 } as const satisfies Record<BuiltinToolName, { done: any, proposed: any, running: any }>
 
 
@@ -3525,6 +3526,10 @@ const toolNameToDesc = (toolName: BuiltinToolName, _toolParams: BuiltinToolCallP
 				desc1: `${done}/${total} 完了`,
 				desc1Info: current ? `作業中: ${current.step}` : undefined,
 			}
+		},
+		'browser_use': () => {
+			const toolParams = _toolParams as BuiltinToolCallParams['browser_use']
+			return { desc1: browserUseActionLabel(toolParams) }
 		},
 	}
 
@@ -3937,7 +3942,73 @@ const AgentPlanChecklist = ({ plan, explanation }: { plan: AgentPlanStep[], expl
 	</div>
 }
 
+/** browser_use の 1 操作を短く日本語で (ツール行の右側に出す) */
+const browserUseActionLabel = (p: BuiltinToolCallParams['browser_use']): string => {
+	const ref = p.ref !== undefined ? `[${p.ref}]` : ''
+	const short = (t: string | undefined) => !t ? '' : t.length > 30 ? `${t.slice(0, 29)}…` : t
+	switch (p.action) {
+		case 'navigate': return `開く ${(p.url ?? '').replace(/^https?:\/\//, '')}`
+		case 'snapshot': return 'ページを読む'
+		case 'click': return `クリック ${ref}`
+		case 'type': return `入力 ${ref} "${short(p.text)}"${p.submit ? ' + Enter' : ''}`
+		case 'select': return `選択 ${ref} "${short(p.text)}"`
+		case 'press': return `キー ${p.key ?? ''}`
+		case 'scroll': return p.direction === 'up' ? '上へスクロール' : '下へスクロール'
+		case 'back': return '戻る'
+		case 'forward': return '進む'
+		case 'wait': return `待機 ${p.ms ?? 1000}ms`
+		case 'close': return 'ブラウザを閉じる'
+	}
+}
+
 const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: ResultWrapper<T>, } } = {
+	'browser_use': {
+		resultWrapper: ({ toolMessage, threadId, messageIdx }) => {
+			const accessor = useAccessor()
+			const chatThreadsState = useChatThreadsState()
+
+			// 最新のブラウザ操作だけスクリーンショットを開いて出し、それより前は畳む
+			const messages = chatThreadsState.allThreads[threadId]?.messages ?? []
+			let latestIdx = -1
+			for (let i = messages.length - 1; i >= 0; i--) {
+				const m = messages[i]
+				if (m.role === 'tool' && m.name === 'browser_use' && m.type === 'success') { latestIdx = i; break }
+			}
+
+			const title = getTitle(toolMessage)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
+			const isRejected = toolMessage.type === 'rejected'
+			const componentParams: ToolHeaderParams = { title, desc1, desc1Info, isError: false, icon: null, isRejected }
+
+			if (toolMessage.type === 'success') {
+				const { result } = toolMessage
+				componentParams.desc2 = result.title || undefined
+				componentParams.children = <div className='px-2 py-1 flex flex-col gap-1 !select-text cursor-auto'>
+					<div className='text-xs text-void-fg-3 break-all'>{result.message}{result.url ? ` — ${result.url}` : ''}</div>
+					{result.screenshot
+						? <img src={result.screenshot} alt={result.title || result.url} className='w-full rounded border border-void-border-3' />
+						: null}
+					{result.browser ? <div className='text-[10px] text-void-fg-4'>{result.browser}</div> : null}
+				</div>
+				if (messageIdx === latestIdx) componentParams.isOpen = true
+			}
+			else if (toolMessage.type === 'tool_request') {
+				componentParams.children = <ToolChildrenWrapper>
+					<div className='text-xs text-void-fg-2 px-2 py-1 break-all'>{browserUseActionLabel(toolMessage.params)}</div>
+				</ToolChildrenWrapper>
+				componentParams.isOpen = true
+			}
+			else if (toolMessage.type === 'tool_error') {
+				componentParams.bottomChildren = <BottomChildren title='Error'>
+					<CodeChildren>
+						{toolMessage.result}
+					</CodeChildren>
+				</BottomChildren>
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />
+		},
+	},
 	'apply_patch': {
 		resultWrapper: ({ toolMessage }) => {
 			const accessor = useAccessor()

@@ -549,7 +549,11 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 	}
 
 	private _storeAllThreads(threads: ChatThreads) {
-		const serializedThreads = JSON.stringify(threads);
+		// browser_use のスクリーンショット (JPEG の data URL) は表示中のセッションでだけ使い、保存しない
+		// (1 枚あたり数十 KB あり、スレッドの保存データが際限なく大きくなるため)
+		const serializedThreads = JSON.stringify(threads, (key, value) =>
+			key === 'screenshot' && typeof value === 'string' && value.startsWith('data:image/') ? null : value
+		);
 		this._storageService.store(
 			THREAD_STORAGE_KEY,
 			serializedThreads,
