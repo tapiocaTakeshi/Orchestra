@@ -264,6 +264,56 @@
 		if (e.key === 'Escape' && state.selectedId !== null) { select(null); }
 	});
 
+	// ---- 文字と背景のコントラスト ----
+	// VS Code のテーマ変数が届かない・読めない配色 (例: 黒い背景に黒い文字) のときは、
+	// design.css の既定の配色 (テーマの種類に合わせたもの) に切り替える
+	const probe = document.createElement('div');
+	probe.style.cssText = 'position:absolute;width:0;height:0;overflow:hidden;visibility:hidden';
+	document.body.appendChild(probe);
+	/** CSS の色 → [r, g, b, a] (計算済みの rgb()/rgba() を読む) */
+	function rgbaOf(/** @type {string} */ css) {
+		probe.style.color = '';
+		probe.style.color = css;
+		const m = /rgba?\(([^)]+)\)/.exec(getComputedStyle(probe).color);
+		if (!m) { return null; }
+		const [r, g, b, a = 1] = m[1].split(/[\s,/]+/).filter(Boolean).map(Number);
+		return [r, g, b, a];
+	}
+	function luminance(/** @type {number[]} */ c) {
+		const ch = c.slice(0, 3).map(v => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); });
+		return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+	}
+	function contrast(/** @type {number[]} */ a, /** @type {number[]} */ b) {
+		const [l1, l2] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+		return (l1 + 0.05) / (l2 + 0.05);
+	}
+	function checkContrast() {
+		const root = getComputedStyle(document.documentElement);
+		const v = (/** @type {string} */ name) => root.getPropertyValue(name).trim();
+		const fg = v('--vscode-foreground') || v('--vscode-editor-foreground');
+		const backgrounds = [v('--vscode-editor-background'), v('--vscode-sideBar-background')].filter(Boolean);
+		let unsafe = false;
+		if (fg && backgrounds.length) {
+			const f = rgbaOf(fg);
+			for (const bg of backgrounds) {
+				const c = rgbaOf(bg);
+				// 透明な背景は判定しない (下の色が分からないため)
+				if (!f || !c || c[3] < 0.5) { continue; }
+				if (contrast(f, c) < 3) { unsafe = true; }
+			}
+		} else if (backgrounds.length && !fg) {
+			// 背景だけ届いて文字色が無い: 既定の文字色が背景に合うかを確かめる
+			const c = rgbaOf(backgrounds[0]);
+			const d = rgbaOf(getComputedStyle(document.body).getPropertyValue('--od-d-fg'));
+			if (c && d && c[3] >= 0.5 && contrast(d, c) < 3) { unsafe = true; }
+		}
+		document.body.classList.toggle('od-safe-colors', unsafe);
+	}
+	checkContrast();
+	// テーマを切り替えると VS Code は <html> の style と <body> の class を書き換える
+	new MutationObserver(checkContrast).observe(document.documentElement, { attributes: true, attributeFilter: ['style', 'class'] });
+	new MutationObserver(checkContrast).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+
 	// ---- 右パネル (Properties / AI Designer) の大きさ ----
 	const side = $('od-side');
 	function applySideLayout() {
