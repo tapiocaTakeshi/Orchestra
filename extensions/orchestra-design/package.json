@@ -4,6 +4,7 @@
   "description": "Design mode for the Division Designer role's design HTML (.division/design/*.html, one file per screen): live preview, page switching, visual editing, and AI edits that write back to the same HTML files.",
   "version": "0.1.0",
   "publisher": "orchestra",
+  "icon": "media/icon.png",
   "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
@@ -40,7 +41,10 @@
         "command": "orchestra.design.open",
         "title": "Open Design in Design Mode",
         "category": "Orchestra Design",
-        "icon": "$(paintcan)"
+        "icon": {
+          "light": "media/icon-32.png",
+          "dark": "media/icon-32.png"
+        }
       },
       {
         "command": "orchestra.design.openAsText",

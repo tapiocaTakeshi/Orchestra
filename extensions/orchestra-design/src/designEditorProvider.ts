@@ -67,6 +67,9 @@ export class DesignEditorProvider implements vscode.CustomTextEditorProvider {
 		const mediaRoot = vscode.Uri.joinPath(this.context.extensionUri, 'media');
 		panel.webview.options = { enableScripts: true, localResourceRoots: [mediaRoot] };
 		panel.webview.html = this.getShellHtml(panel.webview);
+		// タブのアイコン (Orchestra Design のアイコン)
+		const tabIcon = vscode.Uri.joinPath(mediaRoot, 'icon-32.png');
+		panel.iconPath = { light: tabIcon, dark: tabIcon };
 
 		let parsed: ParsedHtml = parseHtml(document.getText());
 		let parsedVersion = document.version;
@@ -343,7 +346,7 @@ export class DesignEditorProvider implements vscode.CustomTextEditorProvider {
 </head>
 <body>
 	<header class="od-toolbar">
-		<div class="od-title"><span class="od-logo">◆</span> Orchestra Design
+		<div class="od-title"><img class="od-logo" src="${media('icon-64.png')}" alt="" width="18" height="18"> Orchestra Design
 			<select id="od-pages" class="od-pages" title="ページ (.division/design/ の画面)"></select>
 			<button id="od-new-page" class="od-icon" title="新しいページを作る (今のページのトークンと &lt;style&gt; を引き継ぐ)">＋</button>
 			<span class="od-file" id="od-file"></span><span class="od-dirty" id="od-dirty" hidden>●</span></div>
