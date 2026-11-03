@@ -1324,6 +1324,20 @@ const DivisionSettings = () => {
 						onChange={(newVal) => voidSettingsService.setGlobalSetting('divisionFlowApprovalMode', newVal)}
 					/>
 				</div>
+				<div className={`flex items-center justify-between gap-4 pl-3 ${settingsState.globalSettings.divisionFlowApprovalMode ? '' : 'opacity-50'}`}>
+					<div className="flex flex-col">
+						<span className="text-xs text-void-fg-2 font-medium">Designer など、Coder / Writer 以外のロールでは承認で止めない</span>
+						<span className="text-[11px] text-void-fg-4">
+							有効にすると、承認待ちで一時停止するのは Coder / Writer の出力だけになります。Designer・Planner・Search・Research・Image・Idea man・File Search・Reviewer の出力は保存だけして、そのまま次のステップに進みます。
+						</span>
+					</div>
+					<VoidSwitch
+						size='xs'
+						value={!!settingsState.globalSettings.divisionFlowApprovalCoderWriterOnly}
+						disabled={!settingsState.globalSettings.divisionFlowApprovalMode}
+						onChange={(newVal) => voidSettingsService.setGlobalSetting('divisionFlowApprovalCoderWriterOnly', newVal)}
+					/>
+				</div>
 			</div>
 
 			{/* projects.json section header with Update All + Supabase Sync buttons */}

@@ -207,6 +207,9 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 		const divisionFlowApprovalMode = modelSelection.providerName === 'divisionAPI'
 			? !!globalSettings.divisionFlowApprovalMode
 			: undefined;
+		const divisionFlowApprovalCoderWriterOnly = modelSelection.providerName === 'divisionAPI'
+			? !!globalSettings.divisionFlowApprovalCoderWriterOnly
+			: undefined;
 		const divisionGoalLoopMode = modelSelection.providerName === 'divisionAPI'
 			? globalSettings.divisionGoalLoopMode
 			: undefined;
@@ -232,6 +235,7 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 			divisionMaxBriefGateIterations,
 			divisionMaxReviewerIterations,
 			divisionFlowApprovalMode,
+			divisionFlowApprovalCoderWriterOnly,
 			divisionGoalLoopMode,
 			workspaceFolderPath,
 		} satisfies MainSendLLMMessageParams);
