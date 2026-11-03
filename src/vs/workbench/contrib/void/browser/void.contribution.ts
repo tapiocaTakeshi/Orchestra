@@ -99,7 +99,7 @@ import './cloudAgentsPane.js'
 // register Division の Web サイトでログインするためのリダイレクト (orchestra://division-auth) 受け口
 import './divisionBrowserLoginService.js'
 
-// register Orchestra Design (.division/DESIGN.html の編集モード) に Designer ロールの接続情報を渡すコマンド
+// register Orchestra Design (.division/design/*.html の編集モード) に Designer ロールの接続情報を渡すコマンド
 import './designModeBridge.js'
 
 // ---------- common (unclear if these actually need to be imported, because they're already imported wherever they're used) ----------

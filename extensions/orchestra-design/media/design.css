@@ -71,6 +71,8 @@ input:focus, select:focus, textarea:focus { outline: 1px solid var(--vscode-focu
 .od-title { display: flex; align-items: center; gap: 6px; font-weight: 600; white-space: nowrap; }
 .od-logo { color: var(--od-accent); }
 .od-file { font-weight: 400; color: var(--od-muted); }
+.od-pages { width: auto; max-width: 180px; margin-left: 6px; font-weight: 400; }
+button.od-icon { padding: 0 6px; line-height: 18px; }
 .od-dirty { color: var(--od-accent); }
 .od-tabs { display: flex; gap: 2px; margin-left: 8px; }
 .od-tabs button { border-color: transparent; }
