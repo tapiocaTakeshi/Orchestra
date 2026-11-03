@@ -1,0 +1,5 @@
+
+
+# Orchestra browser_use: keep only this platform's agent-browser binaries
+agent-browser/bin/agent-browser-darwin-*
+agent-browser/bin/agent-browser-linux-*

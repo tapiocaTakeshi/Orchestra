@@ -210,3 +210,10 @@ react-native-safe-area-context/android/**
 react-native-safe-area-context/ios/**
 react-native-safe-area-context/common/**
 react-native-safe-area-context/*.podspec
+
+# Orchestra browser_use: only the native agent-browser binaries are used (see .moduleignore.<platform>)
+agent-browser/skills/**
+agent-browser/skill-data/**
+agent-browser/scripts/**
+agent-browser/cli/**
+agent-browser/*.md

@@ -15,3 +15,7 @@
 @vscode/windows-registry/*.txt
 @vscode/windows-registry/package.json
 !@vscode/windows-registry/dist/index.d.ts
+
+# Orchestra browser_use: keep only this platform's agent-browser binaries
+agent-browser/bin/agent-browser-linux-*
+agent-browser/bin/agent-browser-win32-*

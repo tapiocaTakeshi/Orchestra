@@ -24,7 +24,7 @@ import { formatPatchResult, movedAwayPaths, parsePatch, PatchError, planPatch } 
 import { IMainProcessService } from '../../../../platform/ipc/common/mainProcessService.js'
 import { ProxyChannel } from '../../../../base/parts/ipc/common/ipc.js'
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js'
-import { BROWSER_USE_CHANNEL_NAME, BrowserUseAction, browserUseActions, BrowserUseActionName, IBrowserUseMainService, validateBrowserUrl } from '../common/browserUseTypes.js'
+import { BROWSER_USE_CHANNEL_NAME, BrowserUseAction, browserUseActions, BrowserUseActionName, IBrowserUseMainService, normalizeBrowserRef, validateBrowserUrl } from '../common/browserUseTypes.js'
 import { BROWSER_USE_LOCAL_ONLY_SETTING, browserUseOptions, isLocalBrowserUrl } from './browserUseConfig.js'
 
 
@@ -164,7 +164,7 @@ export class ToolsService implements IToolsService {
 		@IConfigurationService configurationService: IConfigurationService,
 	) {
 		const queryBuilder = instantiationService.createInstance(QueryBuilder);
-		// Playwright のブラウザは main プロセスで動かす (browserUseMainService.ts)
+		// agent-browser (Vercel) は main プロセスから動かす (browserUseMainService.ts)
 		const browserUse = ProxyChannel.toService<IBrowserUseMainService>(mainProcessService.getChannel(BROWSER_USE_CHANNEL_NAME))
 
 		this.validateParams = {
@@ -343,11 +343,11 @@ export class ToolsService implements IToolsService {
 					}
 				}
 				if (action === 'click' || action === 'type' || action === 'select') {
-					const ref = validateNumber(p.ref, { default: null })
-					if (ref === null || ref < 1) { throw new Error(`browser_use ${action} needs ref: the [number] of an element in the latest snapshot.`) }
+					const ref = normalizeBrowserRef(p.ref)
+					if (ref === null) { throw new Error(`browser_use ${action} needs ref: the ref of an element in the latest snapshot, e.g. "e3" (got ${JSON.stringify(p.ref)}).`) }
 					out.ref = ref
 				}
-				if (action === 'type' || action === 'select') { out.text = p.text === undefined || p.text === null ? '' : String(p.text) }
+				if (action === 'type' || action === 'select' || action === 'dialog') { out.text = p.text === undefined || p.text === null ? '' : String(p.text) }
 				if (action === 'type') { out.submit = validateBoolean(p.submit, { default: false }) }
 				if (action === 'press') { out.key = validateStr('key', p.key ?? '') }
 				if (action === 'scroll') { out.direction = String(p.direction ?? '').toLowerCase() === 'up' ? 'up' : 'down' }
