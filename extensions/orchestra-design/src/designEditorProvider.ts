@@ -377,15 +377,19 @@ export class DesignEditorProvider implements vscode.CustomTextEditorProvider {
 			</div>
 			<div class="od-breadcrumb" id="od-breadcrumb"></div>
 		</section>
-		<aside class="od-side">
-			<div class="od-props" aria-label="Properties">
+		<aside class="od-side" id="od-side">
+			<div class="od-side-resizer" id="od-side-resizer" role="separator" aria-orientation="vertical" title="ドラッグで幅を変更 (ダブルクリックで元の幅)"></div>
+			<div class="od-props" id="od-props" aria-label="Properties">
 				<div class="od-panel-title">Properties</div>
 				<div id="od-props-body" class="od-props-body"><p class="od-muted">キャンバスか Layers で要素を選択してください。<br>ダブルクリックで文字を直接編集できます。</p></div>
 			</div>
-			<div class="od-ai" aria-label="AI Designer">
-				<div class="od-panel-title">AI Designer</div>
+			<div class="od-split" id="od-split" role="separator" aria-orientation="horizontal" title="ドラッグで Properties と AI Designer の高さを変更 (ダブルクリックで元に戻す)"></div>
+			<div class="od-ai" id="od-ai" aria-label="AI Designer">
+				<div class="od-panel-title od-ai-title">AI Designer
+					<button id="od-ai-expand" class="od-icon" title="AI Designer を右側いっぱいに広げる">⤢</button>
+				</div>
 				<div class="od-ai-scope" id="od-ai-scope">対象: ページ全体</div>
-				<textarea id="od-ai-input" rows="3" placeholder="例: 選択したボタンを丸くして、色をブランドカラーに"></textarea>
+				<textarea id="od-ai-input" rows="6" placeholder="例: 選択したボタンを丸くして、色をブランドカラーに (Ctrl+Enter で依頼)"></textarea>
 				<div class="od-ai-row">
 					<span id="od-ai-status" class="od-muted"></span>
 					<button id="od-ai-cancel" hidden>中止</button>

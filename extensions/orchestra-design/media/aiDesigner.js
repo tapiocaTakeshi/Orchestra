@@ -42,6 +42,13 @@
 				if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run(); }
 			});
 			this.cancelBtn.addEventListener('click', () => this.handlers.onCancel());
+			// 入力に合わせて高さを伸ばす (上限は CSS の max-height)
+			const grow = () => {
+				this.input.style.height = 'auto';
+				this.input.style.height = Math.max(110, this.input.scrollHeight + 2) + 'px';
+			};
+			this.input.addEventListener('input', grow);
+			this.grow = grow;
 			$('od-ai-apply').addEventListener('click', () => { if (this.proposalId !== null) { this.handlers.onApply(this.proposalId); } });
 			$('od-ai-discard').addEventListener('click', () => { if (this.proposalId !== null) { this.handlers.onDiscard(this.proposalId); } });
 		}

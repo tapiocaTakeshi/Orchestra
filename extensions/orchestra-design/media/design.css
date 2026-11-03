@@ -94,7 +94,13 @@ button.od-icon { padding: 0 6px; line-height: 18px; }
 	min-height: 0;
 }
 .od-layers { width: 220px; border-right: 1px solid var(--od-border); }
-.od-side { width: 290px; border-left: 1px solid var(--od-border); }
+.od-side { width: var(--od-side-width, 380px); min-width: 260px; max-width: 75vw; border-left: 1px solid var(--od-border); position: relative; flex: none; }
+/* 右パネルの幅を変えるつまみ (左端) と、Properties / AI Designer の境目 */
+.od-side-resizer { position: absolute; left: -3px; top: 0; bottom: 0; width: 6px; cursor: col-resize; z-index: 2; }
+.od-split { flex: none; height: 6px; margin: -3px 0; cursor: row-resize; position: relative; z-index: 1; border-top: 1px solid var(--od-border); background-clip: content-box; padding-top: 2px; }
+.od-side-resizer:hover, .od-side-resizer.dragging, .od-split:hover, .od-split.dragging { background: var(--vscode-sash-hoverBorder, var(--od-accent)); }
+body.od-resizing, body.od-resizing * { user-select: none !important; }
+body.od-resizing iframe { pointer-events: none; }
 body.mode-preview .od-layers, body.mode-preview .od-side { display: none; }
 .od-panel-title {
 	font-size: 11px;
@@ -137,7 +143,8 @@ body.mode-preview .od-layers, body.mode-preview .od-side { display: none; }
 [hidden] { display: none !important; }
 
 /* ---- properties ---- */
-.od-props { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.od-props { flex: 0 0 var(--od-props-height, 40%); min-height: 60px; display: flex; flex-direction: column; overflow: hidden; }
+.od-side.ai-expanded .od-props, .od-side.ai-expanded .od-split { display: none; }
 .od-props-body { overflow: auto; padding: 0 10px 10px; flex: 1; }
 .od-props-head { font-family: var(--vscode-editor-font-family, monospace); margin: 2px 0 6px; color: var(--od-accent); }
 .od-props-section { margin-top: 8px; }
@@ -148,14 +155,18 @@ body.mode-preview .od-layers, body.mode-preview .od-side { display: none; }
 .od-color input[type=color] { width: 24px; height: 22px; padding: 0; border: 1px solid var(--od-input-border); background: none; flex: none; }
 
 /* ---- AI designer ---- */
-.od-ai { border-top: 1px solid var(--od-border); padding: 0 10px 10px; flex: none; max-height: 55%; overflow: auto; }
+.od-ai { padding: 0 12px 12px; flex: 1 1 0; min-height: 140px; overflow: auto; display: flex; flex-direction: column; }
+.od-ai-title { display: flex; align-items: center; padding-left: 0; padding-right: 0; }
+.od-ai-title .od-icon { margin-left: auto; border-color: transparent; font-size: 13px; }
+.od-side.ai-expanded .od-ai-title .od-icon { color: var(--od-accent); }
+#od-ai-input { min-height: 110px; max-height: 50vh; font-size: 13px; line-height: 1.5; padding: 6px 8px; }
 .od-ai-scope { color: var(--od-muted); margin-bottom: 4px; }
 .od-ai-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
 .od-ai-row .od-muted { margin-right: auto; }
 .od-ai-row button:first-of-type { margin-left: auto; }
 .od-ai-proposal { margin-top: 8px; border: 1px solid var(--od-accent); border-radius: 4px; padding: 6px; }
 .od-ai-proposal pre {
-	max-height: 140px;
+	max-height: 40vh;
 	overflow: auto;
 	margin: 4px 0;
 	padding: 4px;
@@ -169,5 +180,5 @@ body.mode-preview .od-layers, body.mode-preview .od-side { display: none; }
 
 @media (max-width: 900px) {
 	.od-layers { display: none; }
-	.od-side { width: 240px; }
+	.od-side { width: min(var(--od-side-width, 380px), 60vw); }
 }
