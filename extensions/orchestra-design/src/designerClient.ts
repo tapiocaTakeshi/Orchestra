@@ -40,6 +40,9 @@ export interface DesignerRequest {
 	ancestry?: string;
 	styles: string;
 	guide: string | undefined;
+	/** 編集中のページ (例: login.html) と、同じデザインの他のページ (リンクの参考) */
+	page?: string;
+	otherPages?: string[];
 }
 
 export interface DesignerResult {
@@ -107,7 +110,7 @@ export class DesignerClient {
 					body: JSON.stringify({
 						provider,
 						input: buildInput(req),
-						systemPrompt: SYSTEM_PROMPT,
+						systemPrompt: `${SYSTEM_PROMPT}\n${SYSTEM_PROMPT_RULES}`,
 						maxTokens: req.scope === 'document' ? 32000 : 12000,
 					}),
 					signal: controller.signal,
@@ -131,7 +134,9 @@ export class DesignerClient {
 	}
 }
 
-const SYSTEM_PROMPT = `You are the Designer role of Division, editing an existing HTML/CSS design file (.division/DESIGN.html) in place.
+const SYSTEM_PROMPT = `You are the Designer role of Division, editing one page of an existing HTML/CSS design in place. The design lives in .division/design/ with one self-contained HTML file per screen (index.html holds the design system and links to the other screens).
+- Keep the page consistent with the shared :root tokens. Links to other screens are relative (href="login.html").`;
+const SYSTEM_PROMPT_RULES = `
 Rules:
 - Change only what the instruction asks for. Keep every other attribute, class, id, text and structure as it is.
 - Return exactly ONE fenced code block (\`\`\`html ... \`\`\`) with the replacement HTML, followed by at most one short sentence describing the change.
@@ -146,6 +151,9 @@ function buildInput(req: DesignerRequest): string {
 	}
 	if (req.scope === 'element' && req.styles.trim()) {
 		parts.push(`## Stylesheets in the document (read-only context)\n\`\`\`css\n${truncate(req.styles, MAX_STYLE_CHARS)}\n\`\`\``);
+	}
+	if (req.page) {
+		parts.push(`## Page\n${req.page}${req.otherPages?.length ? `\nOther pages of this design: ${req.otherPages.join(', ')}` : ''}`);
 	}
 	parts.push(`## Scope\n${req.scope}${req.ancestry ? ` (location: ${req.ancestry})` : ''}`);
 	parts.push(`## Current HTML\n\`\`\`html\n${req.target}\n\`\`\``);

@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 // @ts-check
 
-// Design 画面のまとめ役。拡張機能 (DESIGN.html の TextDocument) と各パネルをつなぐ。
+// Design 画面のまとめ役。拡張機能 (このページの HTML の TextDocument) と各パネルをつなぐ。
 (function () {
 	'use strict';
 	const OD = /** @type {any} */ (window).OD;
@@ -159,6 +159,22 @@
 				if (state.selectedId !== null) { vscode.postMessage({ type: 'select', id: state.selectedId }); }
 				break;
 			}
+			case 'pages': {
+				// 同じデザインフォルダのページ一覧 (index.html が先頭)。選ぶとそのページを開く
+				const sel = $('od-pages');
+				sel.textContent = '';
+				for (const name of msg.pages) {
+					const opt = document.createElement('option');
+					opt.value = name;
+					opt.textContent = name.replace(/\.html?$/i, '');
+					sel.appendChild(opt);
+				}
+				sel.value = msg.current;
+				sel.hidden = !msg.folder;
+				$('od-new-page').hidden = !msg.folder;
+				$('od-file').hidden = !!msg.folder;
+				break;
+			}
 			case 'elementInfo':
 				if (!msg.info || msg.info.id === state.selectedId) { setInfo(msg.info); }
 				break;
@@ -174,7 +190,7 @@
 			case 'aiProposal':
 				state.showingProposal = true;
 				ai.showProposal(msg);
-				$('od-banner').textContent = 'AI 提案のプレビュー — 右の「適用」で DESIGN.html に書き込みます';
+				$('od-banner').textContent = 'AI 提案のプレビュー — 右の「適用」でこのページの HTML に書き込みます';
 				$('od-banner').hidden = false;
 				canvas.load(msg.previewHtml, { keepScroll: true });
 				break;
@@ -222,6 +238,11 @@
 	for (const b of document.querySelectorAll('.od-devices button')) {
 		b.addEventListener('click', () => setDevice(/** @type {any} */ (/** @type {HTMLElement} */ (b).dataset.device)));
 	}
+	$('od-pages').addEventListener('change', (/** @type {Event} */ e) => {
+		const name = /** @type {HTMLSelectElement} */ (e.target).value;
+		vscode.postMessage({ type: 'openPage', name });
+	});
+	$('od-new-page').addEventListener('click', () => vscode.postMessage({ type: 'newPage' }));
 	$('od-undo').addEventListener('click', () => vscode.postMessage({ type: 'undo' }));
 	$('od-redo').addEventListener('click', () => vscode.postMessage({ type: 'redo' }));
 	$('od-save').addEventListener('click', () => vscode.postMessage({ type: 'save' }));

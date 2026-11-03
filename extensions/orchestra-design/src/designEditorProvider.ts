@@ -3,14 +3,15 @@
  *  Licensed under the MIT License. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------------*/
 
-// Orchestra Design: .division/DESIGN.html の Custom Text Editor。
+// Orchestra Design: デザイン HTML (.division/design/*.html、以前の .division/DESIGN.html) の Custom Text Editor。
 //
-// 保存元は VS Code の TextDocument (= DESIGN.html そのもの) だけ。
+// 1 ページ = 1 エディタ。上部のページ切り替えで同じフォルダの別のページを開く。
+// 保存元は VS Code の TextDocument (= そのページの HTML ファイルそのもの) だけ。
 // - キャンバス・Properties での変更は htmlPatchService の最小差分を WorkspaceEdit で適用する。
 //   そのため Undo / Redo / 保存 / 未保存表示は通常のテキストエディタと同じ仕組みで動き、
 //   同じファイルをテキストエディタ (Code) で開いていても常に同期する。
 // - プレビューは Webview 内の sandbox iframe (allow-scripts のみ、opaque origin) で描画する。
-//   DESIGN.html のスクリプトは VS Code API にも拡張機能にも触れられない。
+//   デザイン HTML のスクリプトは VS Code API にも拡張機能にも触れられない。
 // - AI 編集は差分を提示するだけで、ユーザーが「適用」したときに初めて書き込む。
 
 import * as vscode from 'vscode';
@@ -22,6 +23,7 @@ import {
 	setStyleProperty, setTextContent, setAttribute, replaceOuterHtml, outerHtml, applyPatches,
 } from './htmlPatchService';
 import { DesignerClient } from './designerClient';
+import { createDesignPage, isPageFolder, listSiblingPages } from './designPages';
 
 export const DESIGN_VIEW_TYPE = 'orchestra.designEditor';
 
@@ -36,6 +38,8 @@ type WebviewMessage =
 	| { type: 'edit'; ops: EditOp[] }
 	| { type: 'undo' } | { type: 'redo' } | { type: 'save' }
 	| { type: 'openCode' }
+	| { type: 'openPage'; name: string }
+	| { type: 'newPage' }
 	| { type: 'setRunScripts'; value: boolean }
 	| { type: 'ai'; instruction: string; id: number | null }
 	| { type: 'aiCancel' }
@@ -79,6 +83,12 @@ export class DesignEditorProvider implements vscode.CustomTextEditorProvider {
 		};
 		const runScripts = () => previewRunsScripts();
 		const post = (msg: unknown) => panel.webview.postMessage(msg);
+		const pageNameOf = (u: vscode.Uri) => path.basename(u.fsPath);
+		let pages: vscode.Uri[] = [document.uri];
+		const sendPages = async () => {
+			pages = await listSiblingPages(document.uri);
+			post({ type: 'pages', current: pageNameOf(document.uri), pages: pages.map(pageNameOf), folder: isPageFolder(document.uri) });
+		};
 
 		const sendDocument = (reload: boolean) => {
 			const doc = current();
@@ -126,6 +136,11 @@ export class DesignEditorProvider implements vscode.CustomTextEditorProvider {
 			if (d.uri.toString() === document.uri.toString()) { post({ type: 'saved' }); }
 		}));
 		disposables.push(vscode.workspace.onDidGrantWorkspaceTrust(() => sendDocument(true)));
+		if (isPageFolder(document.uri)) {
+			// 同じフォルダにページが増えたり消えたりしたら、ページ切り替えの一覧を更新する
+			const pageWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(path.dirname(document.uri.fsPath)), '*.html'), false, true, false);
+			disposables.push(pageWatcher, pageWatcher.onDidCreate(() => sendPages()), pageWatcher.onDidDelete(() => sendPages()));
+		}
 		disposables.push(vscode.workspace.onDidChangeConfiguration(e => {
 			if (e.affectsConfiguration('orchestraDesign.preview.runScripts')) { sendDocument(true); }
 		}));
@@ -139,7 +154,20 @@ export class DesignEditorProvider implements vscode.CustomTextEditorProvider {
 				switch (msg.type) {
 					case 'ready':
 						sendDocument(true);
+						await sendPages();
 						return;
+					case 'openPage': {
+						const target = pages.find(u => pageNameOf(u) === msg.name);
+						if (target && target.toString() !== document.uri.toString()) {
+							await vscode.commands.executeCommand('vscode.openWith', target, DESIGN_VIEW_TYPE, panel.viewColumn);
+						}
+						return;
+					}
+					case 'newPage': {
+						const created = await createDesignPage(document.uri, vscode.workspace.getWorkspaceFolder(document.uri)?.uri);
+						if (created) { await vscode.commands.executeCommand('vscode.openWith', created, DESIGN_VIEW_TYPE, panel.viewColumn); }
+						return;
+					}
 					case 'select': {
 						const info = typeof msg.id === 'number' ? elementInfo(current(), msg.id) : undefined;
 						post({ type: 'elementInfo', info: info ?? null });
@@ -192,6 +220,8 @@ export class DesignEditorProvider implements vscode.CustomTextEditorProvider {
 								ancestry: elementId === null ? undefined : (elementInfo(doc, elementId)?.path.map(p => p.tag).join(' > ')),
 								styles: collectStyles(doc),
 								guide: await this.readGuide(document.uri),
+								page: pageNameOf(document.uri),
+								otherPages: pages.map(pageNameOf).filter(n => n !== pageNameOf(document.uri)),
 							}, cts.token);
 							if (cts.token.isCancellationRequested) { return; }
 							if (scope === 'element' && parseHtml(result.html).roots.length !== 1) {
@@ -233,7 +263,7 @@ export class DesignEditorProvider implements vscode.CustomTextEditorProvider {
 						if (!p || p.id !== msg.proposalId) { return; }
 						proposal = undefined;
 						if (p.version !== document.version) {
-							throw new HtmlPatchError('提案の作成後に DESIGN.html が変更されました。もう一度 AI に依頼してください。');
+							throw new HtmlPatchError(`提案の作成後に ${pageNameOf(document.uri)} が変更されました。もう一度 AI に依頼してください。`);
 						}
 						const doc = current();
 						const patches = p.scope === 'element'
@@ -273,9 +303,9 @@ export class DesignEditorProvider implements vscode.CustomTextEditorProvider {
 		return this.agentScript;
 	}
 
-	/** 同じ .division フォルダの DESIGN.md (Designer 用ガイド) */
+	/** .division/DESIGN.md (Designer 用ガイド)。ページは .division/design/ にあるので 1 つ上を見る */
 	private async readGuide(designUri: vscode.Uri): Promise<string | undefined> {
-		const guideUri = vscode.Uri.joinPath(designUri, '..', 'DESIGN.md');
+		const guideUri = isPageFolder(designUri) ? vscode.Uri.joinPath(designUri, '..', '..', 'DESIGN.md') : vscode.Uri.joinPath(designUri, '..', 'DESIGN.md');
 		try {
 			const bytes = await vscode.workspace.fs.readFile(guideUri);
 			return new TextDecoder('utf-8').decode(bytes);
@@ -286,8 +316,8 @@ export class DesignEditorProvider implements vscode.CustomTextEditorProvider {
 
 	private getShellHtml(webview: vscode.Webview): string {
 		const media = (file: string) => webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', file));
-		// DESIGN.html は sandbox iframe (srcdoc) で描画する。srcdoc は親の CSP を引き継ぐので、
-		// nonce を付けると 'unsafe-inline' が無効になり DESIGN.html 自身のインラインスクリプトが
+		// デザイン HTML は sandbox iframe (srcdoc) で描画する。srcdoc は親の CSP を引き継ぐので、
+		// nonce を付けると 'unsafe-inline' が無効になりデザイン HTML 自身のインラインスクリプトが
 		// 動かなくなる。そのため nonce は使わず、外側の文書には拡張機能のスクリプト以外を置かない
 		// (信頼できない HTML を外側に挿入しない。表示は textContent のみ) ことで守る。
 		const csp = [
@@ -313,10 +343,13 @@ export class DesignEditorProvider implements vscode.CustomTextEditorProvider {
 </head>
 <body>
 	<header class="od-toolbar">
-		<div class="od-title"><span class="od-logo">◆</span> Orchestra Design <span class="od-file" id="od-file"></span><span class="od-dirty" id="od-dirty" hidden>●</span></div>
+		<div class="od-title"><span class="od-logo">◆</span> Orchestra Design
+			<select id="od-pages" class="od-pages" title="ページ (.division/design/ の画面)"></select>
+			<button id="od-new-page" class="od-icon" title="新しいページを作る (今のページのトークンと &lt;style&gt; を引き継ぐ)">＋</button>
+			<span class="od-file" id="od-file"></span><span class="od-dirty" id="od-dirty" hidden>●</span></div>
 		<nav class="od-tabs" role="tablist">
 			<button role="tab" data-mode="design" class="active" title="要素を選択して編集">Design</button>
-			<button role="tab" data-mode="code" title="同じ DESIGN.html をテキストエディタで横に開く">Code</button>
+			<button role="tab" data-mode="code" title="このページの HTML をテキストエディタで横に開く">Code</button>
 			<button role="tab" data-mode="preview" title="操作できるプレビュー (選択なし)">Preview</button>
 		</nav>
 		<div class="od-actions">
@@ -327,8 +360,8 @@ export class DesignEditorProvider implements vscode.CustomTextEditorProvider {
 			</div>
 			<button id="od-undo" title="元に戻す (Ctrl+Z)">↶</button>
 			<button id="od-redo" title="やり直し (Ctrl+Shift+Z)">↷</button>
-			<label class="od-toggle" title="DESIGN.html の &lt;script&gt; をプレビューで実行する"><input type="checkbox" id="od-run-scripts"> JS</label>
-			<button id="od-save" class="primary" title="DESIGN.html に保存 (Ctrl+S)">保存</button>
+			<label class="od-toggle" title="デザイン HTML の &lt;script&gt; をプレビューで実行する"><input type="checkbox" id="od-run-scripts"> JS</label>
+			<button id="od-save" class="primary" title="このページの HTML に保存 (Ctrl+S)">保存</button>
 		</div>
 	</header>
 	<main class="od-main">
@@ -340,7 +373,7 @@ export class DesignEditorProvider implements vscode.CustomTextEditorProvider {
 			<div id="od-banner" class="od-banner" hidden></div>
 			<div id="od-error" class="od-error" hidden></div>
 			<div class="od-canvas" id="od-canvas">
-				<iframe id="od-frame" title="DESIGN.html preview" sandbox="allow-scripts"></iframe>
+				<iframe id="od-frame" title="Design preview" sandbox="allow-scripts"></iframe>
 			</div>
 			<div class="od-breadcrumb" id="od-breadcrumb"></div>
 		</section>
@@ -376,7 +409,7 @@ export class DesignEditorProvider implements vscode.CustomTextEditorProvider {
 	}
 }
 
-/** 信頼されていないワークスペースでは DESIGN.html のスクリプトを実行しない */
+/** 信頼されていないワークスペースではデザイン HTML のスクリプトを実行しない */
 function previewRunsScripts(): boolean {
 	return vscode.workspace.isTrusted && vscode.workspace.getConfiguration('orchestraDesign').get<boolean>('preview.runScripts', true);
 }

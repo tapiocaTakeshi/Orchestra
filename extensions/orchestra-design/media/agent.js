@@ -5,7 +5,7 @@
 // @ts-check
 
 // プレビュー iframe (sandbox="allow-scripts", opaque origin) の中で動く選択用エージェント。
-// DESIGN.html と同じ権限しか持たず、親 (Design 画面) とは postMessage だけでやり取りする。
+// デザイン HTML と同じ権限しか持たず、親 (Design 画面) とは postMessage だけでやり取りする。
 // VS Code API や拡張機能の権限には触れられない。
 (function () {
 	'use strict';
