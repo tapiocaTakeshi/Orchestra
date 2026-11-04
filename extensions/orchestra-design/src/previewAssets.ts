@@ -3,19 +3,20 @@
  *  Licensed under the MIT License. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------------*/
 
-// プレビュー用: デザイン HTML が別ファイルで読み込む CSS (<link rel="stylesheet" href="style.css">) を
-// プレビューの HTML に埋め込む。
+// プレビュー用: デザイン HTML が相対パスで参照する別ファイル (CSS・画像・フォント) をプレビューの HTML に埋め込む。
 //
 // プレビューは sandbox iframe の srcdoc (opaque origin、ベース URL は about:srcdoc) なので、
-// 相対パスの <link> も CSS の url() も解決できず、HTML だけが表示されていた。
-// そこでファイルを拡張機能側で読み、<link> を同じ内容の <style> に置き換える。
+// 相対パスの <link> も <img src> も CSS の url() も解決できず、HTML だけが表示されていた。
+// そこでファイルを拡張機能側で読み、
+// - <link rel="stylesheet"> を同じ内容の <style> に置き換える。
 // - CSS 内の @import (相対パス) は再帰的に展開する (循環・深さは制限)。
-// - CSS 内の url() (画像・フォント) は data: URI に変換する (サイズ上限あり)。
+// - CSS (別ファイル・<style>・style 属性) 内の url() の画像・フォントは data: URI に変換する (サイズ上限あり)。
+// - <img src> / srcset、<source>、<input type="image">、<video poster>、SVG の <image href> も data: URI に変換する。
 // - 読めるのはワークスペース (root) の中のファイルだけ。外を指す / 無いファイルは元の <link> のまま。
 // 保存されるのは HTML ファイルそのもので、ここでの変換はプレビューにだけ使う。
 
 import * as path from 'path';
-import { ParsedHtml, getAttr, decodeEntities, parseHtml, applyPatches, TextPatch } from './htmlPatchService';
+import { ParsedHtml, HtmlAttr, getAttr, decodeEntities, parseHtml, applyPatches, TextPatch } from './htmlPatchService';
 
 export interface AssetReader {
 	/** テキストを読む (開いているエディタの未保存の内容を優先してよい)。無ければ undefined */
@@ -116,6 +117,84 @@ export function inlineStylesheets(html: string, opts: InlineOptions): InlineResu
 	return { html: patches.length ? applyPatches(html, patches) : html, files: [...files] };
 }
 
+/** src などに画像のパスを 1 つ持つ属性 (タグ → 属性) */
+const IMAGE_ATTRS: Record<string, string[]> = {
+	img: ['src'], source: ['src'], input: ['src'], video: ['poster'], embed: ['src'], object: ['data'],
+	image: ['href', 'xlink:href'], feimage: ['href', 'xlink:href'],
+};
+const SRCSET_TAGS = new Set(['img', 'source']);
+
+/**
+ * 画像などの相対パスを data: URI にした HTML を返す。
+ * 対象: IMAGE_ATTRS の属性、srcset、style 属性と <style> の中の url() (と <style> 内の @import)。
+ * 画像として扱える拡張子 (MIME が分かるもの) で、ワークスペース内にあり、サイズ上限以下のものだけ変換する。
+ */
+export function inlineImages(html: string, opts: InlineOptions): InlineResult {
+	const doc = parseHtml(html);
+	const files = new Set<string>();
+	const patches: TextPatch[] = [];
+	const setAttr = (a: HtmlAttr, value: string) => {
+		patches.push({ start: a.start, end: a.end, text: `${a.name}="${value.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"` });
+	};
+	for (const node of doc.nodes) {
+		for (const name of IMAGE_ATTRS[node.tag] ?? []) {
+			const a = getAttr(node, name);
+			if (a?.value === undefined) { continue; }
+			if (node.tag === 'input' && getAttr(node, 'type')?.value?.toLowerCase() !== 'image') { continue; }
+			const uri = refToDataUri(decodeEntities(a.value), opts, files);
+			if (uri !== undefined) { setAttr(a, uri); }
+		}
+		if (SRCSET_TAGS.has(node.tag)) {
+			const a = getAttr(node, 'srcset');
+			if (a?.value !== undefined) {
+				const before = decodeEntities(a.value);
+				const after = rewriteSrcset(before, opts, files);
+				if (after !== before) { setAttr(a, after); }
+			}
+		}
+		const style = getAttr(node, 'style');
+		if (style?.value !== undefined && /url\(/i.test(style.value)) {
+			const before = decodeEntities(style.value);
+			const after = rewriteCss(before, opts.documentPath, opts, files, new Set(), 0);
+			if (after !== before) { setAttr(style, after); }
+		}
+		if (node.tag === 'style' && node.closeStart !== undefined) {
+			const before = html.slice(node.openEnd, node.closeStart);
+			if (/url\(|@import/i.test(before)) {
+				const after = rewriteCss(before, opts.documentPath, opts, files, new Set([opts.documentPath]), 0);
+				if (after !== before) { patches.push({ start: node.openEnd, end: node.closeStart, text: escapeStyleText(after) }); }
+			}
+		}
+	}
+	return { html: patches.length ? applyPatches(html, patches) : html, files: [...files] };
+}
+
+/** 別ファイルの CSS と画像の両方を埋め込む (プレビューで使う) */
+export function inlinePreviewAssets(html: string, opts: InlineOptions): InlineResult {
+	const css = inlineStylesheets(html, opts);
+	const img = inlineImages(css.html, opts);
+	return { html: img.html, files: [...new Set([...css.files, ...img.files])] };
+}
+
+/** srcset の各候補 (URL 幅/密度) の URL を data: URI にする */
+function rewriteSrcset(srcset: string, opts: InlineOptions, files: Set<string>): string {
+	return srcset.split(',').map(candidate => {
+		const m = /^(\s*)(\S+)(.*)$/s.exec(candidate);
+		if (!m) { return candidate; }
+		const uri = refToDataUri(m[2], opts, files);
+		return uri === undefined ? candidate : `${m[1]}${uri}${m[3]}`;
+	}).join(',');
+}
+
+function refToDataUri(ref: string, opts: InlineOptions, files: Set<string>, fromFile = opts.documentPath): string | undefined {
+	if (!isLocalRef(ref)) { return undefined; }
+	const abs = resolveRef(ref, fromFile, opts.root);
+	const uri = abs === undefined ? undefined : toDataUri(abs, opts.reader);
+	if (uri === undefined) { return undefined; }
+	files.add(abs!);
+	return uri + (/#.*$/.exec(ref.trim())?.[0] ?? '');
+}
+
 /** <style> の中で終了タグとして解釈されないようにする */
 function escapeStyleText(css: string): string {
 	return css.replace(/<\/(style)/gi, '<\\/$1');
@@ -151,14 +230,9 @@ function rewriteCss(css: string, file: string, opts: InlineOptions, files: Set<s
 			// @import 自体は先頭にしか書けないが、展開後の中身はそのまま置いてよい
 			return media ? `@media ${media} {\n${inner}\n}` : inner;
 		}
-		const ref: string = u1 ?? u2 ?? u3 ?? '';
-		if (!isLocalRef(ref)) { return m; }
-		const abs = resolveRef(ref, file, opts.root);
-		const dataUri = abs === undefined ? undefined : toDataUri(abs, opts.reader);
-		if (dataUri === undefined) { return m; }
-		files.add(abs!);
-		const hash = /#.*$/.exec(ref.trim())?.[0] ?? '';
-		return `url("${dataUri}${hash}")`;
+		const uri = refToDataUri(u1 ?? u2 ?? u3 ?? '', opts, files, file);
+		// data: URI (base64) は空白・引用符・括弧を含まないので引用符なしで書ける (style 属性の中でも安全)
+		return uri === undefined ? m : `url(${uri})`;
 	});
 }
 

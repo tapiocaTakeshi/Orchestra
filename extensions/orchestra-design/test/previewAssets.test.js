@@ -71,7 +71,7 @@ test('url() in CSS becomes a data: URI relative to the CSS file', () => {
 		'.division/design/css/a.css': '.h{background:url(../img/bg.png)} .i{background:url("data:image/png;base64,AA")} /* url(x.png) */ .s{content:"url(y.png)"}',
 		'.division/design/img/bg.png': new Uint8Array([1, 2, 3]),
 	}));
-	assert.match(r.html, /url\("data:image\/png;base64,AQID"\)/);
+	assert.match(r.html, /url\(data:image\/png;base64,AQID\)/);
 	assert.match(r.html, /url\("data:image\/png;base64,AA"\)/);
 	assert.match(r.html, /\/\* url\(x\.png\) \*\//);
 	assert.match(r.html, /"url\(y\.png\)"/);
@@ -88,4 +88,53 @@ test('linkedStylesheets lists the local CSS files for the AI context', () => {
 	const doc = h.parseHtml('<link rel="stylesheet" href="style.css"><link rel="stylesheet" href="https://x.test/a.css">');
 	const list = a.linkedStylesheets(doc, opts({ '.division/design/style.css': 'a{}' }));
 	assert.deepEqual(list, [{ path: path.join(DESIGN, 'style.css'), css: 'a{}' }]);
+});
+
+const PNG = new Uint8Array([1, 2, 3]); // base64: AQID
+
+test('<img src> and srcset with relative paths become data: URIs', () => {
+	const html = '<img data-od-id="1" src="img/a.png" alt="a"><img src="../shared/b.svg#icon"><img srcset="img/a.png 1x, img/a@2x.png 2x, https://x.test/c.png 3x" src="https://x.test/c.png"><picture><source srcset="img/a.png" type="image/png"></picture>';
+	const r = a.inlineImages(html, opts({
+		'.division/design/img/a.png': PNG, '.division/design/img/a@2x.png': PNG, '.division/shared/b.svg': '<svg/>',
+	}));
+	assert.match(r.html, /<img data-od-id="1" src="data:image\/png;base64,AQID" alt="a">/);
+	assert.match(r.html, /src="data:image\/svg\+xml;base64,PHN2Zy8\+#icon"/);
+	assert.match(r.html, /srcset="data:image\/png;base64,AQID 1x, data:image\/png;base64,AQID 2x, https:\/\/x\.test\/c\.png 3x" src="https:\/\/x\.test\/c\.png"/);
+	assert.match(r.html, /<source srcset="data:image\/png;base64,AQID" type="image\/png">/);
+	assert.equal(r.files.length, 3);
+});
+
+test('video poster, input type=image and SVG <image href> are converted; other inputs are not', () => {
+	const html = '<video poster="p.png"></video><input type="image" src="p.png"><input type="text" src="p.png"><svg><image href="p.png"/><image xlink:href="p.png"/></svg>';
+	const r = a.inlineImages(html, opts({ '.division/design/p.png': PNG }));
+	assert.equal((r.html.match(/data:image\/png;base64,AQID/g) || []).length, 4);
+	assert.match(r.html, /<input type="text" src="p\.png">/);
+});
+
+test('url() in style attributes and <style> resolves relative to the page', () => {
+	const html = `<div style='background: url("img/a.png") no-repeat'></div><style>.h{background:url(img/a.png)} .x{background:url(missing.png)}</style>`;
+	const r = a.inlineImages(html, opts({ '.division/design/img/a.png': PNG }));
+	assert.match(r.html, /<div style="background: url\(data:image\/png;base64,AQID\) no-repeat">/);
+	assert.match(r.html, /\.h\{background:url\(data:image\/png;base64,AQID\)\}/);
+	assert.match(r.html, /url\(missing\.png\)/);
+	// 書き換え後もパースでき、style 属性は 1 つの値のまま
+	const div = h.parseHtml(r.html).nodes.find(n => n.tag === 'div');
+	assert.equal(h.getAttr(div, 'style').value, 'background: url(data:image/png;base64,AQID) no-repeat');
+});
+
+test('remote, data:, missing, outside-workspace, non-image and oversized files stay as they are', () => {
+	const big = new Uint8Array(a.MAX_DATA_URI_BYTES + 1);
+	const html = '<img src="https://x.test/a.png"><img src="data:image/png;base64,AA"><img src="nope.png"><img src="../../../etc/a.png"><img src="doc.txt"><img src="big.png"><a href="other.html">x</a>';
+	const r = a.inlineImages(html, opts({ '.division/design/doc.txt': 'x', '.division/design/big.png': big }));
+	assert.equal(r.html, html);
+	assert.deepEqual(r.files, []);
+});
+
+test('inlinePreviewAssets does both stylesheets and images', () => {
+	const r = a.inlinePreviewAssets('<link rel="stylesheet" href="s.css"><img src="p.png">', opts({
+		'.division/design/s.css': '.x{background:url(p.png)}', '.division/design/p.png': PNG,
+	}));
+	assert.equal((r.html.match(/data:image\/png;base64,AQID/g) || []).length, 2);
+	assert.doesNotMatch(r.html, /<link/);
+	assert.deepEqual(r.files.sort(), [path.join(DESIGN, 'p.png'), path.join(DESIGN, 's.css')].sort());
 });
