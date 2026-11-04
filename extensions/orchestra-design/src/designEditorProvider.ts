@@ -24,7 +24,7 @@ import {
 } from './htmlPatchService';
 import { DesignerClient } from './designerClient';
 import { createDesignPage, isPageFolder, listSiblingPages } from './designPages';
-import { AssetReader, InlineOptions, MAX_DATA_URI_BYTES, inlineStylesheets, linkedStylesheets } from './previewAssets';
+import { AssetReader, InlineOptions, MAX_DATA_URI_BYTES, inlinePreviewAssets, isLocalRef, linkedStylesheets } from './previewAssets';
 
 export const DESIGN_VIEW_TYPE = 'orchestra.designEditor';
 
@@ -218,6 +218,8 @@ export class DesignEditorProvider implements vscode.CustomTextEditorProvider {
 							await applyPatches_(patches);
 						}
 						if (ops[0]) { post({ type: 'elementInfo', info: elementInfo(current(), ops[0].id) ?? null }); }
+						// 画像の相対パスはプレビュー上でそのままでは表示できない (data: URI への変換が要る) ので読み直す
+						if (ops.some(touchesLocalAsset)) { sendDocument(true); }
 						return;
 					}
 					case 'undo':
@@ -315,12 +317,12 @@ export class DesignEditorProvider implements vscode.CustomTextEditorProvider {
 	}
 
 	/**
-	 * プレビュー用 HTML: data-od-id を付け、別ファイルの CSS を埋め込み、選択・ハイライト用のエージェントを先頭に差し込む。
+	 * プレビュー用 HTML: data-od-id を付け、別ファイルの CSS・画像を埋め込み、選択・ハイライト用のエージェントを先頭に差し込む。
 	 * files は埋め込んだファイル (変更監視用)。
 	 */
 	private previewHtml(doc: ParsedHtml, documentUri: vscode.Uri): { html: string; files: string[] } {
 		const inlined = documentUri.scheme === 'file'
-			? inlineStylesheets(instrumentForPreview(doc, { runScripts: previewRunsScripts() }), this.assetOptions(documentUri))
+			? inlinePreviewAssets(instrumentForPreview(doc, { runScripts: previewRunsScripts() }), this.assetOptions(documentUri))
 			: { html: instrumentForPreview(doc, { runScripts: previewRunsScripts() }), files: [] };
 		const html = inlined.html;
 		const agent = `<script data-od-agent>${this.getAgentScript().replace(/<\/script/gi, '<\\/script')}</script>`;
@@ -461,6 +463,16 @@ export class DesignEditorProvider implements vscode.CustomTextEditorProvider {
 /** 信頼されていないワークスペースではデザイン HTML のスクリプトを実行しない */
 function previewRunsScripts(): boolean {
 	return vscode.workspace.isTrusted && vscode.workspace.getConfiguration('orchestraDesign').get<boolean>('preview.runScripts', true);
+}
+
+/** プレビューで data: URI に変換しないと表示できない値 (画像の相対パス・url()) を変える編集か */
+function touchesLocalAsset(op: EditOp): boolean {
+	if (op.kind === 'style') { return /url\(/i.test(String(op.value ?? '')); }
+	if (op.kind !== 'attr') { return false; }
+	const name = String(op.name).toLowerCase();
+	if (name === 'style') { return /url\(/i.test(String(op.value ?? '')); }
+	if (!/^(src|srcset|poster|data|href|xlink:href)$/.test(name) || op.value === null) { return false; }
+	return name === 'srcset' ? String(op.value).split(',').some(c => isLocalRef(c.trim().split(/\s+/)[0] ?? '')) : isLocalRef(String(op.value));
 }
 
 /** 開いているエディタの (未保存も含む) 内容を優先し、無ければディスクから読む */
