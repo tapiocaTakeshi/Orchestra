@@ -44,6 +44,7 @@ import { availableTools, InternalToolInfo } from '../../common/prompt/prompts.js
 import { generateUuid } from '../../../../../base/common/uuid.js';
 import { extractSearchReplaceBlocks } from '../../common/helpers/extractCodeFromResult.js';
 import { DESIGN_DIR, DESIGN_INDEX_PAGE, LEGACY_DESIGN_FILE, sortDesignPageNames, splitDesignPages } from '../../common/designPages.js';
+import { APP_PAPER_FILE, APP_SPECIFICATION_FILE, APP_DESIGN_DIR, appendAppDocumentVersion, ensureAppWorkflowTasks, isAppCreationRequest } from '../../common/appCreationFlow.js';
 import { extractSearchedSites, mergeSearchedSites, logSearchedSites, searchedSitesMarkdown, isDefaultWebSearchEnabled, isWebSearchRejectedError } from '../../common/searchedSites.js';
 
 const getGoogleApiKey = async () => {
@@ -1075,21 +1076,21 @@ const FLOW_ROLE_TO_FILENAME: Record<string, string> = {
 	// designer は .division/design/ に画面ごとの HTML を書く (common/designPages.ts)。ここには先頭ページを置く。
 	'design': `${DESIGN_DIR}/${DESIGN_INDEX_PAGE}`,
 	'designer': `${DESIGN_DIR}/${DESIGN_INDEX_PAGE}`,
-	'search': 'SEARCH.md',
-	'searcher': 'SEARCH.md',
+	'search': APP_PAPER_FILE,
+	'searcher': APP_PAPER_FILE,
 	'file-search': 'FILE-SEARCH.md',
 	'filesearch': 'FILE-SEARCH.md',
 	'file_search': 'FILE-SEARCH.md',
 	'file-searcher': 'FILE-SEARCH.md',
 	'filesearcher': 'FILE-SEARCH.md',
-	'research': 'RESEARCH.md',
-	'researcher': 'RESEARCH.md',
-	'deep-research': 'RESEARCH.md',
-	'deep-researcher': 'RESEARCH.md',
+	'research': APP_PAPER_FILE,
+	'researcher': APP_PAPER_FILE,
+	'deep-research': APP_PAPER_FILE,
+	'deep-researcher': APP_PAPER_FILE,
 	'review': 'REVIEW.md',
 	'reviewer': 'REVIEW.md',
-	'writing': 'WRITING.md',
-	'writer': 'WRITING.md',
+	'writing': APP_SPECIFICATION_FILE,
+	'writer': APP_SPECIFICATION_FILE,
 	'planning': 'PLANNING.md',
 	'planner': 'PLANNING.md',
 	'ideaman': 'IDEAMAN.md',
@@ -1099,8 +1100,8 @@ const FLOW_ROLE_TO_FILENAME: Record<string, string> = {
 // The designer answers with one self-contained HTML document per screen, each in a
 // ```html <file name> block. Every page is written to .division/design/<name>.html;
 // pages the designer did not output this time are kept. Returns the written paths.
-const writeDesignPages = (divisionDir: string, content: string): string[] => {
-	const dir = path.join(divisionDir, DESIGN_DIR);
+const writeDesignPages = (workspaceFolderPath: string, content: string): string[] => {
+	const dir = path.join(workspaceFolderPath, APP_DESIGN_DIR);
 	fs.mkdirSync(dir, { recursive: true });
 	return splitDesignPages(content).map(page => {
 		const filePath = path.join(dir, page.name);
@@ -1109,14 +1110,14 @@ const writeDesignPages = (divisionDir: string, content: string): string[] => {
 	});
 };
 
-/** .division/design/ にあるページ名 (index.html が先頭) */
+/** The persisted design/ pages; older .division/design/ pages remain readable. */
 const listDesignPages = (workspaceFolderPath: string): string[] => {
-	try {
-		const names = fs.readdirSync(path.join(workspaceFolderPath, '.division', DESIGN_DIR)).filter(n => /\.html?$/i.test(n));
-		return sortDesignPageNames(names);
-	} catch {
-		return [];
-	}
+	const list = (root: string): string[] => {
+		try { return sortDesignPageNames(fs.readdirSync(root).filter(n => /\.html?$/i.test(n))); }
+		catch { return []; }
+	};
+	const saved = list(path.join(workspaceFolderPath, APP_DESIGN_DIR));
+	return saved.length ? saved : list(path.join(workspaceFolderPath, '.division', DESIGN_DIR));
 };
 
 const saveFlowResultAsMd = (
@@ -1130,15 +1131,20 @@ const saveFlowResultAsMd = (
 	const filename = FLOW_ROLE_TO_FILENAME[role.toLowerCase()];
 	if (!filename || !workspaceFolderPath) return null;
 
-	const divisionDir = path.join(workspaceFolderPath, '.division');
-	const filePath = path.join(divisionDir, filename);
+	const persistentDoc = filename === APP_PAPER_FILE || filename === APP_SPECIFICATION_FILE;
+	const targetDir = persistentDoc || filename.startsWith(`${DESIGN_DIR}/`)
+		? workspaceFolderPath : path.join(workspaceFolderPath, '.division');
+	const filePath = path.join(targetDir, filename);
 
 	try {
-		fs.mkdirSync(divisionDir, { recursive: true });
+		fs.mkdirSync(targetDir, { recursive: true });
 		if (filename.startsWith(`${DESIGN_DIR}/`)) {
-			// Appending with a Markdown rule would break the documents, so pages are always replaced.
-			const written = writeDesignPages(divisionDir, content);
+			// Update changed pages only; never clear design/ or delete omitted pages.
+			const written = writeDesignPages(workspaceFolderPath, content);
 			return written.find(p => path.basename(p) === DESIGN_INDEX_PAGE) ?? written[0] ?? null;
+		} else if (persistentDoc) {
+			const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
+			fs.writeFileSync(filePath, appendAppDocumentVersion(existing, content, new Date().toISOString()), 'utf-8');
 		} else if (append && fs.existsSync(filePath)) {
 			const existing = fs.readFileSync(filePath, 'utf-8');
 			fs.writeFileSync(filePath, existing + '\n\n---\n\n' + content, 'utf-8');
@@ -1156,7 +1162,8 @@ const saveFlowResultAsMd = (
 const buildMdFileInfo = (workspaceFolderPath: string, role: string): { mdFileName: string; mdFilePath: string } | null => {
 	const filename = FLOW_ROLE_TO_FILENAME[role.toLowerCase()];
 	if (!filename) return null;
-	return { mdFileName: filename, mdFilePath: path.join(workspaceFolderPath, '.division', filename) };
+	const canonical = filename === APP_PAPER_FILE || filename === APP_SPECIFICATION_FILE || filename.startsWith(`${DESIGN_DIR}/`);
+	return { mdFileName: filename, mdFilePath: path.join(workspaceFolderPath, ...(canonical ? [] : ['.division']), filename) };
 };
 
 // Division API の image ロールは生成画像を base64 (生の base64 または
@@ -3435,13 +3442,18 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		const readDesignPages = (): Array<{ file: string; html: string }> => {
 			if (!workspaceFolderPath) return [];
 			const read = (rel: string) => {
-				try { return fs.readFileSync(path.join(workspaceFolderPath, '.division', rel), 'utf-8').trim(); } catch { return ''; }
+				try { return fs.readFileSync(path.join(workspaceFolderPath, rel), 'utf-8').trim(); } catch { return ''; }
 			};
 			let pages = listDesignPages(workspaceFolderPath)
-				.map(name => ({ file: `.division/${DESIGN_DIR}/${name}`, html: read(`${DESIGN_DIR}/${name}`) }))
+				.map(name => {
+					const canonical = `${APP_DESIGN_DIR}/${name}`;
+					const legacy = `.division/${DESIGN_DIR}/${name}`;
+					const html = read(canonical) || read(legacy);
+					return { file: read(canonical) ? canonical : legacy, html };
+				})
 				.filter(p => p.html);
 			if (!pages.length) {
-				const legacy = read(LEGACY_DESIGN_FILE);
+				const legacy = read(`.division/${LEGACY_DESIGN_FILE}`);
 				if (legacy) pages = [{ file: `.division/${LEGACY_DESIGN_FILE}`, html: legacy }];
 			}
 			const total = pages.reduce((n, p) => n + p.html.length, 0);
@@ -3455,9 +3467,10 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 
 		const isCoderLikeRole = (r: string): boolean => {
 			const role = (r || '').toLowerCase();
-			return role === 'coder' || role === 'coding' || role === 'code'
-				|| role === 'writer' || role === 'writing';
+			return role === 'coder' || role === 'coding' || role === 'code';
 		};
+		const isCoderOrWriterRole = (r: string): boolean =>
+			isCoderLikeRole(r) || r === 'writing' || r === 'writer';
 		const isImageRole = (r: string): boolean => {
 			const role = (r || '').toLowerCase();
 			return role === 'image' || role === 'imager' || role === 'image-generator' || role === 'imagegen';
@@ -3534,7 +3547,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		): boolean => {
 			if (!divisionFlowApprovalMode || !workspaceFolderPath) return false;
 			// 「coder / writer だけ承認」設定なら、それ以外のロールは保存だけして止めずに進む
-			if (divisionFlowApprovalCoderWriterOnly && !isCoderLikeRole(flowRole)) return false;
+			if (divisionFlowApprovalCoderWriterOnly && !isCoderOrWriterRole(flowRole)) return false;
 			writeOrchestrationState(workspaceFolderPath, {
 				approved: false,
 				workspaceFolderPath,
@@ -3874,11 +3887,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					if (!edited) return o;
 					if (workspaceFolderPath && o.mdFileName) {
 						try {
-							if (o.mdFileName.startsWith(`${DESIGN_DIR}/`)) {
-								writeDesignPages(path.join(workspaceFolderPath, '.division'), edited.mdContent);
-							} else {
-								fs.writeFileSync(path.join(workspaceFolderPath, '.division', o.mdFileName), edited.mdContent, 'utf-8');
-							}
+							saveFlowResultAsMd(workspaceFolderPath, o.role, o.title, edited.mdContent, sessionId || 'approved');
 						} catch (_e) { /* ignore */ }
 					}
 					return { ...o, output: edited.mdContent };
@@ -3941,6 +3950,19 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 						title: 'ファイル読み込み',
 						description: '作業フォルダのファイルを読み込み、後続エージェントに共有する (AI は使わない)',
 					});
+				}
+
+				if (isAppCreationRequest(baseInput)) {
+					tasks = ensureAppWorkflowTasks(tasks);
+					if (workspaceFolderPath) {
+						fs.mkdirSync(path.join(workspaceFolderPath, APP_DESIGN_DIR), { recursive: true });
+						for (const [file, heading] of [[APP_PAPER_FILE, '# 論文'], [APP_SPECIFICATION_FILE, '# 仕様書']]) {
+							const target = path.join(workspaceFolderPath, file);
+							if (!fs.existsSync(target)) fs.writeFileSync(target, heading + '\n', { flag: 'wx' });
+						}
+					} else {
+						appendText('> ⚠️ ワークスペースが未指定のため、永続成果物は保存できません。アプリ制作にはフォルダを開いてください。\n\n');
+					}
 				}
 
 				if (tasks.length === 0) {
@@ -4119,11 +4141,11 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				const existingDesignPages = isDesigner && workspaceFolderPath ? listDesignPages(workspaceFolderPath) : [];
 				const taskInstruction = isDesigner
 					? [
-						`直前の assistant メッセージに先行タスクの出力が添付されています（ある場合）。それを踏まえ、ユーザー要求を視覚化した **デザイン HTML（ブラウザで開けるデザイン文書）** を画面ごとに作成してください。保存先は \`.division/${DESIGN_DIR}/\` フォルダで、1 画面 = 1 ファイルです。`,
+						`直前の assistant メッセージに先行タスクの出力が添付されています（ある場合）。**specification.md の最新版を最優先**し、ユーザー要求を視覚化したデザイン HTML を画面ごとに更新してください。保存先はワークスペース直下の \`${APP_DESIGN_DIR}/\` フォルダで、1 画面 = 1 ファイルです。フォルダを初期化・削除しないでください。`,
 						``,
 						`### 出力要件`,
 						`- 画面ごとに \`\`\`html コードブロックを 1 つずつ出力し、開始行にファイル名を付けてください（例: \`\`\`html index.html / \`\`\`html login.html / \`\`\`html dashboard.html）。ファイル名は英小文字・数字・ハイフンのみ。`,
-						`- \`${DESIGN_INDEX_PAGE}\` は必須で、デザインシステム（トークン・コンポーネント見本）と全画面へのリンク（\`<a href="login.html">\` のような相対リンク）を置いてください。`,
+						`- \`${DESIGN_INDEX_PAGE}\` は必須ページです。既存の index.html がある場合は、変更が必要なときだけ更新してください。デザインシステム（トークン・コンポーネント見本）と全画面への相対リンクを維持してください。`,
 						`- 各ファイルは \`<!DOCTYPE html>\` から始まる完結した 1 ファイルにし、同じ :root トークンをそれぞれに入れてください。前置き・後書きは書かないでください。`,
 						existingDesignPages.length
 							? `- 既存のページ: ${existingDesignPages.map(n => `\`${n}\``).join(', ')}。変更するページだけを同じファイル名で出力してください（出力しなかったページはそのまま残ります）。`
@@ -4161,7 +4183,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					const designBlock = designPages.length
 						? [
 							``,
-							`### デザイン仕様 (${designPages.length > 1 ? `.division/${DESIGN_DIR}/ の ${designPages.length} 画面` : designPages[0].file}) — 必ずこの通りに実装すること`,
+							`### デザイン仕様 (${designPages.length > 1 ? `${APP_DESIGN_DIR}/ の ${designPages.length} 画面` : designPages[0].file}) — 必ずこの通りに実装すること`,
 							`- :root の CSS 変数（色・フォント・余白・角丸・影）は名前と値をそのまま使う。独自の色や変数を作らない。`,
 							`- セクション構成・ワイヤーフレーム・コンポーネントの見た目と状態・レスポンシブの規則に従う。`,
 							...(designPages.length > 1 ? [`- 各ファイルは 1 画面です。画面ごとに対応するページ・コンポーネントを実装する。`] : []),
@@ -4182,6 +4204,26 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					].join('\n');
 				}
 
+				const readPersistent = (name: string): string => {
+					if (!workspaceFolderPath) return '';
+					try {
+						const value = fs.readFileSync(path.join(workspaceFolderPath, name), 'utf-8');
+						return truncateForContext(value.slice(-45000), 45000);
+					} catch { return ''; }
+				};
+				const paperContext = readPersistent(APP_PAPER_FILE);
+				const specContext = readPersistent(APP_SPECIFICATION_FILE);
+				const isResearchRole = ['search', 'searcher', 'research', 'researcher', 'deep-research', 'deep-researcher'].includes(role);
+				const isWriterRole = role === 'writer' || role === 'writing';
+				const persistentContext = [
+					isResearchRole ? `## 論文の更新ルール\n${APP_PAPER_FILE} を一新しない。既存の調査・根拠と重複しない追記や訂正だけを Markdown で出力する。` : '',
+					isResearchRole && paperContext ? `## 既存の paper.md（末尾が最新）\n${paperContext}` : '',
+					isWriterRole ? `## 仕様書の更新ルール\n${APP_PAPER_FILE} の研究結果を根拠とし、既存の specification.md を保全しながら必要な追加・変更点だけ Markdown で出力する。` : '',
+					isWriterRole && paperContext ? `## 論文（根拠）\n${paperContext}` : '',
+					isWriterRole && specContext ? `## 既存の仕様書（末尾が最新）\n${specContext}` : '',
+					(isDesigner || isCoderLikeRole(role)) && specContext ? `## 必ず準拠する specification.md（末尾が最新）\n${specContext}` : '',
+					isCoderLikeRole(role) ? `## 実装契約\n仕様書と design/ の保存済み最新版を両方参照する。既存のコードは差分編集し、仕様とデザインにない独自変更を避ける。` : '',
+				].filter(Boolean).join('\n\n');
 				const taskInput = [
 					`## ユーザーの元のリクエスト`,
 					currentInput,
@@ -4194,6 +4236,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					``,
 					`## 指示`,
 					taskInstruction,
+					persistentContext,
 					extraCoderBlock,
 				].filter(Boolean).join('\n');
 
