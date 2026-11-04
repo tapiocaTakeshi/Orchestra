@@ -12,8 +12,8 @@ import { createDecorator } from '../../../../platform/instantiation/common/insta
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { IMetricsService } from './metricsService.js';
 import { defaultProviderSettings, getModelCapabilities, ModelOverrides } from './modelCapabilities.js';
-import { DIVISION_AUTH_BACKUP_STORAGE_KEY, VOID_SETTINGS_STORAGE_KEY } from './storageKeys.js';
-import { parseDivisionAuthBackup, serializeDivisionAuthBackup } from './divisionAuthBackup.js';
+import { VOID_SETTINGS_BACKUP_STORAGE_KEY, VOID_SETTINGS_STORAGE_KEY } from './storageKeys.js';
+import { readSettingsWithFallback } from './settingsBackup.js';
 import { defaultSettingsOfProvider, FeatureName, ProviderName, ModelSelectionOfFeature, SettingsOfProvider, SettingName, providerNames, ModelSelection, modelSelectionsEqual, featureNames, VoidStatefulModelInfo, GlobalSettings, GlobalSettingName, defaultGlobalSettings, ModelSelectionOptions, OptionsOfModelSelection, ChatMode, OverridesOfModel, defaultOverridesOfModel, MCPUserStateOfName as MCPUserStateOfName, MCPUserState, SkillUserStateOfName, SkillUserState } from './voidSettingsTypes.js';
 
 
@@ -320,8 +320,12 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 
 	async readAndInitializeState() {
 		let readS: VoidSettingsState
+		// 控えから読んだとき (今使える鍵で暗号化し直す) と、控えがまだ無いとき (控えを作る) は保存し直す
+		let needsStore = false
 		try {
-			readS = await this._readState();
+			const read = await this._readState();
+			readS = read.state
+			needsStore = read.needsStore
 			// 1.0.3 addition, remove when enough users have had this code run
 			if (readS.globalSettings.includeToolLintErrors === undefined) readS.globalSettings.includeToolLintErrors = true
 
@@ -454,24 +458,11 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 			readS = defaultState()
 		}
 
-		// 設定の復号に失敗した (アップデートで macOS のキーチェーン鍵が読めなくなった等) ときや
-		// 設定が初期値に戻ってしまったときは、ログイン情報の控えから戻してログインを保つ。
-		// 控えはログアウトで消えるので、自分でログアウトした場合はここに入らない。
-		let restoredLogin = false
-		if (!readS.globalSettings.isLoggedIn) {
-			const backup = parseDivisionAuthBackup(this._storageService.get(DIVISION_AUTH_BACKUP_STORAGE_KEY, StorageScope.APPLICATION))
-			if (backup) {
-				readS = { ...readS, globalSettings: { ...readS.globalSettings, ...backup } }
-				restoredLogin = true
-			}
-		}
-
 		this.state = readS
 		this.state = _stateWithMergedDefaultModels(this.state)
 		this.state = _validatedModelState(this.state);
 
-		if (restoredLogin) {
-			// 今使える鍵で暗号化し直して保存しておく
+		if (needsStore) {
 			await this._storeState()
 		}
 
@@ -482,34 +473,35 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 	}
 
 
-	private async _readState(): Promise<VoidSettingsState> {
-		const encryptedState = this._storageService.get(VOID_SETTINGS_STORAGE_KEY, StorageScope.APPLICATION)
-
-		if (!encryptedState)
-			return defaultState()
-
-		const stateStr = await this._encryptionService.decrypt(encryptedState)
-		const state = JSON.parse(stateStr)
-		return state
+	private async _readState(): Promise<{ state: VoidSettingsState, needsStore: boolean }> {
+		// 復号できない (アップデートで macOS のキーチェーン鍵が読めなくなった等) ときは控えから読む
+		const backup = this._storageService.get(VOID_SETTINGS_BACKUP_STORAGE_KEY, StorageScope.APPLICATION)
+		const read = await readSettingsWithFallback<VoidSettingsState>(
+			this._storageService.get(VOID_SETTINGS_STORAGE_KEY, StorageScope.APPLICATION),
+			backup,
+			value => this._encryptionService.decrypt(value),
+		)
+		if (read.kind === 'none')
+			return { state: defaultState(), needsStore: false }
+		return { state: read.state, needsStore: read.kind === 'backup' || !backup }
 	}
 
 
 	private async _storeState() {
 		const state = this.state
 
-		// ログイン情報の控えは暗号鍵に依存させない (アップデート後に復号できなくてもログインを保つため)
-		const authBackup = serializeDivisionAuthBackup(state.globalSettings)
-		if (authBackup)
-			this._storageService.store(DIVISION_AUTH_BACKUP_STORAGE_KEY, authBackup, StorageScope.APPLICATION, StorageTarget.MACHINE);
-		else
-			this._storageService.remove(DIVISION_AUTH_BACKUP_STORAGE_KEY, StorageScope.APPLICATION);
+		const stateStr = JSON.stringify(state)
+
+		// 控えは暗号鍵に依存させない (アップデート後に復号できなくても設定を保つため)。
+		// MACHINE なので設定同期でアップロードされない。
+		this._storageService.store(VOID_SETTINGS_BACKUP_STORAGE_KEY, stateStr, StorageScope.APPLICATION, StorageTarget.MACHINE);
 
 		let encryptedState: string
 		try {
-			encryptedState = await this._encryptionService.encrypt(JSON.stringify(state))
+			encryptedState = await this._encryptionService.encrypt(stateStr)
 		} catch (e) {
 			// 暗号化できなくても (キーチェーンにアクセスできない等) ログインや設定変更は止めない。
-			// ログイン情報は上の控えに残っている。
+			// 設定は上の控えに残っている。
 			console.error('[VoidSettingsService] Could not encrypt settings:', e)
 			return
 		}
