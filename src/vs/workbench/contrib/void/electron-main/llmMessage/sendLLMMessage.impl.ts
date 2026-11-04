@@ -4349,9 +4349,15 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				}
 
 				// 既知のロールは .division/*.md にも保存
-				const mdInfo = (output && workspaceFolderPath) ? buildMdFileInfo(workspaceFolderPath, role, appWorkflowEnabled) : null;
+				let mdInfo = (output && workspaceFolderPath) ? buildMdFileInfo(workspaceFolderPath, role, appWorkflowEnabled) : null;
 				if (mdInfo && workspaceFolderPath) {
-					saveFlowResultAsMd(workspaceFolderPath, task.role, task.title || '', output, sessionId || 'task', false, appWorkflowEnabled);
+					const writtenPath = saveFlowResultAsMd(workspaceFolderPath, task.role, task.title || '', output, sessionId || 'task', false, appWorkflowEnabled);
+					if (writtenPath) {
+						mdInfo = { mdFileName: path.relative(workspaceFolderPath, writtenPath), mdFilePath: writtenPath };
+					} else {
+						appendText(`⚠️ ${role} の成果物を保存できませんでした。保存に失敗したため、このステップを承認できません。\n\n`);
+						mdInfo = null;
+					}
 				}
 				taskOutputs.push({ role: task.role, title: task.title || '', output, mdFileName: mdInfo?.mdFileName, mdFilePath: mdInfo?.mdFilePath });
 
