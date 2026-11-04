@@ -20,4 +20,7 @@ export const THREAD_STORAGE_KEY = 'void.chatThreadStorageII'
 
 
 
+// 暗号鍵が読めなくなっても (アップデート後など) ログインを保つための、ログイン情報の控え
+export const DIVISION_AUTH_BACKUP_STORAGE_KEY = 'orchestra.divisionAuthBackup'
+
 export const OPT_OUT_KEY = 'void.app.optOutAll'

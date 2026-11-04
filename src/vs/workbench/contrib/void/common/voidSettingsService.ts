@@ -12,7 +12,8 @@ import { createDecorator } from '../../../../platform/instantiation/common/insta
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { IMetricsService } from './metricsService.js';
 import { defaultProviderSettings, getModelCapabilities, ModelOverrides } from './modelCapabilities.js';
-import { VOID_SETTINGS_STORAGE_KEY } from './storageKeys.js';
+import { DIVISION_AUTH_BACKUP_STORAGE_KEY, VOID_SETTINGS_STORAGE_KEY } from './storageKeys.js';
+import { parseDivisionAuthBackup, serializeDivisionAuthBackup } from './divisionAuthBackup.js';
 import { defaultSettingsOfProvider, FeatureName, ProviderName, ModelSelectionOfFeature, SettingsOfProvider, SettingName, providerNames, ModelSelection, modelSelectionsEqual, featureNames, VoidStatefulModelInfo, GlobalSettings, GlobalSettingName, defaultGlobalSettings, ModelSelectionOptions, OptionsOfModelSelection, ChatMode, OverridesOfModel, defaultOverridesOfModel, MCPUserStateOfName as MCPUserStateOfName, MCPUserState, SkillUserStateOfName, SkillUserState } from './voidSettingsTypes.js';
 
 
@@ -453,9 +454,26 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 			readS = defaultState()
 		}
 
+		// 設定の復号に失敗した (アップデートで macOS のキーチェーン鍵が読めなくなった等) ときや
+		// 設定が初期値に戻ってしまったときは、ログイン情報の控えから戻してログインを保つ。
+		// 控えはログアウトで消えるので、自分でログアウトした場合はここに入らない。
+		let restoredLogin = false
+		if (!readS.globalSettings.isLoggedIn) {
+			const backup = parseDivisionAuthBackup(this._storageService.get(DIVISION_AUTH_BACKUP_STORAGE_KEY, StorageScope.APPLICATION))
+			if (backup) {
+				readS = { ...readS, globalSettings: { ...readS.globalSettings, ...backup } }
+				restoredLogin = true
+			}
+		}
+
 		this.state = readS
 		this.state = _stateWithMergedDefaultModels(this.state)
 		this.state = _validatedModelState(this.state);
+
+		if (restoredLogin) {
+			// 今使える鍵で暗号化し直して保存しておく
+			await this._storeState()
+		}
 
 
 		this._resolver();
@@ -478,7 +496,23 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 
 	private async _storeState() {
 		const state = this.state
-		const encryptedState = await this._encryptionService.encrypt(JSON.stringify(state))
+
+		// ログイン情報の控えは暗号鍵に依存させない (アップデート後に復号できなくてもログインを保つため)
+		const authBackup = serializeDivisionAuthBackup(state.globalSettings)
+		if (authBackup)
+			this._storageService.store(DIVISION_AUTH_BACKUP_STORAGE_KEY, authBackup, StorageScope.APPLICATION, StorageTarget.MACHINE);
+		else
+			this._storageService.remove(DIVISION_AUTH_BACKUP_STORAGE_KEY, StorageScope.APPLICATION);
+
+		let encryptedState: string
+		try {
+			encryptedState = await this._encryptionService.encrypt(JSON.stringify(state))
+		} catch (e) {
+			// 暗号化できなくても (キーチェーンにアクセスできない等) ログインや設定変更は止めない。
+			// ログイン情報は上の控えに残っている。
+			console.error('[VoidSettingsService] Could not encrypt settings:', e)
+			return
+		}
 		this._storageService.store(VOID_SETTINGS_STORAGE_KEY, encryptedState, StorageScope.APPLICATION, StorageTarget.USER);
 	}
 
