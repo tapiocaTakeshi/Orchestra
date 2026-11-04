@@ -44,11 +44,15 @@ Orchestra がそれぞれを `.division/design/<name>.html` に保存します (
 - **差分適用**。キャンバスでの変更は該当要素の `style` 属性・文字・属性だけを書き換える最小のテキスト差分です。
   既存の `<style>`、スクリプト、インデント、コメントはそのまま残ります。
   (`src/htmlPatchService.ts`。選択用の `data-od-id` はプレビューにだけ注入し、ファイルには書きません)
-- **AI には現在の HTML と選択要素を渡す**。選択要素の outerHTML・`<style>`・DESIGN.md だけを送り、
+- **AI には現在の HTML と選択要素を渡す**。選択要素の outerHTML・`<style>` と読み込んでいる CSS ファイル・DESIGN.md だけを送り、
   選択要素 1 つ分の置き換えを返させます。ファイル全体を再生成させません。
 - **プレビューは隔離**。Webview 内の `sandbox="allow-scripts"` iframe (opaque origin) で描画します。
   DESIGN.html のスクリプトは VS Code API・拡張機能・ファイルに触れられません。
   信頼されていないワークスペース、または `orchestraDesign.preview.runScripts: false` ではスクリプトを実行しません。
+- **別ファイルの CSS も表示**。`<link rel="stylesheet" href="style.css">` のようにワークスペース内の CSS を読み込んでいる場合、
+  プレビューではその内容を `<style>` として埋め込みます (`@import` は展開、CSS 内の `url()` の画像・フォントは data: URI に変換)。
+  CSS ファイルを編集すると (保存前でも) プレビューが更新されます。ファイルには何も書き込みません (`src/previewAssets.ts`)。
+  ワークスペースの外を指すパスや `https://` の CSS はそのままです。
 - **クラウドとローカルの区別**。この拡張機能が編集するのは、ローカルのワークスペースにあるデザイン HTML だけです。
   クラウドエージェントがサンドボックスで生成したページは、先にワークスペースへ取り込んでから開きます
   (サンドボックス上のファイルを直接書き換えることはしません)。
