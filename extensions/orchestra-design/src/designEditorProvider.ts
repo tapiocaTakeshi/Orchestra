@@ -24,6 +24,7 @@ import {
 } from './htmlPatchService';
 import { DesignerClient } from './designerClient';
 import { createDesignPage, isPageFolder, listSiblingPages } from './designPages';
+import { AssetReader, InlineOptions, MAX_DATA_URI_BYTES, inlineStylesheets, linkedStylesheets } from './previewAssets';
 
 export const DESIGN_VIEW_TYPE = 'orchestra.designEditor';
 
@@ -88,6 +89,30 @@ export class DesignEditorProvider implements vscode.CustomTextEditorProvider {
 		const post = (msg: unknown) => panel.webview.postMessage(msg);
 		const pageNameOf = (u: vscode.Uri) => path.basename(u.fsPath);
 		let pages: vscode.Uri[] = [document.uri];
+
+		// 別ファイルの CSS (<link rel="stylesheet">) とその url() の参照先。変わったらプレビューを読み直す
+		const assetWatchers = new Map<string, vscode.Disposable>();
+		let assetReloadTimer: ReturnType<typeof setTimeout> | undefined;
+		const reloadForAssets = () => {
+			if (assetReloadTimer) { clearTimeout(assetReloadTimer); }
+			assetReloadTimer = setTimeout(() => { assetReloadTimer = undefined; sendDocument(true); }, 150);
+		};
+		const watchAssets = (files: string[]) => {
+			const wanted = new Set(files);
+			for (const [file, w] of assetWatchers) {
+				if (!wanted.has(file)) { w.dispose(); assetWatchers.delete(file); }
+			}
+			for (const file of wanted) {
+				if (assetWatchers.has(file)) { continue; }
+				const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(path.dirname(file)), path.basename(file)));
+				assetWatchers.set(file, vscode.Disposable.from(watcher, watcher.onDidChange(reloadForAssets), watcher.onDidCreate(reloadForAssets), watcher.onDidDelete(reloadForAssets)));
+			}
+		};
+		const renderPreview = (doc: ParsedHtml): string => {
+			const { html, files } = this.previewHtml(doc, document.uri);
+			watchAssets(files);
+			return html;
+		};
 		const sendPages = async () => {
 			pages = await listSiblingPages(document.uri);
 			post({ type: 'pages', current: pageNameOf(document.uri), pages: pages.map(pageNameOf), folder: isPageFolder(document.uri) });
@@ -102,7 +127,7 @@ export class DesignEditorProvider implements vscode.CustomTextEditorProvider {
 				fileName: path.basename(document.uri.fsPath),
 				isDirty: document.isDirty,
 				source: doc.text,
-				html: reload ? this.previewHtml(doc) : undefined,
+				html: reload ? renderPreview(doc) : undefined,
 				layers: buildLayers(doc),
 				tags: doc.nodes.map(n => n.tag),
 				runScripts: runScripts(),
@@ -131,6 +156,8 @@ export class DesignEditorProvider implements vscode.CustomTextEditorProvider {
 
 		const disposables: vscode.Disposable[] = [];
 		disposables.push(vscode.workspace.onDidChangeTextDocument(e => {
+			// 読み込んでいる CSS をテキストエディタで編集中なら、保存前でもプレビューに反映する
+			if (e.contentChanges.length && e.document.uri.scheme === 'file' && assetWatchers.has(e.document.uri.fsPath)) { reloadForAssets(); return; }
 			if (e.document.uri.toString() !== document.uri.toString() || !e.contentChanges.length) { return; }
 			// キャンバスで行った変更はプレビュー上に既に反映済みなので iframe を再読み込みしない
 			sendDocument(selfEditDepth === 0);
@@ -149,6 +176,8 @@ export class DesignEditorProvider implements vscode.CustomTextEditorProvider {
 		}));
 		panel.onDidDispose(() => {
 			aiCancel?.cancel();
+			if (assetReloadTimer) { clearTimeout(assetReloadTimer); }
+			assetWatchers.forEach(w => w.dispose());
 			disposables.forEach(d => d.dispose());
 		});
 
@@ -221,7 +250,7 @@ export class DesignEditorProvider implements vscode.CustomTextEditorProvider {
 								scope,
 								target: elementId === null ? doc.text : outerHtml(doc, elementId),
 								ancestry: elementId === null ? undefined : (elementInfo(doc, elementId)?.path.map(p => p.tag).join(' > ')),
-								styles: collectStyles(doc),
+								styles: collectStyles(doc, this.assetOptions(document.uri)),
 								guide: await this.readGuide(document.uri),
 								page: pageNameOf(document.uri),
 								otherPages: pages.map(pageNameOf).filter(n => n !== pageNameOf(document.uri)),
@@ -244,7 +273,7 @@ export class DesignEditorProvider implements vscode.CustomTextEditorProvider {
 								after: result.html,
 								note: result.note,
 								model: result.model,
-								previewHtml: this.previewHtml(parseHtml(afterDoc)),
+								previewHtml: renderPreview(parseHtml(afterDoc)),
 							});
 						} catch (err) {
 							if (!cts.token.isCancellationRequested) { showError(err); }
@@ -285,9 +314,15 @@ export class DesignEditorProvider implements vscode.CustomTextEditorProvider {
 		});
 	}
 
-	/** プレビュー用 HTML: data-od-id を付け、選択・ハイライト用のエージェントを先頭に差し込む */
-	private previewHtml(doc: ParsedHtml): string {
-		const html = instrumentForPreview(doc, { runScripts: previewRunsScripts() });
+	/**
+	 * プレビュー用 HTML: data-od-id を付け、別ファイルの CSS を埋め込み、選択・ハイライト用のエージェントを先頭に差し込む。
+	 * files は埋め込んだファイル (変更監視用)。
+	 */
+	private previewHtml(doc: ParsedHtml, documentUri: vscode.Uri): { html: string; files: string[] } {
+		const inlined = documentUri.scheme === 'file'
+			? inlineStylesheets(instrumentForPreview(doc, { runScripts: previewRunsScripts() }), this.assetOptions(documentUri))
+			: { html: instrumentForPreview(doc, { runScripts: previewRunsScripts() }), files: [] };
+		const html = inlined.html;
 		const agent = `<script data-od-agent>${this.getAgentScript().replace(/<\/script/gi, '<\\/script')}</script>`;
 		// 再パースして挿入位置 (<head> の直後 → <html> の直後 → DOCTYPE の直後) を決める
 		const reparsed = parseHtml(html);
@@ -295,7 +330,14 @@ export class DesignEditorProvider implements vscode.CustomTextEditorProvider {
 		const root = reparsed.nodes.find(n => n.tag === 'html');
 		const doctype = /^\s*<!doctype[^>]*>/i.exec(html);
 		const at = head ? head.openEnd : root ? root.openEnd : doctype ? doctype[0].length : 0;
-		return html.slice(0, at) + agent + html.slice(at);
+		return { html: html.slice(0, at) + agent + html.slice(at), files: inlined.files };
+	}
+
+	/** 別ファイルの CSS を読む設定。読めるのはそのページのワークスペースの中だけ */
+	private assetOptions(documentUri: vscode.Uri): InlineOptions {
+		const folder = vscode.workspace.getWorkspaceFolder(documentUri);
+		const root = folder && folder.uri.scheme === 'file' ? folder.uri.fsPath : path.dirname(documentUri.fsPath);
+		return { documentPath: documentUri.fsPath, root, reader: fileAssetReader };
 	}
 
 	private getAgentScript(): string {
@@ -421,10 +463,33 @@ function previewRunsScripts(): boolean {
 	return vscode.workspace.isTrusted && vscode.workspace.getConfiguration('orchestraDesign').get<boolean>('preview.runScripts', true);
 }
 
-/** <style> の中身を集める (AI に見た目の文脈として渡す) */
-function collectStyles(doc: ParsedHtml): string {
-	return doc.nodes
+/** 開いているエディタの (未保存も含む) 内容を優先し、無ければディスクから読む */
+const fileAssetReader: AssetReader = {
+	readText(absPath) {
+		const open = vscode.workspace.textDocuments.find(d => d.uri.scheme === 'file' && d.uri.fsPath === absPath);
+		if (open) { return open.getText(); }
+		try {
+			return fs.statSync(absPath).isFile() ? fs.readFileSync(absPath, 'utf8').replace(/^\uFEFF/, '') : undefined;
+		} catch {
+			return undefined;
+		}
+	},
+	readBytes(absPath) {
+		try {
+			const st = fs.statSync(absPath);
+			return st.isFile() && st.size <= MAX_DATA_URI_BYTES ? fs.readFileSync(absPath) : undefined;
+		} catch {
+			return undefined;
+		}
+	},
+};
+
+/** <style> と別ファイルの CSS の中身を集める (AI に見た目の文脈として渡す) */
+function collectStyles(doc: ParsedHtml, assets: InlineOptions): string {
+	const inline = doc.nodes
 		.filter(n => n.tag === 'style' && n.closeStart !== undefined)
-		.map(n => doc.text.slice(n.openEnd, n.closeStart))
-		.join('\n');
+		.map(n => doc.text.slice(n.openEnd, n.closeStart));
+	const linked = linkedStylesheets(doc, assets)
+		.map(s => `/* ${path.relative(path.dirname(assets.documentPath), s.path).split(path.sep).join('/')} */\n${s.css}`);
+	return [...linked, ...inline].join('\n');
 }
