@@ -1067,6 +1067,39 @@ const sendGeminiChat = async ({
 
 // --------- DIVISION API ---------
 
+// アプリ制作の生きた文書 (.division の下)。論文 → 仕様書 → デザイン の順に作り、coder は仕様書とデザインから実装する。
+const PAPER_FILE = 'paper.md';
+const SPEC_FILE = 'specification.md';
+/** 生きた文書の以前の版の置き場 (.division/history/<paper|specification|design>/<時刻>/) */
+const HISTORY_DIR = 'history';
+
+/** 論文・仕様書・デザインのどれかなら true (常に保存し、更新はするが一新しない) */
+const isLivingDocument = (filename: string): boolean =>
+	filename === PAPER_FILE || filename === SPEC_FILE || filename.startsWith(`${DESIGN_DIR}/`);
+
+/**
+ * 生きた文書を書き換える前に、今の版を .division/history/ に写す。
+ * ロールが文書を丸ごと書き直してしまっても、以前の版は失われない。
+ */
+const snapshotLivingDocument = (divisionDir: string, filename: string): void => {
+	const isDesign = filename.startsWith(`${DESIGN_DIR}/`);
+	const source = path.join(divisionDir, isDesign ? DESIGN_DIR : filename);
+	if (!fs.existsSync(source)) return;
+	const name = isDesign ? DESIGN_DIR : filename.replace(/\.md$/, '');
+	const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+	const dest = path.join(divisionDir, HISTORY_DIR, name, stamp);
+	try {
+		fs.mkdirSync(dest, { recursive: true });
+		fs.cpSync(source, path.join(dest, path.basename(source)), { recursive: true });
+	} catch (_e) { /* the write still happens; history is best effort */ }
+};
+
+/** .division/<filename> の今の内容 (無ければ '') */
+const readDivisionFile = (workspaceFolderPath: string | undefined, filename: string): string => {
+	if (!workspaceFolderPath) return '';
+	try { return fs.readFileSync(path.join(workspaceFolderPath, '.division', filename), 'utf-8').trim(); } catch { return ''; }
+};
+
 // Flow MD file management: save each flow's result as a structured MD document
 const FLOW_ROLE_TO_FILENAME: Record<string, string> = {
 	'leader': 'LEADER.md',
@@ -1075,21 +1108,23 @@ const FLOW_ROLE_TO_FILENAME: Record<string, string> = {
 	// designer は .division/design/ に画面ごとの HTML を書く (common/designPages.ts)。ここには先頭ページを置く。
 	'design': `${DESIGN_DIR}/${DESIGN_INDEX_PAGE}`,
 	'designer': `${DESIGN_DIR}/${DESIGN_INDEX_PAGE}`,
-	'search': 'SEARCH.md',
-	'searcher': 'SEARCH.md',
+	// アプリ制作の流れ: 論文 (paper.md) → 仕様書 (specification.md) → デザイン (design/) → coder の実装。
+	// この 3 つは常に保存され、更新はするが一新はしない (isLivingDocument)。
+	'search': PAPER_FILE,
+	'searcher': PAPER_FILE,
 	'file-search': 'FILE-SEARCH.md',
 	'filesearch': 'FILE-SEARCH.md',
 	'file_search': 'FILE-SEARCH.md',
 	'file-searcher': 'FILE-SEARCH.md',
 	'filesearcher': 'FILE-SEARCH.md',
-	'research': 'RESEARCH.md',
-	'researcher': 'RESEARCH.md',
-	'deep-research': 'RESEARCH.md',
-	'deep-researcher': 'RESEARCH.md',
+	'research': PAPER_FILE,
+	'researcher': PAPER_FILE,
+	'deep-research': PAPER_FILE,
+	'deep-researcher': PAPER_FILE,
 	'review': 'REVIEW.md',
 	'reviewer': 'REVIEW.md',
-	'writing': 'WRITING.md',
-	'writer': 'WRITING.md',
+	'writing': SPEC_FILE,
+	'writer': SPEC_FILE,
 	'planning': 'PLANNING.md',
 	'planner': 'PLANNING.md',
 	'ideaman': 'IDEAMAN.md',
@@ -1135,6 +1170,7 @@ const saveFlowResultAsMd = (
 
 	try {
 		fs.mkdirSync(divisionDir, { recursive: true });
+		if (isLivingDocument(filename)) snapshotLivingDocument(divisionDir, filename);
 		if (filename.startsWith(`${DESIGN_DIR}/`)) {
 			// Appending with a Markdown rule would break the documents, so pages are always replaced.
 			const written = writeDesignPages(divisionDir, content);
@@ -3453,10 +3489,68 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			});
 		};
 
+		// 論文・仕様書を指示に入れるときの上限 (1 文書あたり)
+		const MAX_LIVING_DOC_CHARS = 60_000;
+		const fenced = (text: string): string => ['````markdown', text, '````'].join('\n');
+
+		// 論文 (researcher / searcher) と仕様書 (writer) の担当への指示。
+		// どちらも生きた文書なので、今の版を渡して「残したまま書き足す・直す」完全版を出させる
+		// (出力はそのまま .division/<file> に保存され、以前の版は .division/history/ に残る)。
+		const buildLivingDocumentInstruction = (file: string): string => {
+			const paper = file === PAPER_FILE;
+			const current = truncateForContext(readDivisionFile(workspaceFolderPath, file), MAX_LIVING_DOC_CHARS);
+			const lines = [
+				``,
+				paper
+					? `### あなたの成果物: 論文 (.division/${PAPER_FILE})`
+					: `### あなたの成果物: 仕様書 (.division/${SPEC_FILE})`,
+				paper
+					? `アプリの土台になる調査です。背景・課題・調査結果・根拠・選択肢とその得失を書き、主張ごとに出典 (URL) を付けてください。`
+					: `論文をもとに、目的・利用者・機能・画面と画面遷移・データ・非機能要件・受け入れ条件を書いてください。designer はこれをもとにデザインを、coder は仕様書とデザインからソフトウェアを作るので、抜けや曖昧さが無いようにしてください。`,
+				`この文書は常に保存され更新される生きた文書です。**一新しないでください。**`,
+				`- 既存の見出し・記述・決定事項はすべて残し、新しいことを書き足し、変わったことを直してください。変えた・取り下げた箇所にはその理由を書いてください。`,
+				`- 末尾に「## 変更履歴」を置き、今回の更新の日付と要点を 1 行追加してください。`,
+				`- 回答は文書の完全版 (Markdown) だけにしてください。回答全体がそのまま .division/${file} に保存されます。前置き・後書きは書かないでください。`,
+			];
+			if (!paper) {
+				const paperDoc = truncateForContext(readDivisionFile(workspaceFolderPath, PAPER_FILE), MAX_LIVING_DOC_CHARS);
+				lines.push(``, paperDoc ? `#### 論文 (.division/${PAPER_FILE}) — 仕様書の根拠` : `#### 論文 (.division/${PAPER_FILE}) はまだありません。先行タスクの出力とユーザーの依頼をもとに書いてください。`);
+				if (paperDoc) lines.push(fenced(paperDoc));
+			}
+			lines.push(``, current
+				? `#### 今の${paper ? '論文' : '仕様書'} (.division/${file}) — これを残したまま更新する`
+				: `#### .division/${file} はまだありません。新しく書いてください。`);
+			if (current) lines.push(fenced(current));
+			return lines.join('\n');
+		};
+
+		// designer への指示: 仕様書をもとにデザインを作り、既存のページは残したまま更新させる。
+		const buildDesignSourceBlock = (): string => {
+			const spec = truncateForContext(readDivisionFile(workspaceFolderPath, SPEC_FILE), MAX_LIVING_DOC_CHARS);
+			const pages = readDesignPages().filter(p => p.file.startsWith(`.division/${DESIGN_DIR}/`));
+			const lines = [
+				``,
+				`### デザインは仕様書から作る生きた文書です`,
+				`- 仕様書 (.division/${SPEC_FILE}) の画面・機能・画面遷移をすべてデザインにしてください。`,
+				`- .division/${DESIGN_DIR}/ は常に保存され更新されます。**一新しないでください。** 既存ページのトークン・構成・画面は、仕様書が変えた部分以外そのまま残し、変える画面だけを同じファイル名で出力してください。ページは削除されません。`,
+				``,
+				spec ? `#### 仕様書 (.division/${SPEC_FILE})` : `#### 仕様書 (.division/${SPEC_FILE}) はまだありません。先行タスクの出力とユーザーの依頼をもとにデザインしてください。`,
+			];
+			if (spec) lines.push(fenced(spec));
+			for (const p of pages) lines.push(``, `#### 今のページ ${p.file} — これを残したまま更新する`, '```html', p.html, '```');
+			return lines.join('\n');
+		};
+
 		const isCoderLikeRole = (r: string): boolean => {
 			const role = (r || '').toLowerCase();
 			return role === 'coder' || role === 'coding' || role === 'code'
 				|| role === 'writer' || role === 'writing';
+		};
+		// コードを書くのは coder だけ。writer は仕様書 (.division/specification.md) を書く。
+		// isCoderLikeRole は「coder / writer だけ承認」の設定にだけ使う。
+		const isCodeRole = (r: string): boolean => {
+			const role = (r || '').toLowerCase();
+			return role === 'coder' || role === 'coding' || role === 'code';
 		};
 		const isImageRole = (r: string): boolean => {
 			const role = (r || '').toLowerCase();
@@ -4135,9 +4229,15 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					].join('\n')
 					: `直前の assistant メッセージに先行タスクの出力が添付されています（ある場合）。それを参考に、あなたの担当タスクを遂行してください。出力は Markdown 形式で、後続エージェントが直接利用できるよう具体的・網羅的にまとめてください。`;
 
-				// Coder/Writer 系には実装指示と existing files を添付
+				// 論文・仕様書を書くロールには、今の文書 (と前段の文書) を渡し、一新せず更新させる
+				const livingFile = FLOW_ROLE_TO_FILENAME[role];
+				const livingDocBlock = (livingFile === PAPER_FILE || livingFile === SPEC_FILE)
+					? buildLivingDocumentInstruction(livingFile)
+					: isDesigner ? buildDesignSourceBlock() : '';
+
+				// Coder 系には実装指示と existing files を添付
 				let extraCoderBlock = '';
-				if (isCoderLikeRole(role)) {
+				if (isCodeRole(role)) {
 					// 既存ファイル一覧は共有コンテキストから引く（全文レポートの見出し解析より
 					// 取りこぼしが少なく、承認モードで再開したあとでも同じ結果になる）。
 					// 一覧が長くなりすぎないよう、関連度の高いファイルに絞る。
@@ -4168,7 +4268,21 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 							...designPages.flatMap(p => [``, `#### ${p.file}`, '```html', p.html, '```']),
 						].join('\n')
 						: '';
+					const spec = truncateForContext(readDivisionFile(workspaceFolderPath, SPEC_FILE), MAX_LIVING_DOC_CHARS);
+					const specBlock = spec
+						? [
+							``,
+							`### 仕様書 (.division/${SPEC_FILE}) — 仕様書とデザインからソフトウェアを作ること`,
+							`- 仕様書の機能・画面・データ・受け入れ条件をすべて満たす。仕様書とデザインに無いものは作らない。`,
+							`- 仕様書・デザイン・論文 (.division/) は編集しない。実装して分かった不足や矛盾は回答の最後に書く。`,
+							``,
+							'````markdown',
+							spec,
+							'````',
+						].join('\n')
+						: '';
 					extraCoderBlock = [
+						specBlock,
 						designBlock,
 						``,
 						`### 出力フォーマット (必須)`,
@@ -4194,6 +4308,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					``,
 					`## 指示`,
 					taskInstruction,
+					livingDocBlock,
 					extraCoderBlock,
 				].filter(Boolean).join('\n');
 
@@ -4279,7 +4394,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				appendText(searchedSitesMarkdown(taskSearchedSites, task.role));
 
 				// Coder 系: コードブロックを実ファイルに書き出す
-				if (output && workspaceFolderPath && isCoderLikeRole(role)) {
+				if (output && workspaceFolderPath && isCodeRole(role)) {
 					const { savedFiles, fileOperations, commands } = saveCodeBlocksFromOutput(output, sessionId || 'task', workspaceFolderPath);
 					if (savedFiles.length > 0) {
 						appendText(`\n`);
