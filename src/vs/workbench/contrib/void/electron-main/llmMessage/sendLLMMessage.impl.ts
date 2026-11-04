@@ -1076,25 +1076,35 @@ const FLOW_ROLE_TO_FILENAME: Record<string, string> = {
 	// designer は .division/design/ に画面ごとの HTML を書く (common/designPages.ts)。ここには先頭ページを置く。
 	'design': `${DESIGN_DIR}/${DESIGN_INDEX_PAGE}`,
 	'designer': `${DESIGN_DIR}/${DESIGN_INDEX_PAGE}`,
-	'search': APP_PAPER_FILE,
-	'searcher': APP_PAPER_FILE,
+	'search': 'SEARCH.md',
+	'searcher': 'SEARCH.md',
 	'file-search': 'FILE-SEARCH.md',
 	'filesearch': 'FILE-SEARCH.md',
 	'file_search': 'FILE-SEARCH.md',
 	'file-searcher': 'FILE-SEARCH.md',
 	'filesearcher': 'FILE-SEARCH.md',
-	'research': APP_PAPER_FILE,
-	'researcher': APP_PAPER_FILE,
-	'deep-research': APP_PAPER_FILE,
-	'deep-researcher': APP_PAPER_FILE,
+	'research': 'RESEARCH.md',
+	'researcher': 'RESEARCH.md',
+	'deep-research': 'RESEARCH.md',
+	'deep-researcher': 'RESEARCH.md',
 	'review': 'REVIEW.md',
 	'reviewer': 'REVIEW.md',
-	'writing': APP_SPECIFICATION_FILE,
-	'writer': APP_SPECIFICATION_FILE,
+	'writing': 'WRITING.md',
+	'writer': 'WRITING.md',
 	'planning': 'PLANNING.md',
 	'planner': 'PLANNING.md',
 	'ideaman': 'IDEAMAN.md',
 	'image': 'IMAGE.md',
+};
+
+/** For app creation, use canonical files; other conversations keep legacy .division role reports. */
+const appFileNameForRole = (role: string, isAppWorkflow: boolean): string | undefined => {
+	const r = role.toLowerCase();
+	if (isAppWorkflow) {
+		if (['research', 'researcher', 'deep-research', 'deep-researcher', 'search', 'searcher'].includes(r)) return APP_PAPER_FILE;
+		if (r === 'writing' || r === 'writer') return APP_SPECIFICATION_FILE;
+	}
+	return FLOW_ROLE_TO_FILENAME[r];
 };
 
 // The designer answers with one self-contained HTML document per screen, each in a
@@ -1127,12 +1137,13 @@ const saveFlowResultAsMd = (
 	content: string,
 	_sessionId: string,
 	append: boolean = false,
+	isAppWorkflow: boolean = false,
 ): string | null => {
-	const filename = FLOW_ROLE_TO_FILENAME[role.toLowerCase()];
+	const filename = appFileNameForRole(role, isAppWorkflow);
 	if (!filename || !workspaceFolderPath) return null;
 
-	const persistentDoc = filename === APP_PAPER_FILE || filename === APP_SPECIFICATION_FILE;
-	const targetDir = persistentDoc || filename.startsWith(`${DESIGN_DIR}/`)
+	const persistentDoc = isAppWorkflow && (filename === APP_PAPER_FILE || filename === APP_SPECIFICATION_FILE);
+	const targetDir = isAppWorkflow && (persistentDoc || filename.startsWith(`${DESIGN_DIR}/`))
 		? workspaceFolderPath : path.join(workspaceFolderPath, '.division');
 	const filePath = path.join(targetDir, filename);
 
@@ -1140,7 +1151,7 @@ const saveFlowResultAsMd = (
 		fs.mkdirSync(targetDir, { recursive: true });
 		if (filename.startsWith(`${DESIGN_DIR}/`)) {
 			// Update changed pages only; never clear design/ or delete omitted pages.
-			const written = writeDesignPages(workspaceFolderPath, content);
+			const written = writeDesignPages(targetDir, content);
 			return written.find(p => path.basename(p) === DESIGN_INDEX_PAGE) ?? written[0] ?? null;
 		} else if (persistentDoc) {
 			const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
@@ -1159,10 +1170,10 @@ const saveFlowResultAsMd = (
 
 // role に対応する .division/*.md の出力先情報。ファイルを生成しない role
 // (leader 自身など、FLOW_ROLE_TO_FILENAME に無い role) の場合は null。
-const buildMdFileInfo = (workspaceFolderPath: string, role: string): { mdFileName: string; mdFilePath: string } | null => {
-	const filename = FLOW_ROLE_TO_FILENAME[role.toLowerCase()];
+const buildMdFileInfo = (workspaceFolderPath: string, role: string, isAppWorkflow: boolean = false): { mdFileName: string; mdFilePath: string } | null => {
+	const filename = appFileNameForRole(role, isAppWorkflow);
 	if (!filename) return null;
-	const canonical = filename === APP_PAPER_FILE || filename === APP_SPECIFICATION_FILE || filename.startsWith(`${DESIGN_DIR}/`);
+	const canonical = isAppWorkflow && (filename === APP_PAPER_FILE || filename === APP_SPECIFICATION_FILE || filename.startsWith(`${DESIGN_DIR}/`));
 	return { mdFileName: filename, mdFilePath: path.join(workspaceFolderPath, ...(canonical ? [] : ['.division']), filename) };
 };
 
@@ -3465,6 +3476,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			});
 		};
 
+		const appWorkflowEnabled = isAppCreationRequest(currentInput);
 		const isCoderLikeRole = (r: string): boolean => {
 			const role = (r || '').toLowerCase();
 			return role === 'coder' || role === 'coding' || role === 'code';
@@ -3887,7 +3899,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					if (!edited) return o;
 					if (workspaceFolderPath && o.mdFileName) {
 						try {
-							saveFlowResultAsMd(workspaceFolderPath, o.role, o.title, edited.mdContent, sessionId || 'approved');
+							saveFlowResultAsMd(workspaceFolderPath, o.role, o.title, edited.mdContent, sessionId || 'approved', false, appWorkflowEnabled);
 						} catch (_e) { /* ignore */ }
 					}
 					return { ...o, output: edited.mdContent };
@@ -3952,7 +3964,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					});
 				}
 
-				if (isAppCreationRequest(baseInput)) {
+				if (appWorkflowEnabled) {
 					tasks = ensureAppWorkflowTasks(tasks);
 					if (workspaceFolderPath) {
 						fs.mkdirSync(path.join(workspaceFolderPath, APP_DESIGN_DIR), { recursive: true });
@@ -4337,9 +4349,9 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				}
 
 				// 既知のロールは .division/*.md にも保存
-				const mdInfo = (output && workspaceFolderPath) ? buildMdFileInfo(workspaceFolderPath, role) : null;
+				const mdInfo = (output && workspaceFolderPath) ? buildMdFileInfo(workspaceFolderPath, role, appWorkflowEnabled) : null;
 				if (mdInfo && workspaceFolderPath) {
-					saveFlowResultAsMd(workspaceFolderPath, task.role, task.title || '', output, sessionId || 'task');
+					saveFlowResultAsMd(workspaceFolderPath, task.role, task.title || '', output, sessionId || 'task', false, appWorkflowEnabled);
 				}
 				taskOutputs.push({ role: task.role, title: task.title || '', output, mdFileName: mdInfo?.mdFileName, mdFilePath: mdInfo?.mdFilePath });
 
