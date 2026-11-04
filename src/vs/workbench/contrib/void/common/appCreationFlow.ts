@@ -43,7 +43,6 @@ export function isAppCreationRequest(request: string): boolean {
  */
 export function ensureAppWorkflowTasks<T extends AppWorkflowTask>(original: T[]): T[] {
 	const tasks = original.map(t => ({ ...t, dependsOn: [...(t.dependsOn ?? [])] }));
-	if (!tasks.some(t => roleStage(t.role) === 3)) return tasks;
 
 	const stages: Array<{ role: string; title: string; description: string }> = [
 		{ role: 'research', title: '論文・技術調査', description: '既存の paper.md を読み、根拠・関連研究・技術選定を追加更新する。' },
@@ -51,7 +50,7 @@ export function ensureAppWorkflowTasks<T extends AppWorkflowTask>(original: T[])
 		{ role: 'design', title: 'デザイン更新', description: 'specification.md をもとに既存 design/ 内の必要なページだけ更新する。' },
 		{ role: 'coder', title: 'ソフトウェア実装', description: 'specification.md と design/ に従い既存コードを差分実装する。' },
 	];
-	for (let stage = 0; stage < stages.length - 1; stage++) {
+	for (let stage = 0; stage < stages.length; stage++) {
 		if (tasks.some(t => roleStage(t.role) === stage)) continue;
 		const spec = stages[stage];
 		let id = `auto-app-${spec.role}`;
