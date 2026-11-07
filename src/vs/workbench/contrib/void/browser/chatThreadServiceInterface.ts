@@ -80,6 +80,8 @@ export interface IChatThreadService {
 	// entry pts
 	abortRunning(threadId: string): Promise<void>;
 	dismissStreamError(threadId: string): void;
+	/** エラーで止まった返答を、止まったところから続ける */
+	continueAfterError(threadId: string): Promise<void>;
 
 	// call to edit a message
 	editUserMessageAndStreamResponse({ userMessage, messageIdx, threadId }: { userMessage: string, messageIdx: number, threadId: string }): Promise<void>;

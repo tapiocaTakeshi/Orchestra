@@ -327,6 +327,9 @@ const newThreadObject = () => {
 // chatThreadServiceInterface.ts に分離してある (理由はそのファイルのコメント参照)。
 // 既存の import 元を壊さないよう、ここから再 export しておく。
 export { IChatThreadService };
+/** 「続ける」で送る指示 (チャットには「続ける」とだけ出す) */
+const CONTINUE_AFTER_ERROR_PROMPT = 'さっきの返答はエラーで途中で止まりました。ここまでの会話・途中までの返答・ツールの結果を踏まえて、最初からやり直さずに止まったところから続けてください。終わった手順は繰り返さないでください。'
+
 class ChatThreadService extends Disposable implements IChatThreadService {
 	_serviceBrand: undefined;
 
@@ -1610,6 +1613,22 @@ We only need to do it for files that were edited since `from`, ie files between 
 
 	dismissStreamError(threadId: string): void {
 		this._setStreamState(threadId, undefined)
+	}
+
+	/**
+	 * エラーで止まった返答を、止まったところから続ける。途中までの返答・ツールの結果は履歴に残っているので、
+	 * 最初からやり直さずに続きを頼む (チャットには「続ける」とだけ出す)。
+	 */
+	async continueAfterError(threadId: string): Promise<void> {
+		const thread = this.state.allThreads[threadId]
+		if (!thread || this.streamState[threadId]?.isRunning) return
+		this._setStreamState(threadId, undefined)
+		this._setThreadState(threadId, { currCheckpointIdx: null })
+		await this._addUserMessageAndStreamResponse({
+			threadId,
+			userMessage: CONTINUE_AFTER_ERROR_PROMPT,
+			displayOverride: '続ける',
+		})
 	}
 
 

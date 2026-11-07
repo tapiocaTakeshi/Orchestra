@@ -416,6 +416,13 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 			await this._chatThreadService.abortRunning(this._threadIdFrom(body));
 			return this._chatState();
 		});
+		// エラーで止まった返答を、止まったところから続ける (IDE の「続ける」と同じ)
+		this._route('POST', '/api/chat/continue', async (_, { body }) => {
+			chat();
+			const threadId = this._threadIdFrom(body);
+			void this._chatThreadService.continueAfterError(threadId);
+			return this._chatState();
+		});
 		this._route('POST', '/api/chat/new', () => {
 			chat();
 			this._openNewThread();

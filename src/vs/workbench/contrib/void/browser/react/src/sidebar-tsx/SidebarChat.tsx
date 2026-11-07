@@ -3,7 +3,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import React, { ButtonHTMLAttributes, FormEvent, FormHTMLAttributes, Fragment, KeyboardEvent, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { ButtonHTMLAttributes, FormEvent, FormHTMLAttributes, Fragment, KeyboardEvent, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import './sidebar-chat-modern.css'
 // `.void-sidebar-modern` をサイドバーのルート要素に付与すると、
 // sidebar-chat-modern.css の Modern+Minimal スタイルが有効化されます。
@@ -892,98 +892,85 @@ const scrollToBottom = (divRef: { current: HTMLElement | null }) => {
 
 
 
-const ScrollToBottomContainer = ({ children, className, style, scrollContainerRef }: { children: React.ReactNode, className?: string, style?: React.CSSProperties, scrollContainerRef: React.MutableRefObject<HTMLDivElement | null> }) => {
+const ScrollToBottomContainer = ({ children, className, style, scrollContainerRef, followKey }: { children: React.ReactNode, className?: string, style?: React.CSSProperties, scrollContainerRef: React.MutableRefObject<HTMLDivElement | null>, followKey?: string | number }) => {
 	const { t: tUI } = useTranslation()
 	const [isAtBottom, setIsAtBottom] = useState(true); // Start at bottom
 
 	const divRef = scrollContainerRef
 	const contentRef = useRef<HTMLDivElement>(null);
-	const isAtBottomRef = useRef(isAtBottom);
-	// True once the user has actively scrolled away from the bottom. While this
-	// is set, we disable all auto-scroll-to-bottom behaviour so streaming output
-	// or ResizeObserver ticks can't "pull" the user back down. Resets to false
-	// only when the user explicitly returns to the bottom (scroll to bottom, or
-	// clicks the floating chevron button).
-	const userPinnedAwayRef = useRef(false);
+	// Claude と同じく、既定で常に一番下 (最新のレスポンス) を表示し続ける。
+	// 止めるのは利用者が自分で上へスクロールしたときだけ (ホイール / タッチ / キー)。
+	// 一番下の近く (FOLLOW_SLACK px 以内) に戻るか、新しいメッセージを送ると、また自動で追いかける。
+	// プログラムからのスクロールやカードの開閉で追従が切れることはない。
+	const followRef = useRef(true);
+	const FOLLOW_SLACK = 80;
 
-	useEffect(() => {
-		isAtBottomRef.current = isAtBottom;
-	}, [isAtBottom]);
-
-	const onScroll = () => {
-		const div = divRef.current;
-		if (!div) return;
-
-		const distanceFromBottom = div.scrollHeight - div.clientHeight - div.scrollTop;
-		const isBottom = Math.abs(distanceFromBottom) < 10;
-
-		// When the user has moved meaningfully away from the bottom, pin them
-		// there until they manually return. We use a larger threshold here so
-		// tiny content-height adjustments don't accidentally release the pin.
-		if (distanceFromBottom > 40) {
-			userPinnedAwayRef.current = true;
-		} else if (isBottom) {
-			userPinnedAwayRef.current = false;
-		}
-
-		setIsAtBottom(isBottom);
+	const distance = () => {
+		const el = divRef.current;
+		return el ? el.scrollHeight - el.clientHeight - el.scrollTop : 0;
+	};
+	const stick = () => {
+		if (followRef.current) scrollToBottom(divRef);
 	};
 
-	// Detect active user scroll gestures. Once the user initiates any of these,
-	// treat it as intent to stay where they are even if streaming content tries
-	// to push the viewport.
+	const onScroll = () => {
+		const d = distance();
+		if (d <= FOLLOW_SLACK) followRef.current = true;
+		setIsAtBottom(d <= FOLLOW_SLACK);
+	};
+
+	// 利用者が上へ動かしたときだけ追従をやめる
 	useEffect(() => {
 		const div = divRef.current;
 		if (!div) return;
-		const markPinnedIfAway = () => {
-			const el = divRef.current;
-			if (!el) return;
-			const distance = el.scrollHeight - el.clientHeight - el.scrollTop;
-			if (distance > 40) userPinnedAwayRef.current = true;
+		let touchY: number | null = null;
+		const leave = () => {
+			// 動いた結果を見てから判断する (まだ一番下の近くなら追従を続ける)
+			requestAnimationFrame(() => { if (distance() > FOLLOW_SLACK) followRef.current = false; });
 		};
-		const onWheel = () => markPinnedIfAway();
-		const onTouchMove = () => markPinnedIfAway();
+		const onWheel = (e: WheelEvent) => { if (e.deltaY < 0) followRef.current = false; else leave(); };
+		const onTouchStart = (e: TouchEvent) => { touchY = e.touches[0]?.clientY ?? null; };
+		const onTouchMove = (e: TouchEvent) => {
+			const y = e.touches[0]?.clientY;
+			if (touchY !== null && y !== undefined && y > touchY + 4) followRef.current = false;
+		};
 		const onKeyDown = (e: globalThis.KeyboardEvent) => {
-			if (['ArrowUp', 'PageUp', 'Home', 'ArrowDown', 'PageDown', 'End'].includes(e.key)) {
-				markPinnedIfAway();
-			}
+			if (['ArrowUp', 'PageUp', 'Home'].includes(e.key)) followRef.current = false;
 		};
 		div.addEventListener('wheel', onWheel, { passive: true });
+		div.addEventListener('touchstart', onTouchStart, { passive: true });
 		div.addEventListener('touchmove', onTouchMove, { passive: true });
 		div.addEventListener('keydown', onKeyDown);
 		return () => {
 			div.removeEventListener('wheel', onWheel);
+			div.removeEventListener('touchstart', onTouchStart);
 			div.removeEventListener('touchmove', onTouchMove);
 			div.removeEventListener('keydown', onKeyDown);
 		};
 	}, [divRef]);
 
-	// When children change (new messages added)
-	useEffect(() => {
-		if (isAtBottom && !userPinnedAwayRef.current) {
-			scrollToBottom(divRef);
-		}
-	}, [children, isAtBottom]); // Dependency on children to detect new messages
+	// 新しいメッセージを送った (followKey が変わった): 必ず最新まで戻って追いかける
+	useLayoutEffect(() => {
+		followRef.current = true;
+		scrollToBottom(divRef);
+		setIsAtBottom(true);
+	}, [followKey]);
 
-	// ResizeObserver to detect content height changes (streaming)
+	// 中身が変わるたびに (描画のあと) 一番下へ
+	useLayoutEffect(() => {
+		stick();
+	});
+
+	// 高さの変化 (ストリーミング・コードブロックの描画・カードの開閉・パネルの大きさの変化) にも追従する
 	useEffect(() => {
-		if (!contentRef.current) return;
-		const observer = new ResizeObserver(() => {
-			if (isAtBottomRef.current && !userPinnedAwayRef.current) {
-				scrollToBottom(divRef);
-			}
-		});
-		observer.observe(contentRef.current);
+		const observer = new ResizeObserver(() => stick());
+		if (contentRef.current) observer.observe(contentRef.current);
+		if (divRef.current) observer.observe(divRef.current);
 		return () => observer.disconnect();
 	}, []);
 
-	// Initial scroll to bottom
-	useEffect(() => {
-		scrollToBottom(divRef);
-	}, []);
-
 	const jumpToBottom = () => {
-		userPinnedAwayRef.current = false;
+		followRef.current = true;
 		scrollToBottom(divRef);
 	};
 
@@ -1909,7 +1896,7 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 		data-orchestra-enter="user"
 		className={`
         group relative overflow-hidden mb-1.5
-        ${mode === 'edit' ? 'w-full max-w-full rounded-lg pl-0 pr-0 py-0' : 'ml-auto mt-3 w-fit max-w-[88%] rounded-2xl rounded-tr-md pl-3 pr-7 py-1.5'}
+        ${mode === 'edit' ? 'w-full max-w-full rounded-lg pl-0 pr-0 py-0' : 'ml-auto mt-2 w-fit max-w-[88%] rounded-2xl rounded-tr-md pl-3 pr-7 py-1.5'}
 
         ${isCheckpointGhost && !isMsgAfterCheckpoint ? 'opacity-50 pointer-events-none' : ''}
     `}
@@ -2195,29 +2182,29 @@ text-[13px]
 [&>:last-child]:!mb-0
 
 prose-h1:text-[14px]
-prose-h1:my-4
+prose-h1:my-2.5
 
 prose-h2:text-[13px]
-prose-h2:my-4
+prose-h2:my-2.5
 
 prose-h3:text-[13px]
-prose-h3:my-3
+prose-h3:my-2
 
 prose-h4:text-[13px]
-prose-h4:my-2
+prose-h4:my-1.5
 
-prose-p:my-2
+prose-p:my-1.5
 prose-p:leading-snug
 prose-hr:my-2
 
-prose-ul:my-2
+prose-ul:my-1.5
 prose-ul:pl-4
 prose-ul:list-outside
 prose-ul:list-disc
 prose-ul:leading-snug
 
 
-prose-ol:my-2
+prose-ol:my-1.5
 prose-ol:pl-4
 prose-ol:list-outside
 prose-ol:list-decimal
@@ -2226,7 +2213,7 @@ prose-ol:leading-snug
 marker:text-inherit
 
 prose-blockquote:pl-2
-prose-blockquote:my-2
+prose-blockquote:my-1.5
 
 prose-code:text-void-fg-3
 prose-code:text-[12px]
@@ -2235,7 +2222,7 @@ prose-code:after:content-none
 
 prose-pre:text-[12px]
 prose-pre:p-2
-prose-pre:my-2
+prose-pre:my-1.5
 
 prose-table:text-[13px]
 '>
@@ -2528,43 +2515,6 @@ const CollapsibleFlowCard = ({
 	)
 }
 
-// ---------------------------------------------------------------------------
-// Cursor 風: 通常の AI 返答 (markdown) を見出し単位で折りたたみ可能に分割する。
-// ## / ### を境にセクション化し、それぞれを CollapsibleFlowCard で包む。
-// 見出しが無い場合は単一カードにフォールバック (auto-fold は呼び出し側で制御)。
-// コードフェンス内の `#` は無視する。
-// ---------------------------------------------------------------------------
-type AssistantSection = { title: string; level: number; body: string }
-
-const splitMarkdownByHeadings = (md: string): AssistantSection[] => {
-	const sections: AssistantSection[] = []
-	const lines = md.split('\n')
-	let current: { title: string; level: number; body: string[] } | null = null
-	let inCodeFence = false
-
-	const flush = () => {
-		if (!current) return
-		const body = current.body.join('\n').replace(/^\s+|\s+$/g, '')
-		// 見出し直前の preamble (level=0) は中身が空なら捨てる
-		if (current.level === 0 && !body) { current = null; return }
-		sections.push({ title: current.title, level: current.level, body })
-		current = null
-	}
-
-	for (const line of lines) {
-		if (/^\s*```/.test(line)) inCodeFence = !inCodeFence
-		const headingMatch = !inCodeFence ? line.match(/^(#{2,3})\s+(.+?)\s*#*\s*$/) : null
-		if (headingMatch) {
-			flush()
-			current = { title: headingMatch[2], level: headingMatch[1].length, body: [] }
-			continue
-		}
-		if (!current) current = { title: '', level: 0, body: [] }
-		current.body.push(line)
-	}
-	flush()
-	return sections
-}
 
 // オーケストレーションのストリーム出力をタスク (= ロール) 単位で分割する。
 // sendLLMMessage.impl.ts は各タスク開始時に
@@ -2748,7 +2698,6 @@ const CollapsibleAssistantResponse = ({
 }) => {
 	// Hooks はトップレベルで一度ずつ呼び出す (条件分岐の前)。
 	const taskSplit = useMemo(() => splitMarkdownByTasks(content), [content])
-	const sections = useMemo(() => splitMarkdownByHeadings(content), [content])
 
 	// オーケストレーション出力 (`### N. role — title` で区切られる) を最優先で検出。
 	// 見つかれば「ロール (タスク) ごとに 1 枚のカード」 を生成する。
@@ -2805,75 +2754,16 @@ const CollapsibleAssistantResponse = ({
 		)
 	}
 
-	const hasHeadings = sections.some(s => s.level > 0)
-
-	// 見出しが無い場合: 全体を 1 枚のカードで包む。
-	// Antigravity 風: ストリーミング中だけ開いて生成過程を見せ、完了したら自動で閉じる。
-	// (StaticCollapsibleCard 側に「isStreaming が true→false になったら閉じる」処理あり)
-	if (!hasHeadings) {
-		return (
-			<StaticCollapsibleCard
-				title={previewFromMarkdown(content) || '返答'}
-				isStreaming={isStreaming}
-				defaultOpen={isStreaming && !autoFold}
-				autoFold={autoFold}
-			>
-				<SmallProseWrapper>
-					<ChatMarkdownRender
-						string={content}
-						chatMessageLocation={chatMessageLocation}
-						isApplyEnabled={true}
-						isLinkDetectionEnabled={true}
-					/>
-				</SmallProseWrapper>
-			</StaticCollapsibleCard>
-		)
-	}
-
-	const lastIdx = sections.length - 1
+	// Claude と同じく、返答は枠で包まず折り畳みもしない地の文で出す (見出しがあってもそのまま)。
 	return (
-		<div className='flex flex-col gap-1.5'>
-			{sections.map((section, i) => {
-				// preamble (見出し前) は折り畳まずそのまま prose で出す。
-				if (section.level === 0) {
-					return (
-						<div key={`preamble-${i}`}>
-							<SmallProseWrapper>
-								<ChatMarkdownRender
-									string={section.body}
-									chatMessageLocation={chatMessageLocation}
-									isApplyEnabled={true}
-									isLinkDetectionEnabled={true}
-								/>
-							</SmallProseWrapper>
-						</div>
-					)
-				}
-				// このセクションが「いま書かれている最後のセクション」かどうか。
-				// ストリーミング中に新しい見出しが下に増えたら、このセクションは
-				// 「最後ではなくなる」ので autoFold が true になり、自動で閉じる。
-				const isCurrentlyStreaming = isStreaming && i === lastIdx
-				const sectionAutoFold = autoFold || (isStreaming && i !== lastIdx)
-				return (
-					<StaticCollapsibleCard
-						key={`sec-${i}`}
-						title={section.title}
-						isStreaming={isCurrentlyStreaming}
-						defaultOpen={isCurrentlyStreaming}
-						autoFold={sectionAutoFold}
-					>
-						<SmallProseWrapper>
-							<ChatMarkdownRender
-								string={section.body || '_(空のセクション)_'}
-								chatMessageLocation={chatMessageLocation}
-								isApplyEnabled={true}
-								isLinkDetectionEnabled={true}
-							/>
-						</SmallProseWrapper>
-					</StaticCollapsibleCard>
-				)
-			})}
-		</div>
+		<SmallProseWrapper>
+			<ChatMarkdownRender
+				string={content}
+				chatMessageLocation={chatMessageLocation}
+				isApplyEnabled={true}
+				isLinkDetectionEnabled={true}
+			/>
+		</SmallProseWrapper>
 	)
 }
 
@@ -6121,9 +6011,11 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 	const messagesHTML = <ScrollToBottomContainer
 		key={'messages' + chatThreadsState.currentThreadId} // force rerender on all children if id changes
 		scrollContainerRef={scrollContainerRef}
+		// 送るたびに最新まで戻って追いかける
+		followKey={previousMessages.filter(m => m.role === 'user').length}
 		className={`
 			flex flex-col
-			px-4 py-4 space-y-4
+			px-4 py-3
 			w-full
 			overflow-x-hidden
 			overflow-y-auto
@@ -6162,6 +6054,8 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 				fullError={latestError.fullError}
 				onDismiss={() => { chatThreadsService.dismissStreamError(currentThread.id) }}
 				showDismiss={true}
+				// 止まったところから続ける (最初からやり直さない)
+				onContinue={() => { void chatThreadsService.continueAfterError(currentThread.id) }}
 			/>
 
 			<WarningBox className='text-sm my-2 mx-4' onClick={() => { commandService.executeCommand(VOID_OPEN_SETTINGS_ACTION_ID) }} text={tUI('chat.openSettings')} />

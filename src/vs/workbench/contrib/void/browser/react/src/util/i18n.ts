@@ -450,6 +450,8 @@ export const translations = {
 	'cloudAgents.github.more': { en: 'Show more', ja: 'もっと見る' },
 	'cloudAgents.github.private': { en: 'Private', ja: '非公開' },
 	'cloudAgents.github.change': { en: 'Change', ja: '変更' },
+	'cloudAgents.resume.button': { en: 'Continue', ja: '続ける' },
+	'cloudAgents.resume.hint': { en: 'Resumes from where it stopped (the failed step is retried, not skipped).', ja: '止まったところから再開します (失敗したステップを飛ばさず、その途中から続けます)。' },
 	'cloudAgents.github.remove': { en: 'Remove', ja: '外す' },
 	'cloudAgents.github.addRepo': { en: 'Add repository', ja: 'リポジトリを追加' },
 	'cloudAgents.github.multiHint': { en: 'Each repository is cloned into its own folder in the workspace ({names}).', ja: '各リポジトリを workspace 直下のそれぞれのフォルダ ({names}) に clone します。' },
