@@ -7,7 +7,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Plus, RotateCcw, Trash2, X, UserCheck, Bot, Play, Flag, Repeat, CornerDownLeft, Split } from 'lucide-react';
+import { Check, Pencil, Plus, RotateCcw, Trash2, X, UserCheck, Bot, Play, Flag, Repeat, CornerDownLeft, Split } from 'lucide-react';
 import { URI } from '../../../../../../../base/common/uri.js';
 import { VSBuffer } from '../../../../../../../base/common/buffer.js';
 import { useAccessor } from '../util/services.js';
@@ -24,6 +24,9 @@ const withLayout = (w: DivisionWorkflow): DivisionWorkflow =>
 	w.nodes.length > 1 && w.nodes.every(n => n.position.x === 0 && n.position.y === 0) ? layoutWorkflow(w) : w;
 
 const WRITE_DELAY_MS = 300;
+
+/** The id workflowFilePane.ts registers the workflow.json canvas editor under. */
+const WORKFLOW_EDITOR_ID = 'void.workflowFileEditor';
 
 /**
  * The workflow shown from .division/workflow.json: read when shown, read again whenever the file
@@ -392,6 +395,13 @@ export const WorkflowReview = ({ workflow: initial, fileUri, status, leader, rol
 
 	const change = (next: DivisionWorkflow) => { setWorkflow(next); setEditedHere(true); };
 
+	// Open .division/workflow.json in the workflow editor (the canvas); saving it there updates this diagram.
+	const commandService = useAccessor().get('ICommandService');
+	const openEditor = () => {
+		if (!fileUri) { return; }
+		commandService.executeCommand('vscode.openWith', fileUri, WORKFLOW_EDITOR_ID).catch(e => console.error('open workflow.json', e));
+	};
+
 	const statusLabel = status === 'approved' ? '✅ 承認済み' : status === 'revised' ? '↩️ 差し戻し済み' : status === 'rejected' ? '⏹ 中止' : null;
 
 	return (
@@ -400,6 +410,12 @@ export const WorkflowReview = ({ workflow: initial, fileUri, status, leader, rol
 				<span style={{ fontSize: 13, fontWeight: 600, color: 'var(--void-fg-1)' }}>🗺️ リーダーのワークフロー案</span>
 				{leader && <span style={{ fontSize: 11, color: 'var(--void-fg-3)' }}>{leader}</span>}
 				{statusLabel && <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--void-fg-3)' }}>{statusLabel}</span>}
+				{pending && fileUri && (
+					<button type='button' style={{ ...buttonStyle('plain'), marginLeft: 'auto' }} disabled={busy} onClick={openEditor}
+						title='.division/workflow.json をワークフローのエディタで開く'>
+						<Pencil size={12} /> ワークフローを編集
+					</button>
+				)}
 			</div>
 			{pending && fromFile && <div style={{ fontSize: 11, color: 'var(--void-fg-3)' }}>表示しているのは <code>.division/workflow.json</code> です。ここでの編集はファイルに書き込まれ、ファイルを保存するとここにも反映されます。</div>}
 			{pending && <div style={{ fontSize: 11.5, color: 'var(--void-fg-3)' }}>ノードを押すと編集できます。承認するとこの順で各ロールが実行し、「承認」ノードの所であなたの確認を待ちます。繰り返しは for / while ループ (目標はここに書きます)、同時に進めたい作業は並列ノードで組めます。</div>}
