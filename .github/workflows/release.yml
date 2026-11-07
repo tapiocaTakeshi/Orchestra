@@ -5,7 +5,7 @@ name: Release
 # 手動トリガーも可能 (workflow_dispatch)。
 #
 # 注意:
-# - macOS arm64 ジョブは macos-14 (Apple Silicon) を使う (gulp vscode-darwin-arm64 が必要)。
+# - macOS arm64 ジョブは macos-15 (Apple Silicon) を使う (macos-14 のイメージは GitHub で廃止済み) (gulp vscode-darwin-arm64 が必要)。
 # - Windows / Linux は x64 ビルド。arm64 が要るなら matrix を増やす。
 # - 全 OS でフルビルドが走るため 1 回 30〜90 分かかる想定。
 # - 一部 OS だけ自動化したい場合は不要なジョブを削除/コメントアウトする。
@@ -43,7 +43,7 @@ jobs:
   # ---------- macOS (arm64) ----------
   build-macos:
     name: Build macOS (arm64)
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 120
     # @vscode/ripgrep の postinstall が GitHub Releases API を叩いて 403 になるのを回避するため、
     # ジョブ全体に GITHUB_TOKEN を渡しておく。

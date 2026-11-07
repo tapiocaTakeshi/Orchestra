@@ -16,7 +16,7 @@ Orchestra のリリース自動化ワークフローを提供します。
   - `Orchestra-vX.Y.Z-win32-x64.exe` (Inno Setup installer, user install)
   - `Orchestra-vX.Y.Z-linux-x64.tar.gz`
 - **所要時間**: 30 〜 90 分 / OS（並列実行）
-- **ランナー**: `macos-14` (Apple Silicon), `windows-latest`, `ubuntu-latest`
+- **ランナー**: `macos-15` (Apple Silicon), `windows-latest`, `ubuntu-latest`
 
 #### 使い方
 
@@ -273,5 +273,5 @@ Orchestra のオートアップデート (`voidUpdateMainService.ts`) は
 | `npm ci` が失敗 | `.nvmrc` の Node バージョンを確認。Python 3 が必要 |
 | native modules のビルド失敗 (Windows) | `npm config set msvs_version 2022` などが必要な場合あり |
 | Linux で `libsecret` 系エラー | `apt-get install libsecret-1-dev` を確認 |
-| DMG 作成時にエラー | `hdiutil` が古い macOS ランナーで動かない可能性。`macos-14` 利用を確認 |
+| DMG 作成時にエラー | `hdiutil` が古い macOS ランナーで動かない可能性。`macos-15` 利用を確認 |
 | Release が `latest` にならない | ドラフトのままになっていないか確認 |
