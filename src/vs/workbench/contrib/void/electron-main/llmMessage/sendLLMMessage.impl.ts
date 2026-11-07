@@ -4221,7 +4221,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 
 				// Reviewer はサーバ側ではなく最後にローカルで一括実行する。
 				// 外した Reviewer に依存していたタスク (例: レビュー指摘の修正) は、Reviewer の依存先を引き継ぐ。
-				// ただしユーザーが組んだワークフロー (Division のサイト) のステップは順番も含めてユーザーのものなので、
+				// ただしユーザーが組んだプロジェクトのワークフローのステップは順番も含めてユーザーのものなので、
 				// reviewer のステップもその位置で実行する (最終レビューは従来どおり最後に行う)。
 				const fromWorkflow = leaderResult.workflow === true;
 				const EXCLUDED_ROLES = new Set<string>(fromWorkflow ? [] : ['review', 'reviewer']);
