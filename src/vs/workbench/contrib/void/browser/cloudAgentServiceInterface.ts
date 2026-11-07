@@ -13,6 +13,7 @@
 
 import type { Event } from '../../../../base/common/event.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
+import type { CloudDocument } from './cloudDocumentFileSystem.js';
 import type { CloudApprovalAction, CloudChange, CloudDecision, CloudGoalLoopMode, CloudPendingApproval, CloudPullRequestInfo, CloudPullRequestResult, CloudSession, CloudSessionEvent, CreateCloudPullRequestParams, GitHubRepo } from '../common/cloudAgentTypes.js';
 
 
@@ -293,6 +294,18 @@ export interface ICloudAgentService {
 	 * POST .../workflow-proposal: Leader のワークフロー案を承認 (workflow = 図で編集した内容) / 差し戻す (feedback)。成功したら true
 	 */
 	resolveWorkflowProposal(id: string, params: { proposalSeq: number; action: CloudApprovalAction; workflow?: import('../common/divisionWorkflow.js').DivisionWorkflow; feedback?: string }): Promise<boolean>;
+
+	// --- 文書 (サンドボックスの .division。ローカルの Division Project と同じファイル) ---
+
+	/** GET .../documents: ワークフロー (workflow.json)・論文・仕様書・デザインのページ・各ロールの成果物 */
+	listDocuments(id: string): Promise<{ documents: CloudDocument[] } | { error: string }>;
+	/**
+	 * 文書をエディタで開く (orchestra-cloud://<id>/.division/…)。ローカルの文書と同じエディタで開き、
+	 * 保存するとサンドボックスのファイルに書く。workflow.json は図のエディタ、デザインは HTML のまま
+	 */
+	openDocument(id: string, path: string): Promise<void>;
+	/** 文書のエディタ上の URI (例: ワークフロー案の図を .division/workflow.json につなぐ) */
+	documentUri(id: string, path: string): import('../../../../base/common/uri.js').URI;
 
 	// --- Pull requests (GitHub-repo sessions only) ---
 
