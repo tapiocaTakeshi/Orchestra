@@ -18,6 +18,7 @@ export default defineConfig({
 		'./src2/role-output-tsx/index.tsx',
 		'./src2/kanban-tsx/index.tsx',
 		'./src2/cloud-agents-tsx/index.tsx',
+		'./src2/workflow-file-tsx/index.tsx',
 	],
 	outDir: './out',
 	format: ['esm'],
