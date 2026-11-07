@@ -1269,6 +1269,36 @@ const DivisionSettings = () => {
 
 	return (
 		<div className="flex flex-col gap-4">
+			{/* 承認モード */}
+			<div className="flex flex-col gap-2 border border-void-border-2 bg-void-bg-2 rounded-sm px-3 py-2">
+				<div className="flex items-center justify-between gap-4">
+					<div className="flex flex-col">
+						<span className="text-sm text-void-fg-1 font-medium">承認モード</span>
+						<span className="text-[11px] text-void-fg-4">
+							有効にすると、Leader がまず計画をワークフロー図にして承認を待ち、各ロールが .md ファイルを生成するたびにも一時停止して、内容を確認・編集してから承認するまで次のステップに進みません。チャットとクラウドエージェントで共通の設定です（無効でもワークフロー図 .division/workflow.json は作られます）。
+						</span>
+					</div>
+					<VoidSwitch
+						size='xs'
+						value={!!settingsState.globalSettings.divisionFlowApprovalMode}
+						onChange={(newVal) => voidSettingsService.setGlobalSetting('divisionFlowApprovalMode', newVal)}
+					/>
+				</div>
+				<div className={`flex items-center justify-between gap-4 pl-3 ${settingsState.globalSettings.divisionFlowApprovalMode ? '' : 'opacity-50'}`}>
+					<div className="flex flex-col">
+						<span className="text-xs text-void-fg-2 font-medium">Designer など、Coder / Writer 以外のロールでは承認で止めない</span>
+						<span className="text-[11px] text-void-fg-4">
+							有効にすると、承認待ちで一時停止するのは Coder / Writer の出力だけになります。Designer・Planner・Search・Research・Image・Idea man・File Search・Reviewer の出力は保存だけして、そのまま次のステップに進みます。
+						</span>
+					</div>
+					<VoidSwitch
+						size='xs'
+						value={!!settingsState.globalSettings.divisionFlowApprovalCoderWriterOnly}
+						disabled={!settingsState.globalSettings.divisionFlowApprovalMode}
+						onChange={(newVal) => voidSettingsService.setGlobalSetting('divisionFlowApprovalCoderWriterOnly', newVal)}
+					/>
+				</div>
+			</div>
             {/* Orchestration loop iteration caps */}
 			<div className="flex flex-col gap-2 border border-void-border-2 bg-void-bg-2 rounded-sm px-3 py-2">
 				<div className="flex items-center justify-between gap-4">
@@ -1309,33 +1339,6 @@ const DivisionSettings = () => {
 						onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
 						className="w-20 bg-void-bg-1 border border-void-border-3 rounded-sm px-2 py-1 text-xs text-void-fg-1 focus:outline-none focus:border-[#0e70c0]"
 						aria-label="Max reviewer iterations"
-					/>
-				</div>
-				<div className="flex items-center justify-between gap-4 pt-1 border-t border-void-border-3">
-					<div className="flex flex-col">
-						<span className="text-xs text-void-fg-2 font-medium">各ステップで承認を得るモード</span>
-						<span className="text-[11px] text-void-fg-4">
-							有効にすると、各ロールが .md ファイルを生成するたびに一時停止し、内容を確認・編集してから承認するまで次のステップに進みません。
-						</span>
-					</div>
-					<VoidSwitch
-						size='xs'
-						value={!!settingsState.globalSettings.divisionFlowApprovalMode}
-						onChange={(newVal) => voidSettingsService.setGlobalSetting('divisionFlowApprovalMode', newVal)}
-					/>
-				</div>
-				<div className={`flex items-center justify-between gap-4 pl-3 ${settingsState.globalSettings.divisionFlowApprovalMode ? '' : 'opacity-50'}`}>
-					<div className="flex flex-col">
-						<span className="text-xs text-void-fg-2 font-medium">Designer など、Coder / Writer 以外のロールでは承認で止めない</span>
-						<span className="text-[11px] text-void-fg-4">
-							有効にすると、承認待ちで一時停止するのは Coder / Writer の出力だけになります。Designer・Planner・Search・Research・Image・Idea man・File Search・Reviewer の出力は保存だけして、そのまま次のステップに進みます。
-						</span>
-					</div>
-					<VoidSwitch
-						size='xs'
-						value={!!settingsState.globalSettings.divisionFlowApprovalCoderWriterOnly}
-						disabled={!settingsState.globalSettings.divisionFlowApprovalMode}
-						onChange={(newVal) => voidSettingsService.setGlobalSetting('divisionFlowApprovalCoderWriterOnly', newVal)}
 					/>
 				</div>
 			</div>

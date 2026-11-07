@@ -488,6 +488,9 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 	}
 
 	private _onSettingsChanged() {
+		// 承認モードは設定 (Division タブ) のスイッチと共通。設定で切り替えたら起動の欄にも反映する。
+		const approvalModePick = this._loadApprovalModePick();
+		if (approvalModePick !== this._state.approvalModePick) this._setState({ approvalModePick });
 		const signature = this._tokenSignature();
 		const isLoggedIn = this._isLoggedIn();
 		const tokenChanged = signature !== this._lastToken;
@@ -1820,13 +1823,17 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 
 	setApprovalModePick(on: boolean): void {
 		this._setState({ approvalModePick: !!on });
-		try {
-			this._storageService.store(APPROVAL_MODE_PICK_STORAGE_KEY, !!on, StorageScope.APPLICATION, StorageTarget.MACHINE);
-		} catch { /* 覚えられなくても選択はできている */ }
+		// 設定の「承認モード」スイッチと同じ値 (IDE のチャットとクラウドエージェントで共通)
+		if (!!this._settingsService.state.globalSettings.divisionFlowApprovalMode !== !!on) {
+			void this._settingsService.setGlobalSetting('divisionFlowApprovalMode', !!on);
+		}
 	}
 
 	private _loadApprovalModePick(): boolean {
+		const fromSettings = this._settingsService.state.globalSettings.divisionFlowApprovalMode;
+		if (typeof fromSettings === 'boolean') return fromSettings;
 		try {
+			// 設定に一本化する前に起動の欄で選んでいた値
 			return this._storageService.getBoolean(APPROVAL_MODE_PICK_STORAGE_KEY, StorageScope.APPLICATION, false);
 		} catch {
 			return false;
