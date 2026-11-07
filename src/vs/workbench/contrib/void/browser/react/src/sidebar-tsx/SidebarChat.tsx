@@ -45,6 +45,7 @@ import { PatchHunk } from '../../../../common/applyPatch.js';
 import { ChatSlashCommand, matchSlashCommands } from '../../../../common/slashCommands.js';
 import { RawToolCallObj } from '../../../../common/sendLLMMessageTypes.js';
 import ErrorBoundary from './ErrorBoundary.js';
+import { OrchestraHero, OrchestraTutorial } from './OrchestraIntro.js';
 import { ToolApprovalTypeSwitch } from '../void-settings-tsx/Settings.js';
 
 import { persistentTerminalNameOfId } from '../../../terminalToolService.js';
@@ -6360,8 +6361,10 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 	const landingPageInput = <div>
 		{errorDisplayHTML && <div className='px-2'>{errorDisplayHTML}</div>}
 		{queueListHTML && <div className='px-2 pt-2'>{queueListHTML}</div>}
+		{/* 初期画面: アニメーションのヒーロー (エージェント UI は自分の挨拶を出す) */}
+		{!isAgentUi && <div className='pt-4'><ErrorBoundary><OrchestraHero /></ErrorBoundary></div>}
 		{agentGreetingHTML}
-		<div className={isAgentUi ? 'pt-0' : 'pt-8'}>
+		<div className={isAgentUi ? 'pt-0' : 'pt-4'}>
 			{slashPopupHTML}
 			{inputChatArea}
 		</div>
@@ -6394,6 +6397,13 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 		<ErrorBoundary>
 			{landingPageInput}
 		</ErrorBoundary>
+
+		{/* チュートリアル: 依頼 → ワークフロー (.division/workflow.json) → デザイン (.division/design/) → 承認・編集 */}
+		<div className='pt-4'>
+			<ErrorBoundary>
+				<OrchestraTutorial />
+			</ErrorBoundary>
+		</div>
 
 		{Object.keys(chatThreadsState.allThreads).length > 1 ? // show if there are threads
 			<ErrorBoundary>
