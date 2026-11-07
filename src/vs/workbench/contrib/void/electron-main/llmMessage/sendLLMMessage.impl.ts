@@ -44,6 +44,7 @@ import { availableTools, InternalToolInfo } from '../../common/prompt/prompts.js
 import { generateUuid } from '../../../../../base/common/uuid.js';
 import { extractSearchReplaceBlocks } from '../../common/helpers/extractCodeFromResult.js';
 import { DESIGN_DIR, DESIGN_INDEX_PAGE, LEGACY_DESIGN_FILE, sortDesignPageNames, splitDesignPages } from '../../common/designPages.js';
+import { CHANGES_FILE, CHANGES_HEADER, DRIFT_CHECK_PROMPT, DRIFT_FILE, GOAL_FILE, changeEntry, driftCheckInput, driftReport, goalDocument, goalInstructionBlock, hasDocumentsToCheck, latestChangeNote, lineChanges, parseDriftVerdict } from '../../common/divisionGoal.js';
 import { DivisionWorkflow, loopLabel, normalizeWorkflow, tasksToWorkflow, WORKFLOW_FILE_NAME, workflowErrors, WorkflowLoopTag, WorkflowWhileCheck, workflowToTasks } from '../../common/divisionWorkflow.js';
 import { extractSearchedSites, mergeSearchedSites, logSearchedSites, searchedSitesMarkdown, isDefaultWebSearchEnabled, isWebSearchRejectedError } from '../../common/searchedSites.js';
 
@@ -1082,18 +1083,70 @@ const isLivingDocument = (filename: string): boolean =>
  * 生きた文書を書き換える前に、今の版を .division/history/ に写す。
  * ロールが文書を丸ごと書き直してしまっても、以前の版は失われない。
  */
-const snapshotLivingDocument = (divisionDir: string, filename: string): void => {
+const snapshotLivingDocument = (divisionDir: string, filename: string): string | null => {
 	const isDesign = filename.startsWith(`${DESIGN_DIR}/`);
 	const source = path.join(divisionDir, isDesign ? DESIGN_DIR : filename);
-	if (!fs.existsSync(source)) return;
+	if (!fs.existsSync(source)) return null;
 	const name = isDesign ? DESIGN_DIR : filename.replace(/\.md$/, '');
 	const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 	const dest = path.join(divisionDir, HISTORY_DIR, name, stamp);
 	try {
 		fs.mkdirSync(dest, { recursive: true });
 		fs.cpSync(source, path.join(dest, path.basename(source)), { recursive: true });
-	} catch (_e) { /* the write still happens; history is best effort */ }
+		return `.division/${HISTORY_DIR}/${name}/${stamp}`;
+	} catch (_e) { /* the write still happens; history is best effort */ return null; }
 };
+
+/** 生きた文書の今の本文 (デザインは全ページをつないだもの)。差分の行数を数えるのに使う。 */
+const readLivingDocument = (divisionDir: string, filename: string): string => {
+	try {
+		if (filename.startsWith(`${DESIGN_DIR}/`)) {
+			const dir = path.join(divisionDir, DESIGN_DIR);
+			return sortDesignPageNames(fs.readdirSync(dir).filter(n => /\.html?$/i.test(n)))
+				.map(n => `<!-- ${n} -->\n${fs.readFileSync(path.join(dir, n), 'utf-8')}`).join('\n');
+		}
+		return fs.readFileSync(path.join(divisionDir, filename), 'utf-8');
+	} catch { return ''; }
+};
+
+/**
+ * 生きた文書を更新したら、何を・なぜ変えたかを .division/changes.md に 1 件追記する。
+ * 理由は文書の「## 変更履歴」の最後の行 (ロールが書く) から取る。変わっていなければ書かない。
+ */
+const recordLivingDocumentChange = (divisionDir: string, filename: string, role: string, title: string, request: string, before: string, after: string, snapshot: string | null, why?: string): void => {
+	const { added, removed } = lineChanges(before, after);
+	if (added === 0 && removed === 0) return;
+	const isDesign = filename.startsWith(`${DESIGN_DIR}/`);
+	const label = isDesign ? `デザイン (.division/${DESIGN_DIR}/)` : filename === PAPER_FILE ? `論文 (.division/${PAPER_FILE})` : `仕様書 (.division/${SPEC_FILE})`;
+	try {
+		const file = path.join(divisionDir, CHANGES_FILE);
+		if (!fs.existsSync(file)) fs.writeFileSync(file, CHANGES_HEADER, 'utf-8');
+		fs.appendFileSync(file, changeEntry({ label, role, title, request, why: why ?? latestChangeNote(after), added, removed, snapshot }), 'utf-8');
+	} catch (_e) { /* the change log is best effort */ }
+};
+
+/** .division/goal.md の今の内容 (無ければ '') */
+const readGoalFile = (workspaceFolderPath: string | undefined): string => {
+	if (!workspaceFolderPath) return '';
+	try { return fs.readFileSync(path.join(workspaceFolderPath, '.division', GOAL_FILE), 'utf-8'); } catch { return ''; }
+};
+
+/** プロジェクトの目的。goal.md が無ければユーザーの最初の依頼から作る (以後 AI は変更しない)。 */
+const ensureGoalFile = (workspaceFolderPath: string | undefined, request: string): string => {
+	if (!workspaceFolderPath) return '';
+	const current = readGoalFile(workspaceFolderPath);
+	if (current.trim() || !request.trim()) return current;
+	const content = goalDocument(request);
+	try {
+		fs.mkdirSync(path.join(workspaceFolderPath, '.division'), { recursive: true });
+		fs.writeFileSync(path.join(workspaceFolderPath, '.division', GOAL_FILE), content, 'utf-8');
+		return content;
+	} catch { return ''; }
+};
+
+/** goal.md (ワークスペース内の絶対パス) なら true */
+const isGoalFilePath = (workspaceFolderPath: string, filePath: string): boolean =>
+	path.resolve(workspaceFolderPath, filePath) === path.resolve(workspaceFolderPath, '.division', GOAL_FILE);
 
 /** .division/<filename> の今の内容 (無ければ '') */
 const readDivisionFile = (workspaceFolderPath: string | undefined, filename: string): string => {
@@ -1162,6 +1215,8 @@ const saveFlowResultAsMd = (
 	content: string,
 	_sessionId: string,
 	append: boolean = false,
+	/** The request the change was made for (recorded in .division/changes.md). */
+	request: string = '',
 ): string | null => {
 	const filename = FLOW_ROLE_TO_FILENAME[role.toLowerCase()];
 	if (!filename || !workspaceFolderPath) return null;
@@ -1171,10 +1226,14 @@ const saveFlowResultAsMd = (
 
 	try {
 		fs.mkdirSync(divisionDir, { recursive: true });
-		if (isLivingDocument(filename)) snapshotLivingDocument(divisionDir, filename);
+		const living = isLivingDocument(filename);
+		const before = living ? readLivingDocument(divisionDir, filename) : '';
+		const snapshot = living ? snapshotLivingDocument(divisionDir, filename) : null;
 		if (filename.startsWith(`${DESIGN_DIR}/`)) {
 			// Appending with a Markdown rule would break the documents, so pages are always replaced.
 			const written = writeDesignPages(divisionDir, content);
+			recordLivingDocumentChange(divisionDir, filename, role, _title, request, before, readLivingDocument(divisionDir, filename), snapshot,
+				written.length ? `次のページを更新: ${written.map(p => path.basename(p)).join(', ')}` : undefined);
 			return written.find(p => path.basename(p) === DESIGN_INDEX_PAGE) ?? written[0] ?? null;
 		} else if (append && fs.existsSync(filePath)) {
 			const existing = fs.readFileSync(filePath, 'utf-8');
@@ -1182,6 +1241,7 @@ const saveFlowResultAsMd = (
 		} else {
 			fs.writeFileSync(filePath, content, 'utf-8');
 		}
+		if (living) recordLivingDocumentChange(divisionDir, filename, role, _title, request, before, readLivingDocument(divisionDir, filename), snapshot);
 		return filePath;
 	} catch (_e) {
 		return null;
@@ -1311,6 +1371,8 @@ type OrchestrationState = {
 	};
 	/** 承認した .division/workflow.json のステップをそのまま実行している (最後に Reviewer を足さない) */
 	fromWorkflowFile?: boolean;
+	/** ドリフト検証で止めた coder のステップ (nextIndex)。承認して再開したら、そのステップは検証し直さない。 */
+	driftAcknowledged?: boolean;
 	/** 目標ループを「ラウンドごとに確認」で止めたときの続きの情報 */
 	goalLoop?: {
 		goal: DivisionGoal | null;
@@ -3591,7 +3653,8 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					: `論文をもとに、目的・利用者・機能・画面と画面遷移・データ・非機能要件・受け入れ条件を書いてください。designer はこれをもとにデザインを、coder は仕様書とデザインからソフトウェアを作るので、抜けや曖昧さが無いようにしてください。`,
 				`この文書は常に保存され更新される生きた文書です。**一新しないでください。**`,
 				`- 既存の見出し・記述・決定事項はすべて残し、新しいことを書き足し、変わったことを直してください。変えた・取り下げた箇所にはその理由を書いてください。`,
-				`- 末尾に「## 変更履歴」を置き、今回の更新の日付と要点を 1 行追加してください。`,
+				`- 末尾に「## 変更履歴」を置き、今回の更新を 1 行追加してください: 日付・何を変えたか・なぜか (目的 .division/${GOAL_FILE} や依頼のどこに基づくか)。この行は .division/${CHANGES_FILE} に記録されます。`,
+				`- 目的 (.division/${GOAL_FILE}) から文書が離れないようにしてください。依頼が目的と食い違うときは、文書に反映する前にその旨を書いてください。`,
 				`- 回答は文書の完全版 (Markdown) だけにしてください。回答全体がそのまま .division/${file} に保存されます。前置き・後書きは書かないでください。`,
 			];
 			if (!paper) {
@@ -3712,6 +3775,8 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			reviewerDone: boolean,
 			/** ワークフローの「承認」ノード: 承認モードの設定に関係なく止まる。 */
 			workflowApproval: boolean = false,
+			/** 状態ファイルに足す情報 (ドリフト検証で止めたときなど) */
+			extraState: Partial<OrchestrationState> = {},
 		): boolean => {
 			if (!workspaceFolderPath) return false;
 			if (!workflowApproval) {
@@ -3730,6 +3795,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				totalSteps,
 				reviewerDone,
 				...(runFromWorkflowFile ? { fromWorkflowFile: true } : {}),
+				...extraState,
 			});
 			onFinalMessage({
 				fullText,
@@ -4249,6 +4315,22 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			}
 			appendText(`\n`);
 
+			// 目的 (.division/goal.md): ユーザーが最初に決めた最上位の基準。無ければ最初の依頼から作り、
+			// 各ロールの指示の先頭に入れる。AI はこれを変更しない (タスク中に変わったら元に戻す)。
+			const goalText = ensureGoalFile(workspaceFolderPath, currentInput);
+			const goalBlock = goalInstructionBlock(goalText);
+			/** タスクが goal.md を変えていたら元に戻す。戻したら true。 */
+			const restoreGoalIfChanged = (): boolean => {
+				if (!workspaceFolderPath || !goalText.trim() || readGoalFile(workspaceFolderPath) === goalText) return false;
+				try {
+					fs.writeFileSync(path.join(workspaceFolderPath, '.division', GOAL_FILE), goalText, 'utf-8');
+					appendText(`> 🎯 \`.division/${GOAL_FILE}\` はユーザーが決めた目的なので、AI による変更を元に戻しました。\n\n`);
+					return true;
+				} catch { return false; }
+			};
+			// ドリフト検証: 最初の coder の前と、生きた文書が更新されたあとの coder の前に行う。
+			let livingDocsChangedSinceDriftCheck = true;
+
 			// 承認モードからの再開時は taskOutputs しか残っていないので、
 			// 保存済みの file-search 出力からコンテキストを組み直す。
 			for (const o of taskOutputs) {
@@ -4338,7 +4420,8 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 							``,
 							`### 仕様書 (.division/${SPEC_FILE}) — 仕様書とデザインからソフトウェアを作ること`,
 							`- 仕様書の機能・画面・データ・受け入れ条件をすべて満たす。仕様書とデザインに無いものは作らない。`,
-							`- 仕様書・デザイン・論文 (.division/) は編集しない。実装して分かった不足や矛盾は回答の最後に書く。`,
+							`- 仕様書・デザイン・論文・目的 (.division/) は編集しない。実装して分かった不足や矛盾は回答の最後に書く。`,
+							`- 仕様書より上に目的 (.division/${GOAL_FILE}) がある。仕様書に従うと目的に反する箇所があれば、仕様書の範囲で目的の意図に沿わせ、回答の最後にそう書く。`,
 							``,
 							'````markdown',
 							spec,
@@ -4364,6 +4447,8 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					`## ユーザーの元のリクエスト`,
 					currentInput,
 					``,
+					goalBlock,
+					goalBlock ? `` : '',
 					`## あなたの担当タスク`,
 					`- ロール: ${task.role}`,
 					`- タイトル: ${task.title || ''}`,
@@ -4426,6 +4511,46 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 						continue;
 					}
 					appendText(`🔁 **まだ未達です。** もう一度繰り返します。${verdict.reason ? `\n\n${verdict.reason}` : ''}\n\n`);
+				}
+				// ドリフト検証: coder が実装する前に、Reviewer が論文・仕様書・デザインを目的 (goal.md) と比べる。
+				// 目的から離れていたら、実装せずに止めてユーザーに確認する (承認すればこのまま実装する)。
+				const driftAcknowledgedHere = round === 1 && isResuming && i === resumeFromIndex && resumeState?.driftAcknowledged === true;
+				if (workspaceFolderPath && isCodeRole(role) && livingDocsChangedSinceDriftCheck && !driftAcknowledgedHere) {
+					livingDocsChangedSinceDriftCheck = false;
+					const designPages = listDesignPages(workspaceFolderPath);
+					const docs = {
+						goal: readGoalFile(workspaceFolderPath).trim(),
+						paper: truncateForContext(readDivisionFile(workspaceFolderPath, PAPER_FILE), 30_000),
+						spec: truncateForContext(readDivisionFile(workspaceFolderPath, SPEC_FILE), 40_000),
+						design: designPages.length
+							? [designPages.join('\n'), `--- ${DESIGN_INDEX_PAGE} ---`, truncateForContext(readDivisionFile(workspaceFolderPath, `${DESIGN_DIR}/${DESIGN_INDEX_PAGE}`), 12_000)].join('\n')
+							: '',
+						changes: readDivisionFile(workspaceFolderPath, CHANGES_FILE).slice(-8_000),
+					};
+					if (hasDocumentsToCheck(docs)) {
+						appendText(`\n---\n\n### 🎯 ドリフト検証 — 実装の前に、文書が目的 (\`.division/${GOAL_FILE}\`) から離れていないかを確認します\n\n`);
+						const check = await callDivisionTaskExecute(
+							endpointBase, projectId, 'reviewer',
+							[DRIFT_CHECK_PROMPT, driftCheckInput(docs, currentInput)].join('\n\n---\n\n'),
+							controller.signal,
+							() => { /* JSON の生ストリームはチャットに流さない */ },
+							divisionApiKey, undefined, undefined,
+							workspaceFolderPath, routingOptions,
+						);
+						if (controller.signal.aborted) { throw Object.assign(new Error('aborted'), { name: 'AbortError' }); }
+						const verdict = parseDriftVerdict(check.error ? '' : check.output || '');
+						if (verdict.drift === true) {
+							const report = driftReport(verdict, task.title || task.role);
+							try { fs.writeFileSync(path.join(workspaceFolderPath, '.division', DRIFT_FILE), report, 'utf-8'); } catch (_e) { /* the chat still shows it */ }
+							appendText(`⛔ **目的からの逸脱が見つかったので、実装を止めました。**\n\n${report.split('\n').slice(2).join('\n')}\n`);
+							const driftInfo = { mdFileName: DRIFT_FILE, mdFilePath: path.join(workspaceFolderPath, '.division', DRIFT_FILE) };
+							// 承認したらこの coder のステップから再開する (そのステップは検証し直さない)。
+							if (maybePauseForApproval('reviewer', report, driftInfo, i, false, true, { driftAcknowledged: true })) return;
+						}
+						appendText(verdict.drift === false
+							? `✅ 文書は目的に沿っています。${verdict.reason ? `\n\n${verdict.reason}` : ''}${verdict.notes ? `\n\n> ${verdict.notes}` : ''}\n\n`
+							: `⚠️ ドリフト検証の結果を読み取れませんでした${check.error ? ` (${check.error})` : ''}。実装を続けます。\n\n`);
+					}
 				}
 				appendText(`\n---\n\n### ${displayStepNumber(i)}. ${task.role} — ${task.title || ''}${task.loops?.length ? ` _(${loopLabel(task.loops)})_` : ''}${task.parallel ? ' _(並列)_' : ''}\n\n`);
 
@@ -4634,7 +4759,11 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 
 				// Coder 系: コードブロックを実ファイルに書き出す
 				if (output && workspaceFolderPath && isCodeRole(role)) {
-					const { savedFiles, fileOperations, commands } = saveCodeBlocksFromOutput(output, sessionId || 'task', workspaceFolderPath);
+					const saved = saveCodeBlocksFromOutput(output, sessionId || 'task', workspaceFolderPath);
+					// goal.md はユーザーの目的なので、coder の出力でも書き換えない (書いていたら下で元に戻す)。
+					const savedFiles = saved.savedFiles.filter(sf => !isGoalFilePath(workspaceFolderPath, sf.filePath));
+					const fileOperations = saved.fileOperations.filter(op => !isGoalFilePath(workspaceFolderPath, op.filePath));
+					const { commands } = saved;
 					if (savedFiles.length > 0) {
 						appendText(`\n`);
 						for (const sf of savedFiles) {
@@ -4646,11 +4775,13 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					}
 					queueCommandRuns(commands);
 				}
+				restoreGoalIfChanged();
 
 				// 既知のロールは .division/*.md にも保存
 				const mdInfo = (output && workspaceFolderPath) ? buildMdFileInfo(workspaceFolderPath, role) : null;
 				if (mdInfo && workspaceFolderPath) {
-					saveFlowResultAsMd(workspaceFolderPath, task.role, task.title || '', output, sessionId || 'task');
+					saveFlowResultAsMd(workspaceFolderPath, task.role, task.title || '', output, sessionId || 'task', false, currentInput);
+					if (isLivingDocument(mdInfo.mdFileName)) livingDocsChangedSinceDriftCheck = true;
 				}
 				taskOutputs.push({ role: task.role, title: task.title || '', output, mdFileName: mdInfo?.mdFileName, mdFilePath: mdInfo?.mdFilePath });
 
@@ -4759,6 +4890,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				`## ユーザーの要求`,
 				currentInput,
 				``,
+				...(goalBlock ? [goalBlock, ``] : []),
 				...(writtenFilesBlock ? [writtenFilesBlock, ``] : []),
 				...(lastCommandResults.length > 0 ? [
 					`## コマンドの実行結果（このラウンドで実際に作業フォルダで実行したもの）`,
@@ -4772,6 +4904,8 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				goal
 					? `それら全体を、上の「Leader が設定した目標」と「達成条件」に照らして判定し、評価結果と改善提案を Markdown で返してください。`
 					: `それら全体を最終レビューし、評価結果と改善提案を Markdown で返してください。`,
+				``,
+				...(goalBlock ? [`成果物が目的 (.division/${GOAL_FILE}) から離れていないかも確かめてください。仕様書どおりでも、目的から外れていれば指摘してください。`] : []),
 				``,
 				`### 出力要件`,
 				`- 1 行目に必ず ` + '`判定: 合格`' + ` または ` + '`判定: 不合格`' + ` を明記。` + (goal ? `すべての達成条件を満たしたときだけ合格。` : ''),
