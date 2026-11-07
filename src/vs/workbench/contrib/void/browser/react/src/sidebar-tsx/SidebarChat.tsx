@@ -6250,18 +6250,6 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 				prompt={composerPrompt}
 				onOpen={() => setComposerPrompt(textAreaRef.current?.value ?? '')}
 			/>
-			{/* 目標ループ: 未達のとき自動で次のラウンドへ進むか、ラウンドごとに確認するか。押すたびに切り替わる */}
-			{settingsState.modelSelectionOfFeature.Chat?.providerName === 'divisionAPI' && (() => {
-				const loopMode = settingsState.globalSettings.divisionGoalLoopMode ?? 'auto'
-				return (
-					<ComposerChip
-						icon={<Repeat size={12} />}
-						label={`${tUI('chat.loop')}: ${tUI(loopMode === 'auto' ? 'chat.loop.auto' : 'chat.loop.confirm')}`}
-						title={`${tUI(loopMode === 'auto' ? 'chat.loop.auto.hint' : 'chat.loop.confirm.hint')}\n${tUI('chat.loop.toggleHint')}`}
-						onClick={() => accessor.get('IVoidSettingsService').setGlobalSetting('divisionGoalLoopMode', loopMode === 'auto' ? 'confirm' : 'auto')}
-					/>
-				)
-			})()}
 			<ContextLeftIndicator messages={previousMessages} />
 		</>}
 	>
