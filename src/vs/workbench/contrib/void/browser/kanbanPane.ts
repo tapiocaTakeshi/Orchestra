@@ -248,7 +248,7 @@ registerAction2(class extends Action2 {
 
 // クラウドエージェントモードではチャット (上部のヘッダーにボードの開閉ボタンがある) を隠しているので、
 // タイトルバーにボードを開くボタンを出す。ボードはエディタ領域 (または別ウィンドウ) に開くので、チャットは戻らない。
-// 並びは Division プロジェクト (6)・コスト管理 (6.5) の次 (orchestraUiMode.ts の説明を参照)
+// 並びは Division プロジェクト (6) の次 (orchestraUiMode.ts の説明を参照)
 MenuRegistry.appendMenuItem(MenuId.TitleBar, {
 	command: {
 		id: VOID_OPEN_KANBAN_ACTION_ID,

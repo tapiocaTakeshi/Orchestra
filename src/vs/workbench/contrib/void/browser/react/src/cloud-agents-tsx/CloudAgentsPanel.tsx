@@ -7,7 +7,7 @@
 // Cursor の Agents 画面 (エージェントモード) のような 3 列のレイアウト:
 //
 //   左   (約 260px): 「＋ 新しいエージェント」・検索欄・エージェントの一覧 (実行中 / 完了 / 停止・失敗)・
-//                   ワークスペースの道具 (Division プロジェクト / コスト管理 / カンバン)・表示中の料金の合計・アカウント
+//                   ワークスペースの道具 (Division プロジェクト / カンバン)・表示中の料金の合計・アカウント
 //   中央          : 選んだエージェントとの会話 (指示・発言・ツールの実行・完了カード) と、下に固定した入力欄。
 //                   「新しいエージェント」のときは「何を任せますか？」の画面と、作業する場所・並列数・プロジェクト・モデルを選べる入力欄
 //   右   (約 360px): 変更ファイルの一覧と差分。「すべて取り込む」/ ファイルごとの「取り込む」。ヘッダーのボタンで開閉
@@ -21,7 +21,7 @@
 // :hover / :focus-within が要るものだけ、PANEL_CSS の oca- で始まるクラスで書く。
 //
 // クラウドエージェントモードでは右のチャットが隠れるので、チャットや IDE から使っていた Division プロジェクト・
-// コスト管理・カンバンへは、左の列の「ワークスペース」から開く (どれもエディタ領域に開く既存の画面)。
+// カンバンへは、左の列の「ワークスペース」から開く (どれもエディタ領域に開く既存の画面)。
 
 import '../styles.css'
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -116,7 +116,7 @@ import {
 } from '../../../../common/cloudAgentTypes.js';
 import type { CloudChangesState, CloudGitHubPick, CloudModelPick, CloudPullRequestState, CloudSessionSource } from '../../../cloudAgentServiceInterface.js';
 import type { DivisionProjectConfig } from '../../../divisionProjectService.js';
-import { ORCHESTRA_OPEN_COST_MANAGEMENT_ACTION_ID, ORCHESTRA_OPEN_DIVISION_PROJECTS_ACTION_ID, VOID_OPEN_KANBAN_ACTION_ID } from '../../../actionIDs.js';
+import { ORCHESTRA_OPEN_DIVISION_PROJECTS_ACTION_ID, VOID_OPEN_KANBAN_ACTION_ID } from '../../../actionIDs.js';
 import { WorkflowDiagram, WorkflowReview } from '../workflow-tsx/WorkflowReview.js';
 import { normalizeWorkflow } from '../../../../common/divisionWorkflow.js';
 import { scopedCss } from '../util/scopedCss.js';
@@ -1822,7 +1822,7 @@ const AgentRow = ({ session, selected, time, changes, projectLabel, onSelect }: 
 };
 
 /**
- * 左の列の下に置く「ワークスペース」: Division プロジェクト / コスト管理 / カンバン。
+ * 左の列の下に置く「ワークスペース」: Division プロジェクト / カンバン。
  * クラウドエージェントモードではチャット (プロジェクトの選択・コスト調整・カンバンの開閉がある) が隠れるので、
  * ここから IDE モードと同じ画面 (設定画面のタブ・カンバンのボード) をエディタ領域に開く。
  */
@@ -1832,7 +1832,6 @@ const WorkspaceNav = ({ compact }: { compact?: boolean }) => {
 	const commandService = accessor.get('ICommandService');
 	const items: { id: string; icon: React.ReactNode; label: string; hint: string; command: string }[] = [
 		{ id: 'division', icon: <Layers size={13} />, label: t('cloudAgents.nav.divisionProjects'), hint: t('cloudAgents.nav.divisionProjectsHint'), command: ORCHESTRA_OPEN_DIVISION_PROJECTS_ACTION_ID },
-		{ id: 'cost', icon: <Coins size={13} />, label: t('cloudAgents.nav.cost'), hint: t('cloudAgents.nav.costHint'), command: ORCHESTRA_OPEN_COST_MANAGEMENT_ACTION_ID },
 		{ id: 'kanban', icon: <Kanban size={13} />, label: t('cloudAgents.nav.kanban'), hint: t('cloudAgents.nav.kanbanHint'), command: VOID_OPEN_KANBAN_ACTION_ID },
 	];
 	if (compact) {
