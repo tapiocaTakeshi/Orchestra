@@ -109,31 +109,29 @@
 	height: 100%;
 	max-width: 1200px;
 	margin: 0 auto;
-	/* Orchestra: an intro row (hero + tutorial) between the header and the lists */
-	grid-template-rows: auto min-content minmax(min-content, auto) min-content;
+	grid-template-rows: 25% minmax(min-content, auto) min-content;
 	grid-template-columns: 1fr 6fr 1fr 6fr 1fr;
 	grid-template-areas:
 		".  header header header ."
-		".  intro intro intro ."
 		". left-column . right-column ."
 		". footer footer footer .";
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer.width-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer {
-	grid-template-rows: auto min-content min-content minmax(min-content, auto) min-content;
+	grid-template-rows: auto min-content minmax(min-content, auto) min-content;
 	grid-template-columns: 1fr;
-	grid-template-areas: "header" "intro" "left-column" "right-column" "footer";
+	grid-template-areas: "header" "left-column" "right-column" "footer";
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer.height-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer {
-	grid-template-rows: auto min-content minmax(min-content, auto) min-content;
-	grid-template-areas: "header header" "intro intro" "left-column right-column" "footer footer";
+	grid-template-rows: auto minmax(min-content, auto) min-content;
+	grid-template-areas: "header" "left-column right-column" "footer footer";
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer.height-constrained.width-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer {
-	grid-template-rows: min-content min-content minmax(min-content, auto) min-content;
+	grid-template-rows: min-content minmax(min-content, auto) min-content;
 	grid-template-columns: 1fr;
-	grid-template-areas: "intro" "left-column" "right-column" "footer";
+	grid-template-areas: "left-column" "right-column" "footer";
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer.width-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .header, .monaco-workbench .part.editor > .content .gettingStartedContainer.height-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .header {
@@ -168,15 +166,6 @@
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .header {
 	grid-area: header;
 	align-self: end;
-	padding-top: 6vh;
-}
-
-/* Orchestra: the intro (hero + tutorial), a React component */
-.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .orchestra-welcome-intro {
-	grid-area: intro;
-	margin: 20px 0 28px;
-	overflow: visible;
-	white-space: normal;
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .footer {

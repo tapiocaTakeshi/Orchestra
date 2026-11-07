@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 /*
- * The Welcome page's intro: an animated hero, and a tutorial that plays itself and shows how a
+ * The IDE's welcome screen (the empty editor, editorGroupWatermark.ts): an animated hero, and a tutorial that plays itself and shows how a
  * Division Project run goes — the request, the workflow diagram (.division/workflow.json), the paper
  * (.division/paper.md) and the specification (.division/specification.md), the design (.division/design/)
  * and approving / editing them — with buttons that open those files.
@@ -301,7 +301,7 @@ const useDivisionFiles = () => {
 	return { hasFolder: !!folder, exists, openWorkflow, openPaper, openSpec, openDesign };
 };
 
-/** The self-playing tutorial on the Welcome page. */
+/** The self-playing tutorial on the IDE's welcome screen. */
 export const OrchestraTutorial = () => {
 	const { t } = useTranslation();
 	const [hidden, setHidden] = useState(readHidden);
@@ -392,7 +392,7 @@ export const OrchestraTutorial = () => {
 	);
 };
 
-/** What the Welcome page shows above its lists: the hero and the tutorial side by side (stacked when narrow). */
+/** The intro on the IDE's welcome screen: the hero and the tutorial side by side (stacked when narrow). */
 export const OrchestraWelcome = () => {
 	const isDark = useIsDark();
 	return (
