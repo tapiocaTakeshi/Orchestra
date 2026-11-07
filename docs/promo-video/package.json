@@ -1,0 +1,13 @@
+{
+  "name": "orchestra-promo-video",
+  "private": true,
+  "description": "Source for docs/promo-video/orchestra-promo.mp4",
+  "scripts": {
+    "music": "python3 music.py",
+    "render": "node render.js silent.mp4 30 && ffmpeg -y -i silent.mp4 -i music.wav -c:v copy -c:a aac -b:a 192k -shortest -movflags +faststart orchestra-promo.mp4"
+  },
+  "dependencies": {
+    "@fontsource/inter": "5.2.5",
+    "@fontsource/noto-sans-jp": "5.2.5"
+  }
+}

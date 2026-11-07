@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="node_modules/@fontsource/noto-sans-jp/400.css">
+<link rel="stylesheet" href="node_modules/@fontsource/noto-sans-jp/700.css">
+<link rel="stylesheet" href="node_modules/@fontsource/noto-sans-jp/900.css">
+<link rel="stylesheet" href="node_modules/@fontsource/inter/400.css">
+<link rel="stylesheet" href="node_modules/@fontsource/inter/700.css">
+<link rel="stylesheet" href="node_modules/@fontsource/inter/900.css">
+<style>
+:root{
+  --bg:#08080c; --panel:#13131a; --panel2:#1b1b24; --line:#2a2a36;
+  --text:#f4f4f6; --muted:#9a9aaa; --red:#dc1628; --red2:#ff4b5c;
+  --blue:#3b82f6; --amber:#f59e0b; --violet:#8b5cf6; --green:#22c55e; --cyan:#06b6d4; --pink:#ec4899;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden;background:var(--bg);color:var(--text);
+  font-family:"Inter","Noto Sans JP",sans-serif;-webkit-font-smoothing:antialiased}
+#stage{position:relative;width:1920px;height:1080px;overflow:hidden}
+/* ambient background */
+.glow{position:absolute;border-radius:50%;filter:blur(120px);opacity:.35;animation:drift 52s linear both}
+.g1{width:900px;height:900px;background:#dc1628;left:-300px;top:-350px}
+.g2{width:800px;height:800px;background:#4c1d95;right:-250px;bottom:-350px;animation-name:drift2}
+@keyframes drift{from{transform:translate(0,0)}to{transform:translate(500px,300px)}}
+@keyframes drift2{from{transform:translate(0,0)}to{transform:translate(-400px,-200px)}}
+.grid{position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.07) 1.5px,transparent 1.5px);background-size:40px 40px;
+  mask-image:radial-gradient(ellipse at center,#000 30%,transparent 80%)}
+
+.scene{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  animation:sIn .7s cubic-bezier(.2,.8,.2,1) calc(var(--s)*1s) both, sOut .6s ease-in calc(var(--e)*1s - .6s) forwards}
+@keyframes sIn{from{opacity:0;transform:scale(1.04)}to{opacity:1;transform:none}}
+@keyframes sOut{from{opacity:1;transform:none}to{opacity:0;transform:scale(.97)}}
+.a{animation-duration:.7s;animation-timing-function:cubic-bezier(.2,.8,.2,1);animation-fill-mode:both;animation-delay:calc(var(--d)*1s)}
+.up{animation-name:up} @keyframes up{from{opacity:0;transform:translateY(40px)}to{opacity:1;transform:none}}
+.fade{animation-name:fade} @keyframes fade{from{opacity:0}to{opacity:1}}
+.pop{animation-name:pop;animation-timing-function:cubic-bezier(.3,1.6,.5,1)} @keyframes pop{from{opacity:0;transform:scale(.4)}to{opacity:1;transform:none}}
+.left{animation-name:left} @keyframes left{from{opacity:0;transform:translateX(-60px)}to{opacity:1;transform:none}}
+.right{animation-name:right} @keyframes right{from{opacity:0;transform:translateX(60px)}to{opacity:1;transform:none}}
+.draw{stroke-dasharray:1000;animation-name:draw;animation-duration:.9s} @keyframes draw{from{stroke-dashoffset:1000}to{stroke-dashoffset:0}}
+
+h1.big{font-size:84px;font-weight:900;letter-spacing:-.01em;line-height:1.2;text-align:center}
+h2{font-size:60px;font-weight:900;line-height:1.25;text-align:center}
+.sub{font-size:28px;color:var(--muted);margin-top:18px;text-align:center}
+.red{color:var(--red2)}
+.mono{font-family:ui-monospace,"DejaVu Sans Mono",monospace}
+.kicker{font-size:22px;font-weight:700;letter-spacing:.25em;color:var(--red2);margin-bottom:18px;text-transform:uppercase}
+
+/* S1 */
+.logo{width:340px;height:340px;animation:logoIn 1.4s cubic-bezier(.2,.9,.2,1) .2s both}
+@keyframes logoIn{from{opacity:0;transform:rotate(-200deg) scale(.3)}to{opacity:1;transform:none}}
+.wordmark{font-size:150px;font-weight:900;letter-spacing:-.03em;margin-top:-30px}
+.tag{font-size:34px;color:#d6d6de;margin-top:4px}
+.pill{display:inline-flex;gap:10px;align-items:center;margin-top:34px;padding:12px 26px;border:1px solid var(--line);border-radius:999px;
+  font-size:22px;color:var(--muted);background:rgba(255,255,255,.03)}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--red)}
+
+/* S2 */
+.chat{width:1100px;margin-top:70px;background:var(--panel);border:1px solid var(--line);border-radius:28px;padding:30px 34px;
+  box-shadow:0 30px 80px rgba(0,0,0,.5)}
+.chat .row{display:flex;align-items:center;gap:20px}
+.chat .input{flex:1;font-size:44px;font-weight:700;min-height:62px}
+.caret{display:inline-block;width:4px;height:48px;background:var(--red2);vertical-align:-8px;margin-left:4px}
+.send{width:74px;height:74px;border-radius:50%;background:var(--red);display:grid;place-items:center;font-size:36px;color:#fff;
+  animation:press .5s ease 9.3s both}
+@keyframes press{0%{transform:scale(1)}40%{transform:scale(.82);box-shadow:0 0 0 0 rgba(220,22,40,.7)}100%{transform:scale(1);box-shadow:0 0 0 30px rgba(220,22,40,0)}}
+.chips{display:flex;gap:12px;margin-top:22px}
+.chip{font-size:20px;padding:8px 16px;border-radius:999px;background:var(--panel2);color:var(--muted);border:1px solid var(--line)}
+
+/* S3 roles */
+.orbit{position:relative;width:1300px;height:680px;margin:10px 0 24px}
+.orbit svg{position:absolute;inset:0}
+.node{position:absolute;translate:-50% -50%;width:250px;padding:20px 18px;border-radius:22px;background:var(--panel);
+  border:2px solid var(--c);text-align:center;box-shadow:0 0 40px color-mix(in srgb,var(--c) 30%,transparent)}
+.node .ic{font-size:44px;line-height:1}
+.node .nm{font-size:28px;font-weight:900;margin-top:8px;color:var(--c)}
+.node .ds{font-size:19px;color:var(--muted);margin-top:4px}
+.node.leader{width:300px;padding:28px}
+.node.leader .nm{font-size:36px}
+.wrap{position:absolute;left:50%;top:50%}
+.providers{display:flex;gap:16px;margin-top:4px;align-items:center}
+.prov{font-size:22px;font-weight:700;padding:10px 20px;border-radius:12px;background:var(--panel);border:1px solid var(--line)}
+
+/* S4 workflow */
+.canvas{position:relative;width:1640px;height:560px;margin-top:40px;border-radius:28px;background:#0e0e14;border:1px solid var(--line);
+  background-image:radial-gradient(rgba(255,255,255,.09) 1.5px,transparent 1.5px);background-size:28px 28px;overflow:hidden}
+.canvas svg{position:absolute;inset:0}
+.wn{position:absolute;translate:-50% -50%;padding:16px 22px;border-radius:16px;background:var(--panel);border:2px solid var(--c);
+  font-size:24px;font-weight:700;white-space:nowrap;display:flex;gap:10px;align-items:center}
+.wn small{display:block;font-size:16px;color:var(--muted);font-weight:400}
+.wn .bar{width:6px;align-self:stretch;border-radius:3px;background:var(--c)}
+.loopbox{position:absolute;border:2px dashed var(--violet);border-radius:22px;background:rgba(139,92,246,.07)}
+.loopbox .lbl{position:absolute;top:-18px;left:20px;background:#0e0e14;padding:2px 12px;color:var(--violet);font-weight:700;font-size:20px}
+.runner{position:absolute;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 0 18px 6px var(--red2);transform:translate(-50%,-50%)}
+
+/* S5 docs */
+.docs{display:flex;gap:30px;margin-top:60px}
+.doc{width:340px;height:420px;border-radius:22px;background:var(--panel);border:1px solid var(--line);padding:26px;position:relative;overflow:hidden}
+.doc .fn{font-size:22px;font-weight:700;display:flex;gap:10px;align-items:center}
+.doc .who{font-size:17px;color:var(--muted);margin-top:6px}
+.doc .ln{height:12px;border-radius:6px;background:#2a2a38;margin-top:16px}
+.doc .hd{height:18px;width:60%;border-radius:6px;background:var(--c);opacity:.8;margin-top:24px}
+.doc .top{position:absolute;left:0;top:0;right:0;height:6px;background:var(--c)}
+.mini{margin-top:20px;border-radius:12px;border:1px solid var(--line);height:240px;padding:14px;background:#0e0e14}
+.mini .nav{height:16px;border-radius:5px;background:#2a2a38}
+.mini .hero{height:70px;border-radius:8px;margin-top:12px;background:linear-gradient(135deg,var(--pink),var(--violet))}
+.mini .cards{display:flex;gap:8px;margin-top:12px}
+.mini .cards div{flex:1;height:90px;border-radius:8px;background:#22222e}
+.code{font-family:ui-monospace,"DejaVu Sans Mono",monospace;font-size:16px;line-height:1.75;margin-top:18px;color:#c9c9d6;white-space:pre}
+.k{color:#ff7a8a}.s{color:#7ee2a8}.f{color:#7cc4ff}
+.approve{position:absolute;left:50%;top:56%;translate:-50% -50%;width:760px;padding:34px 40px;border-radius:26px;background:#17171f;
+  border:2px solid var(--amber);box-shadow:0 40px 120px rgba(0,0,0,.8)}
+.approve .t{font-size:30px;font-weight:900;display:flex;gap:14px;align-items:center}
+.approve .b{font-size:22px;color:var(--muted);margin-top:10px}
+.btns{display:flex;gap:16px;margin-top:26px;justify-content:flex-end}
+.btn{font-size:24px;font-weight:700;padding:14px 30px;border-radius:14px;border:1px solid var(--line);background:var(--panel2)}
+.btn.ok{background:var(--green);border-color:var(--green);color:#04120a;animation:press2 .45s ease calc(var(--d)*1s) both}
+@keyframes press2{0%{transform:scale(1)}40%{transform:scale(.88)}100%{transform:scale(1)}}
+.stamp{position:absolute;inset:0;display:grid;place-items:center;font-size:40px;font-weight:900;color:var(--green);background:rgba(10,30,18,.92);border-radius:24px}
+
+/* S6 phone */
+.split{display:flex;align-items:center;gap:110px}
+.phone{width:400px;height:820px;border-radius:64px;background:#000;border:10px solid #2b2b33;position:relative;padding:22px 18px;overflow:hidden;
+  box-shadow:0 50px 120px rgba(0,0,0,.7),0 0 0 2px #444 inset}
+.notch{position:absolute;left:50%;top:14px;transform:translateX(-50%);width:120px;height:32px;border-radius:20px;background:#000;z-index:2;border:1px solid #222}
+.scr{height:100%;border-radius:44px;background:#0f0f15;padding:56px 18px 18px;display:flex;flex-direction:column;gap:14px;overflow:hidden}
+.ph-h{display:flex;justify-content:space-between;align-items:center;font-size:20px;font-weight:700}
+.ph-h .mode{color:var(--red2)}
+.bub{max-width:85%;padding:12px 16px;border-radius:18px;font-size:18px;line-height:1.5}
+.bub.me{align-self:flex-end;background:var(--red);color:#fff;border-bottom-right-radius:6px}
+.bub.ai{align-self:flex-start;background:#1e1e28;border-bottom-left-radius:6px}
+.card{border:1px solid var(--amber);border-radius:16px;padding:12px 14px;font-size:16px;background:#1a160c}
+.card .r{display:flex;gap:8px;margin-top:10px}
+.card .r span{flex:1;text-align:center;padding:8px;border-radius:10px;background:#2a2a36;font-weight:700}
+.card .r span.g{background:var(--green);color:#04120a}
+.ph-in{margin-top:auto;border:1px solid var(--line);border-radius:999px;padding:12px 18px;font-size:16px;color:var(--muted);display:flex;justify-content:space-between}
+.side{width:820px}
+.side h2{text-align:left;font-size:58px}
+.feat{display:flex;gap:22px;align-items:flex-start;margin-top:34px}
+.feat .i{width:70px;height:70px;border-radius:18px;background:var(--panel);border:1px solid var(--line);display:grid;place-items:center;font-size:36px;flex:none}
+.feat .tt{font-size:30px;font-weight:900}
+.feat .dd{font-size:22px;color:var(--muted);margin-top:4px}
+.sess{display:flex;gap:8px;margin-top:12px}
+.sess i{width:44px;height:10px;border-radius:5px;background:#2a2a36;position:relative;overflow:hidden}
+.sess i::after{content:"";position:absolute;inset:0;background:var(--cyan);transform-origin:left;animation:fill 2.4s ease calc(var(--d)*1s) both}
+@keyframes fill{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+
+/* S7 grid */
+.tiles{display:grid;grid-template-columns:repeat(3,480px);gap:28px;margin-top:60px}
+.tile{padding:30px 32px;border-radius:24px;background:var(--panel);border:1px solid var(--line);position:relative;overflow:hidden}
+.tile::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--c)}
+.tile .ic{font-size:44px}
+.tile .tt{font-size:30px;font-weight:900;margin-top:10px}
+.tile .dd{font-size:20px;color:var(--muted);margin-top:6px;line-height:1.5}
+
+/* S8 */
+.url{margin-top:40px;font-size:30px;padding:16px 34px;border-radius:999px;background:var(--red);color:#fff;font-weight:700}
+.preload{position:absolute;left:0;top:0;opacity:.01;font-size:10px;width:10px;height:10px;overflow:hidden}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="glow g1"></div><div class="glow g2"></div><div class="grid"></div>
+
+  <!-- S1: intro -->
+  <section class="scene" style="--s:0;--e:5">
+    <img class="logo" src="../../void_icons/orchestra_icon_nonbackground.png" alt="">
+    <div class="wordmark a up" style="--d:1.0">Orchestra</div>
+    <div class="tag a up" style="--d:1.5">最強のマルチエージェントを搭載した、次世代 AI IDE</div>
+    <div class="pill a fade" style="--d:2.2"><span class="dot"></span>Powered by Division API</div>
+  </section>
+
+  <!-- S2: prompt -->
+  <section class="scene" style="--s:5;--e:11">
+    <div class="kicker a fade" style="--d:5.3">One prompt</div>
+    <h1 class="big a up" style="--d:5.4">1つのプロンプトで、<br><span class="red">AIチーム</span>が動き出す。</h1>
+    <div class="chat a up" style="--d:6.0">
+      <div class="row">
+        <div class="input"><span id="typed"></span><span class="caret" id="caret"></span></div>
+        <div class="send">↑</div>
+      </div>
+      <div class="chips"><span class="chip">🎭 Division Project</span><span class="chip">✅ 承認モード</span><span class="chip">📊 コスト: 性能優先</span></div>
+    </div>
+  </section>
+
+  <!-- S3: roles -->
+  <section class="scene" style="--s:11;--e:19">
+    <h2 class="a up" style="--d:11.2">Leader が分解し、<span class="red">7つのロール</span>が分担する。</h2>
+    <div class="orbit">
+      <svg viewBox="0 0 1300 640" width="1300" height="640">
+        <g stroke="rgba(255,255,255,.25)" stroke-width="2.5" fill="none">
+          <path class="a draw" style="--d:12.2" d="M650 320 L210 120"/>
+          <path class="a draw" style="--d:12.35" d="M650 320 L650 90"/>
+          <path class="a draw" style="--d:12.5" d="M650 320 L1090 120"/>
+          <path class="a draw" style="--d:12.65" d="M650 320 L210 520"/>
+          <path class="a draw" style="--d:12.8" d="M650 320 L650 575"/>
+          <path class="a draw" style="--d:12.95" d="M650 320 L1090 520"/>
+        </g>
+      </svg>
+      <div class="node leader a pop" style="--c:var(--red2);left:650px;top:320px;--d:11.8"><div class="ic">🧠</div><div class="nm">Leader</div><div class="ds">タスク分解・統括</div></div>
+      <div class="node a pop" style="--c:var(--blue);left:210px;top:120px;--d:12.5"><div class="ic">🔍</div><div class="nm">Searcher</div><div class="ds">Web 検索・既存ファイル調査</div></div>
+      <div class="node a pop" style="--c:var(--cyan);left:650px;top:90px;--d:12.65"><div class="ic">🔬</div><div class="nm">Researcher</div><div class="ds">深い調査・アイデア出し</div></div>
+      <div class="node a pop" style="--c:var(--pink);left:1090px;top:120px;--d:12.8"><div class="ic">🎨</div><div class="nm">Designer</div><div class="ds">UI デザイン (HTML)</div></div>
+      <div class="node a pop" style="--c:var(--amber);left:210px;top:520px;--d:12.95"><div class="ic">✍️</div><div class="nm">Writer</div><div class="ds">文章・仕様書</div></div>
+      <div class="node a pop" style="--c:var(--green);left:650px;top:575px;--d:13.1"><div class="ic">💻</div><div class="nm">Coder</div><div class="ds">実装</div></div>
+      <div class="node a pop" style="--c:var(--violet);left:1090px;top:520px;--d:13.25"><div class="ic">🔎</div><div class="nm">Reviewer</div><div class="ds">レビュー</div></div>
+    </div>
+    <div class="providers">
+      <span class="prov a up" style="--d:14.4">Anthropic</span>
+      <span class="prov a up" style="--d:14.55">OpenAI</span>
+      <span class="prov a up" style="--d:14.7">Google</span>
+      <span class="prov a up" style="--d:14.85">Perplexity</span>
+      <span class="prov a up" style="--d:15.0">xAI</span>
+      <span class="prov a up" style="--d:15.15">DeepSeek</span>
+      <span class="a fade" style="--d:15.5;font-size:24px;color:var(--muted);margin-left:12px">ロールごとに最適なモデルを割り当て</span>
+    </div>
+  </section>
+
+  <!-- S4: workflow -->
+  <section class="scene" style="--s:19;--e:27">
+    <h2 class="a up" style="--d:19.2">ワークフローを、<span class="red">図</span>で組む。</h2>
+    <div class="sub a up mono" style="--d:19.5">.division/workflow.json — 並列 · 承認 · for / while ループ</div>
+    <div class="canvas a up" style="--d:19.7">
+      <svg viewBox="0 0 1640 560" width="1640" height="560">
+        <g stroke="rgba(255,255,255,.35)" stroke-width="3" fill="none">
+          <path class="a draw" style="--d:20.5" d="M150 280 L260 280"/>
+          <path class="a draw" style="--d:20.9" d="M330 280 C390 280 390 130 470 130"/>
+          <path class="a draw" style="--d:20.9" d="M330 280 L470 280"/>
+          <path class="a draw" style="--d:20.9" d="M330 280 C390 280 390 430 470 430"/>
+          <path class="a draw" style="--d:21.6" d="M650 130 C720 130 720 280 790 280"/>
+          <path class="a draw" style="--d:21.6" d="M650 280 L790 280"/>
+          <path class="a draw" style="--d:21.6" d="M650 430 C720 430 720 280 790 280"/>
+          <path class="a draw" style="--d:22.3" d="M900 280 L1010 280"/>
+          <path class="a draw" style="--d:22.8" d="M1160 280 L1260 280"/>
+          <path class="a draw" style="--d:23.5" d="M1400 280 L1510 280"/>
+        </g>
+        <path class="a draw" style="--d:23.2" d="M1330 230 C1330 170 1100 170 1100 230" stroke="var(--violet)" stroke-width="3" fill="none" stroke-dasharray="1000"/>
+      </svg>
+      <div class="loopbox a fade" style="--d:22.6;left:970px;top:150px;width:520px;height:250px"><span class="lbl">↻ while: テストが全部通るまで (最大 5 回)</span></div>
+      <div class="wn a pop" style="--c:var(--blue);left:95px;top:280px;--d:20.2"><span class="bar"></span>開始</div>
+      <div class="wn a pop" style="--c:#94a3b8;left:295px;top:280px;--d:20.6"><span class="bar"></span>⫘ 並列</div>
+      <div class="wn a pop" style="--c:var(--blue);left:560px;top:130px;--d:21.1"><span class="bar"></span><div>🔍 Searcher<small>既存コード調査</small></div></div>
+      <div class="wn a pop" style="--c:var(--cyan);left:560px;top:280px;--d:21.2"><span class="bar"></span><div>🔬 Researcher<small>論文 paper.md</small></div></div>
+      <div class="wn a pop" style="--c:var(--pink);left:560px;top:430px;--d:21.3"><span class="bar"></span><div>🎨 Designer<small>design/*.html</small></div></div>
+      <div class="wn a pop" style="--c:var(--amber);left:845px;top:280px;--d:22.0"><span class="bar"></span>✋ 承認</div>
+      <div class="wn a pop" style="--c:var(--green);left:1085px;top:280px;--d:22.8"><span class="bar"></span>💻 Coder</div>
+      <div class="wn a pop" style="--c:var(--violet);left:1330px;top:280px;--d:23.0"><span class="bar"></span>🔎 Reviewer</div>
+      <div class="wn a pop" style="--c:var(--red2);left:1565px;top:280px;--d:23.6"><span class="bar"></span>完了</div>
+      <div class="runner" id="runner"></div>
+    </div>
+  </section>
+
+  <!-- S5: outputs + approval -->
+  <section class="scene" style="--s:27;--e:34">
+    <h2 class="a up" style="--d:27.2">成果物を見て、直して、<span class="red">承認</span>。</h2>
+    <div class="docs">
+      <div class="doc a up" style="--c:var(--cyan);--d:27.6"><div class="top"></div>
+        <div class="fn">📖 paper.md</div><div class="who">論文 · Researcher</div>
+        <div class="hd"></div><div class="ln"></div><div class="ln" style="width:88%"></div><div class="ln" style="width:94%"></div><div class="ln" style="width:70%"></div>
+        <div class="hd" style="width:45%"></div><div class="ln"></div><div class="ln" style="width:80%"></div><div class="ln" style="width:60%"></div>
+      </div>
+      <div class="doc a up" style="--c:var(--amber);--d:27.8"><div class="top"></div>
+        <div class="fn">📋 specification.md</div><div class="who">仕様書 · Writer</div>
+        <div class="hd" style="width:35%"></div><div class="ln" style="width:75%"></div><div class="ln" style="width:85%"></div>
+        <div class="hd" style="width:30%"></div><div class="ln" style="width:65%"></div><div class="ln" style="width:90%"></div>
+        <div class="hd" style="width:40%"></div><div class="ln" style="width:55%"></div>
+      </div>
+      <div class="doc a up" style="--c:var(--pink);--d:28.0"><div class="top"></div>
+        <div class="fn">🎨 design/index.html</div><div class="who">デザイン · Designer</div>
+        <div class="mini"><div class="nav"></div><div class="hero"></div><div class="cards"><div></div><div></div><div></div></div></div>
+      </div>
+      <div class="doc a up" style="--c:var(--green);--d:28.2"><div class="top"></div>
+        <div class="fn">💻 src/quiz.ts</div><div class="who">実装 · Coder</div>
+<div class="code"><span class="k">export function</span> <span class="f">score</span>(
+  answers: <span class="f">Answer</span>[],
+) {
+  <span class="k">return</span> answers
+    .<span class="f">filter</span>(a =&gt; a.ok)
+    .length;
+}
+<span class="k">test</span>(<span class="s">'score'</span>, () =&gt; {
+  <span class="f">expect</span>(…).<span class="f">toBe</span>(<span class="s">3</span>);
+});</div>
+      </div>
+    </div>
+    <div class="approve a pop" style="--d:29.6">
+      <div class="t">✋ 承認待ち: specification.md</div>
+      <div class="b">内容を編集してから承認すると、その内容で Coder に進みます。</div>
+      <div class="btns"><span class="btn">✏️ 開いて編集</span><span class="btn ok" style="--d:31.3">✓ 承認</span></div>
+      <div class="stamp a pop" style="--d:31.6">✓ 承認しました — 次のステップへ</div>
+    </div>
+  </section>
+
+  <!-- S6: mobile -->
+  <section class="scene" style="--s:34;--e:41">
+    <div class="split">
+      <div class="phone a up" style="--d:34.3"><div class="notch"></div>
+        <div class="scr">
+          <div class="ph-h"><span>☰</span><span class="mode">リモートコントロール ▾</span><span>📄</span></div>
+          <div class="bub me a right" style="--d:35.0">ログイン画面も追加して</div>
+          <div class="bub ai a left" style="--d:35.6">🧠 ワークフローを作りました。<br>Designer → Coder → Reviewer</div>
+          <div class="card a pop" style="--d:36.4">⚠️ <b>コマンドの実行</b><div class="mono" style="margin-top:6px;color:#ddd">npm test</div>
+            <div class="r"><span>却下</span><span class="g">承認</span></div></div>
+          <div class="bub ai a left" style="--d:37.4">✅ テスト 24 件すべて成功</div>
+          <div class="ph-in"><span>指示を入力…</span><span>📊 コスト</span></div>
+        </div>
+      </div>
+      <div class="side">
+        <div class="kicker a fade" style="--d:34.5">Orchestra Mobile</div>
+        <h2 class="a up" style="--d:34.6">スマホから、<br>PC の <span class="red">Orchestra</span> を操作。</h2>
+        <div class="feat a left" style="--d:35.4"><div class="i">📡</div><div><div class="tt">リモートコントロール</div><div class="dd">同じ LAN の IDE と直結。指示・中断・承認をその場で。</div></div></div>
+        <div class="feat a left" style="--d:36.0"><div class="i">☁️</div><div><div class="tt">クラウドエージェント</div><div class="dd">PC がオフでも OK。最大 10 セッションを並列実行。</div>
+          <div class="sess"><i style="--d:36.3"></i><i style="--d:36.5"></i><i style="--d:36.7"></i><i style="--d:36.9"></i><i style="--d:37.1"></i><i style="--d:37.3"></i><i style="--d:37.5"></i><i style="--d:37.7"></i><i style="--d:37.9"></i><i style="--d:38.1"></i></div></div></div>
+        <div class="feat a left" style="--d:36.6"><div class="i">🗂</div><div><div class="tt">カンバン · 論文 · 仕様書</div><div class="dd">タスクの実行も、成果物の編集も手元で。</div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- S7: features -->
+  <section class="scene" style="--s:41;--e:47">
+    <h2 class="a up" style="--d:41.2">エージェントが、<span class="red">最後まで</span>やり切る。</h2>
+    <div class="tiles">
+      <div class="tile a pop" style="--c:var(--blue);--d:41.7"><div class="ic">🌐</div><div class="tt">browser_use</div><div class="dd">実際の Chrome を操作して<br>動作確認</div></div>
+      <div class="tile a pop" style="--c:var(--green);--d:41.85"><div class="ic">🩹</div><div class="tt">apply_patch</div><div class="dd">複数ファイルの変更を<br>全部か無しかで一括適用</div></div>
+      <div class="tile a pop" style="--c:var(--amber);--d:42.0"><div class="ic">✅</div><div class="tt">update_plan</div><div class="dd">計画をチェックリストで<br>ライブ表示</div></div>
+      <div class="tile a pop" style="--c:var(--violet);--d:42.15"><div class="ic">🗜️</div><div class="tt">自動コンパクション</div><div class="dd">長い会話も要約して<br>作業を継続</div></div>
+      <div class="tile a pop" style="--c:var(--cyan);--d:42.3"><div class="ic">📜</div><div class="tt">AGENTS.md</div><div class="dd">ビルド手順や規約を<br>自動で読み込み</div></div>
+      <div class="tile a pop" style="--c:var(--red2);--d:42.45"><div class="ic">🔄</div><div class="tt">VS Code 互換</div><div class="dd">拡張機能・デバッグ・Git を<br>そのまま</div></div>
+    </div>
+  </section>
+
+  <!-- S8: outro -->
+  <section class="scene" style="--s:47;--e:53.5">
+    <img class="a pop" style="--d:47.3;width:260px;height:260px" src="../../void_icons/orchestra_icon_nonbackground.png" alt="">
+    <div class="wordmark a up" style="--d:47.7;font-size:130px;margin-top:-24px">Orchestra</div>
+    <div class="tag a up" style="--d:48.2;font-size:40px;font-weight:700">あなたのアイデアに、AI のオーケストラを。</div>
+    <div class="url a pop" style="--d:49.0">api.division.he-ro.io</div>
+  </section>
+
+  <div class="preload">クイズアプリを作って</div>
+</div>
+
+<script>
+const DURATION = 53.5;
+const PROMPT = 'クイズアプリを作って';
+const typed = document.getElementById('typed');
+const caret = document.getElementById('caret');
+const runner = document.getElementById('runner');
+// path the "runner" dot follows through the workflow (canvas coords)
+const route = [[95,280],[295,280],[560,280],[845,280],[1085,280],[1330,280],[1330,200],[1085,200],[1085,280],[1330,280],[1565,280]];
+function along(p){ // p in [0,1]
+  const seg=[];let tot=0;
+  for(let i=1;i<route.length;i++){const d=Math.hypot(route[i][0]-route[i-1][0],route[i][1]-route[i-1][1]);seg.push(d);tot+=d;}
+  let x=p*tot;
+  for(let i=0;i<seg.length;i++){ if(x<=seg[i]){const f=x/seg[i];return [route[i][0]+(route[i+1][0]-route[i][0])*f, route[i][1]+(route[i+1][1]-route[i][1])*f];} x-=seg[i]; }
+  return route[route.length-1];
+}
+window.setTime = function(t){
+  for (const a of document.getAnimations()) { a.pause(); a.currentTime = t*1000; }
+  // typing: 6.8s .. 8.8s
+  const n = Math.max(0, Math.min(PROMPT.length, Math.floor((t-6.8)/0.2)));
+  typed.textContent = PROMPT.slice(0,n);
+  caret.style.opacity = (n < PROMPT.length || Math.floor(t*2)%2===0) && t < 9.3 ? 1 : 0;
+  // workflow runner: 24.0 .. 26.6
+  const p = (t-24.0)/2.6;
+  if (p<0||p>1.05){ runner.style.opacity=0; } else { const [x,y]=along(Math.min(1,p)); runner.style.opacity=1; runner.style.left=x+'px'; runner.style.top=y+'px'; }
+};
+window.DURATION = DURATION;
+</script>
+</body>
+</html>

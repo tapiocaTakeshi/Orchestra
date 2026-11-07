@@ -1,0 +1,5 @@
+node_modules/
+silent.mp4
+music.wav
+still_*.png
+package-lock.json
