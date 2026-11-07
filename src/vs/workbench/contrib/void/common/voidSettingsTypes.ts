@@ -688,6 +688,8 @@ export type GlobalSettings = {
 	// 生成するたびに一時停止し、ユーザーが承認 (または編集して承認 / 却下) するまで
 	// 次のステップに進まない。
 	divisionFlowApprovalMode: boolean;
+	/** 承認モードを既定オンにした移行を済ませたか (以前の既定オフのまま保存された値を一度だけオンにする) */
+	divisionFlowApprovalModeDefaultOn?: boolean;
 	// 承認モード時、true なら coder / writer の出力でだけ一時停止し、それ以外のロール
 	// (searcher / researcher / designer / reviewer) は承認を待たずに次へ進む。
 	divisionFlowApprovalCoderWriterOnly: boolean;
@@ -750,7 +752,8 @@ export const defaultGlobalSettings: GlobalSettings = {
 	maxBriefGateIterations: 10,
 	maxReviewerIterations: 5, // 目標ループの最大ラウンド数 (1 ラウンド = Leader の計画 → 各ロール → Reviewer)
 	maxReviewIterations: 10,
-	divisionFlowApprovalMode: false,
+	divisionFlowApprovalMode: true, // 文書 (.division の成果物) を確認・編集できるタイミングを既定で作る
+	divisionFlowApprovalModeDefaultOn: true,
 	divisionFlowApprovalCoderWriterOnly: false,
 	divisionGoalLoopMode: 'auto',
 	uiLanguage: 'ja', // Orchestra の固定文言 (ホーム画面・チャット) は日本語なので、既定も日本語にそろえる
