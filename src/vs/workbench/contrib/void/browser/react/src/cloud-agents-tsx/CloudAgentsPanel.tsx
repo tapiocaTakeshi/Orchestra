@@ -79,6 +79,7 @@ import {
 	ShieldAlert,
 	ShieldCheck,
 	ShieldX,
+	Sparkles,
 } from 'lucide-react';
 
 import { useAccessor, useCloudAgentState, useDivisionProjectConfig, useDivisionProjects, useIsDark, useOrchestraUiMode, useRefreshModelState, useSettingsState } from '../util/services.js';
@@ -94,6 +95,9 @@ import {
 	CloudApprovalEventData,
 	CloudCommandApprovalEventData,
 	CloudPendingCommandApproval,
+	CloudDocumentAiEditProposal,
+	CloudDocumentAiEditRequest,
+	applyCloudDocumentAiEdit,
 	CloudChange,
 	CloudDecision,
 	CloudDecisionOption,
@@ -3123,6 +3127,108 @@ const ApprovalEventRow = ({ data }: { data: CloudApprovalEventData }) => {
 	);
 };
 
+// --- 文書の一部を、その文書を書くロールの AI で直す (提案を見比べて適用したときだけ変わる) ---
+
+const AI_EDIT_PREVIEW_CHARS = 2000;
+const clipForPreview = (s: string) => (s.length > AI_EDIT_PREVIEW_CHARS ? `${s.slice(0, AI_EDIT_PREVIEW_CHARS)}… (${s.length})` : s);
+
+const AiEditBox = ({ value, selection, busy: outerBusy, aiEdit, onApply }: {
+	value: string;
+	selection: { start: number; end: number } | null;
+	busy?: boolean;
+	aiEdit: (req: Omit<CloudDocumentAiEditRequest, 'path'>) => Promise<{ proposal: CloudDocumentAiEditProposal } | { error: string }>;
+	onApply: (next: string) => void;
+}) => {
+	const { t } = useTranslation();
+	const [instruction, setInstruction] = useState('');
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const [proposal, setProposal] = useState<CloudDocumentAiEditProposal | null>(null);
+	const range = selection && selection.end > selection.start && selection.end <= value.length ? selection : null;
+
+	const ask = async () => {
+		if (!range || !instruction.trim() || busy) return;
+		setBusy(true);
+		setError(null);
+		setProposal(null);
+		const res = await aiEdit({ start: range.start, end: range.end, selected: value.slice(range.start, range.end), instruction: instruction.trim(), content: value });
+		setBusy(false);
+		if ('error' in res) setError(res.error);
+		else setProposal(res.proposal);
+	};
+	const apply = () => {
+		if (!proposal) return;
+		const next = applyCloudDocumentAiEdit(value, proposal);
+		if (next === null) {
+			setError(t('cloudAgents.aiEdit.stale'));
+			setProposal(null);
+			return;
+		}
+		onApply(next);
+		setProposal(null);
+		setInstruction('');
+	};
+	const block = (text: string, tone: 'removed' | 'added'): React.ReactNode => (
+		<pre style={{
+			margin: 0, padding: '6px 8px', borderRadius: '5px', maxHeight: '200px', overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+			fontFamily: C.monoFont, fontSize: '11.5px', lineHeight: 1.5, color: C.fg,
+			background: tint(tone === 'removed' ? C.error : C.success, 10), textDecoration: tone === 'removed' ? 'line-through' : undefined,
+		}}>{clipForPreview(text) || (tone === 'removed' ? '(—)' : t('cloudAgents.aiEdit.deleted'))}</pre>
+	);
+
+	return (
+		<div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '8px', borderRadius: '6px', border: `1px solid ${tint(C.accent, 35)}`, background: tint(C.accent, 4) }}>
+			<div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: C.fg }}>
+				<Sparkles size={13} style={{ color: C.accent }} />
+				{proposal ? t('cloudAgents.aiEdit.proposalTitle').replace('{role}', proposal.roleName) : t('cloudAgents.aiEdit.title')}
+				{proposal?.model && <span style={{ fontWeight: 400, color: C.fgMuted, fontSize: '11px' }}>{proposal.model}</span>}
+			</div>
+			{proposal ? (
+				<>
+					<span style={{ fontSize: '11px', color: C.fgMuted }}>{t('cloudAgents.aiEdit.before')}</span>
+					{block(proposal.original, 'removed')}
+					<span style={{ fontSize: '11px', color: C.fgMuted }}>{t('cloudAgents.aiEdit.after')}</span>
+					{block(proposal.replacement, 'added')}
+					<span style={{ fontSize: '11px', color: C.fgMuted }}>{t('cloudAgents.aiEdit.applyHint')}</span>
+				</>
+			) : (
+				<>
+					<span style={{ fontSize: '11.5px', color: C.fgMuted }}>
+						{range ? t('cloudAgents.aiEdit.selected').replace('{n}', String(range.end - range.start)) : t('cloudAgents.aiEdit.selectHint')}
+					</span>
+					<textarea
+						value={instruction}
+						onChange={e => setInstruction(e.target.value)}
+						onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void ask(); } }}
+						placeholder={t('cloudAgents.aiEdit.placeholder')}
+						rows={2}
+						disabled={busy}
+						style={{ ...inputStyle, resize: 'vertical' }}
+					/>
+				</>
+			)}
+			{error && <div style={{ fontSize: '12px', color: C.error, whiteSpace: 'pre-wrap' }}>{error}</div>}
+			<div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px', flexWrap: 'wrap' }}>
+				{proposal ? (
+					<>
+						<button type='button' disabled={busy} onClick={() => setProposal(null)} style={buttonStyle('secondary', busy)}>{t('cloudAgents.aiEdit.discard')}</button>
+						<button type='button' disabled={busy || !range} onClick={() => { void ask(); }} style={buttonStyle('secondary', busy || !range)}>
+							{busy ? <Spinner size={11} /> : <RefreshCw size={12} />}{t('cloudAgents.aiEdit.retry')}
+						</button>
+						<button type='button' disabled={busy || !!outerBusy} onClick={apply} style={buttonStyle('primary', busy || !!outerBusy)}>
+							<CheckCircle2 size={12} />{t('cloudAgents.aiEdit.apply')}
+						</button>
+					</>
+				) : (
+					<button type='button' disabled={busy || !!outerBusy || !range || !instruction.trim()} onClick={() => { void ask(); }} style={buttonStyle('primary', busy || !!outerBusy || !range || !instruction.trim())}>
+						{busy ? <Spinner size={11} /> : <Sparkles size={12} />}{t('cloudAgents.aiEdit.ask')}
+					</button>
+				)}
+			</div>
+		</div>
+	);
+};
+
 // --- 危険なコマンドの承認 (IDE と同じ規則。どのセッションでも、実行する前に止まる) ---
 
 /** command_approval イベント: 「承認待ち: 理由」+ コマンド / 「実行を許可」/「拒否: メモ」 */
@@ -3232,6 +3338,8 @@ const ApprovalCard = ({ session }: { session: CloudSession }) => {
 	const [draft, setDraft] = useState<{ taskSeq: number; content: string } | null>(null);
 	const [feedback, setFeedback] = useState('');
 	const [mode, setMode] = useState<'edit' | 'preview'>('preview');
+	/** The part of the result selected in the code view (for an AI edit) */
+	const [selection, setSelection] = useState<{ start: number; end: number } | null>(null);
 	const original = approval?.content ?? null;
 	const editable = !!approval && original !== null;
 	const content = draft && approval && draft.taskSeq === approval.taskSeq ? draft.content : (original ?? '');
@@ -3331,12 +3439,22 @@ const ApprovalCard = ({ session }: { session: CloudSession }) => {
 					<ChatMarkdownRender string={content} chatMessageLocation={undefined} isApplyEnabled={false} isLinkDetectionEnabled={false} />
 				</div>
 			) : (
-				<textarea
-					value={content}
-					onChange={e => setDraft({ taskSeq: approval.taskSeq, content: e.target.value })}
-					spellCheck={false}
-					style={{ ...inputStyle, minHeight: '260px', maxHeight: '520px', resize: 'vertical', fontFamily: C.monoFont, fontSize: '12px', lineHeight: 1.5 }}
-				/>
+				<>
+					<textarea
+						value={content}
+						onChange={e => setDraft({ taskSeq: approval.taskSeq, content: e.target.value })}
+						onSelect={e => setSelection({ start: e.currentTarget.selectionStart, end: e.currentTarget.selectionEnd })}
+						spellCheck={false}
+						style={{ ...inputStyle, minHeight: '260px', maxHeight: '520px', resize: 'vertical', fontFamily: C.monoFont, fontSize: '12px', lineHeight: 1.5 }}
+					/>
+					<AiEditBox
+						value={content}
+						selection={selection}
+						busy={busy}
+						aiEdit={req => cloudAgentService.aiEditDocument(session.id, { ...req, path: approval.file })}
+						onApply={next => { setSelection(null); setDraft({ taskSeq: approval.taskSeq, content: next }); }}
+					/>
+				</>
 			)}
 			<textarea
 				value={feedback}

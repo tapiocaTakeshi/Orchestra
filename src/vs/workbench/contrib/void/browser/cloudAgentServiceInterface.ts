@@ -323,6 +323,11 @@ export interface ICloudAgentService {
 	 * 保存するとサンドボックスのファイルに書く。workflow.json は図のエディタ、デザインは HTML のまま
 	 */
 	openDocument(id: string, path: string): Promise<void>;
+	/**
+	 * POST .../documents/ai-edit: 文書の選んだ部分を、その文書を書くロールの AI に書き直してもらう。
+	 * 提案を返すだけで保存はしない (ユーザーが見比べて適用し、いつもどおり保存・承認する)
+	 */
+	aiEditDocument(id: string, req: import('../common/cloudAgentTypes.js').CloudDocumentAiEditRequest): Promise<{ proposal: import('../common/cloudAgentTypes.js').CloudDocumentAiEditProposal } | { error: string }>;
 	/** デザイン (.division/design/ の先頭ページ) を Design モードで開く。無ければ知らせて false */
 	openDesign(id: string): Promise<boolean>;
 	/** 文書のエディタ上の URI (例: ワークフロー案の図を .division/workflow.json につなぐ) */

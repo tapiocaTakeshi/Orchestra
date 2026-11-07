@@ -60,6 +60,8 @@ import {
 	CloudPendingApproval,
 	CloudPendingCommandApproval,
 	CloudCommandApprovalAction,
+	CloudDocumentAiEditRequest,
+	CloudDocumentAiEditProposal,
 	CloudPullRequest,
 	CloudPullRequestInfo,
 	CloudPullRequestResult,
@@ -1097,6 +1099,27 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		// the user associated with .html; the resolver falls back to the text editor if the extension is missing.
 		const design = /^\.division\/(?:design\/[^/]+\.html?|DESIGN\.html)$/i.test(path);
 		await this._editorService.openEditor({ resource: cloudDocumentUri(id, path), options: { pinned: true, ...(design ? { override: DESIGN_EDITOR_ID } : {}) } });
+	}
+
+	async aiEditDocument(id: string, req: CloudDocumentAiEditRequest): Promise<{ proposal: CloudDocumentAiEditProposal } | { error: string }> {
+		// The role's model rewrites the part: allow as long as one model call may take.
+		const res = await this._request('POST', this._sessionPath(id, '/documents/ai-edit'), req, 200_000);
+		if (!res.ok) {
+			const detail = res.data && typeof res.data.error === 'string' ? res.data.error : '';
+			// Division explains these itself (in Japanese): the selection changed, the model failed, …
+			if (detail && res.status !== 401 && res.status !== 402 && res.status !== 403) return { error: detail };
+			return { error: res.status === 404 && !detail ? 'この Division サーバーは AI での部分編集に未対応です。' : describeCloudAgentError(res) };
+		}
+		const p = res.data?.proposal;
+		if (!p || typeof p !== 'object' || typeof p.replacement !== 'string' || typeof p.original !== 'string' || typeof p.start !== 'number' || typeof p.end !== 'number') {
+			return { error: 'AI の提案を読み取れませんでした。' };
+		}
+		return {
+			proposal: {
+				path: String(p.path ?? req.path), start: p.start, end: p.end, original: p.original, replacement: p.replacement,
+				role: String(p.role ?? ''), roleName: String(p.roleName || 'AI'), model: String(p.model ?? ''),
+			},
+		};
 	}
 
 	async openDesign(id: string): Promise<boolean> {

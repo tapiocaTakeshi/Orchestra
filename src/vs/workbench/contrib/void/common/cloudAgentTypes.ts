@@ -267,6 +267,30 @@ export type CloudCommandApprovalEventData =
 export type CloudCommandApprovalAction = 'approve' | 'deny';
 
 /**
+ * POST /api/cloud-sessions/:id/documents/ai-edit: the role that writes the document (researcher → paper.md,
+ * writer → specification.md, designer → design/*.html, …) rewrites the selected part. Nothing is saved:
+ * the user looks at the proposal and applies it to the document they are editing (then saves / approves).
+ * content: the document as the client has it now (unsaved edits included); start / end are offsets in it.
+ */
+export type CloudDocumentAiEditRequest = { path: string; start: number; end: number; selected: string; instruction: string; content: string };
+
+export type CloudDocumentAiEditProposal = {
+	path: string;
+	start: number;
+	end: number;
+	original: string;
+	replacement: string;
+	/** The role whose model rewrote it ('' for a plain agent session), its name and model */
+	role: string;
+	roleName: string;
+	model: string;
+};
+
+/** The proposal put into the text, or null when that part changed since it was proposed. */
+export const applyCloudDocumentAiEdit = (text: string, p: Pick<CloudDocumentAiEditProposal, 'start' | 'end' | 'original' | 'replacement'>): string | null =>
+	text.slice(p.start, p.end) === p.original ? text.slice(0, p.start) + p.replacement + text.slice(p.end) : null;
+
+/**
  * 目標ループ (IDE の Division フローの「ループ」と同じ):
  *  - auto:    目標を達成するまで、未達なら自動で次のラウンドへ進む
  *  - confirm: 未達のラウンドが終わるたびに止まり (idle)、「次のラウンドへ進む」(continueGoal) を待つ
