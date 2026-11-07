@@ -5,13 +5,14 @@
 
 /*
  * The chat's start screen: an animated hero, and a tutorial that plays itself and shows how a
- * Division Project run goes — the request, the workflow diagram (.division/workflow.json), the
- * design (.division/design/) and approving / editing them — with buttons that open those files.
+ * Division Project run goes — the request, the workflow diagram (.division/workflow.json), the paper
+ * (.division/paper.md) and the specification (.division/specification.md), the design (.division/design/)
+ * and approving / editing them — with buttons that open those files.
  * Animations are CSS only and stop when the OS asks for reduced motion.
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { CheckCircle2, ChevronLeft, ChevronRight, FileJson, LayoutTemplate, Pause, Play, Repeat, Sparkles, Split, UserCheck, Users, Workflow, X } from 'lucide-react';
+import { BookOpen, CheckCircle2, ChevronLeft, ChevronRight, FileJson, FileText, LayoutTemplate, Pause, Play, Repeat, Sparkles, Split, UserCheck, Users, Workflow, X } from 'lucide-react';
 import { URI } from '../../../../../../../base/common/uri.js';
 import { useAccessor } from '../util/services.js';
 import { TranslationKey, useTranslation } from '../util/i18n.js';
@@ -162,6 +163,38 @@ const SceneWorkflow = () => {
 	);
 };
 
+/** The paper and the specification being written: paper.md → specification.md, both kept up to date. */
+const SceneDocs = () => {
+	const lines = (n: number, start: number) => Array.from({ length: n }, (_, i) => (
+		<div key={i} className='oi-in' style={{ width: `${88 - (i % 3) * 18}%`, ...delay(start + i * 0.18) }}><div className='oi-skeleton' style={{ height: 6 }} /></div>
+	));
+	const doc = (icon: React.ReactNode, file: string, who: string, color: string, d: number, body: React.ReactNode) => (
+		<div className='oi-in' style={{ flex: 1, minWidth: 0, borderRadius: 8, border: `1px solid ${color}`, background: 'var(--void-bg-2)', padding: '6px 7px', display: 'flex', flexDirection: 'column', gap: 4, ...delay(d) }}>
+			<div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9.5, fontWeight: 600, color: 'var(--void-fg-1)', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+				<span style={{ color, display: 'inline-flex' }}>{icon}</span>{file}
+			</div>
+			<div style={{ fontSize: 9, color: 'var(--void-fg-3)' }}>{who}</div>
+			{body}
+		</div>
+	);
+	return (
+		<div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '0 10px' }}>
+			{doc(<BookOpen size={11} />, 'paper.md', 'Searcher · Researcher', '#3b82f6', 0.1, lines(4, 0.4))}
+			<svg width='22' height='14' viewBox='0 0 22 14' style={{ flexShrink: 0 }}><path className='oi-edge' d='M 1 7 L 19 7 M 14 2 L 20 7 L 14 12' style={delay(1.2)} /></svg>
+			{doc(<FileText size={11} />, 'specification.md', 'Writer', '#8b5cf6', 1.35, <>
+				{['機能', '画面', 'データ', '受け入れ条件'].map((h, i) => (
+					<div key={h} className='oi-in' style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9, color: 'var(--void-fg-2)', ...delay(1.6 + i * 0.2) }}>
+						<span style={{ width: 4, height: 4, borderRadius: 999, background: '#8b5cf6' }} />{h}
+					</div>
+				))}
+			</>)}
+			<div style={{ position: 'absolute', left: 10, bottom: 6 }}>
+				<span className='oi-pill oi-in' style={{ ...delay(2.5), fontSize: 9.5, padding: '1px 6px' }}>↻ 毎回、一新せず更新</span>
+			</div>
+		</div>
+	);
+};
+
 /** A screen wireframe drawing itself, saved as .division/design/index.html. */
 const SceneDesign = () => (
 	<div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', gap: 12, padding: '0 14px' }}>
@@ -189,8 +222,8 @@ const SceneApprove = () => (
 	<div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 8, padding: '0 14px' }}>
 		<div className='oi-in' style={{ borderRadius: 9, border: '1px dashed var(--oi-amber)', background: 'var(--void-bg-2)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6, ...delay(0.1) }}>
 			<div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--void-fg-1)', fontWeight: 600 }}>
-				<UserCheck size={12} color='var(--oi-amber)' /> デザインを確認
-				<span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--void-fg-3)', fontWeight: 400 }}>.division/design/</span>
+				<UserCheck size={12} color='var(--oi-amber)' /> 仕様書を確認
+				<span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--void-fg-3)', fontWeight: 400 }}>.division/specification.md</span>
 			</div>
 			<div style={{ display: 'flex', gap: 6 }}>
 				<span className='oi-pill oi-in' style={{ ...delay(0.6), fontSize: 10 }}>✎ 編集</span>
@@ -199,7 +232,7 @@ const SceneApprove = () => (
 			</div>
 		</div>
 		<div className='oi-in' style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--oi-green)', ...delay(2.1) }}>
-			<CheckCircle2 size={13} /> 編集した内容で Coder が実装へ
+			<CheckCircle2 size={13} /> 編集した内容でデザイン・実装へ
 		</div>
 	</div>
 );
@@ -207,6 +240,7 @@ const SceneApprove = () => (
 const SCENES: Array<{ title: TranslationKey; body: TranslationKey; Scene: () => React.ReactElement }> = [
 	{ title: 'intro.step1.title', body: 'intro.step1.body', Scene: SceneAsk },
 	{ title: 'intro.step2.title', body: 'intro.step2.body', Scene: SceneWorkflow },
+	{ title: 'intro.stepDocs.title', body: 'intro.stepDocs.body', Scene: SceneDocs },
 	{ title: 'intro.step3.title', body: 'intro.step3.body', Scene: SceneDesign },
 	{ title: 'intro.step4.title', body: 'intro.step4.body', Scene: SceneApprove },
 ];
@@ -218,7 +252,8 @@ const useDivisionFiles = () => {
 	const fileService = accessor.get('IFileService');
 	const commandService = accessor.get('ICommandService');
 	const folder = workspace.getWorkspace().folders[0]?.uri as URI | undefined;
-	const [exists, setExists] = useState<{ workflow: boolean; design: boolean; designIndex: boolean }>({ workflow: false, design: false, designIndex: false });
+	type Exists = { workflow: boolean; paper: boolean; spec: boolean; design: boolean; designIndex: boolean };
+	const [exists, setExists] = useState<Exists>({ workflow: false, paper: false, spec: false, design: false, designIndex: false });
 
 	const folderKey = folder?.toString() ?? '';
 	const latest = useRef({ folder, fileService });
@@ -227,9 +262,12 @@ const useDivisionFiles = () => {
 		const { folder: f, fileService: files } = latest.current;
 		if (!f) { return; }
 		const check = async (...parts: string[]) => { try { return await files.exists(URI.joinPath(f, '.division', ...parts)); } catch { return false; } };
-		const [workflow, design, designIndex] = await Promise.all([check('workflow.json'), check('design'), check('design', 'index.html')]);
+		const [workflow, paper, spec, design, designIndex] = await Promise.all([
+			check('workflow.json'), check('paper.md'), check('specification.md'), check('design'), check('design', 'index.html'),
+		]);
+		const next: Exists = { workflow, paper, spec, design, designIndex };
 		// Only re-render when something changed (this runs every few seconds).
-		setExists(prev => (prev.workflow === workflow && prev.design === design && prev.designIndex === designIndex ? prev : { workflow, design, designIndex }));
+		setExists(prev => ((Object.keys(next) as Array<keyof Exists>).every(k => prev[k] === next[k]) ? prev : next));
 	}, [folderKey]);
 
 	useEffect(() => {
@@ -238,13 +276,16 @@ const useDivisionFiles = () => {
 		return () => clearInterval(timer);
 	}, [refresh]);
 
-	const openWorkflow = () => { if (folder) { void commandService.executeCommand('vscode.open', URI.joinPath(folder, '.division', 'workflow.json')); } };
+	const openFile = (name: string) => { if (folder) { void commandService.executeCommand('vscode.open', URI.joinPath(folder, '.division', name)); } };
+	const openWorkflow = () => openFile('workflow.json');
+	const openPaper = () => openFile('paper.md');
+	const openSpec = () => openFile('specification.md');
 	const openDesign = () => {
 		if (!folder) { return; }
 		if (exists.designIndex) { void commandService.executeCommand('vscode.open', URI.joinPath(folder, '.division', 'design', 'index.html')); }
 		else { void commandService.executeCommand('revealInExplorer', URI.joinPath(folder, '.division', 'design')); }
 	};
-	return { hasFolder: !!folder, exists, openWorkflow, openDesign };
+	return { hasFolder: !!folder, exists, openWorkflow, openPaper, openSpec, openDesign };
 };
 
 /** The self-playing tutorial under the chat input on the start screen. */
@@ -317,6 +358,8 @@ export const OrchestraTutorial = () => {
 				<div style={{ fontSize: 11, color: 'var(--void-fg-3)' }}>{t('intro.files.title')}</div>
 				{[
 					{ key: 'workflow', icon: <FileJson size={13} color='var(--oi-violet)' />, label: t('intro.files.workflow'), path: '.division/workflow.json', ok: files.exists.workflow, open: files.openWorkflow },
+					{ key: 'paper', icon: <BookOpen size={13} color='#3b82f6' />, label: t('intro.files.paper'), path: '.division/paper.md', ok: files.exists.paper, open: files.openPaper },
+					{ key: 'spec', icon: <FileText size={13} color='var(--oi-violet)' />, label: t('intro.files.spec'), path: '.division/specification.md', ok: files.exists.spec, open: files.openSpec },
 					{ key: 'design', icon: <LayoutTemplate size={13} color='var(--oi-green)' />, label: t('intro.files.design'), path: '.division/design/', ok: files.exists.design, open: files.openDesign },
 				].map(f => (
 					<div key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
