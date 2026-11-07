@@ -15,20 +15,33 @@ import { parseHtml } from './htmlPatchService';
 export const DESIGN_GLOB = '**/.division/{design/*.html,DESIGN.html}';
 export const INDEX_PAGE = 'index.html';
 
+// Pages are named from uri.path (not fsPath) and their folder is the same URI with the parent path, so a
+// design that is not a local file (a cloud agent's sandbox: orchestra-cloud://<session>/.division/design/…)
+// lists, watches and creates its pages the same way.
+
+/** The page's folder, in the same file system as the page */
+export function pageFolderUri(uri: vscode.Uri): vscode.Uri {
+	return uri.with({ path: path.posix.dirname(uri.path) });
+}
+
+export function pageNameOf(uri: vscode.Uri): string {
+	return path.posix.basename(uri.path);
+}
+
 export function isPageFolder(uri: vscode.Uri): boolean {
-	return path.basename(path.dirname(uri.fsPath)) === 'design' && path.basename(path.dirname(path.dirname(uri.fsPath))) === '.division';
+	return path.posix.basename(path.posix.dirname(uri.path)) === 'design' && path.posix.basename(path.posix.dirname(path.posix.dirname(uri.path))) === '.division';
 }
 
 export function sortPageUris(uris: vscode.Uri[]): vscode.Uri[] {
-	const rank = (u: vscode.Uri) => (path.basename(u.fsPath) === INDEX_PAGE ? 0 : path.basename(u.fsPath) === 'DESIGN.html' ? 2 : 1);
+	const rank = (u: vscode.Uri) => (pageNameOf(u) === INDEX_PAGE ? 0 : pageNameOf(u) === 'DESIGN.html' ? 2 : 1);
 	return [...new Map(uris.map(u => [u.toString(), u])).values()]
-		.sort((a, b) => rank(a) - rank(b) || a.fsPath.localeCompare(b.fsPath));
+		.sort((a, b) => rank(a) - rank(b) || a.toString().localeCompare(b.toString()));
 }
 
 /** 同じフォルダのページ (index.html が先頭)。単一ファイルの DESIGN.html ならそれだけ */
 export async function listSiblingPages(page: vscode.Uri): Promise<vscode.Uri[]> {
 	if (!isPageFolder(page)) { return [page]; }
-	const dir = vscode.Uri.file(path.dirname(page.fsPath));
+	const dir = pageFolderUri(page);
 	try {
 		const entries = await vscode.workspace.fs.readDirectory(dir);
 		return sortPageUris(entries
@@ -51,7 +64,7 @@ export function toPageName(raw: string): string | undefined {
  */
 export async function createDesignPage(from: vscode.Uri | undefined, workspaceRoot: vscode.Uri | undefined): Promise<vscode.Uri | undefined> {
 	const dir = from && isPageFolder(from)
-		? vscode.Uri.file(path.dirname(from.fsPath))
+		? pageFolderUri(from)
 		: workspaceRoot ? vscode.Uri.joinPath(workspaceRoot, '.division', 'design') : undefined;
 	if (!dir) { return undefined; }
 	const existing = new Set((await vscode.workspace.fs.readDirectory(dir).then(e => e.map(([n]) => n), () => [] as string[])));

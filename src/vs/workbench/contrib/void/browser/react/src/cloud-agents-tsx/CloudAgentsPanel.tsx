@@ -2942,7 +2942,12 @@ const CompactionRow = ({ data, roleName }: { data: any; roleName?: string }) => 
 };
 
 /** task イベント: start は区切りの見出し (「2/4 · 実装 (Claude Opus) — タイトル」)、done / failed は結果の短い行 */
-const TaskEventRow = ({ data, position }: { data: CloudTaskEventData; position: { pos: number; total: number } | undefined }) => {
+const TaskEventRow = ({ data, position, onOpenDesign }: {
+	data: CloudTaskEventData;
+	position: { pos: number; total: number } | undefined;
+	/** デザインを Design モードで開く (designer のタスクが終わったときだけ出す) */
+	onOpenDesign?: () => void;
+}) => {
 	const { t } = useTranslation();
 	const roleName = data?.roleName || data?.role || '';
 	if (data?.status === 'start') {
@@ -2976,6 +2981,11 @@ const TaskEventRow = ({ data, position }: { data: CloudTaskEventData; position: 
 				) : failed ? (
 					<span style={{ color: C.fgMuted, fontSize: '11.5px' }}>{t('cloudAgents.task.failedNoSummary')}</span>
 				) : null}
+				{!failed && data?.role === 'designer' && onOpenDesign && (
+					<button type='button' className='oca-chip' onClick={onOpenDesign} style={{ alignSelf: 'flex-start', marginTop: '2px' }} title={t('cloudAgents.design.openHint')}>
+						<LayoutTemplate size={12} />{t('cloudAgents.design.open')}
+					</button>
+				)}
 			</div>
 		</div>
 	);
@@ -3227,6 +3237,9 @@ const ApprovalCard = ({ session }: { session: CloudSession }) => {
 	const content = draft && approval && draft.taskSeq === approval.taskSeq ? draft.content : (original ?? '');
 	const edited = editable && content !== original;
 	const isHtml = !!approval?.file.toLowerCase().endsWith('.html');
+	// The workbench cannot draw a page itself (no frames under its Trusted Types policy): a design page is
+	// shown in Design mode (the Orchestra Design editor), where it can also be edited visually.
+	const openDesign = () => { if (approval) void cloudAgentService.openDocument(session.id, approval.file); };
 	useEffect(() => { setFeedback(''); setMode('preview'); }, [approval?.taskSeq]);
 
 	if (session.status !== 'awaiting_approval') return null;
@@ -3282,12 +3295,10 @@ const ApprovalCard = ({ session }: { session: CloudSession }) => {
 				<span style={{ flex: 1 }} />
 				{editable && (
 					<div style={{ display: 'inline-flex', gap: '2px', flexShrink: 0 }}>
-						{!isHtml && (
-							<button type='button' className='oca-chip' data-active={mode === 'preview'} onClick={() => setMode('preview')}>
-								<FileText size={12} />{t('cloudAgents.approval.preview')}
-							</button>
-						)}
-						<button type='button' className='oca-chip' data-active={mode === 'edit' || isHtml} onClick={() => setMode('edit')}>
+						<button type='button' className='oca-chip' data-active={mode === 'preview'} onClick={() => setMode('preview')}>
+							{isHtml ? <LayoutTemplate size={12} /> : <FileText size={12} />}{t(isHtml ? 'cloudAgents.design.chip' : 'cloudAgents.approval.preview')}
+						</button>
+						<button type='button' className='oca-chip' data-active={mode === 'edit'} onClick={() => setMode('edit')}>
 							<FilePen size={12} />{t('cloudAgents.approval.edit')}
 						</button>
 					</div>
@@ -3307,7 +3318,15 @@ const ApprovalCard = ({ session }: { session: CloudSession }) => {
 			</div>
 			{!editable ? (
 				<div style={{ fontSize: '12px', color: C.warning }}>{t(approval.tooLarge ? 'cloudAgents.approval.tooLarge' : 'cloudAgents.approval.missing')}</div>
-			) : mode === 'preview' && !isHtml ? (
+			) : mode === 'preview' && isHtml ? (
+				<div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', padding: '10px', borderRadius: '6px', border: `1px solid ${C.border}`, background: C.bgInput }}>
+					<LayoutTemplate size={16} style={{ color: C.success, flexShrink: 0 }} />
+					<span style={{ flex: '1 1 200px', fontSize: '12px', color: C.fgMuted, lineHeight: 1.5 }}>{t('cloudAgents.design.approvalHint')}</span>
+					<button type='button' onClick={openDesign} style={buttonStyle('primary', false)}>
+						<LayoutTemplate size={12} />{t('cloudAgents.design.open')}
+					</button>
+				</div>
+			) : mode === 'preview' ? (
 				<div className='oca-md' style={{ fontSize: '12.5px', lineHeight: 1.6, color: C.fg, maxHeight: '420px', overflowY: 'auto', padding: '8px 10px', borderRadius: '6px', border: `1px solid ${C.border}`, background: C.bgInput }}>
 					<ChatMarkdownRender string={content} chatMessageLocation={undefined} isApplyEnabled={false} isLinkDetectionEnabled={false} />
 				</div>
@@ -3352,8 +3371,10 @@ const ApprovalCard = ({ session }: { session: CloudSession }) => {
 	);
 };
 
-const EventView = ({ event, onReview, division, active, onContinueGoal, continueBusy, latestAgentPlan }: {
+const EventView = ({ event, onReview, division, active, onContinueGoal, continueBusy, latestAgentPlan, onOpenDesign }: {
 	event: CloudSessionEvent;
+	/** デザインを Design モードで開く */
+	onOpenDesign?: () => void;
 	/** このイベントがエージェントの最新の計画 (update_plan) */
 	latestAgentPlan?: boolean;
 	onReview: () => void;
@@ -3400,7 +3421,7 @@ const EventView = ({ event, onReview, division, active, onContinueGoal, continue
 		case 'plan':
 			return <PlanCard data={data as CloudPlanEventData} progress={division?.progressByPlan.get(event.seq)} active={!!active} />;
 		case 'task':
-			return <TaskEventRow data={data as CloudTaskEventData} position={division?.positionByTask.get(event.seq)} />;
+			return <TaskEventRow data={data as CloudTaskEventData} position={division?.positionByTask.get(event.seq)} onOpenDesign={onOpenDesign} />;
 		case 'approval':
 			return <ApprovalEventRow data={data as CloudApprovalEventData} />;
 		case 'command_approval': {
@@ -3626,6 +3647,7 @@ const Stream = ({ session, events, onReview, footer }: {
 							latestAgentPlan={item.event.seq === latestAgentPlanSeq}
 							onContinueGoal={canContinueGoal && item.event.seq === pausedReviewSeq ? continueGoal : undefined}
 							continueBusy={!!state.sendingById[session.id]}
+							onOpenDesign={() => { void cloudAgentService.openDesign(session.id); }}
 						/>)}
 					{events !== undefined && <ApprovalCard session={session} />}
 					{events !== undefined && footer}
