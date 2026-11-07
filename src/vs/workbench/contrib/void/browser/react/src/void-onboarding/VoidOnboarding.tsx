@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAccessor, useIsDark, useSettingsState } from '../util/services.js';
 import { Brain, Check, ChevronRight, DollarSign, ExternalLink, Lock, X, Code, FileText, Search, Palette, Lightbulb, Folder, Globe, Image as ImageIcon, CheckCircle, PenLine } from 'lucide-react';
-import { displayInfoOfProviderName, ProviderName, providerNames, localProviderNames, featureNames, FeatureName, isFeatureNameDisabled, AgentRole, RoleAssignment, RoleProvider } from '../../../../common/voidSettingsTypes.js';
+import { displayInfoOfProviderName, ProviderName, providerNames, localProviderNames, featureNames, FeatureName, isFeatureNameDisabled, AgentRole, RoleAssignment, RoleProvider, DIVISION_ROLES, divisionRoleLabel } from '../../../../common/voidSettingsTypes.js';
 import { displayNameOfRoleProvider, roleModelOptionsOfProvider, roleProviderOptions } from '../../../../common/divisionModelCatalog.js';
 import { ChatMarkdownRender } from '../markdown/ChatMarkdownRender.js';
 import { OllamaSetupInstructions, OneClickSwitchButton, SettingsForProvider, ModelDump } from '../void-settings-tsx/Settings.js';
@@ -346,7 +346,7 @@ const RoleSelector = ({
 			<div className="flex items-center gap-3 flex-1">
 				<Icon className="w-5 h-5 text-void-fg-2" />
 				<div className="flex-1">
-					<div className="text-lg font-medium capitalize">{role}</div>
+					<div className="text-lg font-medium">{divisionRoleLabel[role]}</div>
 					<div className="text-sm text-void-fg-3 opacity-80">{description}</div>
 				</div>
 			</div>
@@ -407,15 +407,16 @@ const RoleAssignmentPage = ({
 	const roleDescriptions: Record<AgentRole, string> = {
 		leader: 'Coordinates the overall task and delegates to other agents',
 		coder: 'Writes and modifies code with deep technical expertise',
-		planner: 'Creates implementation plans and architectural designs',
-		search: 'Searches documentation and external resources',
-		research: 'Runs deep research and analysis across web sources',
+		search: 'Searches the web and the workspace for information',
+		research: 'Runs deep research, analysis, and ideation',
 		design: 'Generates UI designs and visual assets',
-		writing: 'Writes long-form content, docs, and articles',
-		ideaman: 'Brainstorms ideas and creative directions',
-		filesearch: 'Finds relevant files across the workspace',
-		image: 'Generates images and visual content',
+		writing: 'Writes documents, plans, and specifications',
 		review: 'Reviews and verifies code or text output',
+		// 廃止したロール (表示しない)
+		planner: '',
+		ideaman: '',
+		filesearch: '',
+		image: '',
 	};
 
 	const roleIcons: Record<AgentRole, any> = {
@@ -447,18 +448,7 @@ const RoleAssignmentPage = ({
 			</div>
 
 			<div className="flex flex-col gap-4 overflow-y-auto flex-1">
-				{([
-					'leader',
-					'ideaman',
-					'search',
-					'research',
-					'design',
-					'image',
-					'planner',
-					'coder',
-					'writing',
-					'review',
-				] as AgentRole[]).map(role => (
+				{DIVISION_ROLES.map(role => (
 					<RoleSelector
 						key={role}
 						role={role}

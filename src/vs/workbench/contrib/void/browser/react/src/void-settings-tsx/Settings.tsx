@@ -37,7 +37,7 @@ import { UiModeSettings } from './UiModeSettings.js';
 import { ObsidianSettings } from './ObsidianSettings.js';
 import { CostManagementSettings } from './CostManagement.js';
 import { consumeRequestedVoidSettingsTab, onDidRequestVoidSettingsTab, type VoidSettingsTab } from '../../../voidSettingsTabRequest.js';
-import { uiLanguages, displayInfoOfUILanguage } from '../../../../common/voidSettingsTypes.js';
+import { uiLanguages, displayInfoOfUILanguage, DIVISION_ROLES, divisionRoleLabel } from '../../../../common/voidSettingsTypes.js';
 
 // タブの一覧は voidSettingsTabRequest.ts (コマンドから「このタブで開く」を頼むときと同じ型)
 type Tab = VoidSettingsTab;
@@ -1186,32 +1186,9 @@ const DivisionSettings = () => {
 		});
 	};
 
-	// Role helpers — order matches the Orchestra flow diagram
-	const allRoles: import('../../../../common/voidSettingsTypes.js').AgentRole[] = [
-		'leader',
-		'ideaman',
-		'search',
-		'research',
-		'design',
-		'image',
-		'planner',
-		'coder',
-		'writing',
-		'review',
-	];
-	const roleLabels: Record<string, string> = {
-		leader: 'Leader',
-		coder: 'Coder',
-		planner: 'Planner',
-		search: 'Search',
-		research: 'Research',
-		design: 'Designer',
-		writing: 'Writer',
-		ideaman: 'Idea man',
-		filesearch: 'File Search',
-		image: 'Image',
-		review: 'Reviewer',
-	};
+	// ロールは 7 つだけ (Leader / Searcher / Researcher / Writer / Designer / Coder / Reviewer)
+	const allRoles = DIVISION_ROLES;
+	const roleLabels: Record<string, string> = divisionRoleLabel;
 
 	// 選択肢は起動時に Division API から取得した、Supabase で isEnabled = true のプロバイダ / モデルのみ
 	const divisionProviders = settingsState.globalSettings.divisionProviders;
@@ -1287,9 +1264,9 @@ const DivisionSettings = () => {
 				</div>
 				<div className={`flex items-center justify-between gap-4 pl-3 ${settingsState.globalSettings.divisionFlowApprovalMode ? '' : 'opacity-50'}`}>
 					<div className="flex flex-col">
-						<span className="text-xs text-void-fg-2 font-medium">Designer など、Coder / Writer 以外のロールでは承認で止めない</span>
+						<span className="text-xs text-void-fg-2 font-medium">Coder / Writer 以外のロール (Searcher・Researcher・Designer・Reviewer) では承認で止めない</span>
 						<span className="text-[11px] text-void-fg-4">
-							有効にすると、承認待ちで一時停止するのは Coder / Writer の出力だけになります。Designer・Planner・Search・Research・Image・Idea man・File Search・Reviewer の出力は保存だけして、そのまま次のステップに進みます。
+							有効にすると、承認待ちで一時停止するのは Coder / Writer の出力だけになります。Searcher・Researcher・Designer・Reviewer の出力は保存だけして、そのまま次のステップに進みます。
 						</span>
 					</div>
 					<VoidSwitch
