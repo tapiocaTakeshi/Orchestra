@@ -43,6 +43,9 @@ import {
 	Download,
 	FilePen,
 	FileText,
+	BookOpen,
+	LayoutTemplate,
+	FileJson,
 	ExternalLink,
 	Folder,
 	FolderOpen,
@@ -116,6 +119,7 @@ import {
 } from '../../../../common/cloudAgentTypes.js';
 import type { CloudChangesState, CloudGitHubPick, CloudModelPick, CloudPullRequestState, CloudSessionSource } from '../../../cloudAgentServiceInterface.js';
 import type { DivisionProjectConfig } from '../../../divisionProjectService.js';
+import type { CloudDocument, CloudDocumentKind } from '../../../cloudDocumentFileSystem.js';
 import { ORCHESTRA_OPEN_DIVISION_PROJECTS_ACTION_ID, VOID_OPEN_KANBAN_ACTION_ID } from '../../../actionIDs.js';
 import { WorkflowDiagram, WorkflowReview } from '../workflow-tsx/WorkflowReview.js';
 import { normalizeWorkflow } from '../../../../common/divisionWorkflow.js';
@@ -3071,6 +3075,9 @@ const ApprovalEventRow = ({ data }: { data: CloudApprovalEventData }) => {
 	);
 };
 
+/** The sandbox's workflow file: the leader's proposal is shown (and edited) as this file, like the local run */
+const WORKFLOW_DOCUMENT = '.division/workflow.json';
+
 /** 承認待ちのカード: 成果物を読み込み、その場で編集して承認 / フィードバックを付けて差し戻す */
 const ApprovalCard = ({ session }: { session: CloudSession }) => {
 	const { t } = useTranslation();
@@ -3080,6 +3087,8 @@ const ApprovalCard = ({ session }: { session: CloudSession }) => {
 	const approvalState = state.approvalById[session.id];
 	const approval = approvalState?.approval;
 	const submitting = !!approvalState?.submitting;
+	// The workflow proposal's diagram follows this file (a new URI each render would reload it every time)
+	const workflowUri = useMemo(() => cloudAgentService.documentUri(session.id, WORKFLOW_DOCUMENT), [cloudAgentService, session.id]);
 
 	// 承認待ちになるたび (lastSeq が進むたび) に取り直す
 	useEffect(() => {
@@ -3106,6 +3115,9 @@ const ApprovalCard = ({ session }: { session: CloudSession }) => {
 				<WorkflowReview
 					key={proposal.proposalSeq}
 					workflow={proposal.workflow}
+					// Like the local run: the diagram is the sandbox's .division/workflow.json (edits are written to it,
+					// and the file edited in the editor shows here); approving runs what it shows.
+					fileUri={workflowUri}
 					status='pending'
 					roleOptions={[...new Set(proposal.workflow.nodes.map(n => n.data.role).filter((r): r is string => !!r))]}
 					busy={!!approvalState?.submitting || !state.isLoggedIn}
@@ -3556,6 +3568,120 @@ const FollowUpComposer = ({ session, value, setValue }: { session: CloudSession;
 	);
 };
 
+// ---------------------------------------------------------------------------
+// 文書: サンドボックスの .division (ワークフロー・論文・仕様書・デザイン・成果物)。ローカルの Division Project と同じく
+// エディタで開いて直せる (orchestra-cloud://<id>/.division/…、保存するとサンドボックスに書く)
+// ---------------------------------------------------------------------------
+
+const DOCUMENT_KIND_LABEL: Record<CloudDocumentKind, string> = { workflow: 'ワークフロー', paper: '論文', specification: '仕様書', design: 'デザイン', output: '成果物' };
+const DOCUMENT_KIND_ORDER: CloudDocumentKind[] = ['workflow', 'paper', 'specification', 'design', 'output'];
+const documentIcon = (kind: CloudDocumentKind) => {
+	const props = { size: 13, style: { flexShrink: 0 } as React.CSSProperties };
+	switch (kind) {
+		case 'workflow': return <FileJson {...props} color='var(--vscode-charts-purple, #a371f7)' />;
+		case 'paper': return <BookOpen {...props} color='var(--vscode-charts-blue, #3b82f6)' />;
+		case 'specification': return <FileText {...props} color='var(--vscode-charts-purple, #a371f7)' />;
+		case 'design': return <LayoutTemplate {...props} color={C.success} />;
+		default: return <FileText {...props} color={C.fgMuted} />;
+	}
+};
+
+const DocumentsMenu = ({ session }: { session: CloudSession }) => {
+	const accessor = useAccessor();
+	const cloudAgentService = accessor.get('ICloudAgentService');
+	const [open, setOpen] = useState(false);
+	const [docs, setDocs] = useState<CloudDocument[] | null>(null);
+	const [error, setError] = useState<string | null>(null);
+	const [loading, setLoading] = useState(false);
+	const buttonRef = useRef<HTMLButtonElement | null>(null);
+	const menuRef = useRef<HTMLDivElement | null>(null);
+	useDismiss(open, [menuRef, buttonRef], () => setOpen(false));
+
+	const load = useCallback(async () => {
+		setLoading(true);
+		const res = await cloudAgentService.listDocuments(session.id);
+		setLoading(false);
+		if ('error' in res) { setError(res.error); return; }
+		setDocs(res.documents);
+		setError(null);
+	}, [cloudAgentService, session.id]);
+
+	// Opened: read the list, and again whenever the agent moves on (new events) while it is open.
+	useEffect(() => { if (open) void load(); }, [open, load, session.lastSeq]);
+	useEffect(() => { setOpen(false); setDocs(null); setError(null); }, [session.id]);
+
+	const groups = DOCUMENT_KIND_ORDER.map(kind => ({ kind, docs: (docs ?? []).filter(d => d.kind === kind) })).filter(g => g.docs.length);
+	const title = (d: CloudDocument) => (d.kind === 'workflow' || d.kind === 'paper' || d.kind === 'specification') ? DOCUMENT_KIND_LABEL[d.kind] : d.name.replace(/^design\//, '');
+	// The sandbox has no workspace yet while it is being prepared
+	const unavailable = session.status === 'provisioning' || session.status === 'uploading';
+
+	return (
+		<div style={{ position: 'relative', flexShrink: 0 }}>
+			<button
+				ref={buttonRef}
+				type='button'
+				className='oca-iconbtn'
+				data-active={open}
+				disabled={unavailable}
+				title='文書 (ワークフロー・論文・仕様書・デザイン) をエディタで開く'
+				aria-label='文書'
+				aria-expanded={open}
+				onClick={() => setOpen(v => !v)}
+				style={{ height: '28px', padding: '0 7px', fontSize: '11px' }}
+			>
+				<BookOpen size={14} />
+				文書
+			</button>
+			{open && (
+				<div
+					ref={menuRef}
+					role='menu'
+					onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); } }}
+					style={{
+						position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 30, width: '300px', maxHeight: '60vh', overflowY: 'auto',
+						background: C.bgWidget, color: C.fg, border: `1px solid ${C.border}`, borderRadius: '8px', boxShadow: `0 6px 24px ${C.shadow}`,
+						padding: '6px', display: 'flex', flexDirection: 'column', gap: '6px',
+					}}
+				>
+					<div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0 2px' }}>
+						<span style={{ flex: 1, fontSize: '11px', fontWeight: 600, color: C.fgMuted }}>サンドボックスの .division</span>
+						<button type='button' className='oca-iconbtn' title='読み直す' aria-label='読み直す' disabled={loading} onClick={() => void load()} style={{ width: '22px', height: '22px' }}>
+							{loading ? <Spinner size={11} /> : <RefreshCw size={11} />}
+						</button>
+					</div>
+					{error && <div style={{ fontSize: '11px', color: C.error, padding: '0 2px', whiteSpace: 'pre-wrap' }}>{error}</div>}
+					{docs && !groups.length && (
+						<div style={{ fontSize: '11px', color: C.fgMuted, padding: '2px 2px 4px', lineHeight: 1.5 }}>
+							まだ文書がありません。Division Project で作業すると、ワークフロー (.division/workflow.json)・論文 (paper.md)・仕様書 (specification.md)・デザイン (design/) ができ、ここから開いて直せます。
+						</div>
+					)}
+					{!docs && !error && <div style={{ display: 'flex', justifyContent: 'center', padding: '8px' }}><Spinner /></div>}
+					{groups.map(g => (
+						<div key={g.kind} style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+							<div style={{ fontSize: '10px', fontWeight: 600, color: C.fgMuted, padding: '2px 4px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{DOCUMENT_KIND_LABEL[g.kind]}</div>
+							{g.docs.map(d => (
+								<button
+									key={d.path}
+									type='button'
+									role='menuitem'
+									className='oca-iconbtn'
+									title={`${d.path} をエディタで開く`}
+									onClick={() => { setOpen(false); void cloudAgentService.openDocument(session.id, d.path); }}
+									style={{ justifyContent: 'flex-start', gap: '8px', padding: '5px 6px', fontSize: '12px', color: C.fg, textAlign: 'left', width: '100%' }}
+								>
+									{documentIcon(d.kind)}
+									<span style={{ flex: 1, minWidth: 0, ...ellipsis }}>{title(d)}</span>
+									<span style={{ fontSize: '10px', color: C.fgMuted, fontFamily: C.monoFont, flexShrink: 0 }}>{formatBytes(d.size)}</span>
+								</button>
+							))}
+						</div>
+					))}
+				</div>
+			)}
+		</div>
+	);
+};
+
 const Conversation = ({ session, leftSlot, reviewOpen, onToggleReview, onReview, draft, setDraft }: {
 	session: CloudSession;
 	leftSlot?: React.ReactNode;
@@ -3623,6 +3749,7 @@ const Conversation = ({ session, leftSlot, reviewOpen, onToggleReview, onReview,
 						{t('cloudAgents.detail.stop')}
 					</button>
 				)}
+				<DocumentsMenu session={session} />
 				<PullRequestHeaderActions session={session} onOpenForm={openPrForm} />
 				<button type='button' className='oca-iconbtn' title={t('cloudAgents.detail.archive')} aria-label={t('cloudAgents.detail.archive')} onClick={() => { void cloudAgentService.archive(session.id); }} style={{ width: '28px', height: '28px', flexShrink: 0 }}>
 					<Archive size={14} />

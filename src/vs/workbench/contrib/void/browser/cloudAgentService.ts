@@ -38,6 +38,8 @@ import { IVoidModelService } from '../common/voidModelService.js';
 import { DIVISION_API_BASE_URL } from '../common/divisionAuthConfig.js';
 import { ensureDivisionSession } from '../common/divisionSession.js';
 import { DivisionWorkflow, normalizeWorkflow } from '../common/divisionWorkflow.js';
+import { CLOUD_DOCUMENT_SCHEME, CloudDocument, CloudDocumentFileSystemProvider, cloudDocumentUri } from './cloudDocumentFileSystem.js';
+import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import {
 	CLOUD_AGENT_CHANNEL_NAME,
 	CLOUD_AGENTS_MAX_PARALLEL,
@@ -341,6 +343,7 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 	readonly onDidChangeState: Event<void> = this._onDidChangeState.event;
 
 	private readonly _main: ICloudAgentMainService;
+	private readonly _documents: CloudDocumentFileSystemProvider;
 
 	private _state: CloudAgentState = {
 		sessions: [],
@@ -410,6 +413,9 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 	) {
 		super();
 		this._main = ProxyChannel.toService<ICloudAgentMainService>(mainProcessService.getChannel(CLOUD_AGENT_CHANNEL_NAME));
+		// The sandbox's .division documents open in the editor like the local ones (orchestra-cloud://<id>/.division/…)
+		this._documents = this._register(new CloudDocumentFileSystemProvider((method, path, body, timeoutMs) => this._request(method, path, body, timeoutMs)));
+		this._register(this._fileService.registerProvider(CLOUD_DOCUMENT_SCHEME, this._documents));
 
 		this._lastToken = this._tokenSignature();
 		this._state = { ...this._state, isLoggedIn: this._isLoggedIn(), workspaceName: this._workspaceFolder()?.name ?? null, githubPick: this._loadGitHubPick(), modelPick: this._loadModelPick(), goalLoopPick: this._loadGoalLoopPick(), approvalModePick: this._loadApprovalModePick() };
@@ -1028,6 +1034,25 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 			changesTruncated: !!res.data?.changesTruncated,
 			error: undefined,
 		});
+	}
+
+	// --- 文書 (サンドボックスの .division: ワークフロー・論文・仕様書・デザイン・成果物) ---
+
+	async listDocuments(id: string): Promise<{ documents: CloudDocument[] } | { error: string }> {
+		try {
+			return { documents: await this._documents.listDocuments(id, true) };
+		} catch (e) {
+			return { error: e instanceof Error ? e.message : String(e) };
+		}
+	}
+
+	documentUri(id: string, path: string): URI {
+		return cloudDocumentUri(id, path);
+	}
+
+	async openDocument(id: string, path: string): Promise<void> {
+		// workflow.json opens in the diagram editor and the design pages in the HTML editor, as they do locally.
+		await this._editorService.openEditor({ resource: cloudDocumentUri(id, path), options: { pinned: true } });
 	}
 
 	async loadApproval(id: string): Promise<void> {
@@ -1873,3 +1898,18 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 }
 
 registerSingleton(ICloudAgentService, CloudAgentService, InstantiationType.Delayed);
+
+/**
+ * Editors restored at startup may show a cloud document (orchestra-cloud://…) before anything else asks for the
+ * cloud agent service: create the service (which registers the provider) when the editor needs the scheme.
+ */
+class CloudDocumentActivation extends Disposable implements IWorkbenchContribution {
+	static readonly ID = 'workbench.contrib.orchestraCloudDocuments';
+	constructor(@IFileService fileService: IFileService, @ICloudAgentService cloudAgentService: ICloudAgentService) {
+		super();
+		this._register(fileService.onWillActivateFileSystemProvider(e => {
+			if (e.scheme === CLOUD_DOCUMENT_SCHEME) void cloudAgentService.state; // touching the lazy service instantiates it
+		}));
+	}
+}
+registerWorkbenchContribution2(CloudDocumentActivation.ID, CloudDocumentActivation, WorkbenchPhase.BlockRestore);
