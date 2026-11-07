@@ -2,13 +2,15 @@
  *  Division Project: the leader's plan as a workflow diagram that the user approves.
  *  Shared by the chat (local Division Project runs) and the Cloud Agents panel (cloud sessions).
  *  Click a node to edit it (role, title, instruction, this step's system prompt, approval after it),
- *  add a step after it or delete it; then approve (as edited), send it back with feedback, or stop.
+ *  add a step / a loop (for / while, with the goal) / a parallel node after it or delete it;
+ *  then approve (as edited), send it back with feedback, or stop.
  *--------------------------------------------------------------------------------------*/
 
 import React, { useMemo, useState } from 'react';
-import { Check, Plus, RotateCcw, Trash2, X, UserCheck, Bot, Play, Flag } from 'lucide-react';
+import { Check, Plus, RotateCcw, Trash2, X, UserCheck, Bot, Play, Flag, Repeat, CornerDownLeft, Split } from 'lucide-react';
 import {
-	DivisionWorkflow, WorkflowNode, insertAfter, layoutWorkflow, newWorkflowId, removeNode, setApprovalAfter, workflowErrors, workflowSteps,
+	DEFAULT_WHILE_ITERATIONS, DivisionWorkflow, MAX_LOOP_ITERATIONS, WorkflowNode, insertAfter, insertLoopAfter, insertParallelAfter, layoutWorkflow, loopLabel,
+	newWorkflowId, removeLoop, removeNode, setApprovalAfter, workflowErrors, workflowLoops, workflowSteps,
 } from '../../../../common/divisionWorkflow.js';
 
 const NODE_W = 190;
@@ -20,9 +22,39 @@ const COLORS: Record<WorkflowNode['type'], string> = {
 	role: '#dc2626',
 	approval: '#f59e0b',
 	end: '#71717a',
+	loop: '#8b5cf6',
+	loopEnd: '#8b5cf6',
+	parallel: '#10b981',
 };
 
-const ICONS = { start: Play, role: Bot, approval: UserCheck, end: Flag } as const;
+const ICONS = { start: Play, role: Bot, approval: UserCheck, end: Flag, loop: Repeat, loopEnd: CornerDownLeft, parallel: Split } as const;
+
+/** How a node is titled on the diagram. */
+const nodeTitle = (n: WorkflowNode, roleNames?: Record<string, string>): string => {
+	switch (n.type) {
+		case 'role': return n.data.title || roleNames?.[n.data.role ?? ''] || n.data.role || 'ロール未選択';
+		case 'approval': return n.data.title || '承認';
+		case 'start': return '開始';
+		case 'end': return '終了';
+		case 'loop': return n.data.title || (n.data.loop === 'while' ? 'while ループ' : 'for ループ');
+		case 'loopEnd': return n.data.title || 'ループ終了';
+		case 'parallel': return n.data.title || '並列';
+	}
+};
+
+/** The line under a node's title. */
+const nodeSub = (n: WorkflowNode, roleNames?: Record<string, string>): string => {
+	switch (n.type) {
+		case 'role': return `${roleNames?.[n.data.role ?? ''] ?? n.data.role ?? ''}${n.data.systemPrompt ? ' · SP' : ''}`;
+		case 'approval': return 'あなたが確認';
+		case 'loop': return n.data.loop === 'while'
+			? `目標: ${n.data.goal || '(未設定)'} · 最大${n.data.maxIterations ?? DEFAULT_WHILE_ITERATIONS}回`
+			: `${n.data.count ?? 2} 回くり返す`;
+		case 'loopEnd': return 'ここまでを繰り返す';
+		case 'parallel': return '分岐を同時に実行';
+		default: return '';
+	}
+};
 
 const truncate = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
 
@@ -33,7 +65,12 @@ export const WorkflowDiagram = ({ workflow, selectedId, onSelect, roleNames }: {
 	onSelect?: (id: string | null) => void;
 	roleNames?: Record<string, string>;
 }) => {
-	const steps = useMemo(() => new Map(workflowSteps(workflow).map((s, i) => [s.nodeId, i + 1])), [workflow]);
+	// A step in a loop appears once per round; label it with its first step number.
+	const steps = useMemo(() => {
+		const m = new Map<string, number>();
+		workflowSteps(workflow).forEach((s, i) => { if (!m.has(s.nodeId)) { m.set(s.nodeId, i + 1); } });
+		return m;
+	}, [workflow]);
 	if (!workflow.nodes.length) return null;
 	const xs = workflow.nodes.map(n => n.position.x);
 	const ys = workflow.nodes.map(n => n.position.y);
@@ -69,18 +106,14 @@ export const WorkflowDiagram = ({ workflow, selectedId, onSelect, roleNames }: {
 					const p = at(n);
 					const selected = n.id === selectedId;
 					const Icon = ICONS[n.type];
-					const title = n.type === 'role'
-						? (n.data.title || roleNames?.[n.data.role ?? ''] || n.data.role || 'ロール未選択')
-						: n.type === 'approval' ? (n.data.title || '承認') : n.type === 'start' ? '開始' : '終了';
-					const sub = n.type === 'role'
-						? `${roleNames?.[n.data.role ?? ''] ?? n.data.role ?? ''}${n.data.systemPrompt ? ' · SP' : ''}`
-						: n.type === 'approval' ? 'あなたが確認' : '';
+					const title = nodeTitle(n, roleNames);
+					const sub = nodeSub(n, roleNames);
 					return (
 						<g key={n.id} transform={`translate(${p.x}, ${p.y})`} style={{ cursor: onSelect ? 'pointer' : 'default' }}
 							onClick={ev => { ev.stopPropagation(); onSelect?.(n.id); }}>
 							<rect width={NODE_W} height={NODE_H} rx={9} fill='var(--void-bg-2)'
 								stroke={selected ? 'var(--void-fg-1)' : COLORS[n.type]} strokeWidth={selected ? 2 : 1.2}
-								strokeDasharray={n.type === 'approval' ? '5 3' : undefined} />
+								strokeDasharray={n.type === 'approval' || n.type === 'loopEnd' ? '5 3' : undefined} />
 							<rect x={9} y={10} width={20} height={20} rx={5} fill={COLORS[n.type]} />
 							<foreignObject x={11} y={12} width={16} height={16}><Icon size={16} color='#fff' /></foreignObject>
 							<text x={36} y={24} fontSize={12} fontWeight={600} fill='var(--void-fg-1)'>{truncate(title, 18)}</text>
@@ -105,6 +138,22 @@ const buttonStyle = (kind: 'primary' | 'plain' | 'danger'): React.CSSProperties 
 	background: kind === 'primary' ? '#0e70c0' : 'transparent',
 	color: kind === 'primary' ? '#fff' : kind === 'danger' ? '#f87171' : 'var(--void-fg-2)',
 });
+
+/** One line per loop under the diagram: what repeats and until when. */
+const WorkflowLoopSummary = ({ workflow }: { workflow: DivisionWorkflow }) => {
+	const steps = useMemo(() => workflowSteps(workflow), [workflow]);
+	const loops = useMemo(() => workflowLoops(workflow).loops, [workflow]);
+	if (!loops.length) { return null; }
+	return (
+		<div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 11.5, color: 'var(--void-fg-2)' }}>
+			{loops.map(l => {
+				const rounds = steps.filter(s => s.loops?.some(t => t.id === l.id && t.iteration === 1)).length;
+				const label = loopLabel([{ id: l.id, kind: l.kind, iteration: 1, of: l.iterations, title: l.title }]).replace(/ 1\/\d+ 回目$/, '');
+				return <div key={l.id}>🔁 {label}: {rounds} ステップを{l.kind === 'while' ? `「${l.goal || '目標未設定'}」を達成するまで (最大 ${l.iterations} 回)` : ` ${l.iterations} 回`}くり返す</div>;
+			})}
+		</div>
+	);
+};
 
 export type WorkflowReviewStatus = 'pending' | 'approved' | 'revised' | 'rejected';
 
@@ -152,7 +201,8 @@ export const WorkflowReview = ({ workflow: initial, status, leader, roleOptions,
 				{leader && <span style={{ fontSize: 11, color: 'var(--void-fg-3)' }}>{leader}</span>}
 				{statusLabel && <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--void-fg-3)' }}>{statusLabel}</span>}
 			</div>
-			{pending && <div style={{ fontSize: 11.5, color: 'var(--void-fg-3)' }}>ノードを押すと編集できます。承認するとこの順で各ロールが実行し、「承認」ノードの所であなたの確認を待ちます。</div>}
+			{pending && <div style={{ fontSize: 11.5, color: 'var(--void-fg-3)' }}>ノードを押すと編集できます。承認するとこの順で各ロールが実行し、「承認」ノードの所であなたの確認を待ちます。繰り返しは for / while ループ (目標はここに書きます)、同時に進めたい作業は並列ノードで組めます。</div>}
+			<WorkflowLoopSummary workflow={workflow} />
 
 			<WorkflowDiagram workflow={workflow} selectedId={selectedId} onSelect={pending ? setSelectedId : undefined} roleNames={roleNames} />
 
@@ -185,6 +235,43 @@ export const WorkflowReview = ({ workflow: initial, status, leader, roleOptions,
 							<input style={fieldStyle} value={selected.data.title ?? ''} maxLength={120} onChange={e => patchSelected({ title: e.target.value })} />
 						</label>
 					)}
+					{selected.type === 'loop' && <>
+						<label style={labelStyle}>くり返し方
+							<select style={fieldStyle} value={selected.data.loop ?? 'for'} onChange={e => patchSelected(e.target.value === 'while'
+								? { loop: 'while', goal: selected.data.goal ?? '', maxIterations: selected.data.maxIterations ?? DEFAULT_WHILE_ITERATIONS }
+								: { loop: 'for', count: selected.data.count ?? 2 })}>
+								<option value='for'>for — 決まった回数くり返す</option>
+								<option value='while'>while — 目標を達成するまでくり返す</option>
+							</select>
+						</label>
+						{selected.data.loop === 'while' ? <>
+							<label style={labelStyle}>目標 (達成したらループを抜ける。毎回の前に Leader が判定)
+								<textarea style={fieldStyle} rows={3} value={selected.data.goal ?? ''} maxLength={4000}
+									placeholder='例: テストがすべて通り、画面がデザインどおりになっている'
+									onChange={e => patchSelected({ goal: e.target.value })} />
+							</label>
+							<label style={labelStyle}>最大回数
+								<input style={fieldStyle} type='number' min={1} max={MAX_LOOP_ITERATIONS} value={selected.data.maxIterations ?? DEFAULT_WHILE_ITERATIONS}
+									onChange={e => patchSelected({ maxIterations: Math.max(1, Math.min(MAX_LOOP_ITERATIONS, Number(e.target.value) || 1)) })} />
+							</label>
+						</> : (
+							<label style={labelStyle}>回数
+								<input style={fieldStyle} type='number' min={1} max={MAX_LOOP_ITERATIONS} value={selected.data.count ?? 2}
+									onChange={e => patchSelected({ count: Math.max(1, Math.min(MAX_LOOP_ITERATIONS, Number(e.target.value) || 1)) })} />
+							</label>
+						)}
+						<label style={labelStyle}>ループの名前
+							<input style={fieldStyle} value={selected.data.title ?? ''} maxLength={120} onChange={e => patchSelected({ title: e.target.value })} />
+						</label>
+						<div style={{ fontSize: 11, color: 'var(--void-fg-3)' }}>このノードと「ループ終了」の間のステップを繰り返します。「次にステップを追加」でループの中にステップを入れます。</div>
+					</>}
+					{selected.type === 'parallel' && <>
+						<label style={labelStyle}>並列の名前
+							<input style={fieldStyle} value={selected.data.title ?? ''} maxLength={120} onChange={e => patchSelected({ title: e.target.value })} />
+						</label>
+						<div style={{ fontSize: 11, color: 'var(--void-fg-3)' }}>このノードから出た分岐を同時に実行し、次に分岐が集まるノードで合流します。</div>
+					</>}
+					{selected.type === 'loopEnd' && <div style={{ fontSize: 11, color: 'var(--void-fg-3)' }}>対応する「ループ」からここまでを繰り返します。</div>}
 					<div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
 						{selected.type !== 'end' && (
 							<button type='button' style={buttonStyle('plain')} onClick={() => {
@@ -193,8 +280,28 @@ export const WorkflowReview = ({ workflow: initial, status, leader, roleOptions,
 								setSelectedId(id);
 							}}><Plus size={12} /> 次にステップを追加</button>
 						)}
+						{selected.type !== 'end' && <>
+							<button type='button' style={buttonStyle('plain')} onClick={() => { change(insertLoopAfter(workflow, selected.id, 'for')); }}>
+								<Repeat size={12} /> for ループ
+							</button>
+							<button type='button' style={buttonStyle('plain')} onClick={() => {
+								const next = insertLoopAfter(workflow, selected.id, 'while');
+								change(next);
+								// Select the new loop so the goal can be written straight away.
+								const added = next.nodes.find(n => n.type === 'loop' && !workflow.nodes.some(o => o.id === n.id));
+								if (added) { setSelectedId(added.id); }
+							}}><Repeat size={12} /> while ループ (目標)</button>
+							<button type='button' style={buttonStyle('plain')} onClick={() => {
+								change(insertParallelAfter(workflow, selected.id, options.find(r => /^(search|searcher)$/.test(r)) ?? options[0] ?? 'coder'));
+							}}><Split size={12} /> 並列</button>
+						</>}
 						{selected.type !== 'start' && selected.type !== 'end' && (
-							<button type='button' style={buttonStyle('danger')} onClick={() => { change(removeNode(workflow, selected.id)); setSelectedId(null); }}>
+							<button type='button' style={buttonStyle('danger')} onClick={() => {
+								// A loop and its end go together (the steps inside stay).
+								const pairOf = selected.type === 'loopEnd' ? workflowLoops(workflow).loops.find(l => l.endId === selected.id)?.id : undefined;
+								change(selected.type === 'loop' ? removeLoop(workflow, selected.id) : pairOf ? removeLoop(workflow, pairOf) : removeNode(workflow, selected.id));
+								setSelectedId(null);
+							}}>
 								<Trash2 size={12} /> 削除
 							</button>
 						)}

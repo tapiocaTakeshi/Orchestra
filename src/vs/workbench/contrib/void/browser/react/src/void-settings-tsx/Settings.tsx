@@ -1220,15 +1220,10 @@ const DivisionSettings = () => {
 
 	// Division API orchestration loop caps（ユーザー設定）
 	const maxBriefGateIterations = settingsState.globalSettings.maxBriefGateIterations;
-	const maxReviewerIterations = settingsState.globalSettings.maxReviewerIterations;
 	const [maxBriefGateIterationsInput, setMaxBriefGateIterationsInput] = useState<string>(String(maxBriefGateIterations ?? 10));
-	const [maxReviewerIterationsInput, setMaxReviewerIterationsInput] = useState<string>(String(maxReviewerIterations ?? 5));
 	useEffect(() => {
 		setMaxBriefGateIterationsInput(String(settingsState.globalSettings.maxBriefGateIterations ?? 10));
 	}, [settingsState.globalSettings.maxBriefGateIterations]);
-	useEffect(() => {
-		setMaxReviewerIterationsInput(String(settingsState.globalSettings.maxReviewerIterations ?? 5));
-	}, [settingsState.globalSettings.maxReviewerIterations]);
 	const normalizeLoopCapInput = (raw: string) => {
 		const n = parseInt(raw, 10);
 		return Number.isFinite(n) && n > 0 ? Math.min(n, 100) : 10;
@@ -1237,11 +1232,6 @@ const DivisionSettings = () => {
 		const clamped = normalizeLoopCapInput(raw);
 		voidSettingsService.setGlobalSetting('maxBriefGateIterations', clamped);
 		setMaxBriefGateIterationsInput(String(clamped));
-	};
-	const commitMaxReviewerIterations = (raw: string) => {
-		const clamped = normalizeLoopCapInput(raw);
-		voidSettingsService.setGlobalSetting('maxReviewerIterations', clamped);
-		setMaxReviewerIterationsInput(String(clamped));
 	};
 
 	return (
@@ -1299,25 +1289,8 @@ const DivisionSettings = () => {
 						aria-label="Max brief gate iterations"
 					/>
 				</div>
-				<div className="flex items-center justify-between gap-4">
-					<div className="flex flex-col">
-						<span className="text-xs text-void-fg-2 font-medium">Reviewer 最大試行回数</span>
-						<span className="text-[11px] text-void-fg-4">
-							Leader が決めた目標を Reviewer が達成と判定するまで繰り返す、最大ラウンド数です。1 ラウンドごとに Leader の計画 → 各ロール → Reviewer が走るので、増やすとクレジットの消費も増えます（1〜100）。
-						</span>
-					</div>
-					<input
-						type="number"
-						min={1}
-						max={100}
-						step={1}
-						value={maxReviewerIterationsInput}
-						onChange={(e) => setMaxReviewerIterationsInput(e.target.value)}
-						onBlur={(e) => commitMaxReviewerIterations(e.target.value)}
-						onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-						className="w-20 bg-void-bg-1 border border-void-border-3 rounded-sm px-2 py-1 text-xs text-void-fg-1 focus:outline-none focus:border-[#0e70c0]"
-						aria-label="Max reviewer iterations"
-					/>
+				<div className="text-[11px] text-void-fg-4">
+					繰り返し（ループ実行）は、ワークフローの for / while ループノードで設定します。目標は while ループに書きます。
 				</div>
 			</div>
 

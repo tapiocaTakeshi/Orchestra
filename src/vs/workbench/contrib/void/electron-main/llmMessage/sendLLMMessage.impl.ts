@@ -44,7 +44,7 @@ import { availableTools, InternalToolInfo } from '../../common/prompt/prompts.js
 import { generateUuid } from '../../../../../base/common/uuid.js';
 import { extractSearchReplaceBlocks } from '../../common/helpers/extractCodeFromResult.js';
 import { DESIGN_DIR, DESIGN_INDEX_PAGE, LEGACY_DESIGN_FILE, sortDesignPageNames, splitDesignPages } from '../../common/designPages.js';
-import { DivisionWorkflow, normalizeWorkflow, tasksToWorkflow, WORKFLOW_FILE_NAME, workflowToTasks } from '../../common/divisionWorkflow.js';
+import { DivisionWorkflow, loopLabel, normalizeWorkflow, tasksToWorkflow, WORKFLOW_FILE_NAME, WorkflowLoopTag, WorkflowWhileCheck, workflowToTasks } from '../../common/divisionWorkflow.js';
 import { extractSearchedSites, mergeSearchedSites, logSearchedSites, searchedSitesMarkdown, isDefaultWebSearchEnabled, isWebSearchRejectedError } from '../../common/searchedSites.js';
 
 const getGoogleApiKey = async () => {
@@ -1760,7 +1760,7 @@ const parseContextRoutes = (output: string): { task: number; context: string[] }
 	}
 };
 
-type DivisionLeaderTask = { taskId: string; role: string; title: string; input?: string; output?: string; provider?: string; dependsOn?: string[]; description?: string; reason?: string; mode?: string; context?: string[]; approval?: boolean };
+type DivisionLeaderTask = { taskId: string; role: string; title: string; input?: string; output?: string; provider?: string; dependsOn?: string[]; description?: string; reason?: string; mode?: string; context?: string[]; approval?: boolean; loops?: WorkflowLoopTag[]; whileCheck?: WorkflowWhileCheck; parallel?: string };
 
 // `/api/tasks/create` は保存した Task 行をそのまま返す。各行の ID は `id` (`taskId` は無い) で、
 // `dependsOn` は Leader が振った 0 始まりのタスク番号。フローは `taskId` でタスクを引き、
@@ -1897,6 +1897,31 @@ const callDivisionWorkflowDraft = async (
 // POST /api/tasks/execute — execute a single role's task.
 // Supports SSE streaming when the server sends `Content-Type: text/event-stream`.
 // Falls back to parsing a JSON response body (`{ output }` or `{ task: { output } }`) otherwise.
+/** ワークフローの while ループを、もう一度回すかを Leader に判定させる。 */
+const LOOP_GOAL_JUDGE_PROMPT = `あなたは AI エージェントチームのリーダーです。ワークフローの while ループを、もう一度繰り返すかどうかを決めます。
+ループの目標と、ここまでの各ステップの結果を読んで、目標がもう達成できているかを判定してください。
+少しでも足りない点があれば未達とします。推測で達成にしないでください。
+
+JSON だけを返してください (説明文は不要):
+{"achieved": true | false, "reason": "<判定の理由を 1〜2 文で>"}`;
+
+/** Leader の判定。読めなければ未達 (ループを続ける)。 */
+const parseLoopGoalVerdict = (output: string): { achieved: boolean; reason: string } => {
+	const text = output || '';
+	const fence = /```(?:json)?\s*\n?([\s\S]*?)```/.exec(text);
+	for (const c of [fence?.[1], text]) {
+		if (!c) { continue; }
+		const a = c.indexOf('{');
+		const b = c.lastIndexOf('}');
+		if (a < 0 || b <= a) { continue; }
+		try {
+			const v = JSON.parse(c.slice(a, b + 1)) as { achieved?: unknown; reason?: unknown };
+			return { achieved: v.achieved === true, reason: typeof v.reason === 'string' ? v.reason.slice(0, 500) : '' };
+		} catch { /* next */ }
+	}
+	return { achieved: false, reason: '' };
+};
+
 const callDivisionTaskExecute = async (
 	endpointBase: string,
 	projectId: string,
@@ -3050,22 +3075,6 @@ type DivisionGoal = { goal: string; criteria: string[] };
 type DivisionCriterionCheck = { criterion: string; met: boolean | null; note: string };
 type DivisionVerdict = { achieved: boolean; unmet: string[]; next: string; checks: DivisionCriterionCheck[]; readable: boolean };
 
-const GOAL_SETTING_PROMPT = [
-	'あなたは AI チームのリーダーです。これからチームがユーザーのリクエストに取り組みます。',
-	'作業を始める前に、このリクエストの「目標」と、目標を達成したと判断できる「達成条件」を決めてください。',
-	'',
-	'## ルール',
-	'- 目標は 1 文で、ユーザーが最終的に得たい状態を書く。',
-	'- 達成条件は 1〜6 個。成果物 (ファイルの内容・実行結果など) を見て、はい / いいえで判定できる具体的な文にする。',
-	'- 「品質が高い」のような判定できない条件や、ユーザーが求めていない作業は入れない。',
-	'- テストやビルドのように、コマンドの実行結果で確かめられるものは「npm test が成功する」のように書いてよい (エージェントが出したコマンドは各ラウンドの最後に実行され、結果が判定に使われる)。',
-	'- 出力は次の JSON だけにする (説明文やコードブロックの外の文章は書かない)。',
-	'',
-	'```json',
-	'{"goal": "…", "criteria": ["…", "…"]}',
-	'```',
-].join('\n');
-
 const extractJsonObject = (text: string): unknown => {
 	const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
 	const candidates = [fenced?.[1], text];
@@ -3077,15 +3086,6 @@ const extractJsonObject = (text: string): unknown => {
 		try { return JSON.parse(c.slice(start, end + 1)); } catch { /* 次の候補 */ }
 	}
 	return null;
-};
-
-const parseDivisionGoal = (text: string): DivisionGoal | null => {
-	const obj = extractJsonObject(text) as { goal?: unknown; criteria?: unknown } | null;
-	if (!obj || typeof obj.goal !== 'string' || !obj.goal.trim()) return null;
-	const criteria = Array.isArray(obj.criteria)
-		? obj.criteria.filter((c): c is string => typeof c === 'string' && !!c.trim()).map(c => c.trim()).slice(0, 6)
-		: [];
-	return { goal: obj.goal.trim(), criteria };
 };
 
 /**
@@ -3512,6 +3512,12 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			approval?: boolean;
 			/** ワークフローでこのステップに書かれたシステムプロンプト。 */
 			systemPrompt?: string;
+			/** ワークフローのループ (外側から順): このタスクが何回目の繰り返しか */
+			loops?: WorkflowLoopTag[];
+			/** while ループの 2 回目以降の最初のステップ: 実行する前に目標を判定し、達成していれば残りの回を飛ばす */
+			whileCheck?: WorkflowWhileCheck;
+			/** 並列ノードから出た分岐のステップ (同じ並列ノードの分岐はまとめて同時に実行する) */
+			parallel?: string;
 		};
 
 		const isFileSearchRole = (r: string): boolean => {
@@ -3916,8 +3922,9 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		// 承認モードは 1 ステップずつ止めて確認するモードなので、ループさせず 1 ラウンドで終える。
 		// 「ラウンドごとに確認」で止めたあと、ユーザーが続行を選んだときの再開情報。
 		const goalLoopResume = isResuming ? resumeState?.goalLoop ?? null : null;
-		const maxRounds = goalLoopResume?.maxRounds
-			?? (divisionFlowApprovalMode ? 1 : Math.max(1, Math.min(100, params.divisionMaxReviewerIterations ?? 5)));
+		// ループ実行 (目標を立てて Reviewer が達成と判定するまで回す) はなくなった。繰り返しと目標は
+		// ワークフローのループノード (for / while) で設定する。以前のラウンド確認から再開するときだけ、その上限を引き継ぐ。
+		const maxRounds = goalLoopResume?.maxRounds ?? 1;
 		const confirmEachRound = params.divisionGoalLoopMode === 'confirm';
 		/** 承認モードで Leader のワークフロー案に答えた (承認 / 差し戻し) 直後の再開。 */
 		const workflowDecision = isResuming && resumeState?.workflowReview ? resumeState.workflowReview : null;
@@ -3926,32 +3933,6 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		let lastReviewOutput = goalLoopResume?.lastReviewOutput ?? '';
 		let lastCommandResults: CommandRunResult[] = goalLoopResume?.lastCommandResults ?? [];
 		const baseInput = currentInput;
-
-		if (!isResuming) {
-			appendText(`🎯 **Leader** が目標を設定しています...\n\n`);
-			const goalResult = await callDivisionTaskExecute(
-				endpointBase, projectId, 'leader',
-				[GOAL_SETTING_PROMPT, `## ユーザーのリクエスト\n${currentInput}`].join('\n\n---\n\n'),
-				controller.signal,
-				() => { /* JSON の生ストリームはチャットに流さない */ },
-				divisionApiKey, undefined,
-				withStackContext(chatHistory),
-				workspaceFolderPath, routingOptions,
-			);
-			if (controller.signal.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
-			goal = goalResult.error ? null : parseDivisionGoal(goalResult.output || '');
-			if (goal) {
-				appendText(`## 🎯 目標\n\n**${goal.goal}**\n\n`);
-				if (goal.criteria.length > 0) {
-					appendText(`達成条件:\n${goal.criteria.map((c, n) => `${n + 1}. ${c}`).join('\n')}\n\n`);
-				}
-				if (maxRounds > 1) {
-					appendText(`> 🔁 Reviewer が達成と判定するまで、最大 ${maxRounds} ラウンド繰り返します。\n\n`);
-				}
-			} else {
-				appendText(`> ⚠️ 目標を設定できなかったため、リクエストをそのまま目標として進めます。\n\n`);
-			}
-		}
 
 		if (goalLoopResume) {
 			appendText(`▶️ 続行が選ばれたので、ラウンド ${goalLoopResume.round + 1} / ${maxRounds} から再開します。\n\n`);
@@ -4236,11 +4217,179 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				if (isFileSearchRole(o.role)) absorbFileSearchReport(o.output || '');
 			}
 
+			// ストリームの出力先: 並列で先に始めたタスクは自分の番まで出力をためておき、番が来たらまとめて出す。
+			const makeTaskSink = (live: boolean) => {
+				let buffered = '';
+				let attached = live;
+				return {
+					write: (chunk: string) => { if (attached) { appendText(chunk); } else { buffered += chunk; } },
+					attach: () => { if (!attached) { attached = true; if (buffered) { appendText(buffered); } buffered = ''; } },
+				};
+			};
+			/** AI を Division API で呼ぶだけの普通のタスク (ファイル読み込み・画像生成・サーバー実行済みは除く) */
+			const isPlainAiTask = (t: DivisionTask): boolean => {
+				const r = (t.role || '').toLowerCase();
+				return !isFileSearchRole(r) && !isImageRole(r) && !(t.output && t.output.trim());
+			};
+			/** タスクへの入力を組み立てて Division API の実行を始める (並列の分岐はまとめて始める)。 */
+			const startTaskExecute = (task: DivisionTask, live: boolean) => {
+				const role = (task.role || '').toLowerCase();
+				const sink = makeTaskSink(live);
+				const isDesigner = role === 'design' || role === 'designer';
+				const existingDesignPages = isDesigner && workspaceFolderPath ? listDesignPages(workspaceFolderPath) : [];
+				const taskInstruction = isDesigner
+					? [
+						`直前の assistant メッセージに先行タスクの出力が添付されています（ある場合）。それを踏まえ、ユーザー要求を視覚化した **デザイン HTML（ブラウザで開けるデザイン文書）** を画面ごとに作成してください。保存先は \`.division/${DESIGN_DIR}/\` フォルダで、1 画面 = 1 ファイルです。`,
+						``,
+						`### 出力要件`,
+						`- 画面ごとに \`\`\`html コードブロックを 1 つずつ出力し、開始行にファイル名を付けてください（例: \`\`\`html index.html / \`\`\`html login.html / \`\`\`html dashboard.html）。ファイル名は英小文字・数字・ハイフンのみ。`,
+						`- \`${DESIGN_INDEX_PAGE}\` は必須で、デザインシステム（トークン・コンポーネント見本）と全画面へのリンク（\`<a href="login.html">\` のような相対リンク）を置いてください。`,
+						`- 各ファイルは \`<!DOCTYPE html>\` から始まる完結した 1 ファイルにし、同じ :root トークンをそれぞれに入れてください。前置き・後書きは書かないでください。`,
+						existingDesignPages.length
+							? `- 既存のページ: ${existingDesignPages.map(n => `\`${n}\``).join(', ')}。変更するページだけを同じファイル名で出力してください（出力しなかったページはそのまま残ります）。`
+							: `- 1 画面だけで足りる場合は \`${DESIGN_INDEX_PAGE}\` 1 つで構いません。`,
+						`- インラインの <style> だけで完結させ、React / Next.js / Tailwind / ビルド工程 / 外部画像は使わないでください。`,
+						`- トークンは :root の CSS 変数（--color-* / --font-* / --space-* / --radius-* / --shadow-*）で定義し、文書自体もそのトークンで装飾してください。`,
+						`- 配色スウォッチ、タイポグラフィ見本、ボタン等コンポーネントの実物、主要画面のワイヤーフレームを HTML で描き、それぞれに値と理由を添えてください。`,
+						`- 実装コードではなく、後続の coder エージェントがそのまま実装に使える**デザイン仕様書**が目的です。`,
+					].join('\n')
+					: `直前の assistant メッセージに先行タスクの出力が添付されています（ある場合）。それを参考に、あなたの担当タスクを遂行してください。出力は Markdown 形式で、後続エージェントが直接利用できるよう具体的・網羅的にまとめてください。`;
+
+				// 論文・仕様書を書くロールには、今の文書 (と前段の文書) を渡し、一新せず更新させる
+				const livingFile = FLOW_ROLE_TO_FILENAME[role];
+				const livingDocBlock = (livingFile === PAPER_FILE || livingFile === SPEC_FILE)
+					? buildLivingDocumentInstruction(livingFile)
+					: isDesigner ? buildDesignSourceBlock() : '';
+
+				// Coder 系には実装指示と existing files を添付
+				let extraCoderBlock = '';
+				if (isCodeRole(role)) {
+					// 既存ファイル一覧は共有コンテキストから引く（全文レポートの見出し解析より
+					// 取りこぼしが少なく、承認モードで再開したあとでも同じ結果になる）。
+					// 一覧が長くなりすぎないよう、関連度の高いファイルに絞る。
+					const coderContext = currentProjectContext();
+					const existingFilePaths: string[] = coderContext
+						? coderContext.relevantFiles.slice(0, 200).map(f => f.path)
+						: [];
+					const existingBlock = existingFilePaths.length > 0
+						? [
+							``,
+							`### ワークスペースに既に存在するファイル（必ず編集すること）`,
+							...existingFilePaths.map(p => `- \`${p}\``),
+							``,
+							`上記ファイルは既に存在します。SEARCH/REPLACE 形式で**差分編集**してください。新規作成ブロックで同じパスを上書きしないでください。`,
+						].join('\n')
+						: '';
+					// designer のデザイン HTML は全ページを指示に入れる。先行出力の受け渡し (chatHistory) は
+					// 8,000 文字で切り詰められ、Division API の /api/tasks/execute 側でも渡っていないため、
+					// ここに入れないと coder はデザインを見ないまま実装する。
+					const designPages = readDesignPages();
+					const designBlock = designPages.length
+						? [
+							``,
+							`### デザイン仕様 (${designPages.length > 1 ? `.division/${DESIGN_DIR}/ の ${designPages.length} 画面` : designPages[0].file}) — 必ずこの通りに実装すること`,
+							`- :root の CSS 変数（色・フォント・余白・角丸・影）は名前と値をそのまま使う。独自の色や変数を作らない。`,
+							`- セクション構成・ワイヤーフレーム・コンポーネントの見た目と状態・レスポンシブの規則に従う。`,
+							...(designPages.length > 1 ? [`- 各ファイルは 1 画面です。画面ごとに対応するページ・コンポーネントを実装する。`] : []),
+							...designPages.flatMap(p => [``, `#### ${p.file}`, '```html', p.html, '```']),
+						].join('\n')
+						: '';
+					const spec = truncateForContext(readDivisionFile(workspaceFolderPath, SPEC_FILE), MAX_LIVING_DOC_CHARS);
+					const specBlock = spec
+						? [
+							``,
+							`### 仕様書 (.division/${SPEC_FILE}) — 仕様書とデザインからソフトウェアを作ること`,
+							`- 仕様書の機能・画面・データ・受け入れ条件をすべて満たす。仕様書とデザインに無いものは作らない。`,
+							`- 仕様書・デザイン・論文 (.division/) は編集しない。実装して分かった不足や矛盾は回答の最後に書く。`,
+							``,
+							'````markdown',
+							spec,
+							'````',
+						].join('\n')
+						: '';
+					extraCoderBlock = [
+						specBlock,
+						designBlock,
+						``,
+						`### 出力フォーマット (必須)`,
+						`- 既存ファイルの編集: SEARCH/REPLACE ブロック`,
+						`- 新規ファイル: ` + '```lang:path/to/file```' + ` ブロック`,
+						`- セットアップ・動作確認のコマンド (依存の追加、テスト実行など): ` + '```bash```' + ` ブロック。このラウンドの最後に作業フォルダで実行され、結果がレビューに使われる。サーバーの起動など終わらないコマンドは書かない`,
+						`- 探索系コマンド (find / ls / cat / grep / head / tail) は禁止。コンテキストは既に揃っています。`,
+						existingBlock,
+						``,
+						codeOutputInstructions,
+					].join('\n');
+				}
+
+				const taskInput = [
+					`## ユーザーの元のリクエスト`,
+					currentInput,
+					``,
+					`## あなたの担当タスク`,
+					`- ロール: ${task.role}`,
+					`- タイトル: ${task.title || ''}`,
+					task.description ? `- 説明: ${task.description}` : '',
+					task.reason ? `- 目的: ${task.reason}` : '',
+					``,
+					`## 指示`,
+					taskInstruction,
+					livingDocBlock,
+					extraCoderBlock,
+				].filter(Boolean).join('\n');
+
+				// Pull 型: ロールが「このファイルも要る」と要求したら、ポリシーを通して渡し直し、
+				// 同じタスクをもう一度だけ実行する。台帳が回数と繰り返しを見張るので止まる。
+				const roleContextBlock = buildRoleContextBlock(task.role, task.context);
+				const result = callDivisionTaskExecute(
+					endpointBase, projectId, task.role, taskInput, controller.signal,
+					sink.write,
+					divisionApiKey, sessionId,
+					withStackContext([
+						...chatHistory,
+						...buildPriorContextHistory(task.role, task.context, roleContextBlock.markdown),
+					]),
+					workspaceFolderPath, routingOptions, task.systemPrompt,
+				);
+				return { taskInput, roleContextBlock, result, sink };
+			};
+			const prefetchedTasks = new Map<number, ReturnType<typeof startTaskExecute>>();
+			/** 目標を達成した while ループ: この回以降は飛ばす */
+			const finishedLoops = new Map<string, number>();
+
 			for (let i = resumeFromIndex; i < tasks.length; i++) {
 				drainInjections();
 				const task = tasks[i];
 				const role = (task.role || '').toLowerCase();
-				appendText(`\n---\n\n### ${displayStepNumber(i)}. ${task.role} — ${task.title || ''}\n\n`);
+				// while ループの目標を達成したあとの回は実行しない。
+				if (task.loops?.some(l => finishedLoops.has(l.id) && l.iteration >= finishedLoops.get(l.id)!)) {
+					continue;
+				}
+				// while ループの次の回: 始める前に Leader が目標を判定する。
+				if (task.whileCheck) {
+					const check = task.whileCheck;
+					appendText(`\n---\n\n### 🔁 ${loopLabel(task.loops)} の前に、ループの目標を確認します\n\n> 目標: ${check.goal || '(なし)'}\n\n`);
+					const sofar = taskOutputs
+						.map(o => `- [${o.role}] ${o.title}: ${(o.output || '').replace(/\s+/g, ' ').slice(0, 800)}`)
+						.join('\n');
+					const judge = await callDivisionTaskExecute(
+						endpointBase, projectId, 'leader',
+						[LOOP_GOAL_JUDGE_PROMPT, `## ループの目標\n${check.goal || '(なし)'}`, `## ここまでの結果\n${sofar || '(なし)'}`].join('\n\n---\n\n'),
+						controller.signal,
+						() => { /* JSON の生ストリームはチャットに流さない */ },
+						divisionApiKey, undefined, undefined,
+						workspaceFolderPath, routingOptions,
+					);
+					if (controller.signal.aborted) { throw Object.assign(new Error('aborted'), { name: 'AbortError' }); }
+					const verdict = parseLoopGoalVerdict(judge.error ? '' : judge.output || '');
+					if (verdict.achieved) {
+						finishedLoops.set(check.loopId, check.iteration);
+						appendText(`✅ **目標を達成しました。** 残りの回は実行しません。${verdict.reason ? `\n\n${verdict.reason}` : ''}\n\n`);
+						continue;
+					}
+					appendText(`🔁 **まだ未達です。** もう一度繰り返します。${verdict.reason ? `\n\n${verdict.reason}` : ''}\n\n`);
+				}
+				appendText(`\n---\n\n### ${displayStepNumber(i)}. ${task.role} — ${task.title || ''}${task.loops?.length ? ` _(${loopLabel(task.loops)})_` : ''}${task.parallel ? ' _(並列)_' : ''}\n\n`);
 
 				// File Search はローカル実装でワークスペース全件走査
 				if (isFileSearchRole(role)) {
@@ -4355,122 +4504,28 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					continue;
 				}
 
-				const isDesigner = role === 'design' || role === 'designer';
-				const existingDesignPages = isDesigner && workspaceFolderPath ? listDesignPages(workspaceFolderPath) : [];
-				const taskInstruction = isDesigner
-					? [
-						`直前の assistant メッセージに先行タスクの出力が添付されています（ある場合）。それを踏まえ、ユーザー要求を視覚化した **デザイン HTML（ブラウザで開けるデザイン文書）** を画面ごとに作成してください。保存先は \`.division/${DESIGN_DIR}/\` フォルダで、1 画面 = 1 ファイルです。`,
-						``,
-						`### 出力要件`,
-						`- 画面ごとに \`\`\`html コードブロックを 1 つずつ出力し、開始行にファイル名を付けてください（例: \`\`\`html index.html / \`\`\`html login.html / \`\`\`html dashboard.html）。ファイル名は英小文字・数字・ハイフンのみ。`,
-						`- \`${DESIGN_INDEX_PAGE}\` は必須で、デザインシステム（トークン・コンポーネント見本）と全画面へのリンク（\`<a href="login.html">\` のような相対リンク）を置いてください。`,
-						`- 各ファイルは \`<!DOCTYPE html>\` から始まる完結した 1 ファイルにし、同じ :root トークンをそれぞれに入れてください。前置き・後書きは書かないでください。`,
-						existingDesignPages.length
-							? `- 既存のページ: ${existingDesignPages.map(n => `\`${n}\``).join(', ')}。変更するページだけを同じファイル名で出力してください（出力しなかったページはそのまま残ります）。`
-							: `- 1 画面だけで足りる場合は \`${DESIGN_INDEX_PAGE}\` 1 つで構いません。`,
-						`- インラインの <style> だけで完結させ、React / Next.js / Tailwind / ビルド工程 / 外部画像は使わないでください。`,
-						`- トークンは :root の CSS 変数（--color-* / --font-* / --space-* / --radius-* / --shadow-*）で定義し、文書自体もそのトークンで装飾してください。`,
-						`- 配色スウォッチ、タイポグラフィ見本、ボタン等コンポーネントの実物、主要画面のワイヤーフレームを HTML で描き、それぞれに値と理由を添えてください。`,
-						`- 実装コードではなく、後続の coder エージェントがそのまま実装に使える**デザイン仕様書**が目的です。`,
-					].join('\n')
-					: `直前の assistant メッセージに先行タスクの出力が添付されています（ある場合）。それを参考に、あなたの担当タスクを遂行してください。出力は Markdown 形式で、後続エージェントが直接利用できるよう具体的・網羅的にまとめてください。`;
-
-				// 論文・仕様書を書くロールには、今の文書 (と前段の文書) を渡し、一新せず更新させる
-				const livingFile = FLOW_ROLE_TO_FILENAME[role];
-				const livingDocBlock = (livingFile === PAPER_FILE || livingFile === SPEC_FILE)
-					? buildLivingDocumentInstruction(livingFile)
-					: isDesigner ? buildDesignSourceBlock() : '';
-
-				// Coder 系には実装指示と existing files を添付
-				let extraCoderBlock = '';
-				if (isCodeRole(role)) {
-					// 既存ファイル一覧は共有コンテキストから引く（全文レポートの見出し解析より
-					// 取りこぼしが少なく、承認モードで再開したあとでも同じ結果になる）。
-					// 一覧が長くなりすぎないよう、関連度の高いファイルに絞る。
-					const coderContext = currentProjectContext();
-					const existingFilePaths: string[] = coderContext
-						? coderContext.relevantFiles.slice(0, 200).map(f => f.path)
-						: [];
-					const existingBlock = existingFilePaths.length > 0
-						? [
-							``,
-							`### ワークスペースに既に存在するファイル（必ず編集すること）`,
-							...existingFilePaths.map(p => `- \`${p}\``),
-							``,
-							`上記ファイルは既に存在します。SEARCH/REPLACE 形式で**差分編集**してください。新規作成ブロックで同じパスを上書きしないでください。`,
-						].join('\n')
-						: '';
-					// designer のデザイン HTML は全ページを指示に入れる。先行出力の受け渡し (chatHistory) は
-					// 8,000 文字で切り詰められ、Division API の /api/tasks/execute 側でも渡っていないため、
-					// ここに入れないと coder はデザインを見ないまま実装する。
-					const designPages = readDesignPages();
-					const designBlock = designPages.length
-						? [
-							``,
-							`### デザイン仕様 (${designPages.length > 1 ? `.division/${DESIGN_DIR}/ の ${designPages.length} 画面` : designPages[0].file}) — 必ずこの通りに実装すること`,
-							`- :root の CSS 変数（色・フォント・余白・角丸・影）は名前と値をそのまま使う。独自の色や変数を作らない。`,
-							`- セクション構成・ワイヤーフレーム・コンポーネントの見た目と状態・レスポンシブの規則に従う。`,
-							...(designPages.length > 1 ? [`- 各ファイルは 1 画面です。画面ごとに対応するページ・コンポーネントを実装する。`] : []),
-							...designPages.flatMap(p => [``, `#### ${p.file}`, '```html', p.html, '```']),
-						].join('\n')
-						: '';
-					const spec = truncateForContext(readDivisionFile(workspaceFolderPath, SPEC_FILE), MAX_LIVING_DOC_CHARS);
-					const specBlock = spec
-						? [
-							``,
-							`### 仕様書 (.division/${SPEC_FILE}) — 仕様書とデザインからソフトウェアを作ること`,
-							`- 仕様書の機能・画面・データ・受け入れ条件をすべて満たす。仕様書とデザインに無いものは作らない。`,
-							`- 仕様書・デザイン・論文 (.division/) は編集しない。実装して分かった不足や矛盾は回答の最後に書く。`,
-							``,
-							'````markdown',
-							spec,
-							'````',
-						].join('\n')
-						: '';
-					extraCoderBlock = [
-						specBlock,
-						designBlock,
-						``,
-						`### 出力フォーマット (必須)`,
-						`- 既存ファイルの編集: SEARCH/REPLACE ブロック`,
-						`- 新規ファイル: ` + '```lang:path/to/file```' + ` ブロック`,
-						`- セットアップ・動作確認のコマンド (依存の追加、テスト実行など): ` + '```bash```' + ` ブロック。このラウンドの最後に作業フォルダで実行され、結果がレビューに使われる。サーバーの起動など終わらないコマンドは書かない`,
-						`- 探索系コマンド (find / ls / cat / grep / head / tail) は禁止。コンテキストは既に揃っています。`,
-						existingBlock,
-						``,
-						codeOutputInstructions,
-					].join('\n');
+				// 並列ノードの分岐: 先に始めておいたタスクならその結果を使う (出力はここで順番どおりに出す)。
+				let prepared = prefetchedTasks.get(i);
+				prefetchedTasks.delete(i);
+				if (prepared) {
+					prepared.sink.attach();
+				} else {
+					prepared = startTaskExecute(task, true);
+					// 同じ並列ノードから出た分岐で、互いに待ち合わせのない後続タスクを今すぐ一緒に始める。
+					if (task.parallel) {
+						const group = new Set([task.taskId]);
+						for (let j = i + 1; j < tasks.length; j++) {
+							const t = tasks[j];
+							if (t.parallel !== task.parallel || !isPlainAiTask(t) || t.whileCheck || (t.dependsOn || []).some(d => group.has(d))) { break; }
+							group.add(t.taskId);
+							prefetchedTasks.set(j, startTaskExecute(t, false));
+						}
+						if (group.size > 1) { appendText(`> ⚡ 並列: このステップと続く ${group.size - 1} ステップを同時に実行しています。\n\n`); }
+					}
 				}
-
-				const taskInput = [
-					`## ユーザーの元のリクエスト`,
-					currentInput,
-					``,
-					`## あなたの担当タスク`,
-					`- ロール: ${task.role}`,
-					`- タイトル: ${task.title || ''}`,
-					task.description ? `- 説明: ${task.description}` : '',
-					task.reason ? `- 目的: ${task.reason}` : '',
-					``,
-					`## 指示`,
-					taskInstruction,
-					livingDocBlock,
-					extraCoderBlock,
-				].filter(Boolean).join('\n');
-
-				// Pull 型: ロールが「このファイルも要る」と要求したら、ポリシーを通して渡し直し、
-				// 同じタスクをもう一度だけ実行する。台帳が回数と繰り返しを見張るので止まる。
-				let roleContextBlock = buildRoleContextBlock(task.role, task.context);
-				let execResult = await callDivisionTaskExecute(
-					endpointBase, projectId, task.role, taskInput, controller.signal,
-					(chunk) => appendText(chunk),
-					divisionApiKey, sessionId,
-					withStackContext([
-						...chatHistory,
-						...buildPriorContextHistory(task.role, task.context, roleContextBlock.markdown),
-					]),
-					workspaceFolderPath, routingOptions, task.systemPrompt,
-				);
+				const { taskInput } = prepared;
+				let roleContextBlock = prepared.roleContextBlock;
+				let execResult = await prepared.result;
 				let taskSearchedSites = execResult.citations ?? [];
 
 				if (!execResult.error) {

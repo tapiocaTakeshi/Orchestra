@@ -82,7 +82,6 @@ import { ChatMarkdownRender } from '../markdown/ChatMarkdownRender.js';
 import {
 	CLOUD_AGENTS_MAX_PARALLEL,
 	CLOUD_DIVISION_PROJECT_MODEL,
-	CLOUD_GOAL_LOOP_DEFAULT,
 	CLOUD_PR_TITLE_MAX,
 	CloudApprovalEventData,
 	CloudChange,
@@ -1288,9 +1287,8 @@ ModelPickerPopover.displayName = 'ModelPickerPopover';
 /** パネルが閉じている間に来た「入力欄にフォーカス」の要求も拾えるよう、最後に処理した番号を覚えておく */
 let lastHandledFocusRequest = 0;
 
-type ComposerMenu = 'source' | 'parallel' | 'project' | 'model' | 'loop' | null;
+type ComposerMenu = 'source' | 'parallel' | 'project' | 'model' | null;
 
-const GOAL_LOOP_MODES: CloudGoalLoopMode[] = ['auto', 'confirm', 'off'];
 const goalLoopLabelKey = (mode: CloudGoalLoopMode): TranslationKey => `cloudAgents.goal.mode.${mode}` as TranslationKey;
 
 const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
@@ -1370,7 +1368,6 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 			prompt,
 			title: title.trim() || undefined,
 			model,
-			goalLoop: state.goalLoopPick,
 			approvalMode: state.approvalModePick,
 			...(projectId ? { projectId } : {}),
 			source: effectiveSource,
@@ -1384,7 +1381,7 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 			// 並列で起動したときは 1 本目を開く
 			cloudAgentService.select(created[0].id);
 		}
-	}, [canLaunch, sourceReady, modelReady, cloudAgentService, prompt, title, modelPick, projectId, effectiveSource, state.githubPick, state.goalLoopPick, state.approvalModePick, repoUrl, urlBranch, count, setDraft]);
+	}, [canLaunch, sourceReady, modelReady, cloudAgentService, prompt, title, modelPick, projectId, effectiveSource, state.githubPick, state.approvalModePick, repoUrl, urlBranch, count, setDraft]);
 
 	const sourceHint =
 		effectiveSource === 'workspace' && state.workspaceName ? t('cloudAgents.new.includeWorkspaceHint').replace('{name}', state.workspaceName)
@@ -1490,30 +1487,6 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 				</div>
 			</Popover>
 		);
-	} else if (menu === 'loop') {
-		popover = (
-			<Popover ref={popoverRef} onClose={() => setMenu(null)} width='360px'>
-				<PopoverTitle>{t('cloudAgents.goal.loopTitle')}</PopoverTitle>
-				<div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-					{GOAL_LOOP_MODES.map(mode => (
-						<button
-							key={mode}
-							type='button'
-							className='oca-option'
-							data-selected={state.goalLoopPick === mode}
-							onClick={() => { cloudAgentService.setGoalLoopPick(mode); setMenu(null); textareaRef.current?.focus(); }}
-						>
-							<span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '1px' }}>
-								<span>{t(goalLoopLabelKey(mode))}</span>
-								<span style={{ fontSize: '11px', color: C.fgMuted, whiteSpace: 'normal', lineHeight: 1.35 }}>{t(`${goalLoopLabelKey(mode)}.hint` as TranslationKey)}</span>
-							</span>
-							{state.goalLoopPick === mode && <CheckCircle2 size={12} style={{ flexShrink: 0 }} />}
-						</button>
-					))}
-				</div>
-				<div style={{ fontSize: '11px', color: C.fgMuted, lineHeight: 1.4 }}>{t('cloudAgents.goal.loopHint')}</div>
-			</Popover>
-		);
 	} else if (menu === 'model') {
 		popover = (
 			<ModelPickerPopover
@@ -1579,13 +1552,6 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 							<Layers size={12} />
 							<span style={ellipsis}>{projectLabel ?? t('cloudAgents.project.none')}</span>
 							{divisionMode ? <Lock size={10} style={{ flexShrink: 0, opacity: 0.7 }} /> : <ChevronDown size={11} style={{ flexShrink: 0, opacity: 0.7 }} />}
-						</button>
-					)}
-					{(moreOpen || state.goalLoopPick !== CLOUD_GOAL_LOOP_DEFAULT) && (
-						<button type='button' className='oca-chip' data-active={menu === 'loop'} title={`${t('cloudAgents.goal.loopTitle')}: ${t(`${goalLoopLabelKey(state.goalLoopPick)}.hint` as TranslationKey)}`} onClick={() => toggleMenu('loop')}>
-							<Repeat size={12} />
-							<span style={ellipsis}>{t('cloudAgents.goal.loop')} · {t(goalLoopLabelKey(state.goalLoopPick))}</span>
-							<ChevronDown size={11} style={{ flexShrink: 0, opacity: 0.7 }} />
 						</button>
 					)}
 					{/* 承認モードは Division Project のときだけ (coder 以外のロールの .division ファイルを承認する) */}

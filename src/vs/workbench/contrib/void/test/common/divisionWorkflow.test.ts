@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import * as assert from 'assert';
-import { DivisionWorkflow, insertAfter, layoutWorkflow, normalizeWorkflow, removeNode, setApprovalAfter, tasksToWorkflow, workflowErrors, workflowSteps, workflowToTasks } from '../../common/divisionWorkflow.js';
+import { DivisionWorkflow, insertAfter, insertLoopAfter, insertParallelAfter, removeLoop, layoutWorkflow, normalizeWorkflow, removeNode, setApprovalAfter, tasksToWorkflow, workflowErrors, workflowSteps, workflowToTasks } from '../../common/divisionWorkflow.js';
 
 // The leader's draft: start → research → writer → approval → (design | coder) → reviewer → end
 const draft = (): DivisionWorkflow => normalizeWorkflow({
@@ -74,5 +74,52 @@ suite('Division workflow', () => {
 		assert.ok(workflowErrors({ nodes: w.nodes, edges: [...w.edges, { id: 'c', source: 's5', target: 's1' }] }).some(e => e.includes('ループ')));
 		assert.ok(workflowErrors({ nodes: w.nodes.filter(n => n.type !== 'start'), edges: w.edges }).length > 0);
 		assert.strictEqual(normalizeWorkflow('not json'), null);
+	});
+
+	const graph = (nodes: [string, string, Record<string, unknown>?][], edges: [string, string][]) => normalizeWorkflow({
+		version: 1, enabled: true,
+		nodes: nodes.map(([id, type, data]) => ({ id, type, position: { x: 0, y: 0 }, data: data ?? {} })),
+		edges: edges.map(([source, target]) => ({ id: `${source}-${target}`, source, target })),
+	})!;
+
+	test('a while loop is unrolled into rounds; later rounds judge the goal first', () => {
+		const w = graph(
+			[['s', 'start'], ['a', 'role', { role: 'search' }], ['L', 'loop', { loop: 'while', goal: 'テストが通る', maxIterations: 3 }], ['c', 'role', { role: 'coder' }], ['r', 'role', { role: 'review' }], ['E', 'loopEnd'], ['e', 'end']],
+			[['s', 'a'], ['a', 'L'], ['L', 'c'], ['c', 'r'], ['r', 'E'], ['E', 'e']],
+		);
+		assert.deepStrictEqual(workflowErrors(w), []);
+		const tasks = workflowToTasks(w);
+		assert.deepStrictEqual(tasks.map(t => [t.role, t.dependsOn, t.loops?.[0]?.iteration ?? 0, !!t.whileCheck]), [
+			['search', [], 0, false],
+			['coder', ['wf-1'], 1, false],
+			['review', ['wf-2'], 1, false],
+			['coder', ['wf-3'], 2, true],
+			['review', ['wf-4'], 2, false],
+			['coder', ['wf-5'], 3, true],
+			['review', ['wf-6'], 3, false],
+		]);
+		assert.deepStrictEqual(tasks[3].whileCheck, { loopId: 'L', iteration: 2, goal: 'テストが通る' });
+	});
+
+	test('loops must be closed, a while loop needs a goal, and the body stays inside', () => {
+		const leak = graph([['s', 'start'], ['L', 'loop', { loop: 'while' }], ['c', 'role', { role: 'coder' }], ['E', 'loopEnd'], ['e', 'end']], [['s', 'L'], ['L', 'c'], ['c', 'E'], ['c', 'e'], ['E', 'e']]);
+		const errors = workflowErrors(leak).join(' ');
+		assert.ok(/目標を書いて/.test(errors) && /ループの外とつながっています/.test(errors));
+		const open = graph([['s', 'start'], ['L', 'loop', { loop: 'for' }], ['c', 'role', { role: 'coder' }], ['e', 'end']], [['s', 'L'], ['L', 'c'], ['c', 'e']]);
+		assert.ok(workflowErrors(open).some(m => /閉じていない/.test(m)));
+	});
+
+	test('editing: add a for loop with a step inside, a parallel node, then remove the loop', () => {
+		let w = graph([['s', 'start'], ['a', 'role', { role: 'search' }], ['e', 'end']], [['s', 'a'], ['a', 'e']]);
+		w = insertLoopAfter(w, 'a', 'for');
+		const loopId = w.nodes.find(n => n.type === 'loop')!.id;
+		w = insertAfter(w, loopId, { id: 'c', type: 'role', data: { role: 'coder' } });
+		w = insertParallelAfter(w, 's', 'search');
+		assert.deepStrictEqual(workflowErrors(w), []);
+		const steps = workflowSteps(w);
+		assert.deepStrictEqual(steps.map(s => [s.role, !!s.parallel, s.loops?.[0]?.iteration ?? 0]), [['search', true, 0], ['search', true, 0], ['search', false, 0], ['coder', false, 1], ['coder', false, 2]]);
+		w = removeLoop(w, loopId);
+		assert.ok(!w.nodes.some(n => n.type === 'loop' || n.type === 'loopEnd'));
+		assert.deepStrictEqual(workflowErrors(w), []);
 	});
 });

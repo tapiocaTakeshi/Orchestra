@@ -834,7 +834,6 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		const model = (opts.model ?? '').trim();
 		const projectId = (opts.projectId ?? '').trim();
 		const selectCreated = opts.select !== false;
-		const goalLoop: CloudGoalLoopMode = isCloudGoalLoopMode(opts.goalLoop) ? opts.goalLoop : this._state.goalLoopPick;
 		const approvalMode = typeof opts.approvalMode === 'boolean' ? opts.approvalMode : this._state.approvalModePick;
 		if (model === CLOUD_DIVISION_PROJECT_MODEL && !projectId) {
 			// サーバーも 400 を返すが、サンドボックスを作る前に日本語で弾く
@@ -857,7 +856,7 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 				...(model ? { model } : {}),
 				...(projectId ? { projectId } : {}),
 				...(workspaceName ? { workspaceName } : {}),
-				goalLoop,
+				// 繰り返し (ループ実行) はなくなった: 繰り返しと目標はワークフローのループノードで設定する
 				...(model === CLOUD_DIVISION_PROJECT_MODEL && approvalMode ? { approvalMode: true } : {}),
 			}, CREATE_TIMEOUT_MS);
 			const session = created.ok ? created.data?.session as CloudSession | undefined : undefined;
