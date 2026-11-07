@@ -289,3 +289,53 @@ export const workflowToTasks = (w: Pick<DivisionWorkflow, 'nodes' | 'edges'>): A
 		...(s.systemPrompt ? { systemPrompt: s.systemPrompt } : {}),
 		reason: 'ユーザーが承認したワークフローのステップ',
 	}));
+
+/**
+ * The flow's tasks as a workflow (so .division/workflow.json is written on every run, not only when
+ * the leader's workflow is reviewed). A task's dependsOn are taskIds; a task without any runs after
+ * the one before it (the flow runs its tasks in order). approval: an approval node after the task.
+ */
+export const tasksToWorkflow = (tasks: Array<{
+	taskId: string; role: string; title?: string; description?: string; input?: string;
+	dependsOn?: string[]; approval?: boolean; systemPrompt?: string;
+}>): DivisionWorkflow => {
+	const nodes: WorkflowNode[] = [{ id: 'start', type: 'start', position: { x: 0, y: 0 }, data: {} }];
+	const edges: WorkflowEdge[] = [];
+	const edge = (source: string, target: string) => {
+		if (!edges.some(e => e.source === source && e.target === target)) { edges.push({ id: `e-${source}-${target}`, source, target }); }
+	};
+	const nodeOf = new Map<string, string>();
+	/** where the tasks after a task connect from (its approval node when it has one) */
+	const exitOf = new Map<string, string>();
+	tasks.forEach((t, i) => {
+		const id = `step-${i + 1}`;
+		nodeOf.set(t.taskId, id);
+		const instruction = (t.description || t.input || '').trim();
+		nodes.push({
+			id, type: 'role', position: { x: 0, y: 0 },
+			data: {
+				role: t.role,
+				...(t.title ? { title: t.title } : {}),
+				...(instruction ? { instruction: instruction.slice(0, 4000) } : {}),
+				...(t.systemPrompt ? { systemPrompt: t.systemPrompt } : {}),
+			},
+		});
+		const deps = (t.dependsOn ?? []).map(d => exitOf.get(d)).filter((d): d is string => !!d);
+		if (deps.length) { for (const d of deps) { edge(d, id); } }
+		else if (i > 0) { edge(exitOf.get(tasks[i - 1].taskId)!, id); }
+		else { edge('start', id); }
+		if (t.approval) {
+			const ok = `approval-${i + 1}`;
+			nodes.push({ id: ok, type: 'approval', position: { x: 0, y: 0 }, data: { title: `${t.title || t.role} を確認` } });
+			edge(id, ok);
+			exitOf.set(t.taskId, ok);
+		} else {
+			exitOf.set(t.taskId, id);
+		}
+	});
+	nodes.push({ id: 'end', type: 'end', position: { x: 0, y: 0 }, data: {} });
+	const used = new Set(edges.map(e => e.source));
+	for (const exit of exitOf.values()) { if (!used.has(exit)) { edge(exit, 'end'); } }
+	if (!tasks.length) { edge('start', 'end'); }
+	return layoutWorkflow({ version: 1, enabled: true, nodes, edges });
+};

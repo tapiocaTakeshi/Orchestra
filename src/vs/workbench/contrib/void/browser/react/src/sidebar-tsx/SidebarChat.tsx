@@ -6256,6 +6256,18 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 					/>
 				)
 			})()}
+			{/* 承認モード: リーダーのワークフロー案と各ロールの成果物を承認してから進むか。押すたびに切り替わる (設定の Division タブと同じ) */}
+			{settingsState.modelSelectionOfFeature.Chat?.providerName === 'divisionAPI' && (() => {
+				const approvalOn = !!settingsState.globalSettings.divisionFlowApprovalMode
+				return (
+					<ComposerChip
+						icon={<ClipboardCheck size={12} />}
+						label={`${tUI('chat.approval')}: ${tUI(approvalOn ? 'chat.approval.on' : 'chat.approval.off')}`}
+						title={`${tUI(approvalOn ? 'chat.approval.on.hint' : 'chat.approval.off.hint')}\n${tUI('chat.loop.toggleHint')}`}
+						onClick={() => accessor.get('IVoidSettingsService').setGlobalSetting('divisionFlowApprovalMode', !approvalOn)}
+					/>
+				)
+			})()}
 			<ContextLeftIndicator messages={previousMessages} />
 		</>}
 	>

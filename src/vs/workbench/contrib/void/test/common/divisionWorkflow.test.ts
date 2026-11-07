@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import * as assert from 'assert';
-import { DivisionWorkflow, insertAfter, layoutWorkflow, normalizeWorkflow, removeNode, setApprovalAfter, workflowErrors, workflowSteps, workflowToTasks } from '../../common/divisionWorkflow.js';
+import { DivisionWorkflow, insertAfter, layoutWorkflow, normalizeWorkflow, removeNode, setApprovalAfter, tasksToWorkflow, workflowErrors, workflowSteps, workflowToTasks } from '../../common/divisionWorkflow.js';
 
 // The leader's draft: start → research → writer → approval → (design | coder) → reviewer → end
 const draft = (): DivisionWorkflow => normalizeWorkflow({
@@ -56,5 +56,31 @@ suite('Division workflow', () => {
 		assert.ok(workflowErrors({ nodes: w.nodes, edges: [...w.edges, { id: 'c', source: 's5', target: 's1' }] }).some(e => e.includes('ループ')));
 		assert.ok(workflowErrors({ nodes: w.nodes.filter(n => n.type !== 'start'), edges: w.edges }).length > 0);
 		assert.strictEqual(normalizeWorkflow('not json'), null);
+	});
+});
+
+suite('Division workflow from the flow\'s tasks', () => {
+
+	test('tasks without dependsOn run in order; dependsOn keeps branches; approvals and system prompts kept', () => {
+		const seq = tasksToWorkflow([
+			{ taskId: 'a', role: 'researcher', title: '調査', description: '調べる' },
+			{ taskId: 'b', role: 'coder', title: '実装', systemPrompt: 'SP', approval: true },
+			{ taskId: 'final-review', role: 'reviewer', title: '最終レビュー', dependsOn: ['b'] },
+		]);
+		assert.deepStrictEqual(workflowSteps(seq).map(s => [s.role, s.title, s.dependsOn, s.approval, s.systemPrompt]), [
+			['researcher', '調査', [], false, ''],
+			['coder', '実装', [0], true, 'SP'],
+			['reviewer', '最終レビュー', [1], false, ''],
+		]);
+		assert.strictEqual(workflowSteps(seq)[0].instruction, '調べる');
+		assert.deepStrictEqual(workflowErrors(seq), []);
+
+		const branches = tasksToWorkflow([
+			{ taskId: 'a', role: 'searcher' },
+			{ taskId: 'b', role: 'file-search', dependsOn: [] },
+			{ taskId: 'c', role: 'writer', dependsOn: ['a', 'b'] },
+		]);
+		// b has an empty dependsOn: like a task with none, it follows the task before it
+		assert.deepStrictEqual(workflowSteps(branches).map(s => [s.role, s.dependsOn]), [['searcher', []], ['file-search', [0]], ['writer', [0, 1]]]);
 	});
 });
