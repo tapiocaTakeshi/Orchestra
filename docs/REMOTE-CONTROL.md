@@ -17,7 +17,10 @@ Orchestra Mobile ──HTTP──▶ メインプロセス (:39231)          ─
 - 外出先からのリクエストは `orchestraMobileRelay.ts` が中継から受け取り、LAN と同じ確認を通して
   ワークベンチへ渡します (`/api/internal/*` は中継からは使えません)。
 - `GET /api/ping` 以外はすべて `X-Orchestra-Token` と `X-Division-Access-Token` が必要です。
-  トークン違いは `401 invalid_token`、PC と別アカウントなら `403 account_mismatch`。
+  トークン違いは `401 invalid_token`、PC と別アカウントなら `403 account_mismatch` (モバイルはこれでだけ切断する)。
+  Division のログインの期限切れは `401 division_token_invalid` (モバイルはトークンを更新して送り直す)、
+  Supabase に確認できないときは `503 auth_unavailable`、PC が Division にログインしていなければ `503 pc_not_signed_in`
+  (どちらも接続は保ったまま、あとでもう一度試す)。一度確認したトークンは、その JWT の有効期限まで確認し直さない。
 - 確認を通ったリクエストは、フォーカス中 (無ければ最後にフォーカスされた) ウィンドウへ渡します。
   ウィンドウが無ければ `503 no_window`、50 秒以内に応答が無ければ `504 workbench_timeout`。
 - 型は `src/vs/workbench/contrib/void/common/remoteControlTypes.ts` にあり、モバイル側の
@@ -77,7 +80,8 @@ Orchestra Mobile と同期します。このメッセージは AI には送ら�
 | POST | `/api/chat/abort` | `{ threadId? }` | 実行を中断 |
 | POST | `/api/chat/new` | | 新しいスレッド |
 | POST | `/api/chat/threads/:id` | | スレッドを切り替え |
-| POST | `/api/chat/approve` | `{ threadId? }` | 承認待ちのツールを承認。フローのレビュー (`chat.pendingReview`。目標ループの「毎回確認」など) で止まっているときは、それを承認して続ける (目標ループなら次のラウンドへ)。承認待ちでなければ `409 not_awaiting_approval` |
+| POST | `/api/chat/approve` | `{ threadId?, editedOutputs? }` | 承認待ちのツールを承認。フローのレビュー (`chat.pendingReview`。目標ループの「毎回確認」など) で止まっているときは、それを承認して続ける (目標ループなら次のラウンドへ)。`editedOutputs: [{ mdFileName, mdContent }]` を付けると、成果物 (論文・仕様書・デザインなど) を編集した内容で承認する (PC のチャットの「編集」と同じで、ファイルにも書き、次の役割はその内容を読む)。承認待ちでなければ `409 not_awaiting_approval` |
+| GET | `/api/chat/review?threadId=` | | 承認待ちの成果物の全文 `{ flowRole, title, outputs: [{ role, mdFileName, mdFilePath, content }] }` (`pendingReview.content` は 4,000 文字で切ってある。成果物の一覧は `pendingReview.outputs`)。承認待ちでなければ `409 not_awaiting_review` |
 | POST | `/api/chat/reject` | `{ threadId? }` | 承認待ちのツールを却下。フローのレビューで止まっているときは、そこで止める |
 | POST | `/api/chat/goal-loop` | `{ mode: 'auto' \| 'confirm' }` | 目標ループの進め方 (PC のチャット欄の「ループ」) を変える。今の値は `chat.goalLoopMode` (チャットのモデルが Division API でなければ `null`) 現在は実行に影響しない (ループ実行はなくなり、繰り返しと目標はワークフローのループノードで設定する)。古いアプリのために受け付けるだけ |
 
@@ -133,3 +137,17 @@ Orchestra Mobile と同期します。このメッセージは AI には送ら�
 
 ファイルのパスは最初のワークスペースフォルダからの相対パスだけを受け付け、外へ出るものは
 `403 outside_workspace` にします。
+
+### 文書 (論文・仕様書・デザイン)
+
+`.division` の下の文書を、スマホで読んで編集するためのものです。
+
+| メソッド | パス | 内容 |
+| --- | --- | --- |
+| GET | `/api/documents` | `{ documents: [{ path, name, kind, size, mtime }], revision }`。kind は `paper` (paper.md) / `specification` (specification.md) / `design` (design/*.html、index.html が先頭。以前の DESIGN.html も) / `output` (ほかの *.md) |
+| GET | `/api/documents/content?path=` | `{ path, content, size, mtime }` (2 MB まで) |
+| POST | `/api/documents/content` | `{ path, content, baseMtime? }` を保存して `{ path, content, size, mtime }`。`baseMtime` (開いたときの mtime) が今のファイルと違えば `409 document_changed` |
+
+`.division` の下の `.md` / `.markdown` / `.txt` / `.html` / `.htm` / `.css` だけを扱い、それ以外は `403 not_a_document`。
+保存は「Division プロジェクトの編集」の設定で止められます。`.division` の中が変わるたびに、`/api/state` の
+`documentsRevision` (と `revision`) が進むので、モバイルは開いている文書をそれで読み直します。

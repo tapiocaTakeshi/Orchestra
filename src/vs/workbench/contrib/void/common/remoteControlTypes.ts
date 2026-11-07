@@ -84,7 +84,26 @@ export type RemotePendingReview = {
 	/** 終わったラウンド (goal-loop) / タスク (それ以外) の数 */
 	completed: number;
 	total: number;
+	/** レビューする成果物 (論文・仕様書・デザインなど)。全文は GET /api/chat/review、編集は POST /api/chat/approve の editedOutputs */
+	outputs?: { role: string; mdFileName: string }[];
+	/** content が長くて途中で切ってある */
+	contentTruncated?: boolean;
 };
+
+/** GET /api/chat/review: 承認待ちの成果物の全文 */
+export type RemoteReviewOutputs = {
+	flowRole: string;
+	title: string;
+	outputs: { role: string; mdFileName: string; mdFilePath: string; content: string }[];
+};
+
+/**
+ * .division の下の文書 (GET /api/documents)。論文 (paper.md)・仕様書 (specification.md)・
+ * デザイン (design/*.html)・各ロールの成果物 (*.md)。path はワークスペースからの相対パス。
+ */
+export type RemoteDocumentKind = 'paper' | 'specification' | 'design' | 'output';
+export type RemoteDocument = { path: string; name: string; kind: RemoteDocumentKind; size: number; mtime: number };
+export type RemoteDocumentContent = { path: string; content: string; size: number; mtime: number };
 
 /** Division Project 承認モード: Leader のワークフロー案 (図にして承認・編集する) */
 export type RemotePendingWorkflow = {

@@ -4930,7 +4930,8 @@ const FlowReviewComponent = ({ chatMessage, isCheckpointGhost }: {
 				{flowOutputs.map((o, i) => {
 					const role = (o.role || '').toString().toLowerCase()
 					const roleLabel = flowRoleLabel[role] ?? o.role
-					const value = editedContents[o.mdFileName] ?? o.mdContent
+					// After approval the message holds what was approved (edited here, on the phone, or not at all)
+					const value = status === 'pending' ? (editedContents[o.mdFileName] ?? o.mdContent) : o.mdContent
 					return (
 						<CollapsibleFlowCard
 							key={o.mdFileName}
