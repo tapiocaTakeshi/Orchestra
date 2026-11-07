@@ -6,6 +6,7 @@
  *  状態を持たない。並べ替えもタスクの編集も、すべてサービスのメソッド越しに行う。
  *--------------------------------------------------------------------------------------*/
 
+import { AiLoading } from '../util/AiLoading.js';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
 	AlertTriangle,
@@ -135,11 +136,11 @@ const TaskCard = ({ task, isSelected, isRunning, isCloudRunning, isQueued, onSel
 						{isCloudRunning && (
 							<span title={t('kanban.card.cloudRunning')} style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', color: '#f59e0b' }}>
 								<Cloud size={12} />
-								<Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
+								<AiLoading size={13} />
 							</span>
 						)}
 						{isRunning
-							? <Loader2 size={13} style={{ color: '#f59e0b', animation: 'spin 1s linear infinite' }} />
+							? <AiLoading size={14} />
 							: hover && <IconButton title={t('kanban.card.run')} onClick={e => { e.stopPropagation(); onRun(); }}>
 								<Play size={12} />
 							</IconButton>}
@@ -669,7 +670,7 @@ const KanbanBoardInner = () => {
 			{(state.isRunning || cloudRunTaskIds.length > 0 || state.lastError || kanbanSettings.dryRun || state.source.kind === 'storage') && (
 				<div style={{ display: 'flex', flexDirection: 'column' }}>
 					{state.isRunning && (
-						<Banner color='#f59e0b' icon={<Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />}>
+						<Banner color='#f59e0b' icon={<AiLoading size={13} />}>
 							{t('kanban.board.running').replace('{title}', runningTask?.title ?? '')}
 							{state.awaitingApproval && (
 								<>

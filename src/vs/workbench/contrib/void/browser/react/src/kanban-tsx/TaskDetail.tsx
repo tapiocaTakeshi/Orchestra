@@ -4,8 +4,9 @@
  *  ここはテキスト入力の途中経過だけをローカルに持つ。
  *--------------------------------------------------------------------------------------*/
 
+import { AiLoading } from '../util/AiLoading.js';
 import React, { useEffect, useRef, useState } from 'react';
-import { Cloud, Loader2, MessageSquare, Play, Plus, Trash2, X } from 'lucide-react';
+import { Cloud, MessageSquare, Play, Plus, Trash2, X } from 'lucide-react';
 
 import { useAccessor } from '../util/services.js';
 import { ORCHESTRA_UI_SET_CLOUD_MODE_ACTION_ID } from '../../../orchestraUiModeTypes.js';
@@ -214,7 +215,7 @@ export const TaskDetail = ({ task, board, onClose, isCloudRunning, onRunInCloud 
 							onClick={onRunInCloud}
 							style={{ ...buttonStyle('secondary'), opacity: isCloudRunning ? 0.6 : 1, cursor: isCloudRunning ? 'default' : 'pointer' }}
 						>
-							{isCloudRunning ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Cloud size={12} />}
+							{isCloudRunning ? <AiLoading size={13} /> : <Cloud size={12} />}
 							{isCloudRunning ? t('kanban.card.cloudRunning') : t('kanban.card.runInCloud')}
 						</button>
 					)}
