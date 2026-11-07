@@ -75,6 +75,29 @@ export type CloudWorkspaceInfo = {
 	repoUrl?: string;
 	/** GitHub のリポジトリから始めたとき (サーバーが付ける)。"owner/name" */
 	repoFullName?: string;
+	/** 開始したリポジトリ (サーバーが付ける)。2 個以上なら各リポジトリが workspace 直下の dir に clone されている */
+	repos?: CloudSessionRepo[];
+};
+
+/** workspaceInfo.repos の 1 件 */
+export type CloudSessionRepo = {
+	/** workspace 直下のディレクトリ (1 個だけのときは ".") */
+	dir: string;
+	url: string;
+	/** GitHub なら "owner/name" */
+	fullName?: string;
+	branch?: string;
+};
+
+/** 1 セッションで選べるリポジトリの数 (サーバーの MAX_SESSION_REPOS と同じ) */
+export const CLOUD_MAX_SESSION_REPOS = 10;
+
+/** 複数リポジトリのセッションならそのリポジトリ (2 個以上、または dir が "." でない)。それ以外は [] */
+export const cloudMultiRepos = (info: CloudWorkspaceInfo | null | undefined): CloudSessionRepo[] => {
+	const repos = Array.isArray(info?.repos)
+		? info!.repos.filter(r => r && typeof r.dir === 'string' && typeof r.url === 'string')
+		: [];
+	return repos.length > 1 || repos.some(r => r.dir !== '.') ? repos : [];
 };
 
 export interface CloudSession {
