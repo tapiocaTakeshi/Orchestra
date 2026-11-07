@@ -98,7 +98,23 @@ export type RawToolCallObj = {
 export type AnthropicReasoning = ({ type: 'thinking'; thinking: any; signature: string; } | { type: 'redacted_thinking', data: any })
 
 export type OnText = (p: { fullText: string; fullReasoning: string; toolCall?: RawToolCallObj }) => void
-export type OnFinalMessage = (p: { fullText: string; fullReasoning: string; toolCall?: RawToolCallObj; anthropicReasoning: AnthropicReasoning[] | null; flowReview?: FlowReviewData }) => void // id is tool_use_id
+export type OnFinalMessage = (p: { fullText: string; fullReasoning: string; toolCall?: RawToolCallObj; anthropicReasoning: AnthropicReasoning[] | null; flowReview?: FlowReviewData; workflowReview?: WorkflowReviewData }) => void // id is tool_use_id
+
+/** Division Project approval mode: the leader's plan as a workflow (.division/workflow.json) waiting for the user. */
+export type WorkflowReviewData = {
+	/** DivisionWorkflow (common/divisionWorkflow.ts) */
+	workflow: import('./divisionWorkflow.js').DivisionWorkflow;
+	filePath: string;
+	/** The request the workflow is for */
+	input: string;
+	/** "Provider · model" of the leader */
+	leader?: string;
+}
+
+/** The user's answer to a WorkflowReviewData: approve (as edited, if given) or send back with feedback. */
+export type WorkflowDecision =
+	| { action: 'approve'; workflow?: import('./divisionWorkflow.js').DivisionWorkflow }
+	| { action: 'revise'; feedback: string }
 
 export type FlowOutputEntry = {
 	role: string;

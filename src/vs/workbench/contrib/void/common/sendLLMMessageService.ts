@@ -3,7 +3,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { EventLLMMessageOnTextParams, EventLLMMessageOnErrorParams, EventLLMMessageOnFinalMessageParams, EventLLMMessageOnFileOperationParams, EventLLMMessageOnCommandRunParams, FileOperationItem, CommandOperationItem, ServiceSendLLMMessageParams, MainSendLLMMessageParams, MainLLMMessageAbortParams, MainLLMMessageInterjectParams, ServiceModelListParams, EventModelListOnSuccessParams, EventModelListOnErrorParams, MainModelListParams, OllamaModelResponse, OpenaiCompatibleModelResponse, DivisionAPIModelResponse, } from './sendLLMMessageTypes.js';
+import { EventLLMMessageOnTextParams, EventLLMMessageOnErrorParams, EventLLMMessageOnFinalMessageParams, EventLLMMessageOnFileOperationParams, EventLLMMessageOnCommandRunParams, FileOperationItem, CommandOperationItem, ServiceSendLLMMessageParams, MainSendLLMMessageParams, MainLLMMessageAbortParams, MainLLMMessageInterjectParams, ServiceModelListParams, EventModelListOnSuccessParams, EventModelListOnErrorParams, MainModelListParams, OllamaModelResponse, OpenaiCompatibleModelResponse, DivisionAPIModelResponse, WorkflowDecision, } from './sendLLMMessageTypes.js';
 
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
@@ -34,7 +34,7 @@ export interface ILLMMessageService {
 	divisionAPIList: (params: ServiceModelListParams<DivisionAPIModelResponse>) => void;
 	registerFileOperationHandler: (handler: (operations: FileOperationItem[]) => Promise<void>) => void;
 	registerCommandOperationHandler: (handler: (commands: CommandOperationItem[]) => Promise<void>) => void;
-	approveOrchestration: (editedOutputs?: Array<{ mdFileName: string; mdContent: string }>) => Promise<void>;
+	approveOrchestration: (editedOutputs?: Array<{ mdFileName: string; mdContent: string }>, workflowDecision?: WorkflowDecision) => Promise<void>;
 	/**
 	 * Division API への GET / POST をメインプロセス経由で送る。レンダラーから直接 fetch すると
 	 * API が CORS に対応していないため失敗する。path は `/api/` で始まるものだけ。
@@ -338,10 +338,10 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 		return res ?? { ok: false, status: 0, data: null, error: 'request failed' };
 	}
 
-	async approveOrchestration(editedOutputs?: Array<{ mdFileName: string; mdContent: string }>) {
+	async approveOrchestration(editedOutputs?: Array<{ mdFileName: string; mdContent: string }>, workflowDecision?: WorkflowDecision) {
 		const workspaceFolders = this.workspaceContextService.getWorkspace().folders;
 		const workspaceFolderPath = workspaceFolders.length > 0 ? workspaceFolders[0].uri.fsPath : undefined;
-		await this.channel.call('approveOrchestration', { editedOutputs, workspaceFolderPath });
+		await this.channel.call('approveOrchestration', { editedOutputs, workspaceFolderPath, workflowDecision });
 	}
 }
 

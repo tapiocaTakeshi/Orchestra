@@ -590,6 +590,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			// if flow_review pending but stream state doesn't indicate it (happens if restart Void)
 			if (lastMessage && lastMessage.role === 'flow_review' && lastMessage.status === 'pending')
 				this._setStreamState(threadId, { isRunning: 'awaiting_user', })
+			if (lastMessage && lastMessage.role === 'workflow_review' && lastMessage.status === 'pending')
+				this._setStreamState(threadId, { isRunning: 'awaiting_user', })
 
 			// if running now but stream state doesn't indicate it (happens if restart Void), cancel that last tool
 			if (lastMessage && lastMessage.role === 'tool' && lastMessage.type === 'running_now') {
@@ -716,6 +718,46 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			this._runChatAgent({ threadId, ...this._currentModelSelectionProps(threadId) }),
 			threadId,
 		)
+	}
+
+	private _pendingWorkflowReview(threadId: string) {
+		const thread = this.state.allThreads[threadId]
+		const lastIdx = thread ? thread.messages.length - 1 : -1
+		const lastMsg = thread?.messages[lastIdx]
+		return lastMsg && lastMsg.role === 'workflow_review' && lastMsg.status === 'pending' ? { lastMsg, lastIdx } : null
+	}
+
+	private _resumeAfterWorkflowReview(threadId: string) {
+		this._setThreadState(threadId, { currCheckpointIdx: null })
+		this._wrapRunAgentToNotify(
+			this._runChatAgent({ threadId, ...this._currentModelSelectionProps(threadId) }),
+			threadId,
+		)
+	}
+
+	async approveWorkflowReview(threadId: string, workflow?: import('../common/divisionWorkflow.js').DivisionWorkflow) {
+		const pending = this._pendingWorkflowReview(threadId)
+		if (!pending) return
+		this._editMessageInThread(threadId, pending.lastIdx, { ...pending.lastMsg, status: 'approved', ...(workflow ? { approvedWorkflow: workflow } : {}) })
+		// The main process reads the decision from the orchestration state file, so it must be written before resuming.
+		await this._llmMessageService.approveOrchestration(undefined, { action: 'approve', ...(workflow ? { workflow } : {}) })
+		this._resumeAfterWorkflowReview(threadId)
+	}
+
+	async reviseWorkflowReview(threadId: string, feedback: string) {
+		const pending = this._pendingWorkflowReview(threadId)
+		if (!pending || !feedback.trim()) return
+		this._editMessageInThread(threadId, pending.lastIdx, { ...pending.lastMsg, status: 'revised', feedback: feedback.trim() })
+		await this._llmMessageService.approveOrchestration(undefined, { action: 'revise', feedback: feedback.trim() })
+		this._resumeAfterWorkflowReview(threadId)
+	}
+
+	rejectWorkflowReview(threadId: string) {
+		const pending = this._pendingWorkflowReview(threadId)
+		if (!pending) return
+		this._editMessageInThread(threadId, pending.lastIdx, { ...pending.lastMsg, status: 'rejected' })
+		this._setStreamState(threadId, undefined)
+		this._addUserCheckpoint({ threadId })
 	}
 
 	rejectFlowReview(threadId: string) {
@@ -1022,7 +1064,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				nAttempts += 1
 
 				type ResTypes =
-					| { type: 'llmDone', toolCall?: RawToolCallObj, info: { fullText: string, fullReasoning: string, anthropicReasoning: AnthropicReasoning[] | null, reasoningDuration?: number }, flowReview?: import('../common/sendLLMMessageTypes.js').FlowReviewData }
+					| { type: 'llmDone', toolCall?: RawToolCallObj, info: { fullText: string, fullReasoning: string, anthropicReasoning: AnthropicReasoning[] | null, reasoningDuration?: number }, flowReview?: import('../common/sendLLMMessageTypes.js').FlowReviewData, workflowReview?: import('../common/sendLLMMessageTypes.js').WorkflowReviewData }
 					| { type: 'llmError', error?: { message: string; fullError: Error | null; } }
 					| { type: 'llmAborted' }
 
@@ -1049,7 +1091,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 						}
 						this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: fullText, reasoningSoFar: fullReasoning, toolCallSoFar: toolCall ?? null, reasoningStartMs, reasoningEndMs }, interrupt: Promise.resolve(() => { if (llmCancelToken) this._llmMessageService.abort(llmCancelToken) }) })
 					},
-					onFinalMessage: async ({ fullText, fullReasoning, toolCall, anthropicReasoning, flowReview, }) => {
+					onFinalMessage: async ({ fullText, fullReasoning, toolCall, anthropicReasoning, flowReview, workflowReview, }) => {
 						// Fallback if we have reasoning but never hit fullText
 						if (reasoningStartMs && !reasoningEndMs) {
 							reasoningEndMs = Date.now()
@@ -1058,7 +1100,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 						if (reasoningStartMs && reasoningEndMs) {
 							reasoningDuration = (reasoningEndMs - reasoningStartMs) / 1000;
 						}
-						resMessageIsDonePromise({ type: 'llmDone', toolCall, info: { fullText, fullReasoning, anthropicReasoning, reasoningDuration }, flowReview }) // resolve with tool calls
+						resMessageIsDonePromise({ type: 'llmDone', toolCall, info: { fullText, fullReasoning, anthropicReasoning, reasoningDuration }, flowReview, workflowReview }) // resolve with tool calls
 					},
 					onError: async (error) => {
 						resMessageIsDonePromise({ type: 'llmError', error: error })
@@ -1134,6 +1176,21 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				const { toolCall, info } = llmRes
 
 				this._addMessageToThread(threadId, { role: 'assistant', displayContent: info.fullText, reasoning: info.fullReasoning, anthropicReasoning: info.anthropicReasoning, reasoningDuration: info.reasoningDuration })
+
+				// Workflow review: the leader's plan as a workflow diagram; pause until the user answers it
+				if (llmRes.workflowReview) {
+					const wr = llmRes.workflowReview;
+					this._addMessageToThread(threadId, {
+						role: 'workflow_review',
+						workflow: wr.workflow,
+						filePath: wr.filePath,
+						input: wr.input,
+						...(wr.leader ? { leader: wr.leader } : {}),
+						status: 'pending',
+					})
+					isRunningWhenEnd = 'awaiting_user'
+					break
+				}
 
 				// Flow review: if Division API sent flowReview data, add a flow_review message and pause for user approval
 				if (llmRes.flowReview) {

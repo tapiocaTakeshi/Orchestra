@@ -86,6 +86,14 @@ export type RemotePendingReview = {
 	total: number;
 };
 
+/** Division Project 承認モード: Leader のワークフロー案 (図にして承認・編集する) */
+export type RemotePendingWorkflow = {
+	/** DivisionWorkflow (common/divisionWorkflow.ts): nodes / edges */
+	workflow: import('./divisionWorkflow.js').DivisionWorkflow;
+	input: string;
+	leader?: string;
+};
+
 export type RemoteChatState = {
 	threadId: string;
 	messages: RemoteChatMessage[];
@@ -93,6 +101,8 @@ export type RemoteChatState = {
 	awaitingApproval: boolean;
 	/** 止まっている理由がフローのレビューなら、その中身。ツール承認なら null */
 	pendingReview: RemotePendingReview | null;
+	/** 止まっている理由が Leader のワークフロー案なら、その案 (POST /api/chat/workflow で答える) */
+	pendingWorkflow?: RemotePendingWorkflow | null;
 	/** 目標ループの設定。チャットのモデルが Division API でない (ループが無い) ときは null */
 	goalLoopMode: RemoteGoalLoopMode | null;
 	error?: string;

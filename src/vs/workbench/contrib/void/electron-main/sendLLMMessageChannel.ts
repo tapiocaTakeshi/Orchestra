@@ -8,7 +8,7 @@
 
 import { IServerChannel } from '../../../../base/parts/ipc/common/ipc.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
-import { EventLLMMessageOnTextParams, EventLLMMessageOnErrorParams, EventLLMMessageOnFinalMessageParams, EventLLMMessageOnFileOperationParams, EventLLMMessageOnCommandRunParams, MainSendLLMMessageParams, AbortRef, SendLLMMessageParams, MainLLMMessageAbortParams, MainLLMMessageInterjectParams, ModelListParams, EventModelListOnSuccessParams, EventModelListOnErrorParams, OllamaModelResponse, OpenaiCompatibleModelResponse, MainModelListParams, DivisionAPIModelResponse, } from '../common/sendLLMMessageTypes.js';
+import { EventLLMMessageOnTextParams, EventLLMMessageOnErrorParams, EventLLMMessageOnFinalMessageParams, EventLLMMessageOnFileOperationParams, EventLLMMessageOnCommandRunParams, MainSendLLMMessageParams, AbortRef, SendLLMMessageParams, MainLLMMessageAbortParams, MainLLMMessageInterjectParams, ModelListParams, EventModelListOnSuccessParams, EventModelListOnErrorParams, OllamaModelResponse, OpenaiCompatibleModelResponse, MainModelListParams, DivisionAPIModelResponse, WorkflowDecision, } from '../common/sendLLMMessageTypes.js';
 import { sendLLMMessage } from './llmMessage/sendLLMMessage.js'
 import { IMetricsService } from '../common/metricsService.js';
 import { sendLLMMessageToProviderImplementation } from './llmMessage/sendLLMMessage.impl.js';
@@ -247,8 +247,8 @@ export class LLMMessageChannel implements IServerChannel {
 		}
 	}
 
-	private _callApproveOrchestration(params: { editedOutputs?: Array<{ mdFileName: string; mdContent: string }>; workspaceFolderPath?: string }) {
-		const { editedOutputs, workspaceFolderPath } = params;
+	private _callApproveOrchestration(params: { editedOutputs?: Array<{ mdFileName: string; mdContent: string }>; workspaceFolderPath?: string; workflowDecision?: WorkflowDecision }) {
+		const { editedOutputs, workspaceFolderPath, workflowDecision } = params;
 		if (!workspaceFolderPath) return;
 
 		const stateFile = path.join(workspaceFolderPath, '.division', '.orchestration-state.json');
@@ -258,6 +258,15 @@ export class LLMMessageChannel implements IServerChannel {
 			const state = JSON.parse(raw);
 			state.approved = true;
 			if (editedOutputs) state.editedOutputs = editedOutputs;
+			// Leader のワークフロー案への答え: 承認 (図で編集した内容) か差し戻し (フィードバック)
+			if (workflowDecision && state.workflowReview) {
+				if (workflowDecision.action === 'approve') {
+					delete state.workflowReview.feedback;
+					if (workflowDecision.workflow) state.workflowReview.approvedWorkflow = workflowDecision.workflow;
+				} else {
+					state.workflowReview.feedback = workflowDecision.feedback;
+				}
+			}
 			fs.writeFileSync(stateFile, JSON.stringify(state, null, 2), 'utf-8');
 		} catch (_e) { /* ignore */ }
 	}

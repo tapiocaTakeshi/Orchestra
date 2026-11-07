@@ -81,6 +81,19 @@ export type ChatMessage =
 		allFlowOutputs?: FlowOutputEntry[];
 	}
 	| {
+		// Division Project approval mode: the leader's plan as a workflow diagram (.division/workflow.json).
+		// The user approves it (edited on the diagram or not), sends it back with feedback, or stops.
+		role: 'workflow_review';
+		workflow: import('./divisionWorkflow.js').DivisionWorkflow;
+		filePath: string;
+		input: string;
+		leader?: string;
+		status: 'pending' | 'approved' | 'revised' | 'rejected';
+		/** What was approved, when the user edited the diagram */
+		approvedWorkflow?: import('./divisionWorkflow.js').DivisionWorkflow;
+		feedback?: string;
+	}
+	| {
 		// Auto-compaction (as in Codex): the conversation got too long, so the model summarized it.
 		// Everything before this message is sent to the model as the user's messages + this summary.
 		role: 'compaction';
