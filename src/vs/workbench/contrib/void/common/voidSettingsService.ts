@@ -12,7 +12,8 @@ import { createDecorator } from '../../../../platform/instantiation/common/insta
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { IMetricsService } from './metricsService.js';
 import { defaultProviderSettings, getModelCapabilities, ModelOverrides } from './modelCapabilities.js';
-import { VOID_SETTINGS_STORAGE_KEY } from './storageKeys.js';
+import { VOID_SETTINGS_BACKUP_STORAGE_KEY, VOID_SETTINGS_STORAGE_KEY } from './storageKeys.js';
+import { readSettingsWithFallback } from './settingsBackup.js';
 import { defaultSettingsOfProvider, FeatureName, ProviderName, ModelSelectionOfFeature, SettingsOfProvider, SettingName, providerNames, ModelSelection, modelSelectionsEqual, featureNames, VoidStatefulModelInfo, GlobalSettings, GlobalSettingName, defaultGlobalSettings, ModelSelectionOptions, OptionsOfModelSelection, ChatMode, OverridesOfModel, defaultOverridesOfModel, MCPUserStateOfName as MCPUserStateOfName, MCPUserState, SkillUserStateOfName, SkillUserState } from './voidSettingsTypes.js';
 
 
@@ -319,8 +320,12 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 
 	async readAndInitializeState() {
 		let readS: VoidSettingsState
+		// 控えから読んだとき (今使える鍵で暗号化し直す) と、控えがまだ無いとき (控えを作る) は保存し直す
+		let needsStore = false
 		try {
-			readS = await this._readState();
+			const read = await this._readState();
+			readS = read.state
+			needsStore = read.needsStore
 			// 1.0.3 addition, remove when enough users have had this code run
 			if (readS.globalSettings.includeToolLintErrors === undefined) readS.globalSettings.includeToolLintErrors = true
 
@@ -457,6 +462,10 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 		this.state = _stateWithMergedDefaultModels(this.state)
 		this.state = _validatedModelState(this.state);
 
+		if (needsStore) {
+			await this._storeState()
+		}
+
 
 		this._resolver();
 		this._onDidChangeState.fire();
@@ -464,21 +473,38 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 	}
 
 
-	private async _readState(): Promise<VoidSettingsState> {
-		const encryptedState = this._storageService.get(VOID_SETTINGS_STORAGE_KEY, StorageScope.APPLICATION)
-
-		if (!encryptedState)
-			return defaultState()
-
-		const stateStr = await this._encryptionService.decrypt(encryptedState)
-		const state = JSON.parse(stateStr)
-		return state
+	private async _readState(): Promise<{ state: VoidSettingsState, needsStore: boolean }> {
+		// 復号できない (アップデートで macOS のキーチェーン鍵が読めなくなった等) ときは控えから読む
+		const backup = this._storageService.get(VOID_SETTINGS_BACKUP_STORAGE_KEY, StorageScope.APPLICATION)
+		const read = await readSettingsWithFallback<VoidSettingsState>(
+			this._storageService.get(VOID_SETTINGS_STORAGE_KEY, StorageScope.APPLICATION),
+			backup,
+			value => this._encryptionService.decrypt(value),
+		)
+		if (read.kind === 'none')
+			return { state: defaultState(), needsStore: false }
+		return { state: read.state, needsStore: read.kind === 'backup' || !backup }
 	}
 
 
 	private async _storeState() {
 		const state = this.state
-		const encryptedState = await this._encryptionService.encrypt(JSON.stringify(state))
+
+		const stateStr = JSON.stringify(state)
+
+		// 控えは暗号鍵に依存させない (アップデート後に復号できなくても設定を保つため)。
+		// MACHINE なので設定同期でアップロードされない。
+		this._storageService.store(VOID_SETTINGS_BACKUP_STORAGE_KEY, stateStr, StorageScope.APPLICATION, StorageTarget.MACHINE);
+
+		let encryptedState: string
+		try {
+			encryptedState = await this._encryptionService.encrypt(stateStr)
+		} catch (e) {
+			// 暗号化できなくても (キーチェーンにアクセスできない等) ログインや設定変更は止めない。
+			// 設定は上の控えに残っている。
+			console.error('[VoidSettingsService] Could not encrypt settings:', e)
+			return
+		}
 		this._storageService.store(VOID_SETTINGS_STORAGE_KEY, encryptedState, StorageScope.APPLICATION, StorageTarget.USER);
 	}
 

@@ -20,4 +20,7 @@ export const THREAD_STORAGE_KEY = 'void.chatThreadStorageII'
 
 
 
+// 暗号鍵が読めなくなっても (アップデート後など) 設定を保つための、暗号化しない控え
+export const VOID_SETTINGS_BACKUP_STORAGE_KEY = 'orchestra.settingsBackup'
+
 export const OPT_OUT_KEY = 'void.app.optOutAll'
