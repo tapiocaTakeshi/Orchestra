@@ -82,6 +82,7 @@ import { useAccessor, useCloudAgentState, useDivisionProjectConfig, useDivisionP
 import { TranslationKey, useTranslation } from '../util/i18n.js';
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js';
 import { ChatMarkdownRender } from '../markdown/ChatMarkdownRender.js';
+import { AiLoading } from '../util/AiLoading.js';
 import {
 	CLOUD_AGENTS_MAX_PARALLEL,
 	CLOUD_MAX_SESSION_REPOS,
@@ -282,7 +283,7 @@ const Spinner = ({ size = 12, color }: { size?: number; color?: string }) => (
 /** ステータスの丸 (動いているものはくるくる) */
 const StatusDot = ({ status }: { status: CloudSessionStatus }) => {
 	const color = statusColor[status] ?? C.fgFaint;
-	if (isCloudSessionActive(status)) return <Spinner size={11} color={color} />;
+	if (isCloudSessionActive(status)) return <AiLoading size={12} />;
 	return (
 		<span style={{ width: '11px', height: '11px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
 			<span style={{ width: '7px', height: '7px', borderRadius: '50%', background: color }} />
@@ -301,7 +302,7 @@ const StatusPill = ({ status }: { status: CloudSessionStatus }) => {
 			background: tint(color, 13), color, border: `1px solid ${tint(color, 33)}`,
 			whiteSpace: 'nowrap', flexShrink: 0,
 		}}>
-			{isCloudSessionActive(status) && <Spinner size={10} color={color} />}
+			{isCloudSessionActive(status) && <AiLoading size={11} />}
 			{t(statusKey(status))}
 		</span>
 	);
@@ -2782,7 +2783,7 @@ const PlanTaskStatusIcon = ({ state, active }: { state: DivisionTaskState | unde
 	const box = (node: React.ReactNode, label: string) => <span title={label} style={{ width: '14px', height: '14px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{node}</span>;
 	if (state === 'done') return box(<CheckCircle2 size={13} style={{ color: C.success }} />, t('cloudAgents.task.done'));
 	if (state === 'failed') return box(<XCircle size={13} style={{ color: C.error }} />, t('cloudAgents.task.failed'));
-	if (state === 'start' && active) return box(<Spinner size={12} color={C.accent} />, t('cloudAgents.task.running'));
+	if (state === 'start' && active) return box(<AiLoading size={13} />, t('cloudAgents.task.running'));
 	return box(<Circle size={12} style={{ color: C.fgFaint }} />, t('cloudAgents.task.pending'));
 };
 
@@ -2851,7 +2852,7 @@ const AgentPlanCard = ({ plan, explanation, latest, active }: { plan: AgentPlanS
 	const icon = (s: AgentPlanStep) => {
 		const box = (node: React.ReactNode, label: string) => <span title={label} style={{ width: '14px', height: '14px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{node}</span>;
 		if (s.status === 'completed') return box(<CheckCircle2 size={13} style={{ color: C.success }} />, t('cloudAgents.task.done'));
-		if (s.status === 'in_progress') return box(latest && active ? <Spinner size={12} color={C.accent} /> : <Circle size={12} style={{ color: C.accent }} />, t('cloudAgents.task.running'));
+		if (s.status === 'in_progress') return box(latest && active ? <AiLoading size={13} /> : <Circle size={12} style={{ color: C.accent }} />, t('cloudAgents.task.running'));
 		return box(<Circle size={12} style={{ color: C.fgFaint }} />, t('cloudAgents.task.pending'));
 	};
 	return (
@@ -3535,7 +3536,7 @@ const Stream = ({ session, events, onReview, footer }: {
 					{events !== undefined && footer}
 					{active && (
 						<div style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '12px', color: C.fgMuted, padding: '2px 6px' }}>
-							<Spinner color={statusColor[session.status]} />
+							<AiLoading size={15} label={t('cloudAgents.transcript.working')} />
 							{session.status === 'running' ? t('cloudAgents.transcript.working') : t('cloudAgents.conversation.preparing')}
 						</div>
 					)}

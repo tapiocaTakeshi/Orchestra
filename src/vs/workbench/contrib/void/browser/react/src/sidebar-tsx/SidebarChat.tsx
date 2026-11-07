@@ -12,7 +12,7 @@ import './sidebar-chat-redesign.css';
 
 import { useAccessor, useChatThreadsState, useChatThreadsStreamState, useSettingsState, useActiveURI, useCommandBarState, useFullChatThreadsStreamState, useDivisionProjects, useDivisionProjectConfig, useIsDark, useOrchestraUpdateState, useOrchestraUiMode } from '../util/services.js';
 import { TranslationKey, useTranslation } from '../util/i18n.js';
-import { OrchestraMark } from '../util/OrchestraMark.js';
+import { AiLoading } from '../util/AiLoading.js';
 import { autoUpdate, flip, FloatingPortal, offset, shift, size, useFloating } from '@floating-ui/react';
 import { DivisionProjectConfig } from '../../../divisionProjectService.js';
 import { ScrollType } from '../../../../../../../editor/common/editorCommon.js';
@@ -186,10 +186,8 @@ export const IconWarning = ({ size, className = '' }: { size: number, className?
 };
 
 
-// Every "working on it" state in chat goes through here, so this is where the
-// brand mark earns its keep: the same weaving strands the boot splash opens with,
-// drawn compactly enough to sit inline (see `OrchestraMark`). Pure CSS animation,
-// so no timers / re-renders.
+// Every "working on it" state in chat goes through here: the red rotating-arrow
+// AI loading animation (see `AiLoading`). Pure CSS animation, so no timers / re-renders.
 export const IconLoading = ({ className = '' }: { className?: string }) => {
 	return (
 		<span
@@ -198,7 +196,7 @@ export const IconLoading = ({ className = '' }: { className?: string }) => {
 			role='status'
 			aria-label='読み込み中'
 		>
-			<OrchestraMark />
+			<AiLoading size={15} />
 		</span>
 	);
 }
