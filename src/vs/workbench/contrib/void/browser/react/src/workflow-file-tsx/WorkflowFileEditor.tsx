@@ -14,6 +14,7 @@ import { DivisionWorkflow, layoutWorkflow, normalizeWorkflow, workflowErrors } f
 import { DIVISION_ROLES, divisionRoleLabel } from '../../../../common/voidSettingsTypes.js';
 import { WorkflowLoopSummary, WorkflowNodeEditor, useWorkflowRoleOptions, workflowToJson } from '../workflow-tsx/WorkflowReview.js';
 import { NODE_COLORS, NODE_ICONS, NODE_TYPE_LABEL, WORKFLOW_CANVAS_CSS, WorkflowCanvas, keepPositions, nodeTitle } from './WorkflowCanvas.js';
+import { scopedCss } from '../util/scopedCss.js';
 import '../styles.css';
 
 /** What the editor pane gives the component (one per opened file). */
@@ -161,7 +162,6 @@ const WorkflowFileEditorInner = ({ bridge }: { bridge: WorkflowFileBridge }) => 
 
 	return (
 		<div className='wfe-root'>
-			<style>{WORKFLOW_CANVAS_CSS + WORKFLOW_EDITOR_CSS}</style>
 			{header}
 			<div className='wfe-main'>
 				<WorkflowCanvas workflow={workflow} onChange={change} selectedId={selectedId} onSelect={setSelectedId}
@@ -229,6 +229,8 @@ export const WorkflowFileEditor = ({ bridge }: { bridge?: WorkflowFileBridge }) 
 	const isDark = useIsDark();
 	return (
 		<div className={`@@void-scope ${isDark ? 'dark' : ''}`} style={{ height: '100%', width: '100%' }}>
+			{/* Also styles the header while loading or when the file is invalid. */}
+			<style>{scopedCss(WORKFLOW_CANVAS_CSS + WORKFLOW_EDITOR_CSS)}</style>
 			<div style={{ height: '100%', boxSizing: 'border-box', background: 'var(--void-bg-3)', color: 'var(--void-fg-1)' }}>
 				{bridge ? <WorkflowFileEditorInner key={bridge.uri.toString()} bridge={bridge} /> : null}
 			</div>

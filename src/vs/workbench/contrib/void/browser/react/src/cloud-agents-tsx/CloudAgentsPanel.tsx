@@ -119,6 +119,7 @@ import type { DivisionProjectConfig } from '../../../divisionProjectService.js';
 import { ORCHESTRA_OPEN_COST_MANAGEMENT_ACTION_ID, ORCHESTRA_OPEN_DIVISION_PROJECTS_ACTION_ID, VOID_OPEN_KANBAN_ACTION_ID } from '../../../actionIDs.js';
 import { WorkflowDiagram, WorkflowReview } from '../workflow-tsx/WorkflowReview.js';
 import { normalizeWorkflow } from '../../../../common/divisionWorkflow.js';
+import { scopedCss } from '../util/scopedCss.js';
 
 
 // ---------------------------------------------------------------------------
@@ -4109,7 +4110,7 @@ export const CloudAgentsPanel = () => {
 			className={`@@void-scope ${isDark ? 'dark' : ''}`}
 			style={{ height: '100%', width: '100%', overflow: 'hidden', background: C.bg, color: C.fg, fontSize: '13px' }}
 		>
-			<style>{PANEL_CSS}</style>
+			<style>{scopedCss(PANEL_CSS)}</style>
 			<ErrorBoundary>
 				<CloudAgentsPanelInner width={width} />
 			</ErrorBoundary>

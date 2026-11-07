@@ -16,6 +16,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { BookOpen, CheckCircle2, MessageSquare, ChevronLeft, ChevronRight, FileJson, FileText, LayoutTemplate, Pause, Play, Repeat, Sparkles, Split, UserCheck, Users, Workflow, X } from 'lucide-react';
 import { URI } from '../../../../../../../base/common/uri.js';
 import { useAccessor } from '../util/services.js';
+import { scopedCss } from '../util/scopedCss.js';
 import '../styles.css';
 import { TranslationKey, useTranslation } from '../util/i18n.js';
 
@@ -82,7 +83,7 @@ export const OrchestraHero = ({ showOpenChat = true }: { showOpenChat?: boolean 
 	const commandService = useAccessor().get('ICommandService');
 	return (
 		<div className='oi-root oi-hero select-none'>
-			<style>{STYLES}</style>
+			<style>{scopedCss(STYLES)}</style>
 			<div className='oi-orb' style={{ width: 120, height: 120, left: -30, top: -40, background: 'var(--oi-violet)' }} />
 			<div className='oi-orb' style={{ width: 110, height: 110, right: -40, bottom: -50, background: 'var(--oi-accent)', animationDelay: '-3s' }} />
 			<div className='oi-ring' />
@@ -325,7 +326,7 @@ export const OrchestraTutorial = ({ hideable = true, showFiles = true }: { hidea
 	if (hidden) {
 		return (
 			<div className='oi-root' style={{ display: 'flex', justifyContent: 'flex-start' }}>
-				<style>{STYLES}</style>
+				<style>{scopedCss(STYLES)}</style>
 				<button type='button' className='oi-btn' onClick={() => { setHidden(false); writeHidden(false); setStep(0); }}>
 					<Play size={11} /> {t('intro.tutorial.show')}
 				</button>
@@ -338,7 +339,7 @@ export const OrchestraTutorial = ({ hideable = true, showFiles = true }: { hidea
 
 	return (
 		<div className='oi-root oi-card select-none' onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} aria-label={t('intro.tutorial.title')}>
-			<style>{STYLES}</style>
+			<style>{scopedCss(STYLES)}</style>
 			<div style={{ height: 2, background: 'var(--void-border-2)' }}>
 				{/* keyed by step so the bar restarts; paused bars stop where they are */}
 				<div key={step} className='oi-bar' style={{ animation: `oi-progress ${STEP_MS}ms linear forwards`, animationPlayState: running ? 'running' : 'paused' }} />
