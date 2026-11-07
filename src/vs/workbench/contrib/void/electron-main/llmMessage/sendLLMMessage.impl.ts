@@ -1342,6 +1342,18 @@ const writeOrchestrationState = (workspaceFolderPath: string, state: Orchestrati
 	} catch (_e) { /* ignore */ }
 };
 
+// ディスク上の .division/workflow.json を読む (無い・壊れている場合は null)。
+// ワークフローのエディタは保存するとここに書くので、承認時の正はこのファイル。
+const readWorkflowFile = (workspaceFolderPath: string): DivisionWorkflow | null => {
+	try {
+		const p = path.join(workspaceFolderPath, '.division', WORKFLOW_FILE_NAME);
+		if (!fs.existsSync(p)) return null;
+		return normalizeWorkflow(fs.readFileSync(p, 'utf-8'));
+	} catch (_e) {
+		return null;
+	}
+};
+
 // フロー完了 (Reviewer 完了 or 却下) 時に一時停止状態を掃除する。
 const clearOrchestrationState = (workspaceFolderPath: string): void => {
 	try {
@@ -4050,7 +4062,13 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 
 				if (decision && decision.feedback === undefined) {
 					// ユーザーが承認した (図で編集したかもしれない) ワークフローのステップがそのままタスクになる。
-					const approved = normalizeWorkflow(decision.approvedWorkflow ?? decision.workflow);
+					// 優先順: 承認ボタンの時点でチャット側の図を編集していればその内容 → ディスク上の workflow.json
+					// (ワークフローのエディタで編集して保存した内容はここにしか無い) → 最後に Leader の元の案。
+					// ディスクを読まずに元の案で上書きすると、エディタでの編集が消えてしまう。
+					const fromChat = normalizeWorkflow(decision.approvedWorkflow);
+					const fromDisk = workspaceFolderPath ? readWorkflowFile(workspaceFolderPath) : null;
+					const approved = fromChat ?? fromDisk ?? normalizeWorkflow(decision.workflow);
+					const source = fromChat ? 'chat' : fromDisk ? 'file' : 'leader';
 					// 承認は使い切り: 残すと次の新しい依頼でも同じワークフローから再開してしまう。
 					if (workspaceFolderPath) clearOrchestrationState(workspaceFolderPath);
 					if (approved && workspaceFolderPath) {
@@ -4059,7 +4077,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 							fs.writeFileSync(path.join(workspaceFolderPath, '.division', WORKFLOW_FILE_NAME), JSON.stringify(approved, null, 2) + '\n', 'utf-8');
 						} catch (_e) { /* ignore */ }
 					}
-					appendText(`## ✅ ワークフローを承認しました\n\n${decision.approvedWorkflow ? '図で編集した内容で' : 'Leader の案のまま'}実行します。\n\n`);
+					appendText(`## ✅ ワークフローを承認しました\n\n${source === 'chat' ? '図で編集した内容で' : source === 'file' ? 'workflow.json で編集した内容で' : 'Leader の案のまま'}実行します。\n\n`);
 					leaderResult = { sessionId: '', tasks: approved ? workflowToTasks(approved) : [], finalRole: 'coder', workflow: true };
 				} else if (round === 1 && divisionFlowApprovalMode && workspaceFolderPath) {
 					// 承認モード: Leader はまず計画をワークフロー図として作り、ユーザーが図を見て承認・編集・差し戻しする。
