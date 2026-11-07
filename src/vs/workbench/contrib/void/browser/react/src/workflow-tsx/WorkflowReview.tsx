@@ -140,7 +140,7 @@ const buttonStyle = (kind: 'primary' | 'plain' | 'danger'): React.CSSProperties 
 });
 
 /** One line per loop under the diagram: what repeats and until when. */
-const WorkflowLoopSummary = ({ workflow }: { workflow: DivisionWorkflow }) => {
+export const WorkflowLoopSummary = ({ workflow }: { workflow: DivisionWorkflow }) => {
 	const steps = useMemo(() => workflowSteps(workflow), [workflow]);
 	const loops = useMemo(() => workflowLoops(workflow).loops, [workflow]);
 	if (!loops.length) { return null; }
@@ -151,6 +151,130 @@ const WorkflowLoopSummary = ({ workflow }: { workflow: DivisionWorkflow }) => {
 				const label = loopLabel([{ id: l.id, kind: l.kind, iteration: 1, of: l.iterations, title: l.title }]).replace(/ 1\/\d+ 回目$/, '');
 				return <div key={l.id}>🔁 {label}: {rounds} ステップを{l.kind === 'while' ? `「${l.goal || '目標未設定'}」を達成するまで (最大 ${l.iterations} 回)` : ` ${l.iterations} 回`}くり返す</div>;
 			})}
+		</div>
+	);
+};
+
+/** Role slugs a step can be given: the given ones (not the leader) plus any already used in the workflow. */
+export const useWorkflowRoleOptions = (workflow: DivisionWorkflow, roleOptions?: string[]): string[] => useMemo(() => {
+	const set = new Set((roleOptions ?? []).filter(r => r && r !== 'leader'));
+	for (const n of workflow.nodes) { if (n.type === 'role' && n.data.role) { set.add(n.data.role); } }
+	return [...set];
+}, [roleOptions, workflow]);
+
+/** Edit the selected node: its fields, and add a step / loop / parallel node after it or delete it. */
+export const WorkflowNodeEditor = ({ workflow, selected, options, roleNames, onChange: change, onSelect: setSelectedId }: {
+	workflow: DivisionWorkflow;
+	selected: WorkflowNode;
+	options: string[];
+	roleNames?: Record<string, string>;
+	onChange: (next: DivisionWorkflow) => void;
+	onSelect: (id: string | null) => void;
+}) => {
+	const patchSelected = (patch: Partial<WorkflowNode['data']>) => {
+		change({ ...workflow, nodes: workflow.nodes.map(n => (n.id === selected.id ? { ...n, data: { ...n.data, ...patch } } : n)) });
+	};
+	const hasApprovalAfter = (id: string) => workflow.edges.some(e => e.source === id && workflow.nodes.find(n => n.id === e.target)?.type === 'approval');
+	return (
+		<div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 8, borderRadius: 6, border: '1px solid var(--void-border-2)' }}>
+			{selected.type === 'role' && <>
+				<label style={labelStyle}>ロール
+					<select style={fieldStyle} value={selected.data.role ?? ''} onChange={e => patchSelected({ role: e.target.value })}>
+						{options.map(r => <option key={r} value={r}>{roleNames?.[r] ? `${roleNames[r]} (${r})` : r}</option>)}
+					</select>
+				</label>
+				<label style={labelStyle}>ステップ名
+					<input style={fieldStyle} value={selected.data.title ?? ''} maxLength={120} onChange={e => patchSelected({ title: e.target.value })} />
+				</label>
+				<label style={labelStyle}>指示
+					<textarea style={fieldStyle} rows={4} value={selected.data.instruction ?? ''} maxLength={4000} onChange={e => patchSelected({ instruction: e.target.value })} />
+				</label>
+				<label style={labelStyle}>システムプロンプト (このステップだけ・ロールのプロンプトの後に追加)
+					<textarea style={fieldStyle} rows={4} value={selected.data.systemPrompt ?? ''} maxLength={8000}
+						placeholder='例: 出力は日本語の箇条書き。既存の API は変えないこと。'
+						onChange={e => patchSelected({ systemPrompt: e.target.value })} />
+				</label>
+				<label style={{ ...labelStyle, flexDirection: 'row', alignItems: 'center', gap: 6, color: 'var(--void-fg-2)' }}>
+					<input type='checkbox' checked={hasApprovalAfter(selected.id)} onChange={e => change(setApprovalAfter(workflow, selected.id, e.target.checked))} />
+					このステップの後で承認する
+				</label>
+			</>}
+			{selected.type === 'approval' && (
+				<label style={labelStyle}>承認の名前
+					<input style={fieldStyle} value={selected.data.title ?? ''} maxLength={120} onChange={e => patchSelected({ title: e.target.value })} />
+				</label>
+			)}
+			{selected.type === 'loop' && <>
+				<label style={labelStyle}>くり返し方
+					<select style={fieldStyle} value={selected.data.loop ?? 'for'} onChange={e => patchSelected(e.target.value === 'while'
+						? { loop: 'while', goal: selected.data.goal ?? '', maxIterations: selected.data.maxIterations ?? DEFAULT_WHILE_ITERATIONS }
+						: { loop: 'for', count: selected.data.count ?? 2 })}>
+						<option value='for'>for — 決まった回数くり返す</option>
+						<option value='while'>while — 目標を達成するまでくり返す</option>
+					</select>
+				</label>
+				{selected.data.loop === 'while' ? <>
+					<label style={labelStyle}>目標 (達成したらループを抜ける。毎回の前に Leader が判定)
+						<textarea style={fieldStyle} rows={3} value={selected.data.goal ?? ''} maxLength={4000}
+							placeholder='例: テストがすべて通り、画面がデザインどおりになっている'
+							onChange={e => patchSelected({ goal: e.target.value })} />
+					</label>
+					<label style={labelStyle}>最大回数
+						<input style={fieldStyle} type='number' min={1} max={MAX_LOOP_ITERATIONS} value={selected.data.maxIterations ?? DEFAULT_WHILE_ITERATIONS}
+							onChange={e => patchSelected({ maxIterations: Math.max(1, Math.min(MAX_LOOP_ITERATIONS, Number(e.target.value) || 1)) })} />
+					</label>
+				</> : (
+					<label style={labelStyle}>回数
+						<input style={fieldStyle} type='number' min={1} max={MAX_LOOP_ITERATIONS} value={selected.data.count ?? 2}
+							onChange={e => patchSelected({ count: Math.max(1, Math.min(MAX_LOOP_ITERATIONS, Number(e.target.value) || 1)) })} />
+					</label>
+				)}
+				<label style={labelStyle}>ループの名前
+					<input style={fieldStyle} value={selected.data.title ?? ''} maxLength={120} onChange={e => patchSelected({ title: e.target.value })} />
+				</label>
+				<div style={{ fontSize: 11, color: 'var(--void-fg-3)' }}>このノードと「ループ終了」の間のステップを繰り返します。「次にステップを追加」でループの中にステップを入れます。</div>
+			</>}
+			{selected.type === 'parallel' && <>
+				<label style={labelStyle}>並列の名前
+					<input style={fieldStyle} value={selected.data.title ?? ''} maxLength={120} onChange={e => patchSelected({ title: e.target.value })} />
+				</label>
+				<div style={{ fontSize: 11, color: 'var(--void-fg-3)' }}>このノードから出た分岐を同時に実行し、次に分岐が集まるノードで合流します。</div>
+			</>}
+			{selected.type === 'loopEnd' && <div style={{ fontSize: 11, color: 'var(--void-fg-3)' }}>対応する「ループ」からここまでを繰り返します。</div>}
+			<div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+				{selected.type !== 'end' && (
+					<button type='button' style={buttonStyle('plain')} onClick={() => {
+						const id = newWorkflowId('step');
+						change(insertAfter(workflow, selected.id, { id, type: 'role', data: { role: options.find(r => /^(coder|coding)$/.test(r)) ?? options[0] ?? 'coder', title: '新しいステップ' } }));
+						setSelectedId(id);
+					}}><Plus size={12} /> 次にステップを追加</button>
+				)}
+				{selected.type !== 'end' && <>
+					<button type='button' style={buttonStyle('plain')} onClick={() => { change(insertLoopAfter(workflow, selected.id, 'for')); }}>
+						<Repeat size={12} /> for ループ
+					</button>
+					<button type='button' style={buttonStyle('plain')} onClick={() => {
+						const next = insertLoopAfter(workflow, selected.id, 'while');
+						change(next);
+						// Select the new loop so the goal can be written straight away.
+						const added = next.nodes.find(n => n.type === 'loop' && !workflow.nodes.some(o => o.id === n.id));
+						if (added) { setSelectedId(added.id); }
+					}}><Repeat size={12} /> while ループ (目標)</button>
+					<button type='button' style={buttonStyle('plain')} onClick={() => {
+						change(insertParallelAfter(workflow, selected.id, options.find(r => /^(search|searcher)$/.test(r)) ?? options[0] ?? 'coder'));
+					}}><Split size={12} /> 並列</button>
+				</>}
+				{selected.type !== 'start' && selected.type !== 'end' && (
+					<button type='button' style={buttonStyle('danger')} onClick={() => {
+						// A loop and its end go together (the steps inside stay).
+						const pairOf = selected.type === 'loopEnd' ? workflowLoops(workflow).loops.find(l => l.endId === selected.id)?.id : undefined;
+						change(selected.type === 'loop' ? removeLoop(workflow, selected.id) : pairOf ? removeLoop(workflow, pairOf) : removeNode(workflow, selected.id));
+						setSelectedId(null);
+					}}>
+						<Trash2 size={12} /> 削除
+					</button>
+				)}
+			</div>
 		</div>
 	);
 };
@@ -179,18 +303,9 @@ export const WorkflowReview = ({ workflow: initial, status, leader, roleOptions,
 	const pending = status === 'pending';
 	const errors = useMemo(() => workflowErrors(workflow), [workflow]);
 	const selected = workflow.nodes.find(n => n.id === selectedId) ?? null;
-	const options = useMemo(() => {
-		const set = new Set((roleOptions ?? []).filter(r => r && r !== 'leader'));
-		for (const n of workflow.nodes) { if (n.type === 'role' && n.data.role) { set.add(n.data.role); } }
-		return [...set];
-	}, [roleOptions, workflow]);
+	const options = useWorkflowRoleOptions(workflow, roleOptions);
 
 	const change = (next: DivisionWorkflow) => { setWorkflow(next); setEdited(true); };
-	const patchSelected = (patch: Partial<WorkflowNode['data']>) => {
-		if (!selected) { return; }
-		change({ ...workflow, nodes: workflow.nodes.map(n => (n.id === selected.id ? { ...n, data: { ...n.data, ...patch } } : n)) });
-	};
-	const hasApprovalAfter = (id: string) => workflow.edges.some(e => e.source === id && workflow.nodes.find(n => n.id === e.target)?.type === 'approval');
 
 	const statusLabel = status === 'approved' ? '✅ 承認済み' : status === 'revised' ? '↩️ 差し戻し済み' : status === 'rejected' ? '⏹ 中止' : null;
 
@@ -207,106 +322,7 @@ export const WorkflowReview = ({ workflow: initial, status, leader, roleOptions,
 			<WorkflowDiagram workflow={workflow} selectedId={selectedId} onSelect={pending ? setSelectedId : undefined} roleNames={roleNames} />
 
 			{pending && selected && (
-				<div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 8, borderRadius: 6, border: '1px solid var(--void-border-2)' }}>
-					{selected.type === 'role' && <>
-						<label style={labelStyle}>ロール
-							<select style={fieldStyle} value={selected.data.role ?? ''} onChange={e => patchSelected({ role: e.target.value })}>
-								{options.map(r => <option key={r} value={r}>{roleNames?.[r] ? `${roleNames[r]} (${r})` : r}</option>)}
-							</select>
-						</label>
-						<label style={labelStyle}>ステップ名
-							<input style={fieldStyle} value={selected.data.title ?? ''} maxLength={120} onChange={e => patchSelected({ title: e.target.value })} />
-						</label>
-						<label style={labelStyle}>指示
-							<textarea style={fieldStyle} rows={4} value={selected.data.instruction ?? ''} maxLength={4000} onChange={e => patchSelected({ instruction: e.target.value })} />
-						</label>
-						<label style={labelStyle}>システムプロンプト (このステップだけ・ロールのプロンプトの後に追加)
-							<textarea style={fieldStyle} rows={4} value={selected.data.systemPrompt ?? ''} maxLength={8000}
-								placeholder='例: 出力は日本語の箇条書き。既存の API は変えないこと。'
-								onChange={e => patchSelected({ systemPrompt: e.target.value })} />
-						</label>
-						<label style={{ ...labelStyle, flexDirection: 'row', alignItems: 'center', gap: 6, color: 'var(--void-fg-2)' }}>
-							<input type='checkbox' checked={hasApprovalAfter(selected.id)} onChange={e => change(setApprovalAfter(workflow, selected.id, e.target.checked))} />
-							このステップの後で承認する
-						</label>
-					</>}
-					{selected.type === 'approval' && (
-						<label style={labelStyle}>承認の名前
-							<input style={fieldStyle} value={selected.data.title ?? ''} maxLength={120} onChange={e => patchSelected({ title: e.target.value })} />
-						</label>
-					)}
-					{selected.type === 'loop' && <>
-						<label style={labelStyle}>くり返し方
-							<select style={fieldStyle} value={selected.data.loop ?? 'for'} onChange={e => patchSelected(e.target.value === 'while'
-								? { loop: 'while', goal: selected.data.goal ?? '', maxIterations: selected.data.maxIterations ?? DEFAULT_WHILE_ITERATIONS }
-								: { loop: 'for', count: selected.data.count ?? 2 })}>
-								<option value='for'>for — 決まった回数くり返す</option>
-								<option value='while'>while — 目標を達成するまでくり返す</option>
-							</select>
-						</label>
-						{selected.data.loop === 'while' ? <>
-							<label style={labelStyle}>目標 (達成したらループを抜ける。毎回の前に Leader が判定)
-								<textarea style={fieldStyle} rows={3} value={selected.data.goal ?? ''} maxLength={4000}
-									placeholder='例: テストがすべて通り、画面がデザインどおりになっている'
-									onChange={e => patchSelected({ goal: e.target.value })} />
-							</label>
-							<label style={labelStyle}>最大回数
-								<input style={fieldStyle} type='number' min={1} max={MAX_LOOP_ITERATIONS} value={selected.data.maxIterations ?? DEFAULT_WHILE_ITERATIONS}
-									onChange={e => patchSelected({ maxIterations: Math.max(1, Math.min(MAX_LOOP_ITERATIONS, Number(e.target.value) || 1)) })} />
-							</label>
-						</> : (
-							<label style={labelStyle}>回数
-								<input style={fieldStyle} type='number' min={1} max={MAX_LOOP_ITERATIONS} value={selected.data.count ?? 2}
-									onChange={e => patchSelected({ count: Math.max(1, Math.min(MAX_LOOP_ITERATIONS, Number(e.target.value) || 1)) })} />
-							</label>
-						)}
-						<label style={labelStyle}>ループの名前
-							<input style={fieldStyle} value={selected.data.title ?? ''} maxLength={120} onChange={e => patchSelected({ title: e.target.value })} />
-						</label>
-						<div style={{ fontSize: 11, color: 'var(--void-fg-3)' }}>このノードと「ループ終了」の間のステップを繰り返します。「次にステップを追加」でループの中にステップを入れます。</div>
-					</>}
-					{selected.type === 'parallel' && <>
-						<label style={labelStyle}>並列の名前
-							<input style={fieldStyle} value={selected.data.title ?? ''} maxLength={120} onChange={e => patchSelected({ title: e.target.value })} />
-						</label>
-						<div style={{ fontSize: 11, color: 'var(--void-fg-3)' }}>このノードから出た分岐を同時に実行し、次に分岐が集まるノードで合流します。</div>
-					</>}
-					{selected.type === 'loopEnd' && <div style={{ fontSize: 11, color: 'var(--void-fg-3)' }}>対応する「ループ」からここまでを繰り返します。</div>}
-					<div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-						{selected.type !== 'end' && (
-							<button type='button' style={buttonStyle('plain')} onClick={() => {
-								const id = newWorkflowId('step');
-								change(insertAfter(workflow, selected.id, { id, type: 'role', data: { role: options.find(r => /^(coder|coding)$/.test(r)) ?? options[0] ?? 'coder', title: '新しいステップ' } }));
-								setSelectedId(id);
-							}}><Plus size={12} /> 次にステップを追加</button>
-						)}
-						{selected.type !== 'end' && <>
-							<button type='button' style={buttonStyle('plain')} onClick={() => { change(insertLoopAfter(workflow, selected.id, 'for')); }}>
-								<Repeat size={12} /> for ループ
-							</button>
-							<button type='button' style={buttonStyle('plain')} onClick={() => {
-								const next = insertLoopAfter(workflow, selected.id, 'while');
-								change(next);
-								// Select the new loop so the goal can be written straight away.
-								const added = next.nodes.find(n => n.type === 'loop' && !workflow.nodes.some(o => o.id === n.id));
-								if (added) { setSelectedId(added.id); }
-							}}><Repeat size={12} /> while ループ (目標)</button>
-							<button type='button' style={buttonStyle('plain')} onClick={() => {
-								change(insertParallelAfter(workflow, selected.id, options.find(r => /^(search|searcher)$/.test(r)) ?? options[0] ?? 'coder'));
-							}}><Split size={12} /> 並列</button>
-						</>}
-						{selected.type !== 'start' && selected.type !== 'end' && (
-							<button type='button' style={buttonStyle('danger')} onClick={() => {
-								// A loop and its end go together (the steps inside stay).
-								const pairOf = selected.type === 'loopEnd' ? workflowLoops(workflow).loops.find(l => l.endId === selected.id)?.id : undefined;
-								change(selected.type === 'loop' ? removeLoop(workflow, selected.id) : pairOf ? removeLoop(workflow, pairOf) : removeNode(workflow, selected.id));
-								setSelectedId(null);
-							}}>
-								<Trash2 size={12} /> 削除
-							</button>
-						)}
-					</div>
-				</div>
+				<WorkflowNodeEditor workflow={workflow} selected={selected} options={options} roleNames={roleNames} onChange={change} onSelect={setSelectedId} />
 			)}
 
 			{pending && errors.length > 0 && <div style={{ fontSize: 11.5, color: '#f87171' }}>{errors.join(' ')}</div>}

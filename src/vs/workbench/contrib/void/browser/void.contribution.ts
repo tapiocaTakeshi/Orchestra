@@ -90,6 +90,7 @@ import './voidSCMService.js'
 // register built-in Kanban board (.orchestra/kanban.json, Ctrl+Alt+K)
 import './kanbanService.js'
 import './kanbanPane.js'
+import './workflowEditorPane.js'
 import './kanbanActions.js'
 
 // register クラウドエージェント (Division のサンドボックスでエージェントを並列に動かす, Ctrl+Alt+A)

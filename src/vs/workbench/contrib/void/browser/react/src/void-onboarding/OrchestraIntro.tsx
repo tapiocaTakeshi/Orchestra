@@ -4,31 +4,18 @@
  *--------------------------------------------------------------------------------------*/
 
 /*
- * The IDE's welcome screen (the empty editor, editorGroupWatermark.ts): an animated hero, and a tutorial that plays itself and shows how a
+ * A page of the first-launch onboarding ("Welcome to Orchestra" → this → models → …): an animated hero, and a tutorial that plays itself and shows how a
  * Division Project run goes — the request, the workflow diagram (.division/workflow.json), the paper
  * (.division/paper.md) and the specification (.division/specification.md), the design (.division/design/)
- * and approving / editing them — with buttons that open those files.
+ * and approving / editing them.
  * Animations are CSS only and stop when the OS asks for reduced motion.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { BookOpen, CheckCircle2, MessageSquare, ChevronLeft, ChevronRight, FileJson, FileText, LayoutTemplate, Pause, Play, Repeat, Sparkles, Split, UserCheck, Users, Workflow, X } from 'lucide-react';
-import { URI } from '../../../../../../../base/common/uri.js';
-import { useAccessor, useIsDark } from '../util/services.js';
-import '../styles.css';
+import React, { useEffect, useState } from 'react';
+import { BookOpen, CheckCircle2, ChevronLeft, ChevronRight, FileJson, FileText, LayoutTemplate, Pause, Play, Repeat, Sparkles, Split, UserCheck, Users, Workflow } from 'lucide-react';
 import { TranslationKey, useTranslation } from '../util/i18n.js';
 
 const STEP_MS = 5200;
-// The chat's Ctrl+L action (opens the chat sidebar and focuses its input). See actionIDs.ts.
-const OPEN_CHAT_COMMAND_ID = 'void.ctrlLAction';
-const HIDE_KEY = 'orchestra.intro.tutorialHidden';
-
-const readHidden = (): boolean => {
-	try { return window.localStorage.getItem(HIDE_KEY) === '1'; } catch { return false; }
-};
-const writeHidden = (hidden: boolean): void => {
-	try { window.localStorage.setItem(HIDE_KEY, hidden ? '1' : '0'); } catch { /* not remembered: fine */ }
-};
 
 const STYLES = `
 .oi-root { --oi-accent: var(--vscode-button-background, #0e70c0); --oi-violet: #8b5cf6; --oi-green: #10b981; --oi-amber: #f59e0b; --oi-red: #dc2626; }
@@ -66,8 +53,6 @@ const STYLES = `
 .oi-press { animation: oi-press 2.4s ease-in-out 1s infinite; }
 .oi-welcome { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 16px; align-items: start; text-align: left; }
 @media (max-width: 760px) { .oi-welcome { grid-template-columns: minmax(0, 1fr); } }
-.oi-cta { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; background: var(--oi-accent); color: var(--vscode-button-foreground, #fff); }
-.oi-cta:hover { filter: brightness(1.08); }
 @media (prefers-reduced-motion: reduce) {
 	.oi-root *, .oi-root *::before, .oi-root *::after { animation-duration: 0.001ms !important; animation-delay: 0ms !important; animation-iteration-count: 1 !important; }
 }
@@ -78,7 +63,6 @@ const delay = (s: number): React.CSSProperties => ({ animationDelay: `${s}s` });
 /** The hero at the top of the start screen. */
 export const OrchestraHero = () => {
 	const { t } = useTranslation();
-	const commandService = useAccessor().get('ICommandService');
 	return (
 		<div className='oi-root oi-hero select-none'>
 			<style>{STYLES}</style>
@@ -100,11 +84,7 @@ export const OrchestraHero = () => {
 					<span className='oi-pill oi-in' style={delay(0.4)}><Workflow size={12} color='var(--oi-violet)' /> {t('intro.pill.workflow')}</span>
 					<span className='oi-pill oi-in' style={delay(0.5)}><UserCheck size={12} color='var(--oi-amber)' /> {t('intro.pill.approve')}</span>
 				</div>
-				<div className='oi-in' style={{ marginTop: 6, ...delay(0.6) }}>
-					<button type='button' className='oi-cta' onClick={() => { void commandService.executeCommand(OPEN_CHAT_COMMAND_ID); }}>
-						<MessageSquare size={13} /> {t('intro.hero.openChat')}
-					</button>
-				</div>
+
 			</div>
 		</div>
 	);
@@ -258,75 +238,19 @@ const SCENES: Array<{ title: TranslationKey; body: TranslationKey; Scene: () => 
 	{ title: 'intro.step4.title', body: 'intro.step4.body', Scene: SceneApprove },
 ];
 
-/** Whether .division/workflow.json and .division/design/ exist in the open folder, and opening them. */
-const useDivisionFiles = () => {
-	const accessor = useAccessor();
-	const workspace = accessor.get('IWorkspaceContextService');
-	const fileService = accessor.get('IFileService');
-	const commandService = accessor.get('ICommandService');
-	const folder = workspace.getWorkspace().folders[0]?.uri as URI | undefined;
-	type Exists = { workflow: boolean; paper: boolean; spec: boolean; design: boolean; designIndex: boolean };
-	const [exists, setExists] = useState<Exists>({ workflow: false, paper: false, spec: false, design: false, designIndex: false });
-
-	const folderKey = folder?.toString() ?? '';
-	const latest = useRef({ folder, fileService });
-	latest.current = { folder, fileService };
-	const refresh = useCallback(async () => {
-		const { folder: f, fileService: files } = latest.current;
-		if (!f) { return; }
-		const check = async (...parts: string[]) => { try { return await files.exists(URI.joinPath(f, '.division', ...parts)); } catch { return false; } };
-		const [workflow, paper, spec, design, designIndex] = await Promise.all([
-			check('workflow.json'), check('paper.md'), check('specification.md'), check('design'), check('design', 'index.html'),
-		]);
-		const next: Exists = { workflow, paper, spec, design, designIndex };
-		// Only re-render when something changed (this runs every few seconds).
-		setExists(prev => ((Object.keys(next) as Array<keyof Exists>).every(k => prev[k] === next[k]) ? prev : next));
-	}, [folderKey]);
-
-	useEffect(() => {
-		void refresh();
-		const timer = setInterval(() => { void refresh(); }, 8000);
-		return () => clearInterval(timer);
-	}, [refresh]);
-
-	const openFile = (name: string) => { if (folder) { void commandService.executeCommand('vscode.open', URI.joinPath(folder, '.division', name)); } };
-	const openWorkflow = () => openFile('workflow.json');
-	const openPaper = () => openFile('paper.md');
-	const openSpec = () => openFile('specification.md');
-	const openDesign = () => {
-		if (!folder) { return; }
-		if (exists.designIndex) { void commandService.executeCommand('vscode.open', URI.joinPath(folder, '.division', 'design', 'index.html')); }
-		else { void commandService.executeCommand('revealInExplorer', URI.joinPath(folder, '.division', 'design')); }
-	};
-	return { hasFolder: !!folder, exists, openWorkflow, openPaper, openSpec, openDesign };
-};
-
-/** The self-playing tutorial on the IDE's welcome screen. */
+/** The self-playing tutorial on the onboarding page. */
 export const OrchestraTutorial = () => {
 	const { t } = useTranslation();
-	const [hidden, setHidden] = useState(readHidden);
 	const [step, setStep] = useState(0);
 	const [paused, setPaused] = useState(false);
 	const [hovered, setHovered] = useState(false);
-	const files = useDivisionFiles();
-	const running = !paused && !hovered && !hidden;
+	const running = !paused && !hovered;
 
 	useEffect(() => {
 		if (!running) { return; }
 		const timer = setTimeout(() => setStep(s => (s + 1) % SCENES.length), STEP_MS);
 		return () => clearTimeout(timer);
 	}, [running, step]);
-
-	if (hidden) {
-		return (
-			<div className='oi-root' style={{ display: 'flex', justifyContent: 'flex-start' }}>
-				<style>{STYLES}</style>
-				<button type='button' className='oi-btn' onClick={() => { setHidden(false); writeHidden(false); setStep(0); }}>
-					<Play size={11} /> {t('intro.tutorial.show')}
-				</button>
-			</div>
-		);
-	}
 
 	const { Scene, title, body } = SCENES[step];
 	const go = (d: number) => setStep(s => (s + d + SCENES.length) % SCENES.length);
@@ -347,7 +271,6 @@ export const OrchestraTutorial = () => {
 						{paused ? <Play size={12} /> : <Pause size={12} />}
 					</button>
 					<button type='button' className='oi-icon-btn' onClick={() => go(1)} aria-label={t('intro.tutorial.next')}><ChevronRight size={13} /></button>
-					<button type='button' className='oi-icon-btn' onClick={() => { setHidden(true); writeHidden(true); }} aria-label={t('intro.tutorial.hide')} title={t('intro.tutorial.hide')}><X size={13} /></button>
 				</span>
 			</div>
 
@@ -366,41 +289,14 @@ export const OrchestraTutorial = () => {
 				))}
 			</div>
 
-			{/* The files the user approves and edits, with a way to open them */}
-			<div style={{ borderTop: '1px solid var(--void-border-2)', padding: '8px 12px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-				<div style={{ fontSize: 11, color: 'var(--void-fg-3)' }}>{t('intro.files.title')}</div>
-				{[
-					{ key: 'workflow', icon: <FileJson size={13} color='var(--oi-violet)' />, label: t('intro.files.workflow'), path: '.division/workflow.json', ok: files.exists.workflow, open: files.openWorkflow },
-					{ key: 'paper', icon: <BookOpen size={13} color='#3b82f6' />, label: t('intro.files.paper'), path: '.division/paper.md', ok: files.exists.paper, open: files.openPaper },
-					{ key: 'spec', icon: <FileText size={13} color='var(--oi-violet)' />, label: t('intro.files.spec'), path: '.division/specification.md', ok: files.exists.spec, open: files.openSpec },
-					{ key: 'design', icon: <LayoutTemplate size={13} color='var(--oi-green)' />, label: t('intro.files.design'), path: '.division/design/', ok: files.exists.design, open: files.openDesign },
-				].map(f => (
-					<div key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-						{f.icon}
-						<span style={{ fontSize: 11.5, color: 'var(--void-fg-1)', minWidth: 0 }}>
-							{f.label} <code style={{ fontSize: 10.5, color: 'var(--void-fg-3)' }}>{f.path}</code>
-						</span>
-						<span style={{ marginLeft: 'auto', flexShrink: 0 }}>
-							{f.ok
-								? <button type='button' className='oi-btn' onClick={f.open}>{t('intro.files.open')}</button>
-								: <span style={{ fontSize: 10.5, color: 'var(--void-fg-4)' }}>{t(files.hasFolder ? 'intro.files.missing' : 'intro.files.noFolder')}</span>}
-						</span>
-					</div>
-				))}
-			</div>
 		</div>
 	);
 };
 
-/** The intro on the IDE's welcome screen: the hero and the tutorial side by side (stacked when narrow). */
-export const OrchestraWelcome = () => {
-	const isDark = useIsDark();
-	return (
-		<div className={`@@void-scope ${isDark ? 'dark' : ''}`} style={{ width: '100%' }}>
-			<div className='oi-root oi-welcome'>
-				<OrchestraHero />
-				<OrchestraTutorial />
-			</div>
-		</div>
-	);
-};
+/** The onboarding page: the hero and the tutorial side by side (stacked when narrow). */
+export const OrchestraIntroPage = () => (
+	<div className='oi-root oi-welcome'>
+		<OrchestraHero />
+		<OrchestraTutorial />
+	</div>
+);

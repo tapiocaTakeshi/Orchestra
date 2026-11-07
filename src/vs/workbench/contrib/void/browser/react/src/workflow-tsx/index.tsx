@@ -4,6 +4,6 @@
  *--------------------------------------------------------------------------------------*/
 
 import { mountFnGenerator } from '../util/mountFnGenerator.js'
-import { OrchestraWelcome } from './OrchestraIntro.js'
+import { WorkflowFileEditor } from './WorkflowFileEditor.js'
 
-export const mountOrchestraWelcome = mountFnGenerator(OrchestraWelcome)
+export const mountWorkflowFileEditor = mountFnGenerator(WorkflowFileEditor)

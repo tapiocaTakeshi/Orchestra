@@ -74,50 +74,6 @@
 	height: calc(100% - 70px);
 }
 
-/* Orchestra: the IDE's welcome screen (empty editor) with the intro and the tutorial */
-.monaco-workbench
-	.part.editor
-	> .content
-	.editor-group-container
-	> .editor-group-watermark.orchestra-welcome-screen {
-	max-width: 980px;
-	padding: 0 24px;
-	box-sizing: border-box;
-	overflow-y: auto;
-	justify-content: safe center;
-}
-
-.monaco-workbench
-	.part.editor
-	> .content
-	.editor-group-container
-	> .editor-group-watermark
-	> .orchestra-welcome {
-	display: none;
-}
-
-.monaco-workbench
-	.part.editor
-	> .content.empty:not(.auxiliary)
-	.editor-group-container
-	> .editor-group-watermark.orchestra-welcome-screen
-	> .orchestra-welcome {
-	display: block;
-	width: 100%;
-	flex-shrink: 0;
-	padding: 8px 0 32px;
-}
-
-.monaco-workbench
-	.part.editor
-	> .content
-	.editor-group-container
-	> .editor-group-watermark.orchestra-welcome-screen
-	> .letterpress {
-	flex-shrink: 0;
-	margin-top: 24px;
-}
-
 /* light */
 .void-void-icon,
 .monaco-workbench

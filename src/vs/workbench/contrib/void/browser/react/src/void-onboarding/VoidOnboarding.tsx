@@ -16,6 +16,7 @@ import { isLinux } from '../../../../../../../base/common/platform.js';
 import { LoginScreen } from '../void-login-tsx/LoginScreen.js';
 import { OrchestraThemeSwitcher } from '../sidebar-tsx/SidebarChat.js';
 import { useTranslation } from '../util/i18n.js';
+import { OrchestraIntroPage } from './OrchestraIntro.js';
 
 const OVERRIDE_VALUE = false
 
@@ -845,17 +846,29 @@ const VoidOnboardingContent = () => {
 			}
 		/>,
 
+		// Orchestra の使い方: アニメーションの紹介と、自動で進むチュートリアル
 		1: <OnboardingPageShell hasMaxWidth={false}
+			className='max-w-[1000px] px-6 overflow-y-auto'
+			top={<div className="text-4xl font-light text-center">{t('onboarding.howItWorks')}</div>}
+			content={<ErrorBoundary><OrchestraIntroPage /></ErrorBoundary>}
+			bottom={<div className="w-full flex justify-end">
+				<div className="flex items-center gap-2">
+					<PreviousButton onClick={() => { setPageIndex(pageIndex - 1) }} />
+					<NextButton onClick={() => { setPageIndex(pageIndex + 1) }} />
+				</div>
+			</div>}
+		/>,
+		2: <OnboardingPageShell hasMaxWidth={false}
 			content={
 				<AddProvidersPage pageIndex={pageIndex} setPageIndex={setPageIndex} />
 			}
 		/>,
-		2: <OnboardingPageShell hasMaxWidth={false}
+		3: <OnboardingPageShell hasMaxWidth={false}
 			content={
 				<RoleAssignmentPage pageIndex={pageIndex} setPageIndex={setPageIndex} />
 			}
 		/>,
-		3: <OnboardingPageShell
+		4: <OnboardingPageShell
 
 			content={
 				<div>
