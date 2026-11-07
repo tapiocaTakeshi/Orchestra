@@ -92,6 +92,9 @@ import './kanbanService.js'
 import './kanbanPane.js'
 import './kanbanActions.js'
 
+// .division/workflow.json opens as a diagram (the Division Project workflow)
+import './workflowFilePane.js'
+
 // register クラウドエージェント (Division のサンドボックスでエージェントを並列に動かす, Ctrl+Alt+A)
 import './cloudAgentService.js'
 import './cloudAgentsPane.js'
