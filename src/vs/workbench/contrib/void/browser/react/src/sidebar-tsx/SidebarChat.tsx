@@ -4823,6 +4823,8 @@ const WorkflowReviewMessage = ({ chatMessage, isCheckpointGhost }: {
 		<WorkflowReview
 			key={chatMessage.status}
 			workflow={chatMessage.approvedWorkflow ?? chatMessage.workflow}
+			// While waiting for the answer, show (and edit) .division/workflow.json itself; once answered, what was approved.
+			fileUri={chatMessage.status === 'pending' && chatMessage.filePath ? URI.file(chatMessage.filePath) : undefined}
 			status={chatMessage.status}
 			leader={chatMessage.leader}
 			roleOptions={roleOptions}
