@@ -16,6 +16,7 @@ import { isLinux } from '../../../../../../../base/common/platform.js';
 import { LoginScreen } from '../void-login-tsx/LoginScreen.js';
 import { OrchestraThemeSwitcher } from '../sidebar-tsx/SidebarChat.js';
 import { useTranslation } from '../util/i18n.js';
+import { OrchestraWelcome } from '../welcome-tsx/OrchestraIntro.js';
 
 const OVERRIDE_VALUE = false
 
@@ -845,17 +846,31 @@ const VoidOnboardingContent = () => {
 			}
 		/>,
 
+		// 使い方: アニメーションのヒーローと、自動再生のチュートリアル (依頼 → ワークフロー → 論文・仕様書 → デザイン → 承認・編集)
 		1: <OnboardingPageShell hasMaxWidth={false}
+			content={
+				<div className='w-full max-w-[960px] mx-auto px-6 flex flex-col gap-6 max-h-[70vh] overflow-y-auto'>
+					<div className="text-4xl font-light text-center">{t('onboarding.howItWorks')}</div>
+					<OrchestraWelcome />
+				</div>
+			}
+			bottom={<div className='w-full max-w-[960px] mx-auto px-6 flex justify-end items-center gap-2'>
+				<PreviousButton onClick={() => { setPageIndex(pageIndex - 1) }} />
+				<NextButton onClick={() => { setPageIndex(pageIndex + 1) }} />
+			</div>}
+		/>,
+
+		2: <OnboardingPageShell hasMaxWidth={false}
 			content={
 				<AddProvidersPage pageIndex={pageIndex} setPageIndex={setPageIndex} />
 			}
 		/>,
-		2: <OnboardingPageShell hasMaxWidth={false}
+		3: <OnboardingPageShell hasMaxWidth={false}
 			content={
 				<RoleAssignmentPage pageIndex={pageIndex} setPageIndex={setPageIndex} />
 			}
 		/>,
-		3: <OnboardingPageShell
+		4: <OnboardingPageShell
 
 			content={
 				<div>

@@ -755,6 +755,7 @@ export const translations = {
 	// Onboarding
 	'onboarding.welcome': { en: 'Welcome to Orchestra', ja: 'Orchestra へようこそ' },
 	'onboarding.getStarted': { en: 'Get Started', ja: 'はじめる' },
+	'onboarding.howItWorks': { en: 'How Orchestra works', ja: 'Orchestra の使い方' },
 	'onboarding.next': { en: 'Next', ja: '次へ' },
 	'onboarding.back': { en: 'Back', ja: '戻る' },
 	'onboarding.loggedIn': { en: 'Logged in', ja: 'ログイン済み' },
