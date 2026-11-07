@@ -44,7 +44,7 @@ import { availableTools, InternalToolInfo } from '../../common/prompt/prompts.js
 import { generateUuid } from '../../../../../base/common/uuid.js';
 import { extractSearchReplaceBlocks } from '../../common/helpers/extractCodeFromResult.js';
 import { DESIGN_DIR, DESIGN_INDEX_PAGE, LEGACY_DESIGN_FILE, sortDesignPageNames, splitDesignPages } from '../../common/designPages.js';
-import { DivisionWorkflow, normalizeWorkflow, WORKFLOW_FILE_NAME, workflowToTasks } from '../../common/divisionWorkflow.js';
+import { DivisionWorkflow, normalizeWorkflow, tasksToWorkflow, WORKFLOW_FILE_NAME, workflowToTasks } from '../../common/divisionWorkflow.js';
 import { extractSearchedSites, mergeSearchedSites, logSearchedSites, searchedSitesMarkdown, isDefaultWebSearchEnabled, isWebSearchRejectedError } from '../../common/searchedSites.js';
 
 const getGoogleApiKey = async () => {
@@ -4184,6 +4184,22 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				const sortedTasks = topoSortTasks(tasks);
 				tasks.length = 0;
 				tasks.push(...sortedTasks);
+
+				// 実行するフローを毎回 .division/workflow.json に書く (承認モードでなくても)。
+				// 承認したワークフローを実行するときは、承認した図 (編集・配置を含む) をそのまま残す。
+				if (workspaceFolderPath && !(decision && decision.feedback === undefined)) {
+					const steps = tasks.filter(t => t.taskId !== 'auto-filesearch');
+					const last = steps.length ? [steps[steps.length - 1].taskId] : [];
+					const workflow = tasksToWorkflow([
+						...steps,
+						// 最後にローカルで行う最終レビュー
+						{ taskId: 'final-review', role: 'reviewer', title: '最終レビュー', dependsOn: last },
+					]);
+					try {
+						fs.mkdirSync(path.join(workspaceFolderPath, '.division'), { recursive: true });
+						fs.writeFileSync(path.join(workspaceFolderPath, '.division', WORKFLOW_FILE_NAME), JSON.stringify(workflow, null, 2) + '\n', 'utf-8');
+					} catch (_e) { /* ignore */ }
+				}
 
 				// Reviewer は Phase 3 でローカル実行される最終ステップなので、
 				// フロー表示上もステップ番号に含める。
