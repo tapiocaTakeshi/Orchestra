@@ -98,6 +98,7 @@ import './workflowFilePane.js'
 // register クラウドエージェント (Division のサンドボックスでエージェントを並列に動かす, Ctrl+Alt+A)
 import './cloudAgentService.js'
 import './cloudAgentsPane.js'
+import './cloudDocumentAiEdit.js'
 
 // register Division の Web サイトでログインするためのリダイレクト (orchestra://division-auth) 受け口
 import './divisionBrowserLoginService.js'
