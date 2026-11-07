@@ -166,7 +166,7 @@ class CloudAgentsFullscreen extends Disposable implements IWorkbenchContribution
 		}));
 		// タイトルバーの高さが変わったら (全画面表示・ズームなど) 合わせる
 		this._register(this.layoutService.onDidLayoutMainContainer(() => this.position()));
-		// エディタ領域に何かが開いたら (カンバン・コスト管理・取り込んだ差分など)、それが見えるよう画面を下げる
+		// エディタ領域に何かが開いたら (カンバン・取り込んだ差分など)、それが見えるよう画面を下げる
 		// (既に開いているものを開き直したときは active が変わらないので、開く前のイベントも見る)
 		this._register(this.editorService.onWillOpenEditor(e => {
 			if (this.shown && e.editor.typeId !== CloudAgentsInput.ID) this.hide();

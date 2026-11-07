@@ -26,7 +26,7 @@ import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextke
 import { mountVoidSettings } from './react/out/void-settings-tsx/index.js'
 import { Codicon } from '../../../../base/common/codicons.js';
 import { toDisposable } from '../../../../base/common/lifecycle.js';
-import { ORCHESTRA_OPEN_COST_MANAGEMENT_ACTION_ID, ORCHESTRA_OPEN_DIVISION_PROJECTS_ACTION_ID } from './actionIDs.js';
+import { ORCHESTRA_OPEN_DIVISION_PROJECTS_ACTION_ID } from './actionIDs.js';
 import { ORCHESTRA_UI_MODE_CONTEXT_KEY } from './orchestraUiModeTypes.js';
 import { isVoidSettingsTab, requestVoidSettingsTab, VoidSettingsTab } from './voidSettingsTabRequest.js';
 
@@ -203,9 +203,9 @@ registerAction2(class extends Action2 {
 
 
 // ---------------------------------------------------------------------------
-// 設定画面を特定のタブで開く: Division プロジェクト / コスト管理
+// 設定画面を特定のタブで開く: Division プロジェクト
 //
-// 右のチャット (プロジェクトの選択やコスト調整のチップがある) を隠すクラウドエージェントモードでも、
+// 右のチャット (プロジェクトの選択がある) を隠すクラウドエージェントモードでも、
 // IDE モードと同じ画面に手が届くようにする。エディタ領域に開くので、チャットは戻さない。
 // 開いていれば (閉じずに) 前面に出してタブを切り替え、なければ今のエディタグループに開く。
 // ---------------------------------------------------------------------------
@@ -246,21 +246,6 @@ registerAction2(class extends Action2 {
 	}
 });
 
-registerAction2(class extends Action2 {
-	constructor() {
-		super({
-			id: ORCHESTRA_OPEN_COST_MANAGEMENT_ACTION_ID,
-			title: nls.localize2('orchestraOpenCostManagement', "コスト管理を開く (コストの自動調整・クレジット・利用額)"),
-			category: nls.localize2('orchestraCategory', "Orchestra"),
-			f1: true,
-			icon: Codicon.creditCard,
-			menu: { id: MenuId.TitleBar, group: 'navigation', order: 6.5, when: isCloudModeContext },
-		});
-	}
-	async run(accessor: ServicesAccessor): Promise<void> {
-		await openVoidSettingsAtTab(accessor, 'cost');
-	}
-});
 
 
 

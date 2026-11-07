@@ -575,7 +575,7 @@ registerAction2(class extends Action2 {
 
 // タイトルバーの右側: ☁ クラウドエージェントモードへ (5) / 🔧 上級者モードへ (9)。
 // 今のモード以外へのボタンだけを出す。クラウドエージェントモードの ☁ は「パネルを前面に出す」(cloudAgentsPane.ts)。
-// クラウドエージェントモードでは 6〜7 に Division プロジェクト (6)・コスト管理 (6.5)・カンバン (7) が並ぶ
+// クラウドエージェントモードでは 6〜7 に Division プロジェクト (6)・カンバン (7) が並ぶ
 // (voidSettingsPane.ts / kanbanPane.ts。右のチャットが無くても、IDE モードと同じ画面をエディタ領域に開く)。
 registerAction2(class extends Action2 {
 	constructor() {
