@@ -50,6 +50,7 @@ import { ToolApprovalTypeSwitch } from '../void-settings-tsx/Settings.js';
 import { persistentTerminalNameOfId } from '../../../terminalToolService.js';
 import { removeMCPToolNamePrefix } from '../../../../common/mcpServiceTypes.js';
 import { LoginScreen } from '../void-login-tsx/LoginScreen.js';
+import { ButtonVoiceInput } from '../util/VoiceInput.js';
 import { StorageScope, StorageTarget } from '../../../../../../../platform/storage/common/storage.js';
 
 
@@ -422,6 +423,9 @@ interface VoidChatAreaProps {
 	// the same place they would normally hit "送信".
 	onClickRevert?: () => void;
 
+	/** 渡すと音声入力ボタンを出す。話した内容を文字にして渡す */
+	onVoiceTranscript?: (text: string) => void;
+
 	featureName: FeatureName;
 }
 
@@ -447,6 +451,7 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 	featureName,
 	loadingIcon,
 	onClickRevert,
+	onVoiceTranscript,
 }) => {
 	const accessor = useAccessor()
 	const chatThreadService = accessor.get('IChatThreadService')
@@ -712,6 +717,9 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 				)}
 
 				<div className="flex items-center gap-2 shrink-0">
+
+					{/* Voice input button */}
+					{onVoiceTranscript && <ButtonVoiceInput onTranscript={onVoiceTranscript} />}
 
 					{/* Attachment button */}
 					{showSelections && (
@@ -6116,6 +6124,15 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 		/>
 	) : null
 
+	// 音声入力の結果は、入力欄の今の文の後ろに足す (送信はユーザーが確かめてから)
+	const onVoiceTranscript = useCallback((text: string) => {
+		const current = textAreaRef.current?.value ?? ''
+		const sep = !current || /\s$/.test(current) ? '' : (/[\u3000-\u9fff\uff00-\uffef]$/.test(current) ? '' : ' ')
+		textAreaFnsRef.current?.setValue(current + sep + text)
+		const ta = textAreaRef.current
+		if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length) }
+	}, [textAreaRef, textAreaFnsRef])
+
 	const inputChatArea = <VoidChatArea
 		featureName='Chat'
 		onSubmit={() => onSubmit()}
@@ -6129,6 +6146,7 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 		selections={selections}
 		setSelections={setSelections}
 		onClickAnywhere={() => { textAreaRef.current?.focus() }}
+		onVoiceTranscript={onVoiceTranscript}
 		showModelDropdown={!isAgentUi || showAdvancedInAgentUi}
 		leftSlot={isAgentUi ? (
 			<ComposerChip
