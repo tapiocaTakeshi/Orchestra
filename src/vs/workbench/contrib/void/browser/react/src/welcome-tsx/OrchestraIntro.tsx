@@ -4,7 +4,8 @@
  *--------------------------------------------------------------------------------------*/
 
 /*
- * The IDE's welcome screen (the empty editor, editorGroupWatermark.ts): an animated hero, and a tutorial that plays itself and shows how a
+ * The first-run onboarding's "how it works" page (void-onboarding/VoidOnboarding.tsx, after "Welcome to
+ * Orchestra"): an animated hero, and a tutorial that plays itself and shows how a
  * Division Project run goes — the request, the workflow diagram (.division/workflow.json), the paper
  * (.division/paper.md) and the specification (.division/specification.md), the design (.division/design/)
  * and approving / editing them — with buttons that open those files.
@@ -14,7 +15,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { BookOpen, CheckCircle2, MessageSquare, ChevronLeft, ChevronRight, FileJson, FileText, LayoutTemplate, Pause, Play, Repeat, Sparkles, Split, UserCheck, Users, Workflow, X } from 'lucide-react';
 import { URI } from '../../../../../../../base/common/uri.js';
-import { useAccessor, useIsDark } from '../util/services.js';
+import { useAccessor } from '../util/services.js';
 import '../styles.css';
 import { TranslationKey, useTranslation } from '../util/i18n.js';
 
@@ -75,8 +76,8 @@ const STYLES = `
 
 const delay = (s: number): React.CSSProperties => ({ animationDelay: `${s}s` });
 
-/** The hero at the top of the start screen. */
-export const OrchestraHero = () => {
+/** The hero. `showOpenChat` adds a button that opens the chat (off in the onboarding, which covers the IDE). */
+export const OrchestraHero = ({ showOpenChat = true }: { showOpenChat?: boolean }) => {
 	const { t } = useTranslation();
 	const commandService = useAccessor().get('ICommandService');
 	return (
@@ -100,11 +101,11 @@ export const OrchestraHero = () => {
 					<span className='oi-pill oi-in' style={delay(0.4)}><Workflow size={12} color='var(--oi-violet)' /> {t('intro.pill.workflow')}</span>
 					<span className='oi-pill oi-in' style={delay(0.5)}><UserCheck size={12} color='var(--oi-amber)' /> {t('intro.pill.approve')}</span>
 				</div>
-				<div className='oi-in' style={{ marginTop: 6, ...delay(0.6) }}>
+				{showOpenChat && <div className='oi-in' style={{ marginTop: 6, ...delay(0.6) }}>
 					<button type='button' className='oi-cta' onClick={() => { void commandService.executeCommand(OPEN_CHAT_COMMAND_ID); }}>
 						<MessageSquare size={13} /> {t('intro.hero.openChat')}
 					</button>
-				</div>
+				</div>}
 			</div>
 		</div>
 	);
@@ -301,10 +302,14 @@ const useDivisionFiles = () => {
 	return { hasFolder: !!folder, exists, openWorkflow, openPaper, openSpec, openDesign };
 };
 
-/** The self-playing tutorial on the IDE's welcome screen. */
-export const OrchestraTutorial = () => {
+/**
+ * The self-playing tutorial. `hideable`: a button that hides it (remembered). `showFiles`: the list of
+ * .division files with buttons that open them. The onboarding turns both off.
+ */
+export const OrchestraTutorial = ({ hideable = true, showFiles = true }: { hideable?: boolean, showFiles?: boolean }) => {
 	const { t } = useTranslation();
-	const [hidden, setHidden] = useState(readHidden);
+	const [hiddenState, setHidden] = useState(readHidden);
+	const hidden = hideable && hiddenState;
 	const [step, setStep] = useState(0);
 	const [paused, setPaused] = useState(false);
 	const [hovered, setHovered] = useState(false);
@@ -347,7 +352,7 @@ export const OrchestraTutorial = () => {
 						{paused ? <Play size={12} /> : <Pause size={12} />}
 					</button>
 					<button type='button' className='oi-icon-btn' onClick={() => go(1)} aria-label={t('intro.tutorial.next')}><ChevronRight size={13} /></button>
-					<button type='button' className='oi-icon-btn' onClick={() => { setHidden(true); writeHidden(true); }} aria-label={t('intro.tutorial.hide')} title={t('intro.tutorial.hide')}><X size={13} /></button>
+					{hideable && <button type='button' className='oi-icon-btn' onClick={() => { setHidden(true); writeHidden(true); }} aria-label={t('intro.tutorial.hide')} title={t('intro.tutorial.hide')}><X size={13} /></button>}
 				</span>
 			</div>
 
@@ -367,7 +372,7 @@ export const OrchestraTutorial = () => {
 			</div>
 
 			{/* The files the user approves and edits, with a way to open them */}
-			<div style={{ borderTop: '1px solid var(--void-border-2)', padding: '8px 12px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+			{showFiles && <div style={{ borderTop: '1px solid var(--void-border-2)', padding: '8px 12px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
 				<div style={{ fontSize: 11, color: 'var(--void-fg-3)' }}>{t('intro.files.title')}</div>
 				{[
 					{ key: 'workflow', icon: <FileJson size={13} color='var(--oi-violet)' />, label: t('intro.files.workflow'), path: '.division/workflow.json', ok: files.exists.workflow, open: files.openWorkflow },
@@ -387,20 +392,17 @@ export const OrchestraTutorial = () => {
 						</span>
 					</div>
 				))}
-			</div>
+			</div>}
 		</div>
 	);
 };
 
-/** The intro on the IDE's welcome screen: the hero and the tutorial side by side (stacked when narrow). */
+/** The intro on the onboarding's "how it works" page: the hero and the tutorial side by side (stacked when narrow). */
 export const OrchestraWelcome = () => {
-	const isDark = useIsDark();
 	return (
-		<div className={`@@void-scope ${isDark ? 'dark' : ''}`} style={{ width: '100%' }}>
-			<div className='oi-root oi-welcome'>
-				<OrchestraHero />
-				<OrchestraTutorial />
-			</div>
+		<div className='oi-root oi-welcome' style={{ width: '100%' }}>
+			<OrchestraHero showOpenChat={false} />
+			<OrchestraTutorial hideable={false} showFiles={false} />
 		</div>
 	);
 };
