@@ -231,7 +231,20 @@
 			}
 
 			const swPath = encodeURI(`service-worker.js?v=${expectedWorkerVersion}&vscode-resource-base-authority=${searchParams.get('vscode-resource-base-authority')}&id=${ID}&remoteAuthority=${searchParams.get('remoteAuthority') ?? ''}`);
-			navigator.serviceWorker.register(swPath)
+			// Registering can fail with `InvalidStateError: The document is in an invalid state`
+			// when the frame is not fully active yet (e.g. while the webview is being
+			// re-parented or shown) or when the service worker storage is momentarily busy.
+			// These failures are transient, so retry a few times with a back-off.
+			/** @type {(attempt: number) => Promise<ServiceWorkerRegistration>} */
+			const registerWorker = (attempt) => navigator.serviceWorker.register(swPath).catch(error => {
+				const isInvalidState = error instanceof Error && (error.name === 'InvalidStateError' || error.message.includes('invalid state'));
+				if (!isInvalidState || attempt >= 5) {
+					throw error;
+				}
+				console.log(`Service worker registration failed (attempt ${attempt + 1}), retrying: ${error}`);
+				return new Promise(r => setTimeout(r, 100 * Math.pow(2, attempt))).then(() => registerWorker(attempt + 1));
+			});
+			registerWorker(0)
 				.then(async registration => {
 					/**
 					 * @param {MessageEvent} event

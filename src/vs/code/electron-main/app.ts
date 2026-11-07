@@ -607,6 +607,14 @@ export class CodeApplication extends Disposable {
 		// Setup vscode-remote-resource protocol handler
 		this.setupManagedRemoteResourceUrlHandler(mainProcessElectronServer);
 
+		// Webviews register a service worker on their `vscode-webview://` origin. A stale or
+		// corrupted service worker database left over from a previous run (crash, update, a
+		// second instance on the same user data dir) makes every registration fail with
+		// `InvalidStateError: The document is in an invalid state`, so no webview loads.
+		// Nothing else in the app uses service workers, and webviews register a fresh one on
+		// load, so start every run with a clean registration store.
+		await this.clearWebviewServiceWorkers();
+
 		// Signal phase: ready - before opening first window
 		this.lifecycleMainService.phase = LifecycleMainPhase.Ready;
 
@@ -631,6 +639,17 @@ export class CodeApplication extends Disposable {
 			}, 2500));
 		}, 2500));
 		eventuallyPhaseScheduler.schedule();
+	}
+
+	private async clearWebviewServiceWorkers(): Promise<void> {
+		try {
+			await Promise.race([
+				session.defaultSession.clearStorageData({ storages: ['serviceworkers'] }),
+				new Promise<void>(resolve => setTimeout(resolve, 3000))
+			]);
+		} catch (error) {
+			this.logService.warn('Failed to clear webview service workers', error);
+		}
 	}
 
 	private async setupProtocolUrlHandlers(accessor: ServicesAccessor, mainProcessElectronServer: ElectronIPCServer): Promise<IInitialProtocolUrls | undefined> {
