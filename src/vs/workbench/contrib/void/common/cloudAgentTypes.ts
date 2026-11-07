@@ -29,6 +29,10 @@
 //   POST /api/cloud-sessions/:id/workflow-proposal { proposalSeq, action: "approve" | "revise", workflow?, feedback? } → { session }
 //        content: 編集した成果物 (変えたときだけ送る)。approve で次のタスクへ、revise (feedback 必須) で同じロールがやり直す
 //        承認待ちの間 /messages は 409 { code: "awaiting_approval" }
+//   GET  /api/cloud-sessions/:id/command-approval → { approval: CloudPendingCommandApproval | null }
+//        IDE と同じ規則で、危険なコマンド (rm -rf / git push / sudo / curl | sh / 外部への送信など) はエージェントが実行する前に止まる
+//   POST /api/cloud-sessions/:id/command-approval { requestSeq, action: "approve" | "deny", feedback? } → { session }
+//        approve でそのまま実行して続行、deny で実行せずに (理由をエージェントに伝えて) 続行
 //   POST /api/cloud-sessions/:id/stop         {} → { session }
 //   POST /api/cloud-sessions/:id/archive      {} → { ok }
 //   GET  /api/cloud-sessions/:id/changes      → { changes, patch, patchTruncated }
@@ -60,7 +64,7 @@ export type CloudSessionStatus =
 	| 'provisioning'  // サンドボックス作成中
 	| 'uploading'     // ワークスペースのアップロード + /start 待ち
 	| 'running'       // エージェントが作業中
-	| 'awaiting_approval' // 承認モード: ロールの成果物 (.division/*.md) の承認待ち
+	| 'awaiting_approval' // 承認待ち: ロールの成果物 (.division/*.md)、ワークフロー案、または危険なコマンドの実行
 	| 'idle'          // 1 ターン終わった (追加の指示を送れる)
 	| 'failed'        // 失敗した (追加の指示を送ると再開する)
 	| 'cancelled';    // ユーザーが止めた (追加の指示を送ると再開する)
@@ -137,7 +141,7 @@ export interface CloudSession {
 	approvalMode?: boolean;
 }
 
-export type CloudSessionEventType = 'user' | 'assistant' | 'tool' | 'status' | 'error' | 'done' | 'plan' | 'task' | 'approval' | 'pull_request' | 'goal' | 'review' | 'compaction' | 'workflow' | 'workflow_review';
+export type CloudSessionEventType = 'user' | 'assistant' | 'tool' | 'status' | 'error' | 'done' | 'plan' | 'task' | 'approval' | 'pull_request' | 'goal' | 'review' | 'compaction' | 'workflow' | 'workflow_review' | 'command_approval';
 
 export interface CloudSessionEvent {
 	seq: number;
@@ -156,6 +160,8 @@ export interface CloudSessionEvent {
 	 *  - plan:      CloudPlanEventData (Division Project モードのみ。リーダーの計画)
 	 *  - task:      CloudTaskEventData (Division Project モードのみ。ロールごとのタスクの開始 / 完了 / 失敗)
 	 *  - approval:  CloudApprovalEventData (承認モード。ユーザーが成果物を承認した / 差し戻した)
+	 *  - command_approval: CloudCommandApprovalEventData (危険なコマンドが承認待ちになった / ユーザーが許可・拒否した)
+	 *               tool イベントのうち、承認を経たものには approvalSeq (と拒否なら denied: true) が付く
 	 *  - pull_request: CloudPullRequestEventData (a PR was created / updated from this session)
 	 *  - goal:      CloudGoalEventData (目標ループ。作業の前にリーダーが立てた目標と達成条件)
 	 *  - review:    CloudReviewEventData (目標ループ。ラウンドの終わりのレビュー。status: start → done)
@@ -240,6 +246,25 @@ export type CloudApprovalEventData = {
 };
 
 export type CloudApprovalAction = 'approve' | 'revise';
+
+/** 承認待ちの危険なコマンド (GET .../command-approval) */
+export type CloudPendingCommandApproval = {
+	/** 依頼の command_approval イベントの seq。許可・拒否するときにそのまま返す */
+	requestSeq: number;
+	tool: string;
+	command: string;
+	/** 承認が要る理由 (例: 再帰的な削除 (rm -r)) */
+	reason: string;
+	/** Division Project のときは、実行しようとしたロール */
+	role?: string;
+};
+
+/** command_approval イベント: 依頼 (status: pending) か、その答え (requestSeq 付き) */
+export type CloudCommandApprovalEventData =
+	| { status: 'pending'; tool: string; command: string; reason: string; role?: string }
+	| { status: 'approved' | 'denied'; requestSeq: number; command?: string; role?: string; feedback?: string };
+
+export type CloudCommandApprovalAction = 'approve' | 'deny';
 
 /**
  * 目標ループ (IDE の Division フローの「ループ」と同じ):

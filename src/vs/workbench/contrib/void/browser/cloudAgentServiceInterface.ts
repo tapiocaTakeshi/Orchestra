@@ -54,6 +54,8 @@ export type CloudApprovalState = {
 	approval?: CloudPendingApproval | null;
 	/** Leader のワークフロー案 (承認モード: 計画を図にしたもの)。null = 無い */
 	workflowProposal?: { proposalSeq: number; workflow: import('../common/divisionWorkflow.js').DivisionWorkflow } | null;
+	/** エージェントが実行しようとしている危険なコマンド (どのセッションでも)。null = 無い */
+	command?: import('../common/cloudAgentTypes.js').CloudPendingCommandApproval | null;
 	/** POST .../approval の最中 */
 	submitting: boolean;
 	error?: string;
@@ -307,6 +309,10 @@ export interface ICloudAgentService {
 	 * POST .../workflow-proposal: Leader のワークフロー案を承認 (workflow = 図で編集した内容) / 差し戻す (feedback)。成功したら true
 	 */
 	resolveWorkflowProposal(id: string, params: { proposalSeq: number; action: CloudApprovalAction; workflow?: import('../common/divisionWorkflow.js').DivisionWorkflow; feedback?: string }): Promise<boolean>;
+	/**
+	 * POST .../command-approval: 承認待ちの危険なコマンドを実行する (approve) / 実行させない (deny、feedback は任意)。成功したら true
+	 */
+	resolveCommandApproval(id: string, params: { requestSeq: number; action: import('../common/cloudAgentTypes.js').CloudCommandApprovalAction; feedback?: string }): Promise<boolean>;
 
 	// --- 文書 (サンドボックスの .division。ローカルの Division Project と同じファイル) ---
 
