@@ -79,7 +79,7 @@ Orchestra Mobile と同期します。このメッセージは AI には送ら�
 | POST | `/api/chat/threads/:id` | | スレッドを切り替え |
 | POST | `/api/chat/approve` | `{ threadId? }` | 承認待ちのツールを承認。フローのレビュー (`chat.pendingReview`。目標ループの「毎回確認」など) で止まっているときは、それを承認して続ける (目標ループなら次のラウンドへ)。承認待ちでなければ `409 not_awaiting_approval` |
 | POST | `/api/chat/reject` | `{ threadId? }` | 承認待ちのツールを却下。フローのレビューで止まっているときは、そこで止める |
-| POST | `/api/chat/goal-loop` | `{ mode: 'auto' \| 'confirm' }` | 目標ループの進め方 (PC のチャット欄の「ループ」) を変える。今の値は `chat.goalLoopMode` (チャットのモデルが Division API でなければ `null`) |
+| POST | `/api/chat/goal-loop` | `{ mode: 'auto' \| 'confirm' }` | 目標ループの進め方 (PC のチャット欄の「ループ」) を変える。今の値は `chat.goalLoopMode` (チャットのモデルが Division API でなければ `null`) 現在は実行に影響しない (ループ実行はなくなり、繰り返しと目標はワークフローのループノードで設定する)。古いアプリのために受け付けるだけ |
 
 メッセージは `{ role, text, toolName? }` に変換して返します (1 件 4,000 文字・直近 200 件まで)。
 ストリーミング中の返答や実行中のツールも末尾に含めます。
