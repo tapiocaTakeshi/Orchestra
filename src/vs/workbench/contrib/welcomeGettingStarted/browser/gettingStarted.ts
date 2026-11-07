@@ -73,9 +73,6 @@ import { AccessibilityVerbositySettingId } from '../../accessibility/browser/acc
 import { AccessibleViewAction } from '../../accessibility/browser/accessibleViewActions.js';
 import { KeybindingLabel } from '../../../../base/browser/ui/keybindingLabel/keybindingLabel.js';
 import { ScrollbarVisibility } from '../../../../base/common/scrollable.js';
-/* eslint-disable */ // Orchestra: the Welcome page's intro (hero and tutorial) is a React component of the void contrib
-import { mountOrchestraWelcome } from '../../void/browser/react/out/welcome-tsx/index.js';
-/* eslint-enable */
 
 const SLIDE_TRANSITION_TIME_MS = 250;
 const configurationKey = 'workbench.startupEditor';
@@ -168,10 +165,6 @@ export class GettingStartedPage extends EditorPane {
 
 	private readonly categoriesSlideDisposables: DisposableStore;
 	private showFeaturedWalkthrough = true;
-
-	// Orchestra: the intro (animated hero + tutorial) shown above the lists. Mounted once and moved into
-	// each rebuilt categories slide, so the tutorial keeps its place when the lists change.
-	private orchestraIntro: HTMLElement | undefined;
 
 	constructor(
 		group: IEditorGroup,
@@ -844,21 +837,6 @@ export class GettingStartedPage extends EditorPane {
 		parent.appendChild(this.container);
 	}
 
-	private getOrchestraIntro(): HTMLElement {
-		if (!this.orchestraIntro) {
-			const intro = this.orchestraIntro = $('.orchestra-welcome-intro');
-			try {
-				this.instantiationService.invokeFunction(accessor => {
-					const mounted = mountOrchestraWelcome(intro, accessor);
-					if (mounted) { this._register(toDisposable(() => mounted.dispose())); }
-				});
-			} catch (e) {
-				onUnexpectedError(e);
-			}
-		}
-		return this.orchestraIntro;
-	}
-
 	private async buildCategoriesSlide() {
 
 		this.categoriesSlideDisposables.clear();
@@ -934,7 +912,7 @@ export class GettingStartedPage extends EditorPane {
 		gettingStartedList.onDidChange(layoutLists);
 		layoutLists();
 
-		reset(this.categoriesSlide, $('.gettingStartedCategoriesContainer', {}, header, this.getOrchestraIntro(), leftColumn, rightColumn, footer,));
+		reset(this.categoriesSlide, $('.gettingStartedCategoriesContainer', {}, header, leftColumn, rightColumn, footer,));
 		this.categoriesPageScrollbar?.scanDomNode();
 
 		this.updateCategoryProgress();

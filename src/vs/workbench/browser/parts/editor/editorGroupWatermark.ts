@@ -33,6 +33,9 @@ import {
 } from '../../../contrib/void/browser/orchestraUiModeTypes.js';
 import { VIEWLET_ID as REMOTE_EXPLORER_VIEWLET_ID } from '../../../contrib/remote/browser/remoteExplorer.js';
 import { CLOUD_AGENTS_NEW_ACTION_ID, CLOUD_AGENTS_OPEN_ACTION_ID } from '../../../contrib/void/common/cloudAgentTypes.js';
+import { mountOrchestraWelcome } from '../../../contrib/void/browser/react/out/welcome-tsx/index.js';
+import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
+import { onUnexpectedError } from '../../../../base/common/errors.js';
 /* eslint-enable */
 
 // interface WatermarkEntry {
@@ -91,6 +94,10 @@ export class EditorGroupWatermark extends Disposable {
 	private readonly rootElement: HTMLElement;
 	private readonly iconElement: HTMLElement;
 	private readonly shortcuts: HTMLElement;
+	// Orchestra: the welcome intro (animated hero + tutorial), a React component. Mounted once, the
+	// first time the IDE's welcome screen is shown, and kept while the cloud mode hides it.
+	private readonly intro: HTMLElement;
+	private introMounted = false;
 	private readonly transientDisposables = this._register(new DisposableStore());
 	// private enabled: boolean = false;
 	private workbenchState: WorkbenchState;
@@ -108,22 +115,25 @@ export class EditorGroupWatermark extends Disposable {
 		@IHostService private readonly hostService: IHostService,
 		@ILabelService private readonly labelService: ILabelService,
 		@IViewsService private readonly viewsService: IViewsService,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
 	) {
 		super();
 
 		const elements = h('.editor-group-watermark', [
 			h('.letterpress@icon'),
 			h('.shortcuts@shortcuts'),
+			h('.orchestra-welcome@intro'),
 		]);
 
 		append(container, elements.root);
 		this.rootElement = elements.root;
 		this.iconElement = elements.icon;
 		this.shortcuts = elements.shortcuts; // shortcuts div is modified on render()
+		this.intro = elements.intro;
 
 		// void icon style
 		const updateTheme = () => {
-			elements.icon.style.maxWidth = this.isCloudMode() ? '96px' : '220px'
+			elements.icon.style.maxWidth = this.isCloudMode() ? '96px' : '120px'
 			elements.icon.style.opacity = this.isCloudMode() ? '90%' : '70%' // Slightly higher opacity for the new logo
 			// elements.icon.style.filter = isDark ? '' : 'invert(1)' //brightness(.5)
 		}
@@ -178,7 +188,12 @@ export class EditorGroupWatermark extends Disposable {
 
 		const cloud = this.isCloudMode();
 		this.rootElement.classList.toggle('orchestra-home', cloud);
-		this.iconElement.style.maxWidth = cloud ? '96px' : '220px';
+		// IDE の起動画面 (ウェルカム画面) には紹介とチュートリアルを出す。ロゴは小さめにする。
+		this.rootElement.classList.toggle('orchestra-welcome-screen', !cloud);
+		if (!cloud) {
+			this.mountIntro();
+		}
+		this.iconElement.style.maxWidth = cloud ? '96px' : '120px';
 		this.iconElement.style.opacity = cloud ? '90%' : '70%';
 
 		const voidIconBox = append(this.shortcuts, $('.watermark-box'));
@@ -381,6 +396,23 @@ export class EditorGroupWatermark extends Disposable {
 		pro.textContent = '上級者モード (IDE 表示)';
 		pro.onclick = run(ORCHESTRA_UI_SET_PRO_MODE_ACTION_ID);
 		append(footer, $('span')).textContent = ' に切り替えられます。';
+	}
+
+	private mountIntro(): void {
+		if (this.introMounted) {
+			return;
+		}
+		this.introMounted = true;
+		try {
+			this.instantiationService.invokeFunction(accessor => {
+				const mounted = mountOrchestraWelcome(this.intro, accessor);
+				if (mounted) {
+					this._register({ dispose: () => mounted.dispose() });
+				}
+			});
+		} catch (e) {
+			onUnexpectedError(e);
+		}
 	}
 
 	private clear(): void {
