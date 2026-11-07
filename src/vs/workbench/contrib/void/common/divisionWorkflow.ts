@@ -352,6 +352,8 @@ export const workflowErrors = (w: Pick<DivisionWorkflow, 'nodes' | 'edges'>): st
 	const roles = w.nodes.filter(n => n.type === 'role');
 	if (!roles.length) { errors.push('ロールのステップが1つ以上必要です。'); }
 	if (roles.some(n => !n.data.role)) { errors.push('ロールを選んでいないステップがあります。'); }
+	// workflowSteps() only runs the first MAX_WORKFLOW_STEPS roles: refuse more instead of dropping the rest.
+	if (roles.length > MAX_WORKFLOW_STEPS) { errors.push(`ロールのステップは ${MAX_WORKFLOW_STEPS} 個までです (いまは ${roles.length} 個)。ステップを減らすか、ループでくり返してください。`); }
 	const order = new Set(workflowOrder(w).map(n => n.id));
 	const start = w.nodes.find(n => n.type === 'start');
 	if (start) {

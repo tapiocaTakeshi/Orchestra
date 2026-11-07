@@ -30,6 +30,8 @@ import { findLast, findLastIdx } from '../../../../base/common/arraysFind.js';
 import { IEditCodeService } from './editCodeServiceInterface.js';
 import { VoidFileSnapshot } from '../common/editCodeServiceTypes.js';
 import { INotificationService, Severity } from '../../../../platform/notification/common/notification.js';
+import { IDialogService } from '../../../../platform/dialogs/common/dialogs.js';
+import { highRiskCommandReason } from '../common/commandRisk.js';
 import { truncate } from '../../../../base/common/strings.js';
 import { THREAD_STORAGE_KEY } from '../common/storageKeys.js';
 import { IConvertToLLMMessageService } from './convertToLLMMessageService.js';
@@ -366,6 +368,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		@IObsidianService private readonly _obsidianService: IObsidianService,
 		@IEditorService private readonly _editorService: IEditorService,
 		@IRemoteSessionSyncService private readonly _remoteSessionSyncService: IRemoteSessionSyncService,
+		@IDialogService private readonly _dialogService: IDialogService,
 	) {
 		super()
 		this.state = { allThreads: {}, currentThreadId: null as unknown as string } // default state
@@ -451,8 +454,25 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 					const toolName = 'run_command';
 					const unvalidatedToolParams = { command: cmd.command };
 
-					// Division API が発行したコマンドは auto-approve 設定に関わらず即座に実行する。
-					// `preapproved: true` + validatedParams で承認ステップをスキップ。
+					// Division API が発行したコマンド。ターミナルの自動承認がオンで、かつ危険なコマンド
+					// (commandRisk.ts) でなければそのまま実行する。それ以外は実行前にダイアログで確認する。
+					// (チャットの承認 UI は承認後に LLM へ再リクエストするので、Division のコマンドには使わない)
+					const riskReason = highRiskCommandReason(cmd.command);
+					const autoApprove = !!this._settingsService.state.globalSettings.autoApprove['terminal'];
+					if (riskReason || !autoApprove) {
+						const { confirmed } = await this._dialogService.confirm({
+							type: riskReason ? 'warning' : 'question',
+							message: riskReason ? `Division が危険な可能性のあるコマンドを実行しようとしています (${riskReason})` : 'Division がコマンドを実行しようとしています',
+							detail: cmd.command,
+							primaryButton: '実行する',
+							cancelButton: '実行しない',
+						});
+						if (!confirmed) {
+							this._notificationService.notify({ severity: Severity.Info, message: `コマンドを実行しませんでした: ${cmd.command}` });
+							continue;
+						}
+					}
+
 					let validatedParams: BuiltinToolCallParams['run_command'];
 					try {
 						validatedParams = this._toolsService.validateParams['run_command'](unvalidatedToolParams);
@@ -890,7 +910,9 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 			const approvalType = isBuiltInTool ? approvalTypeOfBuiltinToolName[toolName] : isSkillTool || isObsidianTool ? undefined : 'MCP tools'
 			if (approvalType) {
-				const autoApprove = this._settingsService.state.globalSettings.autoApprove[approvalType]
+				// Commands that delete a lot, escalate, rewrite shared history or send data out always wait for the user.
+				const command = approvalType === 'terminal' && typeof (toolParams as { command?: unknown }).command === 'string' ? (toolParams as { command: string }).command : ''
+				const autoApprove = this._settingsService.state.globalSettings.autoApprove[approvalType] && !highRiskCommandReason(command)
 				// add a tool_request because we use it for UI if a tool is loading (this should be improved in the future)
 				this._addMessageToThread(threadId, { role: 'tool', type: 'tool_request', content: '(Awaiting user permission...)', result: null, name: toolName, params: toolParams, id: toolId, rawParams: opts.unvalidatedToolParams, mcpServerName })
 				if (!autoApprove) {

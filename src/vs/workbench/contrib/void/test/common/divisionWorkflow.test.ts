@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import * as assert from 'assert';
-import { DivisionWorkflow, insertAfter, insertLoopAfter, insertParallelAfter, removeLoop, layoutWorkflow, normalizeWorkflow, removeNode, setApprovalAfter, tasksToWorkflow, workflowErrors, workflowSteps, workflowToTasks } from '../../common/divisionWorkflow.js';
+import { DivisionWorkflow, MAX_WORKFLOW_STEPS, insertAfter, insertLoopAfter, insertParallelAfter, removeLoop, layoutWorkflow, normalizeWorkflow, removeNode, setApprovalAfter, tasksToWorkflow, workflowErrors, workflowSteps, workflowToTasks } from '../../common/divisionWorkflow.js';
 
 // The leader's draft: start → research → writer → approval → (design | coder) → reviewer → end
 const draft = (): DivisionWorkflow => normalizeWorkflow({
@@ -121,5 +121,19 @@ suite('Division workflow', () => {
 		w = removeLoop(w, loopId);
 		assert.ok(!w.nodes.some(n => n.type === 'loop' || n.type === 'loopEnd'));
 		assert.deepStrictEqual(workflowErrors(w), []);
+	});
+
+	test('more role steps than can run is an error, not a silent cut', () => {
+		const n = MAX_WORKFLOW_STEPS + 1;
+		const ids = ['start', ...Array.from({ length: n }, (_, i) => `r${i}`), 'end'];
+		const w = normalizeWorkflow({
+			version: 1, enabled: true,
+			nodes: ids.map(id => ({ id, type: id === 'start' || id === 'end' ? id : 'role', position: { x: 0, y: 0 }, data: id.startsWith('r') ? { role: 'coder' } : {} })),
+			edges: ids.slice(1).map((id, i) => ({ id: `e${i}`, source: ids[i], target: id })),
+		})!;
+		assert.strictEqual(w.nodes.filter(x => x.type === 'role').length, n);
+		assert.ok(workflowErrors(w).some(e => e.includes(String(MAX_WORKFLOW_STEPS))));
+		const ok = normalizeWorkflow({ ...w, nodes: w.nodes.filter(x => x.id !== `r${n - 1}`), edges: [...w.edges.filter(e => e.target !== `r${n - 1}` && e.source !== `r${n - 1}`), { id: 'last', source: `r${n - 2}`, target: 'end' }] })!;
+		assert.deepStrictEqual(workflowErrors(ok), []);
 	});
 });

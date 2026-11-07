@@ -44,7 +44,7 @@ import { availableTools, InternalToolInfo } from '../../common/prompt/prompts.js
 import { generateUuid } from '../../../../../base/common/uuid.js';
 import { extractSearchReplaceBlocks } from '../../common/helpers/extractCodeFromResult.js';
 import { DESIGN_DIR, DESIGN_INDEX_PAGE, LEGACY_DESIGN_FILE, sortDesignPageNames, splitDesignPages } from '../../common/designPages.js';
-import { DivisionWorkflow, loopLabel, normalizeWorkflow, tasksToWorkflow, WORKFLOW_FILE_NAME, WorkflowLoopTag, WorkflowWhileCheck, workflowToTasks } from '../../common/divisionWorkflow.js';
+import { DivisionWorkflow, loopLabel, normalizeWorkflow, tasksToWorkflow, WORKFLOW_FILE_NAME, workflowErrors, WorkflowLoopTag, WorkflowWhileCheck, workflowToTasks } from '../../common/divisionWorkflow.js';
 import { extractSearchedSites, mergeSearchedSites, logSearchedSites, searchedSitesMarkdown, isDefaultWebSearchEnabled, isWebSearchRejectedError } from '../../common/searchedSites.js';
 
 const getGoogleApiKey = async () => {
@@ -4075,6 +4075,13 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					const fromDisk = workspaceFolderPath ? readWorkflowFile(workspaceFolderPath) : null;
 					const approved = fromChat ?? fromDisk ?? normalizeWorkflow(decision.workflow);
 					const source = fromChat ? 'chat' : fromDisk ? 'file' : 'leader';
+					// Run only what was drawn: a workflow that can't run as drawn (too many steps, cycles,
+					// unclosed loops...) would otherwise lose steps silently. The approval stays so it can be fixed and re-sent.
+					const invalid = approved ? workflowErrors(approved) : [];
+					if (invalid.length) {
+						onError({ message: `ワークフローをそのまま実行できません。.division/workflow.json を直してからもう一度送ってください。\n${invalid.map(e => `- ${e}`).join('\n')}`, fullError: null });
+						return;
+					}
 					// 承認は使い切り: 残すと次の新しい依頼でも同じワークフローから再開してしまう。
 					if (workspaceFolderPath) clearOrchestrationState(workspaceFolderPath);
 					if (approved && workspaceFolderPath) {
