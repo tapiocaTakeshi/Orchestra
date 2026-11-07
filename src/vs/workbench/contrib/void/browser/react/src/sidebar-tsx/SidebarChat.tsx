@@ -51,6 +51,7 @@ import { persistentTerminalNameOfId } from '../../../terminalToolService.js';
 import { removeMCPToolNamePrefix } from '../../../../common/mcpServiceTypes.js';
 import { LoginScreen } from '../void-login-tsx/LoginScreen.js';
 import { ButtonVoiceInput } from '../util/VoiceInput.js';
+import { ReadAloudButton } from '../util/ReadAloud.js';
 import { StorageScope, StorageTarget } from '../../../../../../../platform/storage/common/storage.js';
 
 
@@ -3196,6 +3197,12 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 					/>
 				</div>
 			)
+		)}
+		{/* 書き終えた返答は読み上げられる */}
+		{chatMessage.displayContent && !divisionResponse && !isStreamingThis && !isCheckpointGhost && (
+			<div className='flex items-center mt-0.5 opacity-70 hover:opacity-100 transition-opacity duration-150'>
+				<ReadAloudButton id={`chat:${thread.id}:${messageIdx}`} text={chatMessage.displayContent} />
+			</div>
 		)}
 		{shouldShowQuestionReply && <AssistantQuestionReply threadId={thread.id} />}
 		{reviewerNote && !isCheckpointGhost && (
