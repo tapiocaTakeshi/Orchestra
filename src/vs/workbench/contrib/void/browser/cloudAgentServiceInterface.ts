@@ -51,6 +51,8 @@ export type CloudApprovalState = {
 	loading: boolean;
 	/** 承認待ちの成果物。null = 承認待ちのものは無い */
 	approval?: CloudPendingApproval | null;
+	/** Leader のワークフロー案 (承認モード: 計画を図にしたもの)。null = 無い */
+	workflowProposal?: { proposalSeq: number; workflow: import('../common/divisionWorkflow.js').DivisionWorkflow } | null;
 	/** POST .../approval の最中 */
 	submitting: boolean;
 	error?: string;
@@ -287,6 +289,10 @@ export interface ICloudAgentService {
 	 * content は編集した成果物 (変えたときだけ渡す)。成功したら true
 	 */
 	resolveApproval(id: string, params: { taskSeq: number; action: CloudApprovalAction; content?: string; feedback?: string }): Promise<boolean>;
+	/**
+	 * POST .../workflow-proposal: Leader のワークフロー案を承認 (workflow = 図で編集した内容) / 差し戻す (feedback)。成功したら true
+	 */
+	resolveWorkflowProposal(id: string, params: { proposalSeq: number; action: CloudApprovalAction; workflow?: import('../common/divisionWorkflow.js').DivisionWorkflow; feedback?: string }): Promise<boolean>;
 
 	// --- Pull requests (GitHub-repo sessions only) ---
 

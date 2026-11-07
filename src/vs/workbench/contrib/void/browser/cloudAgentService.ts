@@ -37,6 +37,7 @@ import { IVoidSettingsService } from '../common/voidSettingsService.js';
 import { IVoidModelService } from '../common/voidModelService.js';
 import { DIVISION_API_BASE_URL } from '../common/divisionAuthConfig.js';
 import { ensureDivisionSession } from '../common/divisionSession.js';
+import { DivisionWorkflow, normalizeWorkflow } from '../common/divisionWorkflow.js';
 import {
 	CLOUD_AGENT_CHANNEL_NAME,
 	CLOUD_AGENTS_MAX_PARALLEL,
@@ -1049,7 +1050,45 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 				...(raw.tooLarge ? { tooLarge: true } : {}),
 			}
 			: null;
-		this._setApproval(id, { loading: false, approval });
+		// 承認待ちが成果物でなければ、Leader のワークフロー案 (計画を図にしたもの) を待っている
+		let workflowProposal: CloudApprovalState['workflowProposal'] = null;
+		if (!approval) {
+			const wf = await this._request('GET', this._sessionPath(id, '/workflow-proposal'), undefined, CHANGES_TIMEOUT_MS);
+			const p = wf.ok ? wf.data?.proposal : null;
+			const workflow = p && typeof p.proposalSeq === 'number' ? normalizeWorkflow(p.workflow) : null;
+			if (p && workflow) workflowProposal = { proposalSeq: p.proposalSeq, workflow };
+		}
+		this._setApproval(id, { loading: false, approval, workflowProposal });
+	}
+
+	async resolveWorkflowProposal(id: string, params: { proposalSeq: number; action: CloudApprovalAction; workflow?: DivisionWorkflow; feedback?: string }): Promise<boolean> {
+		if (this._state.approvalById[id]?.submitting) return false;
+		const feedback = (params.feedback ?? '').trim();
+		if (params.action === 'revise' && !feedback) {
+			this._setApproval(id, { error: '差し戻すときは、どう直してほしいかを書いてください。' });
+			return false;
+		}
+		this._setApproval(id, { submitting: true, error: undefined });
+		try {
+			const res = await this._request('POST', this._sessionPath(id, '/workflow-proposal'), {
+				proposalSeq: params.proposalSeq,
+				action: params.action,
+				...(params.action === 'approve' && params.workflow ? { workflow: params.workflow } : {}),
+				...(feedback ? { feedback } : {}),
+			});
+			if (!res.ok) {
+				this._setApproval(id, { error: describeCloudAgentError(res) });
+				if (res.status === 409) void this.loadApproval(id);
+				return false;
+			}
+			this._setApproval(id, { workflowProposal: null });
+			if (res.data?.session) this._upsertSession(res.data.session as CloudSession);
+			this._scheduleList(LIST_INTERVAL_ACTIVE_MS);
+			void this._fetchEvents(id);
+			return true;
+		} finally {
+			this._setApproval(id, { submitting: false });
+		}
 	}
 
 	async resolveApproval(id: string, params: { taskSeq: number; action: CloudApprovalAction; content?: string; feedback?: string }): Promise<boolean> {

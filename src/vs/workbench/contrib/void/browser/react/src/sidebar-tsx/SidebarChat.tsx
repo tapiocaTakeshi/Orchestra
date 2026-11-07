@@ -34,6 +34,7 @@ import { WarningBox } from '../void-settings-tsx/WarningBox.js';
 import { getModelCapabilities, getIsReasoningEnabledState } from '../../../../common/modelCapabilities.js';
 import { AlertTriangle, File, Ban, Check, ChevronDown, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text, Image as ImageIcon, Paperclip, Palette, Blocks, SendHorizontal, Code, Package, RotateCcw, Loader2, ListPlus, Sun, Moon, Flame, ClipboardCheck, CornerUpLeft, CheckCircle2, Circle, CircleDot, Download as DownloadIcon, ExternalLink as ExternalLinkIcon, Bot, SlidersHorizontal, Coins, Repeat, LogIn } from 'lucide-react';
 import { ChatMessage, CheckpointEntry, StagingSelectionItem, ToolMessage } from '../../../../common/chatThreadServiceTypes.js';
+import { WorkflowReview } from '../workflow-tsx/WorkflowReview.js';
 import { approvalTypeOfBuiltinToolName, ApplyPatchFileResult, BuiltinToolCallParams, BuiltinToolName, ToolName, LintErrorItem, ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsServiceTypes.js';
 import { CopyButton, EditToolAcceptRejectButtonsHTML, IconShell1, JumpToFileButton, JumpToTerminalButton, StatusIndicator, StatusIndicatorForApplyButton, useApplyStreamState, useEditToolStreamState } from '../markdown/ApplyBlockHoverButtons.js';
 import type { IsRunningType } from '../../../chatThreadService.js';
@@ -4764,6 +4765,10 @@ const _ChatBubble = ({ threadId, chatMessage, currCheckpointIdx, isCommitted, me
 		/>
 	}
 
+	else if (role === 'workflow_review') {
+		return <WorkflowReviewMessage chatMessage={chatMessage} isCheckpointGhost={isCheckpointGhost} />
+	}
+
 	else if (role === 'compaction') {
 		return <div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
 			<CompactionNotice chatMessage={chatMessage} />
@@ -4795,6 +4800,31 @@ const CompactionNotice = ({ chatMessage }: { chatMessage: ChatMessage & { role: 
 				<ChatMarkdownRender string={chatMessage.summary} chatMessageLocation={undefined} />
 			</SmallProseWrapper>
 		</div>}
+	</div>
+}
+
+/** Division Project 承認モード: Leader が計画をワークフロー図にしたもの。編集して承認 / 差し戻し / 中止。 */
+const WorkflowReviewMessage = ({ chatMessage, isCheckpointGhost }: {
+	chatMessage: ChatMessage & { role: 'workflow_review' },
+	isCheckpointGhost: boolean,
+}) => {
+	const accessor = useAccessor()
+	const chatThreadsService = accessor.get('IChatThreadService')
+	const project = useDivisionProjectConfig()
+	const roleOptions = useMemo(() => [...new Set((project?.agents ?? []).map(a => String(a.role)))], [project])
+	const threadId = () => chatThreadsService.state.currentThreadId
+	return <div className={isCheckpointGhost ? 'opacity-50 pointer-events-none' : ''}>
+		<WorkflowReview
+			key={chatMessage.status}
+			workflow={chatMessage.approvedWorkflow ?? chatMessage.workflow}
+			status={chatMessage.status}
+			leader={chatMessage.leader}
+			roleOptions={roleOptions}
+			onApprove={(workflow) => { chatThreadsService.approveWorkflowReview(threadId(), workflow).catch(e => console.error('approve workflow', e)) }}
+			onRevise={(feedback) => { chatThreadsService.reviseWorkflowReview(threadId(), feedback).catch(e => console.error('revise workflow', e)) }}
+			onReject={() => chatThreadsService.rejectWorkflowReview(threadId())}
+		/>
+		{chatMessage.status === 'revised' && chatMessage.feedback && <div className='text-[11px] text-void-fg-3 px-2'>差し戻しのフィードバック: {chatMessage.feedback}</div>}
 	</div>
 }
 
@@ -4998,6 +5028,10 @@ const formatChatThreadAsText = (messages: ChatMessage[] | undefined): string => 
 			}
 			case 'compaction': {
 				lines.push('## Summary (auto-compaction)', m.summary.trim(), '')
+				break
+			}
+			case 'workflow_review': {
+				lines.push('## Workflow Review', `- status: ${m.status}`, `- file: ${m.filePath}`, '')
 				break
 			}
 			case 'flow_review': {

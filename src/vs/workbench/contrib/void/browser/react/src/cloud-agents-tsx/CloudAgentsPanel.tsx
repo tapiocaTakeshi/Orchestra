@@ -118,6 +118,8 @@ import {
 import type { CloudChangesState, CloudGitHubPick, CloudModelPick, CloudPullRequestState, CloudSessionSource } from '../../../cloudAgentServiceInterface.js';
 import type { DivisionProjectConfig } from '../../../divisionProjectService.js';
 import { ORCHESTRA_OPEN_COST_MANAGEMENT_ACTION_ID, ORCHESTRA_OPEN_DIVISION_PROJECTS_ACTION_ID, VOID_OPEN_KANBAN_ACTION_ID } from '../../../actionIDs.js';
+import { WorkflowDiagram, WorkflowReview } from '../workflow-tsx/WorkflowReview.js';
+import { normalizeWorkflow } from '../../../../common/divisionWorkflow.js';
 
 
 // ---------------------------------------------------------------------------
@@ -3130,6 +3132,24 @@ const ApprovalCard = ({ session }: { session: CloudSession }) => {
 	useEffect(() => { setFeedback(''); setMode('preview'); }, [approval?.taskSeq]);
 
 	if (session.status !== 'awaiting_approval') return null;
+	const proposal = approvalState?.workflowProposal;
+	if (!approval && proposal) {
+		// Leader が計画をワークフロー図にした: 図で確認・編集して承認 / 差し戻す
+		return (
+			<div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+				<WorkflowReview
+					key={proposal.proposalSeq}
+					workflow={proposal.workflow}
+					status='pending'
+					roleOptions={[...new Set(proposal.workflow.nodes.map(n => n.data.role).filter((r): r is string => !!r))]}
+					busy={!!approvalState?.submitting || !state.isLoggedIn}
+					onApprove={(workflow) => { void cloudAgentService.resolveWorkflowProposal(session.id, { proposalSeq: proposal.proposalSeq, action: 'approve', ...(workflow ? { workflow } : {}) }); }}
+					onRevise={(feedback) => { void cloudAgentService.resolveWorkflowProposal(session.id, { proposalSeq: proposal.proposalSeq, action: 'revise', feedback }); }}
+				/>
+				{approvalState?.error && <div style={{ fontSize: '12px', color: C.error }}>{approvalState.error}</div>}
+			</div>
+		);
+	}
 	if (!approval) {
 		return (
 			<div style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '12px', color: approvalState?.error ? C.error : C.fgMuted, padding: '2px 6px' }}>
@@ -3279,6 +3299,25 @@ const EventView = ({ event, onReview, division, active, onContinueGoal, continue
 			return <TaskEventRow data={data as CloudTaskEventData} position={division?.positionByTask.get(event.seq)} />;
 		case 'approval':
 			return <ApprovalEventRow data={data as CloudApprovalEventData} />;
+		case 'workflow': {
+			// Leader が計画をワークフロー図にした (承認モード)
+			const workflow = normalizeWorkflow(data.workflow);
+			if (!workflow) return null;
+			return (
+				<div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '0 6px' }}>
+					<div style={{ fontSize: '12px', color: C.fgMuted }}>🗺️ Leader のワークフロー案{data.leaderModel ? ` (${String(data.leaderModel)})` : ''}</div>
+					<WorkflowDiagram workflow={workflow} roleNames={division ? Object.fromEntries(division.roleNames) : undefined} />
+				</div>
+			);
+		}
+		case 'workflow_review':
+			return (
+				<div style={{ fontSize: '11.5px', color: C.fgMuted, padding: '0 6px', whiteSpace: 'pre-wrap' }}>
+					{data.status === 'approved'
+						? `✅ ワークフローを承認しました${data.edited ? ' (図で編集)' : ''}`
+						: `↩️ ワークフローを差し戻しました: ${String(data.feedback ?? '')}`}
+				</div>
+			);
 		case 'tool': {
 			const agentPlan = agentPlanOf(data);
 			if (agentPlan) return <AgentPlanCard plan={agentPlan.plan} explanation={agentPlan.explanation} latest={!!latestAgentPlan} active={!!active} />;

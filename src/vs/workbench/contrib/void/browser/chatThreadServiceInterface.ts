@@ -96,6 +96,10 @@ export interface IChatThreadService {
 	// flow review approve/reject
 	approveFlowReview(threadId: string, editedOutputs?: Array<{ mdFileName: string; mdContent: string }>): Promise<void>;
 	rejectFlowReview(threadId: string): void;
+	/** Division Project: answer the leader's workflow (approve as edited / send back with feedback / stop). */
+	approveWorkflowReview(threadId: string, workflow?: import('../common/divisionWorkflow.js').DivisionWorkflow): Promise<void>;
+	reviseWorkflowReview(threadId: string, feedback: string): Promise<void>;
+	rejectWorkflowReview(threadId: string): void;
 
 	// jump to history
 	jumpToCheckpointBeforeMessageIdx(opts: { threadId: string, messageIdx: number, jumpToUserModified: boolean }): void;

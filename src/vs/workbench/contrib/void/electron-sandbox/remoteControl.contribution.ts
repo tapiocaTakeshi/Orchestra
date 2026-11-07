@@ -51,10 +51,12 @@ import {
 	RemoteGoalLoopMode,
 	RemoteIdeInfo,
 	RemotePendingReview,
+	RemotePendingWorkflow,
 	RemoteSessionInfo,
 	RemoteThreadSummary,
 } from '../common/remoteControlTypes.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
+import { DivisionWorkflow, normalizeWorkflow, workflowErrors } from '../common/divisionWorkflow.js';
 import { AgentRole, providerNames, RoleAssignment } from '../common/voidSettingsTypes.js';
 
 Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).registerConfiguration({
@@ -409,7 +411,8 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 			chat();
 			const threadId = this._threadIdFrom(body);
 			this._requireAwaitingApproval(threadId);
-			if (this._pendingFlowReview(threadId)) await this._chatThreadService.approveFlowReview(threadId);
+			if (this._pendingWorkflowReview(threadId)) await this._chatThreadService.approveWorkflowReview(threadId);
+			else if (this._pendingFlowReview(threadId)) await this._chatThreadService.approveFlowReview(threadId);
 			else this._chatThreadService.approveLatestToolRequest(threadId);
 			return this._chatState();
 		});
@@ -417,8 +420,36 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 			chat();
 			const threadId = this._threadIdFrom(body);
 			this._requireAwaitingApproval(threadId);
-			if (this._pendingFlowReview(threadId)) this._chatThreadService.rejectFlowReview(threadId);
+			if (this._pendingWorkflowReview(threadId)) this._chatThreadService.rejectWorkflowReview(threadId);
+			else if (this._pendingFlowReview(threadId)) this._chatThreadService.rejectFlowReview(threadId);
 			else this._chatThreadService.rejectLatestToolRequest(threadId);
+			return this._chatState();
+		});
+		// Leader のワークフロー案に答える: approve (workflow があれば編集後の内容で) / revise (feedback) / reject
+		this._route('POST', '/api/chat/workflow', async (_, { body }) => {
+			chat();
+			const threadId = this._threadIdFrom(body);
+			this._requireAwaitingApproval(threadId);
+			if (!this._pendingWorkflowReview(threadId)) throw new HttpError(409, 'not_awaiting_workflow', 'ワークフロー案は承認待ちではありません。');
+			const b = asObject(body);
+			if (b.action === 'approve') {
+				let workflow: DivisionWorkflow | undefined;
+				if (b.workflow !== undefined) {
+					const parsed = normalizeWorkflow(b.workflow);
+					const errors = parsed ? workflowErrors(parsed) : ['ワークフローの形式が正しくありません。'];
+					if (!parsed || errors.length) throw new HttpError(400, 'invalid_workflow', errors.join(' '));
+					workflow = parsed;
+				}
+				await this._chatThreadService.approveWorkflowReview(threadId, workflow);
+			} else if (b.action === 'revise') {
+				const feedback = typeof b.feedback === 'string' ? b.feedback.trim() : '';
+				if (!feedback) throw new HttpError(400, 'invalid_request', '差し戻すときは feedback を書いてください。');
+				await this._chatThreadService.reviseWorkflowReview(threadId, feedback);
+			} else if (b.action === 'reject') {
+				this._chatThreadService.rejectWorkflowReview(threadId);
+			} else {
+				throw new HttpError(400, 'invalid_request', 'action は approve / revise / reject のどれかです。');
+			}
 			return this._chatState();
 		});
 		this._route('POST', '/api/chat/goal-loop', async (_, { body }) => {
@@ -579,15 +610,26 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 			total: review.totalTasks,
 		} : null;
 
+		const wr = awaitingApproval ? this._pendingWorkflowReview(threadId) : undefined;
+		const pendingWorkflow: RemotePendingWorkflow | null = wr ? { workflow: wr.workflow, input: truncate(wr.input), ...(wr.leader ? { leader: wr.leader } : {}) } : null;
+
 		return {
 			threadId,
 			messages: messages.slice(-MAX_MESSAGES),
 			isRunning: !!stream?.isRunning,
 			awaitingApproval,
 			pendingReview,
+			pendingWorkflow,
 			goalLoopMode: this._goalLoopMode(),
 			error: stream?.error?.message,
 		};
+	}
+
+	/** 最後のメッセージが未回答の Leader のワークフロー案なら、それを返す */
+	private _pendingWorkflowReview(threadId: string) {
+		const messages = this._chatThreadService.state.allThreads[threadId]?.messages ?? [];
+		const last = messages[messages.length - 1];
+		return last?.role === 'workflow_review' && last.status === 'pending' ? last : undefined;
 	}
 
 	/** 最後のメッセージが未回答のフローのレビューなら、それを返す */
@@ -624,6 +666,8 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 				return { role: 'system', text: truncate(`${message.flowRole}: ${message.mdFileName} (${message.status})`) };
 			case 'compaction':
 				return { role: 'system', text: '会話が長くなったので、ここまでの経緯を要約しました' };
+			case 'workflow_review':
+				return { role: 'system', text: `ワークフロー案 (${message.status === 'pending' ? '承認待ち' : message.status === 'approved' ? '承認済み' : message.status === 'revised' ? '差し戻し' : '中止'})` };
 			default:
 				return undefined;
 		}

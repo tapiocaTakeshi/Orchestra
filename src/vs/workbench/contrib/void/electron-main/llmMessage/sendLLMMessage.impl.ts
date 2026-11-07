@@ -44,6 +44,7 @@ import { availableTools, InternalToolInfo } from '../../common/prompt/prompts.js
 import { generateUuid } from '../../../../../base/common/uuid.js';
 import { extractSearchReplaceBlocks } from '../../common/helpers/extractCodeFromResult.js';
 import { DESIGN_DIR, DESIGN_INDEX_PAGE, LEGACY_DESIGN_FILE, sortDesignPageNames, splitDesignPages } from '../../common/designPages.js';
+import { DivisionWorkflow, normalizeWorkflow, WORKFLOW_FILE_NAME, workflowToTasks } from '../../common/divisionWorkflow.js';
 import { extractSearchedSites, mergeSearchedSites, logSearchedSites, searchedSitesMarkdown, isDefaultWebSearchEnabled, isWebSearchRejectedError } from '../../common/searchedSites.js';
 
 const getGoogleApiKey = async () => {
@@ -1277,6 +1278,8 @@ type OrchestrationTaskLike = {
 	description?: string;
 	reason?: string;
 	mode?: string;
+	approval?: boolean;
+	systemPrompt?: string;
 };
 type OrchestrationTaskOutput = {
 	role: string;
@@ -1296,6 +1299,16 @@ type OrchestrationState = {
 	totalSteps: number;
 	reviewerDone: boolean;
 	editedOutputs?: Array<{ mdFileName: string; mdContent: string }>;
+	/**
+	 * 承認モードで Leader が作ったワークフロー案 (.division/workflow.json) の承認待ち。
+	 * 承認 IPC で approvedWorkflow (図で編集した内容) か feedback (差し戻し) が入る。
+	 */
+	workflowReview?: {
+		workflow: DivisionWorkflow;
+		goal: DivisionGoal | null;
+		approvedWorkflow?: DivisionWorkflow;
+		feedback?: string;
+	};
 	/** 目標ループを「ラウンドごとに確認」で止めたときの続きの情報 */
 	goalLoop?: {
 		goal: DivisionGoal | null;
@@ -1747,7 +1760,7 @@ const parseContextRoutes = (output: string): { task: number; context: string[] }
 	}
 };
 
-type DivisionLeaderTask = { taskId: string; role: string; title: string; input?: string; output?: string; provider?: string; dependsOn?: string[]; description?: string; reason?: string; mode?: string; context?: string[] };
+type DivisionLeaderTask = { taskId: string; role: string; title: string; input?: string; output?: string; provider?: string; dependsOn?: string[]; description?: string; reason?: string; mode?: string; context?: string[]; approval?: boolean };
 
 // `/api/tasks/create` は保存した Task 行をそのまま返す。各行の ID は `id` (`taskId` は無い) で、
 // `dependsOn` は Leader が振った 0 始まりのタスク番号。フローは `taskId` でタスクを引き、
@@ -1779,7 +1792,7 @@ const normalizeDivisionLeaderTasks = (rawTasks: unknown): DivisionLeaderTask[] =
 				return /^\d+$/.test(dep) ? taskIdOfIndex.get(Number(dep)) : undefined;
 			})
 			.filter((d): d is string => !!d && d !== taskIds[i]);
-		return { ...t, taskId: taskIds[i], role: String(t.role ?? ''), title: String(t.title ?? ''), dependsOn: [...new Set(dependsOn)] };
+		return { ...t, taskId: taskIds[i], role: String(t.role ?? ''), title: String(t.title ?? ''), dependsOn: [...new Set(dependsOn)], approval: t.approval === true };
 	});
 };
 
@@ -1796,6 +1809,8 @@ const callDivisionTaskCreate = async (
 	sessionId: string;
 	tasks: DivisionLeaderTask[];
 	finalRole: string;
+	/** The project has its own workflow (Division website): the tasks are its steps, in its order. */
+	workflow?: boolean;
 	error?: string;
 }> => {
 	try {
@@ -1832,10 +1847,50 @@ const callDivisionTaskCreate = async (
 			sessionId: data.sessionId || '',
 			tasks: normalizeDivisionLeaderTasks(data.tasks),
 			finalRole: data.finalRole || 'coder',
+			workflow: data.workflow === true,
 			error: data.error,
 		};
 	} catch (e: any) {
 		return { sessionId: '', tasks: [], finalRole: '', error: e?.message || String(e) };
+	}
+};
+
+// POST /api/tasks/workflow — the project's leader drafts a workflow (graph) for the request; nothing runs.
+// fromProject: the project already has the user's own workflow (no review needed).
+const callDivisionWorkflowDraft = async (
+	endpointBase: string,
+	projectId: string,
+	input: string,
+	signal: AbortSignal,
+	divisionApiKey?: string,
+	chatHistory?: { role: 'user' | 'assistant'; content: string }[],
+	revise?: { previous: unknown; feedback: string },
+): Promise<{ workflow: DivisionWorkflow | null; fromProject: boolean; leader?: string; error?: string }> => {
+	try {
+		const apiKey = divisionApiKey || process.env.DIVISION_API_KEY || '';
+		const response = await fetch(`${endpointBase}/api/tasks/workflow`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json', ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}) },
+			body: JSON.stringify({
+				projectId,
+				input,
+				...(chatHistory && chatHistory.length > 0 ? { chatHistory } : {}),
+				...(revise ? { previous: revise.previous, feedback: revise.feedback } : {}),
+			}),
+			signal,
+		});
+		if (!response.ok) {
+			const errorText = await response.text();
+			return { workflow: null, fromProject: false, error: `HTTP ${response.status}: ${errorText.substring(0, 300)}` };
+		}
+		const data = await response.json() as any;
+		return {
+			workflow: normalizeWorkflow(data?.workflow),
+			fromProject: data?.fromProject === true,
+			...(data?.leader ? { leader: `${data.leader.provider} · ${data.leader.model}` } : {}),
+		};
+	} catch (e: any) {
+		return { workflow: null, fromProject: false, error: e?.message || String(e) };
 	}
 };
 
@@ -1854,6 +1909,8 @@ const callDivisionTaskExecute = async (
 	chatHistory?: { role: 'user' | 'assistant'; content: string }[],
 	workspacePath?: string,
 	routingOptions?: DivisionRoutingOptions,
+	/** A workflow step's own system prompt (added after the role's prompt on the server). */
+	stepSystemPrompt?: string,
 ): Promise<{ output: string; error?: string; provider?: string; durationMs?: number; citations?: string[] }> => {
 	try {
 		const apiKey = divisionApiKey || process.env.DIVISION_API_KEY || '';
@@ -1879,6 +1936,7 @@ const callDivisionTaskExecute = async (
 				...(sessionId ? { sessionId } : {}),
 				...(chatHistory && chatHistory.length > 0 ? { chatHistory } : {}),
 				...(workspacePath ? { workspacePath } : {}),
+				...(stepSystemPrompt?.trim() ? { stepSystemPrompt: stepSystemPrompt.trim() } : {}),
 			}),
 			signal,
 		});
@@ -3450,6 +3508,10 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			 * どちらの場合も divisionContextPolicy のゲートを通してから渡す。
 			 */
 			context?: string[];
+			/** プロジェクトのワークフローで、このステップの後に「承認」ノードがある (承認モードでなくても止まる)。 */
+			approval?: boolean;
+			/** ワークフローでこのステップに書かれたシステムプロンプト。 */
+			systemPrompt?: string;
 		};
 
 		const isFileSearchRole = (r: string): boolean => {
@@ -3625,10 +3687,15 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			mdInfo: { mdFileName: string; mdFilePath: string },
 			completedIndex: number,
 			reviewerDone: boolean,
+			/** ワークフローの「承認」ノード: 承認モードの設定に関係なく止まる。 */
+			workflowApproval: boolean = false,
 		): boolean => {
-			if (!divisionFlowApprovalMode || !workspaceFolderPath) return false;
-			// 「coder / writer だけ承認」設定なら、それ以外のロールは保存だけして止めずに進む
-			if (divisionFlowApprovalCoderWriterOnly && !isCoderLikeRole(flowRole)) return false;
+			if (!workspaceFolderPath) return false;
+			if (!workflowApproval) {
+				if (!divisionFlowApprovalMode) return false;
+				// 「coder / writer だけ承認」設定なら、それ以外のロールは保存だけして止めずに進む
+				if (divisionFlowApprovalCoderWriterOnly && !isCoderLikeRole(flowRole)) return false;
+			}
 			writeOrchestrationState(workspaceFolderPath, {
 				approved: false,
 				workspaceFolderPath,
@@ -3852,7 +3919,9 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		const maxRounds = goalLoopResume?.maxRounds
 			?? (divisionFlowApprovalMode ? 1 : Math.max(1, Math.min(100, params.divisionMaxReviewerIterations ?? 5)));
 		const confirmEachRound = params.divisionGoalLoopMode === 'confirm';
-		let goal: DivisionGoal | null = goalLoopResume?.goal ?? null;
+		/** 承認モードで Leader のワークフロー案に答えた (承認 / 差し戻し) 直後の再開。 */
+		const workflowDecision = isResuming && resumeState?.workflowReview ? resumeState.workflowReview : null;
+		let goal: DivisionGoal | null = goalLoopResume?.goal ?? workflowDecision?.goal ?? null;
 		let lastVerdict: DivisionVerdict | null = goalLoopResume?.lastVerdict ?? null;
 		let lastReviewOutput = goalLoopResume?.lastReviewOutput ?? '';
 		let lastCommandResults: CommandRunResult[] = goalLoopResume?.lastCommandResults ?? [];
@@ -3953,7 +4022,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			}
 			if (!(round === 1 && isResuming)) currentInput = composeRoundInput();
 
-			if (round === 1 && isResuming && resumeState) {
+			if (round === 1 && isResuming && resumeState && !workflowDecision) {
 				sessionId = resumeState.sessionId;
 				if (sessionId) activeServerSessionIds.add(sessionId);
 				currentInput = resumeState.currentInput;
@@ -3994,11 +4063,73 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					? `**Leader AI** がタスクを分析中...\n\n`
 					: `**Leader AI** がレビューの指摘をもとにタスクを組み直しています...\n\n`);
 				const leaderHistory = withStackContext(chatHistory);
-				const leaderResult = await callDivisionTaskCreate(
-					endpointBase, projectId, currentInput, controller.signal,
-					divisionApiKey, leaderHistory.length > 0 ? leaderHistory : undefined,
-					workspaceFolderPath, routingOptions,
-				);
+				let leaderResult: Awaited<ReturnType<typeof callDivisionTaskCreate>> | null = null;
+				const decision = round === 1 ? workflowDecision : null;
+				if (decision && resumeState) currentInput = resumeState.currentInput;
+
+				if (decision && decision.feedback === undefined) {
+					// ユーザーが承認した (図で編集したかもしれない) ワークフローのステップがそのままタスクになる。
+					const approved = normalizeWorkflow(decision.approvedWorkflow ?? decision.workflow);
+					// 承認は使い切り: 残すと次の新しい依頼でも同じワークフローから再開してしまう。
+					if (workspaceFolderPath) clearOrchestrationState(workspaceFolderPath);
+					if (approved && workspaceFolderPath) {
+						try {
+							fs.mkdirSync(path.join(workspaceFolderPath, '.division'), { recursive: true });
+							fs.writeFileSync(path.join(workspaceFolderPath, '.division', WORKFLOW_FILE_NAME), JSON.stringify(approved, null, 2) + '\n', 'utf-8');
+						} catch (_e) { /* ignore */ }
+					}
+					appendText(`## ✅ ワークフローを承認しました\n\n${decision.approvedWorkflow ? '図で編集した内容で' : 'Leader の案のまま'}実行します。\n\n`);
+					leaderResult = { sessionId: '', tasks: approved ? workflowToTasks(approved) : [], finalRole: 'coder', workflow: true };
+				} else if (round === 1 && divisionFlowApprovalMode && workspaceFolderPath) {
+					// 承認モード: Leader はまず計画をワークフロー図として作り、ユーザーが図を見て承認・編集・差し戻しする。
+					const draft = await callDivisionWorkflowDraft(
+						endpointBase, projectId, currentInput, controller.signal, divisionApiKey,
+						leaderHistory.length > 0 ? leaderHistory : undefined,
+						decision ? { previous: decision.workflow, feedback: decision.feedback ?? '' } : undefined,
+					);
+					if (draft.error) {
+						onError({ message: divisionErrorMessage(draft.error), fullError: null });
+						return;
+					}
+					if (draft.workflow && !draft.fromProject) {
+						const file = path.join(workspaceFolderPath, '.division', WORKFLOW_FILE_NAME);
+						try {
+							fs.mkdirSync(path.dirname(file), { recursive: true });
+							fs.writeFileSync(file, JSON.stringify(draft.workflow, null, 2) + '\n', 'utf-8');
+						} catch (_e) { /* ignore */ }
+						writeOrchestrationState(workspaceFolderPath, {
+							approved: false,
+							workspaceFolderPath,
+							sessionId: '',
+							currentInput,
+							tasks: [],
+							taskOutputs: [],
+							nextIndex: 0,
+							totalSteps: 0,
+							reviewerDone: false,
+							workflowReview: { workflow: draft.workflow, goal },
+						});
+						appendText(decision
+							? `## 🗺️ ワークフロー案 (作り直し)\n\nフィードバックに沿って Leader が作り直しました。図を確認して、承認・編集・差し戻しをしてください。\n`
+							: `## 🗺️ ワークフロー案\n\nLeader が計画をワークフローにしました。図を確認して、承認・編集・差し戻しをしてください。\n`);
+						onFinalMessage({
+							fullText,
+							fullReasoning: '',
+							anthropicReasoning: null,
+							workflowReview: { workflow: draft.workflow, filePath: file, input: currentInput, ...(draft.leader ? { leader: draft.leader } : {}) },
+						});
+						flushCommandRunsAfterFinalMessage();
+						return;
+					}
+					// プロジェクト自身のワークフローがある: 承認済みなので、そのとおりにタスクを作る (下の task-create)。
+				}
+				if (!leaderResult) {
+					leaderResult = await callDivisionTaskCreate(
+						endpointBase, projectId, currentInput, controller.signal,
+						divisionApiKey, leaderHistory.length > 0 ? leaderHistory : undefined,
+						workspaceFolderPath, routingOptions,
+					);
+				}
 
 				if (leaderResult.error) {
 					// 進捗テキストは折りたたまれて「分析中...」のまま見えるので、エラーは onError で目に見える形で出す。
@@ -4011,7 +4142,10 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 
 				// Reviewer はサーバ側ではなく最後にローカルで一括実行する。
 				// 外した Reviewer に依存していたタスク (例: レビュー指摘の修正) は、Reviewer の依存先を引き継ぐ。
-				const EXCLUDED_ROLES = new Set(['review', 'reviewer']);
+				// ただしユーザーが組んだワークフロー (Division のサイト) のステップは順番も含めてユーザーのものなので、
+				// reviewer のステップもその位置で実行する (最終レビューは従来どおり最後に行う)。
+				const fromWorkflow = leaderResult.workflow === true;
+				const EXCLUDED_ROLES = new Set<string>(fromWorkflow ? [] : ['review', 'reviewer']);
 				const leaderTasks = leaderResult.tasks as DivisionTask[];
 				const excludedDeps = new Map(leaderTasks
 					.filter(t => EXCLUDED_ROLES.has((t.role || '').toLowerCase()))
@@ -4063,7 +4197,9 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				if (tasks.some(t => isFileSearchRole(t.role))) {
 					appendText(`📂 **準備:** 作業フォルダのファイルを読み込み、各 AI に渡します（AI は使いません）\n\n`);
 				}
-				appendText(`${maxRounds > 1 ? `ラウンド ${round}: ` : ''}Leader が以下の ${aiStepCount} ステップのフローを作成しました。以降、各ロールの AI はこの順番通りに実行されます。\n\n`);
+				appendText(fromWorkflow
+					? `${maxRounds > 1 ? `ラウンド ${round}: ` : ''}プロジェクトの**ワークフロー**どおりに、以下の ${aiStepCount} ステップを実行します (各ステップの指示は Leader が書きました)。\n\n`
+					: `${maxRounds > 1 ? `ラウンド ${round}: ` : ''}Leader が以下の ${aiStepCount} ステップのフローを作成しました。以降、各ロールの AI はこの順番通りに実行されます。\n\n`);
 				for (let i = 0; i < tasks.length; i++) {
 					const t = tasks[i];
 					if (isFileSearchRole(t.role)) continue;
@@ -4073,7 +4209,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 						.filter(idx => idx >= 0 && !isFileSearchRole(tasks[idx].role))
 						.map(idx => displayStepNumber(idx));
 					const depsPart = depSteps.length > 0 ? ` _(依存: ${depSteps.join(', ')})_` : '';
-					appendText(`${displayStepNumber(i)}. **${t.role}** — ${t.title || ''}${depsPart}\n`);
+					appendText(`${displayStepNumber(i)}. **${t.role}** — ${t.title || ''}${depsPart}${t.approval ? ' 🔒 _承認_' : ''}\n`);
 				}
 				appendText(`${aiStepCount}. **reviewer** — 最終レビュー\n`);
 				if (divisionFlowApprovalMode) {
@@ -4192,7 +4328,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 								? `🖼️ 画像生成完了（${savedImagePaths.length}件保存）\n\n`
 								: `🖼️ 画像生成完了\n\n`;
 							appendText(doneMsg);
-							if (mdInfo && maybePauseForApproval('image', markdown, mdInfo, i + 1, false)) return;
+							if (mdInfo && maybePauseForApproval('image', markdown, mdInfo, i + 1, false, !!task.approval)) return;
 						}
 					} catch (e: any) {
 						const errMsg = `(image generation failed: ${e?.message || String(e)})`;
@@ -4323,7 +4459,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 						...chatHistory,
 						...buildPriorContextHistory(task.role, task.context, roleContextBlock.markdown),
 					]),
-					workspaceFolderPath, routingOptions,
+					workspaceFolderPath, routingOptions, task.systemPrompt,
 				);
 				let taskSearchedSites = execResult.citations ?? [];
 
@@ -4369,7 +4505,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 								...chatHistory,
 								...buildPriorContextHistory(task.role, task.context, followUp.markdown),
 							]),
-							workspaceFolderPath, routingOptions,
+							workspaceFolderPath, routingOptions, task.systemPrompt,
 						);
 						taskSearchedSites = mergeSearchedSites(taskSearchedSites, execResult.citations ?? []);
 						if (execResult.error) break;
@@ -4415,7 +4551,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				}
 				taskOutputs.push({ role: task.role, title: task.title || '', output, mdFileName: mdInfo?.mdFileName, mdFilePath: mdInfo?.mdFilePath });
 
-				if (mdInfo && maybePauseForApproval(task.role, output, mdInfo, i + 1, false)) return;
+				if (mdInfo && maybePauseForApproval(task.role, output, mdInfo, i + 1, false, !!task.approval)) return;
 			}
 
 			// =============================================

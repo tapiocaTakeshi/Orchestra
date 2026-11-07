@@ -24,6 +24,9 @@
 //        { continueGoal: true, text? }: 目標ループが「毎回確認」で止まっているとき、次のラウンドへ進める (text は追加の指示)
 //   GET  /api/cloud-sessions/:id/approval     → { approval: CloudPendingApproval | null }  (status が awaiting_approval のとき)
 //   POST /api/cloud-sessions/:id/approval     { taskSeq, action: "approve" | "revise", content?, feedback? } → { session }
+//   GET  /api/cloud-sessions/:id/workflow-proposal → { proposal: { proposalSeq, workflow, file } | null }
+//        承認モードでは Leader がまず計画をワークフロー図 (.division/workflow.json) にして承認を待つ
+//   POST /api/cloud-sessions/:id/workflow-proposal { proposalSeq, action: "approve" | "revise", workflow?, feedback? } → { session }
 //        content: 編集した成果物 (変えたときだけ送る)。approve で次のタスクへ、revise (feedback 必須) で同じロールがやり直す
 //        承認待ちの間 /messages は 409 { code: "awaiting_approval" }
 //   POST /api/cloud-sessions/:id/stop         {} → { session }
@@ -111,7 +114,7 @@ export interface CloudSession {
 	approvalMode?: boolean;
 }
 
-export type CloudSessionEventType = 'user' | 'assistant' | 'tool' | 'status' | 'error' | 'done' | 'plan' | 'task' | 'approval' | 'pull_request' | 'goal' | 'review' | 'compaction';
+export type CloudSessionEventType = 'user' | 'assistant' | 'tool' | 'status' | 'error' | 'done' | 'plan' | 'task' | 'approval' | 'pull_request' | 'goal' | 'review' | 'compaction' | 'workflow' | 'workflow_review';
 
 export interface CloudSessionEvent {
 	seq: number;
