@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import * as assert from 'assert';
-import { DivisionWorkflow, insertAfter, layoutWorkflow, normalizeWorkflow, removeNode, setApprovalAfter, workflowErrors, workflowSteps, workflowToTasks } from '../../common/divisionWorkflow.js';
+import { DivisionWorkflow, insertAfter, layoutWorkflow, normalizeWorkflow, removeNode, setApprovalAfter, tasksToWorkflow, workflowErrors, workflowSteps, workflowToTasks } from '../../common/divisionWorkflow.js';
 
 // The leader's draft: start → research → writer → approval → (design | coder) → reviewer → end
 const draft = (): DivisionWorkflow => normalizeWorkflow({
@@ -37,6 +37,24 @@ suite('Division workflow', () => {
 			['wf-5', 'reviewer', ['wf-3', 'wf-4'], false],
 		]);
 		assert.strictEqual(tasks[1].systemPrompt, '短く');
+	});
+
+	test('the leader\'s task list as a workflow (written even without approval mode)', () => {
+		const w = tasksToWorkflow([
+			{ taskId: 'a', role: 'research', title: '調査', input: '調べる' },
+			{ taskId: 'b', role: 'writer', title: '仕様', dependsOn: ['a'], approval: true },
+			{ taskId: 'c', role: 'design', dependsOn: ['b'] },
+			{ taskId: 'd', role: 'coder', dependsOn: ['b', 'missing'] },
+		]);
+		assert.deepStrictEqual(workflowErrors(w), []);
+		assert.deepStrictEqual(workflowSteps(w).map(s => [s.role, s.dependsOn, s.approval]), [
+			['research', [], false],
+			['writer', [0], true],
+			['design', [1], false],
+			['coder', [1], false],
+		]);
+		assert.strictEqual(workflowSteps(w)[0].instruction, '調べる');
+		assert.deepStrictEqual(normalizeWorkflow(JSON.parse(JSON.stringify(w))), w);
 	});
 
 	test('editing: approval off/on, insert after a step, remove a step', () => {
