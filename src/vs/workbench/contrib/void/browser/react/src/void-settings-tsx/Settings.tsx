@@ -1269,6 +1269,7 @@ const DivisionSettings = () => {
 
 	return (
 		<div className="flex flex-col gap-4">
+			<span className="text-xs text-void-fg-3 uppercase font-semibold tracking-wide">{t('division.run')}</span>
 			{/* 承認モード */}
 			<div className="flex flex-col gap-2 border border-void-border-2 bg-void-bg-2 rounded-sm px-3 py-2">
 				<div className="flex items-center justify-between gap-4">
@@ -1345,7 +1346,7 @@ const DivisionSettings = () => {
 
 			{/* projects.json section header with Update All + Supabase Sync buttons */}
 			<div className="flex items-center justify-between">
-				<span className="text-xs text-void-fg-3 uppercase font-semibold tracking-wide">Configured Projects</span>
+				<span className="text-xs text-void-fg-3 uppercase font-semibold tracking-wide">{t('division.projects')}</span>
 				<div className="flex items-center gap-3">
 					<button
 						onClick={handleRemotePush}
@@ -1549,21 +1550,30 @@ export const Settings = () => {
 	// 開いたままの設定画面にも、あとから頼まれたタブを反映する
 	useEffect(() => onDidRequestVoidSettingsTab(tab => setSelectedSection(tab)), []);
 
-	const navItems: { tab: Tab; label: string }[] = [
-		{ tab: 'models', label: t('tab.models') },
-		{ tab: 'localProviders', label: t('tab.localProviders') },
-		{ tab: 'providers', label: t('tab.providers') },
-		{ tab: 'featureOptions', label: t('tab.featureOptions') },
-		{ tab: 'division', label: t('tab.division') },
-		{ tab: 'cost', label: t('tab.cost') },
-		{ tab: 'general', label: t('tab.general') },
-		{ tab: 'mcp', label: t('tab.mcp') },
-		{ tab: 'skills', label: t('tab.skills') },
-		{ tab: 'kanban', label: t('tab.kanban') },
-		{ tab: 'obsidian', label: t('tab.obsidian') },
-		{ tab: 'updates', label: t('tab.updates') },
-		{ tab: 'all', label: t('tab.all') },
+	// サイドバーは用途ごとにまとめる。「すべての設定」で縦に並べたときも、この順番で表示する。
+	const navGroups: { label: string; tabs: Tab[] }[] = [
+		{ label: t('tabGroup.ai'), tabs: ['models', 'providers', 'localProviders', 'featureOptions'] },
+		{ label: t('tabGroup.agents'), tabs: ['division', 'skills', 'mcp', 'kanban', 'obsidian'] },
+		{ label: t('tabGroup.app'), tabs: ['general', 'cost', 'updates'] },
 	];
+	const tabLabel: Record<Tab, string> = {
+		models: t('tab.models'),
+		localProviders: t('tab.localProviders'),
+		providers: t('tab.providers'),
+		featureOptions: t('tab.featureOptions'),
+		division: t('tab.division'),
+		cost: t('tab.cost'),
+		general: t('tab.general'),
+		mcp: t('tab.mcp'),
+		skills: t('tab.skills'),
+		kanban: t('tab.kanban'),
+		obsidian: t('tab.obsidian'),
+		updates: t('tab.updates'),
+		all: t('tab.all'),
+	};
+	const tabOrder = navGroups.flatMap(g => g.tabs);
+	/** 「すべての設定」で並べたときの位置 (サイドバーと同じ順番) */
+	const sectionOrder = (tab: Tab): React.CSSProperties => ({ order: tabOrder.indexOf(tab) });
 	const shouldShowTab = (tab: Tab) => selectedSection === 'all' || selectedSection === tab;
 	const accessor = useAccessor()
 	const commandService = accessor.get('ICommandService')
@@ -1645,6 +1655,20 @@ export const Settings = () => {
 	}
 
 
+	const NavButton = ({ tab, label }: { tab: Tab; label: string }) => (
+		<button
+			onClick={() => {
+				setSelectedSection(tab);
+				if (tab === 'all') window.scrollTo({ top: 0, behavior: 'smooth' });
+			}}
+			className={`py-1.5 px-4 rounded-md text-left text-sm transition-all duration-200 ${selectedSection === tab
+				? 'bg-[#0e70c0]/80 text-white font-medium shadow-sm'
+				: 'hover:bg-void-bg-2 text-void-fg-1'}`}
+		>
+			{label}
+		</button>
+	);
+
 	return (
 		<div className={`@@void-scope ${isDark ? 'dark' : ''}`} style={{ height: '100%', width: '100%', overflow: 'auto' }}>
 			{showLoginScreen && <LoginScreen onClose={() => setShowLoginScreen(false)} />}
@@ -1654,28 +1678,16 @@ export const Settings = () => {
 
 				<aside className="md:w-1/4 w-full p-6 shrink-0">
 					{/* vertical tab list */}
-					<div className="flex flex-col gap-2 mt-12">
-						{navItems.map(({ tab, label }) => (
-							<button
-								key={tab}
-								onClick={() => {
-									if (tab === 'all') {
-										setSelectedSection('all');
-										window.scrollTo({ top: 0, behavior: 'smooth' });
-									} else {
-										setSelectedSection(tab);
-									}
-								}}
-								className={`
-          py-2 px-4 rounded-md text-left transition-all duration-200
-          ${selectedSection === tab
-										? 'bg-[#0e70c0]/80 text-white font-medium shadow-sm'
-										: 'bg-void-bg-2 hover:bg-void-bg-2/80 text-void-fg-1'}
-        `}
-							>
-								{label}
-							</button>
+					<div className="flex flex-col gap-4 mt-12">
+						{navGroups.map(group => (
+							<div key={group.label} className="flex flex-col gap-1">
+								<span className="px-4 text-[11px] text-void-fg-3 uppercase font-semibold tracking-wide">{group.label}</span>
+								{group.tabs.map(tab => (
+									<NavButton key={tab} tab={tab} label={tabLabel[tab]} />
+								))}
+							</div>
 						))}
+						<NavButton tab='all' label={tabLabel.all} />
 					</div>
 				</aside>
 
@@ -1686,7 +1698,7 @@ export const Settings = () => {
 
 					<div className='max-w-3xl'>
 
-						<h1 className='text-2xl w-full'>{`Orchestra Settings`}</h1>
+						<h1 className='text-2xl w-full'>{t('settings.title')}</h1>
 
 						<div className='w-full h-[1px] my-2' />
 
@@ -1700,9 +1712,9 @@ export const Settings = () => {
 						{/* All sections in flex container with gap-12 */}
 						<div className='flex flex-col gap-12'>
 							{/* Models section (formerly FeaturesTab) */}
-							<div className={shouldShowTab('models') ? `` : 'hidden'}>
+							<div className={shouldShowTab('models') ? `` : 'hidden'} style={sectionOrder('models')}>
 								<ErrorBoundary>
-									<h2 className={`text-3xl mb-2`}>Models</h2>
+									<h2 className={`text-3xl mb-2`}>{t('tab.models')}</h2>
 									<ModelDump />
 									<div className='w-full h-[1px] my-4' />
 									<AutoDetectLocalModelsToggle />
@@ -1711,10 +1723,10 @@ export const Settings = () => {
 							</div>
 
 							{/* Local Providers section */}
-							<div className={shouldShowTab('localProviders') ? `` : 'hidden'}>
+							<div className={shouldShowTab('localProviders') ? `` : 'hidden'} style={sectionOrder('localProviders')}>
 								<ErrorBoundary>
-									<h2 className={`text-3xl mb-2`}>Local Providers</h2>
-									<h3 className={`text-void-fg-3 mb-2`}>{`Orchestra can access any model that you host locally. We automatically detect your local models by default.`}</h3>
+									<h2 className={`text-3xl mb-2`}>{t('tab.localProviders')}</h2>
+									<h3 className={`text-void-fg-3 mb-2`}>{t('localProviders.subtitle')}</h3>
 
 									<div className='opacity-80 mb-4'>
 										<OllamaSetupInstructions sayWeAutoDetect={true} />
@@ -1725,19 +1737,19 @@ export const Settings = () => {
 							</div>
 
 							{/* Main Providers section */}
-							<div className={shouldShowTab('providers') ? `` : 'hidden'}>
+							<div className={shouldShowTab('providers') ? `` : 'hidden'} style={sectionOrder('providers')}>
 								<ErrorBoundary>
-									<h2 className={`text-3xl mb-2`}>Main Providers</h2>
-									<h3 className={`text-void-fg-3 mb-2`}>{`Orchestra can access models from Anthropic, OpenAI, OpenRouter, and more.`}</h3>
+									<h2 className={`text-3xl mb-2`}>{t('tab.providers')}</h2>
+									<h3 className={`text-void-fg-3 mb-2`}>{t('providers.subtitle')}</h3>
 
 									<VoidProviderSettings providerNames={nonlocalProviderNames} />
 								</ErrorBoundary>
 							</div>
 
 							{/* Feature Options section */}
-							<div className={shouldShowTab('featureOptions') ? `` : 'hidden'}>
+							<div className={shouldShowTab('featureOptions') ? `` : 'hidden'} style={sectionOrder('featureOptions')}>
 								<ErrorBoundary>
-									<h2 className={`text-3xl mb-2`}>Feature Options</h2>
+									<h2 className={`text-3xl mb-2`}>{t('tab.featureOptions')}</h2>
 
 									<div className='flex flex-col gap-y-8 my-4'>
 										<ErrorBoundary>
@@ -1956,7 +1968,7 @@ export const Settings = () => {
 							</div>
 
 							{/* General section */}
-							<div className={`${shouldShowTab('general') ? `` : 'hidden'} flex flex-col gap-12`}>
+							<div className={`${shouldShowTab('general') ? `` : 'hidden'} flex flex-col gap-12`} style={sectionOrder('general')}>
 								{/* 表示モード (エージェント / 上級者) */}
 								<div>
 									<ErrorBoundary>
@@ -2190,7 +2202,7 @@ export const Settings = () => {
 
 
 							{/* Division section */}
-							<div className={shouldShowTab('division') ? `` : 'hidden'}>
+							<div className={shouldShowTab('division') ? `` : 'hidden'} style={sectionOrder('division')}>
 								<ErrorBoundary>
 									<h2 className="text-3xl mb-2">{t('division.title')}</h2>
 									<h4 className="text-void-fg-3 mb-4">{t('division.subtitle')}</h4>
@@ -2199,7 +2211,7 @@ export const Settings = () => {
 							</div>
 
 							{/* Cost management section (チャットの「コスト調整」・クレジット・クラウドエージェントの利用額) */}
-							<div className={shouldShowTab('cost') ? `` : 'hidden'}>
+							<div className={shouldShowTab('cost') ? `` : 'hidden'} style={sectionOrder('cost')}>
 								<ErrorBoundary>
 									<h2 className="text-3xl mb-2">{t('cost.title')}</h2>
 									<h4 className="text-void-fg-3 mb-4">{t('cost.subtitle')}</h4>
@@ -2208,7 +2220,7 @@ export const Settings = () => {
 							</div>
 
 							{/* MCP section */}
-							<div className={shouldShowTab('mcp') ? `` : 'hidden'}>
+							<div className={shouldShowTab('mcp') ? `` : 'hidden'} style={sectionOrder('mcp')}>
 								<ErrorBoundary>
 									<h2 className='text-3xl mb-2'>{t('mcp.title')}</h2>
 									<h4 className={`text-void-fg-3 mb-4`}>
@@ -2229,7 +2241,7 @@ Use Model Context Protocol to provide Agent mode with more tools.
 							</div>
 
 							{/* Skills section */}
-							<div className={shouldShowTab('skills') ? `` : 'hidden'}>
+							<div className={shouldShowTab('skills') ? `` : 'hidden'} style={sectionOrder('skills')}>
 								<ErrorBoundary>
 									<h2 className='text-3xl mb-2'>{t('skills.title')}</h2>
 									<h4 className={`text-void-fg-3 mb-4`}>
@@ -2248,7 +2260,7 @@ Use Model Context Protocol to provide Agent mode with more tools.
 							</div>
 
 							{/* Kanban section */}
-							<div className={shouldShowTab('kanban') ? `` : 'hidden'}>
+							<div className={shouldShowTab('kanban') ? `` : 'hidden'} style={sectionOrder('kanban')}>
 								<ErrorBoundary>
 									<h2 className='text-3xl mb-2'>{t('kanban.title')}</h2>
 									<h4 className={`text-void-fg-3 mb-4`}>
@@ -2259,7 +2271,7 @@ Use Model Context Protocol to provide Agent mode with more tools.
 							</div>
 
 							{/* Obsidian section */}
-							<div className={shouldShowTab('obsidian') ? `` : 'hidden'}>
+							<div className={shouldShowTab('obsidian') ? `` : 'hidden'} style={sectionOrder('obsidian')}>
 								<ErrorBoundary>
 									<h2 className='text-3xl mb-2'>{t('obsidian.title')}</h2>
 									<h4 className={`text-void-fg-3 mb-4`}>
@@ -2270,7 +2282,7 @@ Use Model Context Protocol to provide Agent mode with more tools.
 							</div>
 
 							{/* Updates section */}
-							<div className={shouldShowTab('updates') ? `` : 'hidden'}>
+							<div className={shouldShowTab('updates') ? `` : 'hidden'} style={sectionOrder('updates')}>
 								<OrchestraUpdatesPane />
 							</div>
 

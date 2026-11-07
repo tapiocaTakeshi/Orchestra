@@ -27,6 +27,12 @@ export const translations = {
 	'tab.obsidian': { en: 'Obsidian', ja: 'Obsidian' },
 	'tab.updates': { en: 'Updates', ja: 'アップデート' },
 	'tab.all': { en: 'All Settings', ja: 'すべての設定' },
+	'tabGroup.ai': { en: 'AI models', ja: 'AI モデル' },
+	'tabGroup.agents': { en: 'Agents & workflow', ja: 'エージェント・ワークフロー' },
+	'tabGroup.app': { en: 'App', ja: 'アプリ' },
+	'settings.title': { en: 'Orchestra Settings', ja: 'Orchestra の設定' },
+	'localProviders.subtitle': { en: 'Orchestra can access any model that you host locally. We automatically detect your local models by default.', ja: 'ローカルで動かしているモデルを使えます。既定ではローカルのモデルを自動で検出します。' },
+	'providers.subtitle': { en: 'Orchestra can access models from Anthropic, OpenAI, OpenRouter, and more.', ja: 'Anthropic・OpenAI・OpenRouter などのモデルを使えます。' },
 
 	// Settings - General - Account
 	'general.account.title': { en: 'Account', ja: 'アカウント' },
@@ -83,6 +89,8 @@ export const translations = {
 	// Settings - Division / MCP / Updates section headers
 	'division.title': { en: 'Division', ja: 'Division' },
 	'division.subtitle': { en: 'Manage your Division projects and role assignments.', ja: 'Division プロジェクトとロール割り当てを管理します。' },
+	'division.run': { en: 'Running the flow', ja: 'フローの実行' },
+	'division.projects': { en: 'Configured projects', ja: '設定済みのプロジェクト' },
 	// ロールに保存済みだが Division で無効 (isEnabled = false) のプロバイダ / モデルに付ける
 	'division.roleOptionDisabled': { en: '(disabled)', ja: '（無効）' },
 	'mcp.title': { en: 'MCP', ja: 'MCP' },
