@@ -10,6 +10,7 @@ import { ChevronDown, ChevronRight, FileText, Layers } from 'lucide-react';
 import { ChatMessage } from '../../../../common/chatThreadServiceTypes.js';
 import { roleDisplayConfig } from '../conductor-tsx/ConductorTypes.js';
 import { AgentRole } from '../../../../common/voidSettingsTypes.js';
+import { ReadAloudButton } from '../util/ReadAloud.js';
 
 type RoleOutput = {
 	role: string;
@@ -268,6 +269,9 @@ const RoleCard = ({ output, threadId }: { output: RoleOutput; threadId: string }
 					lineHeight: '1.7',
 					color: 'var(--void-fg-1)',
 				}}>
+					<div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-8px', marginBottom: '4px' }}>
+						<ReadAloudButton id={`role:${threadId}:${output.messageIdx}:${output.role}:${output.mdFileName ?? ''}`} text={output.mdContent} showLabel />
+					</div>
 					<ChatMarkdownRender
 						string={output.mdContent}
 						chatMessageLocation={chatMessageLocation}
@@ -409,6 +413,9 @@ export const RoleOutputPanel: React.FC = () => {
 						lineHeight: '1.8',
 						color: 'var(--void-fg-1)',
 					}}>
+						<div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-16px', marginBottom: '4px' }}>
+							<ReadAloudButton id={`role-combined:${currentThreadId}`} text={combinedMarkdown} showLabel />
+						</div>
 						<ChatMarkdownRender
 							string={combinedMarkdown}
 							chatMessageLocation={chatMessageLocation}
