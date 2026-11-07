@@ -551,7 +551,39 @@ export const contextTagsOfGroup = (group: ContextTagGroup): ContextTag[] =>
 	contextTags.filter(t => t.group === group);
 
 // Division API role assignment types
+// planner / ideaman / image は廃止したロール (保存済みの設定を読めるよう型には残す)。filesearch は AI を使わない準備ステップ。
 export type AgentRole = 'leader' | 'coder' | 'planner' | 'search' | 'research' | 'design' | 'writing' | 'ideaman' | 'filesearch' | 'image' | 'review';
+
+/**
+ * Division のロールは次の 7 つだけ (Supabase の Role と同じ):
+ *   Leader / Searcher / Researcher / Writer / Designer / Coder / Reviewer
+ * (Orchestra 内部の名前は search / research / writing / design / review)
+ */
+export const DIVISION_ROLES: readonly AgentRole[] = ['leader', 'search', 'research', 'writing', 'design', 'coder', 'review'];
+
+export const divisionRoleLabel: Record<AgentRole, string> = {
+	leader: 'Leader',
+	search: 'Searcher',
+	research: 'Researcher',
+	writing: 'Writer',
+	design: 'Designer',
+	coder: 'Coder',
+	review: 'Reviewer',
+	filesearch: 'ファイル読み込み',
+	// 廃止したロール: 古い記録の表示用に、引き継ぎ先のロール名で出す
+	planner: 'Writer',
+	ideaman: 'Researcher',
+	image: 'Designer',
+};
+
+/** 廃止したロール → 7 ロールのどれか */
+export const RETIRED_ROLE_TO_DIVISION_ROLE: Partial<Record<AgentRole, AgentRole>> = {
+	planner: 'writing',
+	ideaman: 'research',
+	image: 'design',
+};
+
+export const isDivisionRole = (role: string): boolean => (DIVISION_ROLES as readonly string[]).includes(role);
 
 // Division ロール割り当てごとの推論エフォート。未設定ならモデル既定。
 // Division API 側でプロバイダごとのネイティブ設定（Anthropic output_config.effort /
@@ -657,7 +689,7 @@ export type GlobalSettings = {
 	// 次のステップに進まない。
 	divisionFlowApprovalMode: boolean;
 	// 承認モード時、true なら coder / writer の出力でだけ一時停止し、それ以外のロール
-	// (designer / planner / search / image / reviewer など) は承認を待たずに次へ進む。
+	// (searcher / researcher / designer / reviewer) は承認を待たずに次へ進む。
 	divisionFlowApprovalCoderWriterOnly: boolean;
 	/** 目標ループ: 'auto' = 達成まで自動で回す / 'confirm' = ラウンドごとに続けるか確認する */
 	divisionGoalLoopMode: DivisionGoalLoopMode;
@@ -672,21 +704,18 @@ export type GlobalSettings = {
 
 // Default role assignments for Division API
 // Ordered to match the Orchestra flow:
-// User → Leader → (ideaman, search, research) → (design, image, planner)
-//   → (coder or writing) → review → User
+// User → Leader → (search, research) → writing → design → coder → review → User
+// ロールは Leader / Searcher / Researcher / Writer / Designer / Coder / Reviewer の 7 つだけ。
 //
 // ファイル読み込み (filesearch) はフローの最初に Orchestra がローカルで行う準備ステップで、
 // AI モデルを使わないのでロール割り当てには含めない (sendLLMMessage.impl.ts が自動で差し込む)。
 export const defaultRoleAssignments: RoleAssignment[] = [
 	{ role: 'leader', provider: 'openAI', model: 'gpt-5.2' },
-	{ role: 'ideaman', provider: 'openAI', model: 'gpt-5.2' },
 	{ role: 'search', provider: 'openAI', model: 'gpt-5.2-instant' },
 	{ role: 'research', provider: 'perplexity', model: 'sonar-pro' },
-	{ role: 'design', provider: 'gemini', model: 'gemini-3-flash' },
-	{ role: 'image', provider: 'gemini', model: 'gemini-3-flash' },
-	{ role: 'planner', provider: 'gemini', model: 'gemini-3-pro' },
-	{ role: 'coder', provider: 'anthropic', model: 'claude-opus-4-6' },
 	{ role: 'writing', provider: 'openAI', model: 'gpt-5.2' },
+	{ role: 'design', provider: 'gemini', model: 'gemini-3-flash' },
+	{ role: 'coder', provider: 'anthropic', model: 'claude-opus-4-6' },
 	{ role: 'review', provider: 'anthropic', model: 'claude-opus-4-6' },
 ];
 

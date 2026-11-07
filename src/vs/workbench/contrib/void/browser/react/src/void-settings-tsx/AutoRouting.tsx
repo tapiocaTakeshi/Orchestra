@@ -29,9 +29,11 @@ const performanceLabel = (v: number) => v >= 85 ? '最高性能のモデルだ�
 const lengthLabel = (v: number) => v <= 1024 ? '短め' : v <= 4096 ? 'ふつう' : v <= 16384 ? '長め' : 'とても長い';
 
 const ROLE_LABELS: Record<string, string> = {
-	leader: 'リーダー', coder: 'コーダー', review: 'レビュー', reviewer: 'レビュー', planner: 'プランナー',
-	search: '検索', searcher: '検索', research: 'リサーチ', researcher: 'リサーチ', design: 'デザイン', designer: 'デザイン',
-	writing: 'ライター', writer: 'ライター', ideaman: 'アイデア', image: '画像', imager: '画像',
+	leader: 'リーダー', search: 'サーチャー', searcher: 'サーチャー', research: 'リサーチャー', researcher: 'リサーチャー',
+	writing: 'ライター', writer: 'ライター', design: 'デザイナー', designer: 'デザイナー', coder: 'コーダー',
+	review: 'レビュアー', reviewer: 'レビュアー',
+	// 廃止したロール (古い記録): 引き継ぎ先のロール名で出す
+	planner: 'ライター', ideaman: 'リサーチャー', image: 'デザイナー', imager: 'デザイナー',
 };
 const roleLabel = (role: string) => ROLE_LABELS[role.toLowerCase()] ?? role;
 

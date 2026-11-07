@@ -2435,18 +2435,24 @@ const FlowIndicator = ({ messages, isRunning, reasoningSoFar, compacting }: {
 // 各フローを Cursor 風に 1 件ずつ折りたためるカード。
 // `DivisionOrchestrationComponent` と `FlowReviewComponent` で共有。
 const flowRoleLabel: Record<string, string> = {
+	// ロールは 7 つ: リーダー・サーチャー・リサーチャー・ライター・デザイナー・コーダー・レビュアー
 	leader: 'リーダー',
+	search: 'サーチャー',
+	searcher: 'サーチャー',
+	research: 'リサーチャー',
+	researcher: 'リサーチャー',
+	writing: 'ライター',
+	writer: 'ライター',
+	design: 'デザイナー',
+	designer: 'デザイナー',
 	coder: 'コーダー',
-	planner: 'プランナー',
-	search: '検索',
-	research: 'リサーチ',
-	design: 'デザイン',
-	writing: 'ライティング',
-	ideaman: 'アイデア',
+	review: 'レビュアー',
+	reviewer: 'レビュアー',
 	filesearch: '準備・AI なし',
-	image: 'イメージ',
-	review: 'レビュー',
-	reviewer: 'レビュー',
+	// 廃止したロール (古い記録): 引き継ぎ先のロール名で出す
+	planner: 'ライター',
+	ideaman: 'リサーチャー',
+	image: 'デザイナー',
 	terminal: 'コマンド',
 }
 

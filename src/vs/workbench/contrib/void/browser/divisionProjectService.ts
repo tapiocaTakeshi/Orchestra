@@ -16,7 +16,7 @@ import { IFileService } from '../../../../platform/files/common/files.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
-import { AgentRole, defaultRoleAssignments, displayInfoOfProviderName, normalizeReasoningEffort, ProviderName, providerNames, ReasoningEffort, RoleAssignment, RoleProvider } from '../common/voidSettingsTypes.js';
+import { AgentRole, RETIRED_ROLE_TO_DIVISION_ROLE, defaultRoleAssignments, displayInfoOfProviderName, normalizeReasoningEffort, ProviderName, providerNames, ReasoningEffort, RoleAssignment, RoleProvider } from '../common/voidSettingsTypes.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
 import { divisionProviderIdOfRoleProvider } from '../common/divisionModelCatalog.js';
 import * as dom from '../../../../base/browser/dom.js';
@@ -70,6 +70,12 @@ const ROLE_ALIASES: Record<string, AgentRole> = {
 	'reviewer': 'review',
 	'designer': 'design',
 	'imager': 'image',
+	'planning': 'planner',
+	'idea man': 'ideaman',
+	'idea-man': 'ideaman',
+	'deep-research': 'research',
+	'deep-researcher': 'research',
+	'coding': 'coder',
 	'writer': 'writing',
 	'searcher': 'search',
 	'researcher': 'research',
@@ -84,7 +90,6 @@ const ROLE_ALIASES: Record<string, AgentRole> = {
 const AGENT_ROLE_TO_SUPABASE_ID: Partial<Record<AgentRole, string>> = {
 	review: 'reviewer',
 	design: 'designer',
-	image: 'imager',
 	writing: 'writer',
 	search: 'searcher',
 	research: 'researcher',
@@ -466,7 +471,16 @@ class DivisionProjectService extends Disposable implements IDivisionProjectServi
 				...(effort ? { effort } : {}),
 			};
 		});
-		return { agents: result, changed };
+		// ロールは 7 つだけ: 廃止したロール (planner / ideaman / image) は引き継ぎ先のロールにする。
+		// 引き継ぎ先がもうあれば、廃止したロールの行は捨てる。
+		const merged: RoleAssignment[] = [];
+		for (const a of result) {
+			const target = RETIRED_ROLE_TO_DIVISION_ROLE[a.role];
+			if (!target) { merged.push(a); continue; }
+			changed = true;
+			if (!result.some(x => x.role === target) && !merged.some(x => x.role === target)) merged.push({ ...a, role: target });
+		}
+		return { agents: merged, changed };
 	}
 
 	private async _readConfig(uri: URI): Promise<void> {
