@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import React, { useEffect, useState } from 'react';
-import { AlertCircle, ChevronDown, ChevronUp, X } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronUp, Play, X } from 'lucide-react';
 import { useSettingsState } from '../util/services.js';
 import { errorDetails } from '../../../../common/sendLLMMessageTypes.js';
 
@@ -14,11 +14,16 @@ export const ErrorDisplay = ({
 	fullError,
 	onDismiss,
 	showDismiss,
+	onContinue,
+	continueLabel = '続ける',
 }: {
 	message: string,
 	fullError: Error | null,
 	onDismiss: (() => void) | null,
 	showDismiss?: boolean,
+	/** 「続ける」: 止まったところから再開する */
+	onContinue?: () => void,
+	continueLabel?: string,
 }) => {
 	const [isExpanded, setIsExpanded] = useState(false);
 
@@ -28,20 +33,30 @@ export const ErrorDisplay = ({
 	const message = message_ + ''
 
 	return (
-		<div className={`rounded-lg border border-red-200 bg-red-50 p-4 overflow-auto`}>
+		<div className={`rounded-lg border border-red-200 bg-red-50 px-3 py-2 overflow-auto text-[12.5px]`}>
 			{/* Header */}
 			<div className='flex items-start justify-between'>
 				<div className='flex gap-3'>
-					<AlertCircle className='h-5 w-5 text-red-600 mt-0.5' />
+					<AlertCircle className='h-4 w-4 text-red-600 mt-0.5 flex-shrink-0' />
 					<div className='flex-1'>
 						<h3 className='font-semibold text-red-800'>
 							{/* eg Error */}
 							Error
 						</h3>
-						<p className='text-red-700 mt-1'>
+						<p className='text-red-700 mt-0.5'>
 							{/* eg Something went wrong */}
 							{message}
 						</p>
+						{onContinue && (
+							<button
+								type='button'
+								onClick={onContinue}
+								className='mt-1.5 inline-flex items-center gap-1 rounded-md bg-red-600 hover:bg-red-700 text-white px-2.5 py-1 text-[12px] font-medium'
+							>
+								<Play className='h-3 w-3' />
+								{continueLabel}
+							</button>
+						)}
 					</div>
 				</div>
 

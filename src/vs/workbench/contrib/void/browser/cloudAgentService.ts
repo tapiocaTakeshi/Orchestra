@@ -985,6 +985,25 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		}
 	}
 
+	async resume(id: string): Promise<boolean> {
+		if (this._state.sendingById[id]) return false;
+		this._setState({ sendingById: { ...this._state.sendingById, [id]: true } });
+		try {
+			// エラーで止まったセッションを、止まったところから (失敗したタスクの途中から) 続ける。指示は足さない
+			const res = await this._request('POST', this._sessionPath(id, '/resume'), {});
+			if (!res.ok) {
+				this._setState({ lastError: describeCloudAgentError(res) });
+				return false;
+			}
+			if (res.data?.session) this._upsertSession(res.data.session as CloudSession);
+			this._scheduleList(LIST_INTERVAL_ACTIVE_MS);
+			void this._fetchEvents(id);
+			return true;
+		} finally {
+			this._setState({ sendingById: omitKey(this._state.sendingById, id) });
+		}
+	}
+
 	async compact(id: string): Promise<boolean> {
 		if (this._state.sendingById[id]) return false;
 		this._setState({ sendingById: { ...this._state.sendingById, [id]: true } });

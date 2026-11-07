@@ -216,6 +216,10 @@ const PANEL_CSS = `
 .oca-link:hover { text-decoration: underline; }
 .oca-md p:first-child { margin-top: 0; }
 .oca-md p:last-child { margin-bottom: 0; }
+.oca-md p, .oca-md ul, .oca-md ol, .oca-md pre, .oca-md blockquote { margin-top: 0.4em; margin-bottom: 0.4em; }
+.oca-md h1, .oca-md h2, .oca-md h3, .oca-md h4 { margin-top: 0.7em; margin-bottom: 0.3em; line-height: 1.3; }
+.oca-md li { margin: 0.1em 0; }
+.oca-md ul, .oca-md ol { padding-left: 1.3em; }
 `;
 
 const statusColor: Record<CloudSessionStatus, string> = {
@@ -3275,9 +3279,11 @@ const EventView = ({ event, onReview, division, active, onContinueGoal, continue
 		case 'user':
 			return (
 				<div style={{
-					padding: '8px 12px', borderRadius: '8px',
+					// Claude のように右寄せの小さな吹き出し
+					alignSelf: 'flex-end', maxWidth: '88%', marginTop: '6px',
+					padding: '5px 10px', borderRadius: '12px',
 					background: C.bgInput, color: C.fgInput, border: `1px solid ${C.borderInput}`,
-					fontSize: '13px', lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+					fontSize: '13px', lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
 				}}>
 					{String(data.text ?? '')}
 				</div>
@@ -3288,7 +3294,7 @@ const EventView = ({ event, onReview, division, active, onContinueGoal, continue
 			// Division Project モードでは、どのロールの発言かを小さなチップで横に出す (目標ループのレビュアーも)
 			const role = typeof data.role === 'string' && data.role ? data.role : data.phase === 'review' ? 'reviewer' : '';
 			return (
-				<div className='oca-md' style={{ fontSize: '13px', lineHeight: 1.65, color: C.fg, padding: '0 2px' }}>
+				<div className='oca-md' style={{ fontSize: '13px', lineHeight: 1.55, color: C.fg, padding: '0 2px' }}>
 					{role && (
 						<span style={{ float: 'left', margin: '2px 7px 0 0', display: 'inline-flex' }}>
 							<RoleChip role={role} name={division?.roleNames.get(role) || (data.phase === 'review' ? t('cloudAgents.goal.reviewer') : role)} />
@@ -3447,38 +3453,64 @@ const Stream = ({ session, events, onReview, footer }: {
 	const canContinueGoal = pausedReviewSeq !== null && !isCloudSessionActive(session.status) && state.isLoggedIn;
 	const continueGoal = useCallback(() => { void cloudAgentService.sendMessage(session.id, '', { continueGoal: true }); }, [cloudAgentService, session.id]);
 
+	const contentRef = useRef<HTMLDivElement | null>(null);
+	const lastScrollTop = useRef(0);
 	const scrollToBottom = useCallback(() => {
 		const el = scrollRef.current;
 		if (el) el.scrollTop = el.scrollHeight;
 		stickToBottom.current = true;
 		setAtBottom(true);
 	}, []);
+	const stick = useCallback(() => {
+		const el = scrollRef.current;
+		if (el && stickToBottom.current) el.scrollTop = el.scrollHeight;
+	}, []);
 
-	// セッションを切り替えたら一番下から
-	useLayoutEffect(() => { scrollToBottom(); }, [session.id, scrollToBottom]);
-	// 一番下を見ているときだけ、新しいイベントで自動スクロールする (上にスクロールして読んでいるときは動かさない)
-	useLayoutEffect(() => {
-		if (stickToBottom.current) {
-			const el = scrollRef.current;
-			if (el) el.scrollTop = el.scrollHeight;
-		}
-	}, [lastSeq, items.length, session.status]);
+	// セッションを切り替えた / 指示を送った (ユーザーのイベントが増えた) / 再開した: 一番下 (最新) から追いかける
+	const userCount = useMemo(() => (events ?? []).filter(e => e.type === 'user').length, [events]);
+	useLayoutEffect(() => { scrollToBottom(); }, [session.id, userCount, scrollToBottom]);
+	useLayoutEffect(() => { if (session.status === 'running') scrollToBottom(); }, [session.status, scrollToBottom]);
+	// 既定で常に最新を表示する。描画のたびと、高さが変わったとき (コードブロック・図・カードの開閉・パネルの大きさ) に一番下へ。
+	// 止まるのは利用者が自分で上へスクロールしたときだけ
+	useLayoutEffect(() => { stick(); });
+	useEffect(() => {
+		const observer = new ResizeObserver(() => stick());
+		if (contentRef.current) observer.observe(contentRef.current);
+		if (scrollRef.current) observer.observe(scrollRef.current);
+		return () => observer.disconnect();
+	}, [stick]);
+	useEffect(() => {
+		const el = scrollRef.current;
+		if (!el) return;
+		const onWheel = (e: WheelEvent) => { if (e.deltaY < 0) { stickToBottom.current = false; setAtBottom(false); } };
+		const onKey = (e: KeyboardEvent) => { if (['ArrowUp', 'PageUp', 'Home'].includes(e.key)) stickToBottom.current = false; };
+		el.addEventListener('wheel', onWheel, { passive: true });
+		el.addEventListener('keydown', onKey);
+		return () => { el.removeEventListener('wheel', onWheel); el.removeEventListener('keydown', onKey); };
+	}, []);
 
 	const active = isCloudSessionActive(session.status);
+	// エラーで止まった: 「続ける」で、止まったところから (失敗したタスクの途中から) 再開する
+	const canResume = session.status === 'failed' && state.isLoggedIn && !!events?.length;
+	const resuming = !!state.sendingById[session.id];
 
 	return (
 		<div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>
 			<div
 				ref={scrollRef}
 				onScroll={e => {
+					// 一番下の近くに戻ったら、また追いかける (離れるのはホイール・キー・スクロールバーで上へ動かしたとき)
 					const el = e.currentTarget;
-					const bottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-					stickToBottom.current = bottom;
-					if (bottom !== atBottom) setAtBottom(bottom);
+					const bottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+					if (bottom) stickToBottom.current = true;
+					else if (!stickToBottom.current || el.scrollTop < lastScrollTop.current) stickToBottom.current = false;
+					lastScrollTop.current = el.scrollTop;
+					const shown = stickToBottom.current || bottom;
+					if (shown !== atBottom) setAtBottom(shown);
 				}}
 				style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}
 			>
-				<div style={{ maxWidth: '860px', margin: '0 auto', padding: '16px 16px 8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+				<div ref={contentRef} style={{ maxWidth: '860px', margin: '0 auto', padding: '10px 12px 6px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
 					{events === undefined ? (
 						<div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: C.fgMuted }}><Spinner /> {t('cloudAgents.transcript.loading')}</div>
 					) : events.length === 0 ? (
@@ -3511,6 +3543,20 @@ const Stream = ({ session, events, onReview, footer }: {
 						<div style={{ display: 'flex', gap: '6px', fontSize: '12px', color: C.error, padding: '0 6px' }}>
 							<AlertTriangle size={13} style={{ marginTop: '2px', flexShrink: 0 }} />
 							<span style={{ whiteSpace: 'pre-wrap' }}>{session.errorMsg}</span>
+						</div>
+					)}
+					{canResume && (
+						<div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 6px', flexWrap: 'wrap' }}>
+							<button
+								type='button'
+								disabled={resuming}
+								onClick={() => { void cloudAgentService.resume(session.id); }}
+								style={{ ...buttonStyle('primary', resuming), padding: '3px 10px' }}
+							>
+								{resuming ? <Spinner size={11} /> : <RefreshCw size={12} />}
+								{t('cloudAgents.resume.button')}
+							</button>
+							<span style={{ fontSize: '11px', color: C.fgMuted }}>{t('cloudAgents.resume.hint')}</span>
 						</div>
 					)}
 				</div>
