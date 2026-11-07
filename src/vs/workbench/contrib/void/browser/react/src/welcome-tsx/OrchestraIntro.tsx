@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 /*
- * The chat's start screen: an animated hero, and a tutorial that plays itself and shows how a
+ * The Welcome page's intro: an animated hero, and a tutorial that plays itself and shows how a
  * Division Project run goes — the request, the workflow diagram (.division/workflow.json), the paper
  * (.division/paper.md) and the specification (.division/specification.md), the design (.division/design/)
  * and approving / editing them — with buttons that open those files.
@@ -12,12 +12,15 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { BookOpen, CheckCircle2, ChevronLeft, ChevronRight, FileJson, FileText, LayoutTemplate, Pause, Play, Repeat, Sparkles, Split, UserCheck, Users, Workflow, X } from 'lucide-react';
+import { BookOpen, CheckCircle2, MessageSquare, ChevronLeft, ChevronRight, FileJson, FileText, LayoutTemplate, Pause, Play, Repeat, Sparkles, Split, UserCheck, Users, Workflow, X } from 'lucide-react';
 import { URI } from '../../../../../../../base/common/uri.js';
-import { useAccessor } from '../util/services.js';
+import { useAccessor, useIsDark } from '../util/services.js';
+import '../styles.css';
 import { TranslationKey, useTranslation } from '../util/i18n.js';
 
 const STEP_MS = 5200;
+// The chat's Ctrl+L action (opens the chat sidebar and focuses its input). See actionIDs.ts.
+const OPEN_CHAT_COMMAND_ID = 'void.ctrlLAction';
 const HIDE_KEY = 'orchestra.intro.tutorialHidden';
 
 const readHidden = (): boolean => {
@@ -46,7 +49,7 @@ const STYLES = `
 .oi-in { opacity: 0; animation: oi-fade-up 0.5s ease-out forwards; }
 .oi-pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; font-size: 11px; border: 1px solid var(--void-border-2); background: var(--void-bg-1); color: var(--void-fg-2); }
 .oi-card { border-radius: 14px; border: 1px solid var(--void-border-2); background: var(--void-bg-2); overflow: hidden; }
-.oi-stage { position: relative; height: 128px; margin: 0 12px; border-radius: 10px; background: var(--void-bg-1); border: 1px solid var(--void-border-2); overflow: hidden; }
+.oi-stage { position: relative; height: 150px; margin: 0 12px; border-radius: 10px; background: var(--void-bg-1); border: 1px solid var(--void-border-2); overflow: hidden; }
 .oi-svg-pop { opacity: 0; transform-box: fill-box; transform-origin: center; animation: oi-pop 0.45s ease-out forwards; }
 .oi-edge { stroke: var(--void-fg-3); stroke-width: 1.4; fill: none; stroke-dasharray: 60; stroke-dashoffset: 60; animation: oi-draw 0.5s ease-out forwards; }
 .oi-file { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 6px; font-size: 10.5px; font-family: var(--vscode-editor-font-family, monospace); color: var(--void-fg-1); background: rgba(139, 92, 246, 0.14); border: 1px solid rgba(139, 92, 246, 0.45); opacity: 0; animation: oi-pop 0.45s ease-out forwards, oi-glow 2.2s ease-in-out 0.6s infinite; }
@@ -61,6 +64,10 @@ const STYLES = `
 .oi-icon-btn { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; border: none; background: transparent; color: var(--void-fg-3); cursor: pointer; }
 .oi-icon-btn:hover { color: var(--void-fg-1); background: var(--void-bg-3, rgba(127,127,127,0.15)); }
 .oi-press { animation: oi-press 2.4s ease-in-out 1s infinite; }
+.oi-welcome { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 16px; align-items: start; text-align: left; }
+@media (max-width: 760px) { .oi-welcome { grid-template-columns: minmax(0, 1fr); } }
+.oi-cta { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; background: var(--oi-accent); color: var(--vscode-button-foreground, #fff); }
+.oi-cta:hover { filter: brightness(1.08); }
 @media (prefers-reduced-motion: reduce) {
 	.oi-root *, .oi-root *::before, .oi-root *::after { animation-duration: 0.001ms !important; animation-delay: 0ms !important; animation-iteration-count: 1 !important; }
 }
@@ -71,6 +78,7 @@ const delay = (s: number): React.CSSProperties => ({ animationDelay: `${s}s` });
 /** The hero at the top of the start screen. */
 export const OrchestraHero = () => {
 	const { t } = useTranslation();
+	const commandService = useAccessor().get('ICommandService');
 	return (
 		<div className='oi-root oi-hero select-none'>
 			<style>{STYLES}</style>
@@ -91,6 +99,11 @@ export const OrchestraHero = () => {
 					<span className='oi-pill oi-in' style={delay(0.3)}><Users size={12} color='var(--oi-red)' /> {t('intro.pill.team')}</span>
 					<span className='oi-pill oi-in' style={delay(0.4)}><Workflow size={12} color='var(--oi-violet)' /> {t('intro.pill.workflow')}</span>
 					<span className='oi-pill oi-in' style={delay(0.5)}><UserCheck size={12} color='var(--oi-amber)' /> {t('intro.pill.approve')}</span>
+				</div>
+				<div className='oi-in' style={{ marginTop: 6, ...delay(0.6) }}>
+					<button type='button' className='oi-cta' onClick={() => { void commandService.executeCommand(OPEN_CHAT_COMMAND_ID); }}>
+						<MessageSquare size={13} /> {t('intro.hero.openChat')}
+					</button>
 				</div>
 			</div>
 		</div>
@@ -288,7 +301,7 @@ const useDivisionFiles = () => {
 	return { hasFolder: !!folder, exists, openWorkflow, openPaper, openSpec, openDesign };
 };
 
-/** The self-playing tutorial under the chat input on the start screen. */
+/** The self-playing tutorial on the Welcome page. */
 export const OrchestraTutorial = () => {
 	const { t } = useTranslation();
 	const [hidden, setHidden] = useState(readHidden);
@@ -374,6 +387,19 @@ export const OrchestraTutorial = () => {
 						</span>
 					</div>
 				))}
+			</div>
+		</div>
+	);
+};
+
+/** What the Welcome page shows above its lists: the hero and the tutorial side by side (stacked when narrow). */
+export const OrchestraWelcome = () => {
+	const isDark = useIsDark();
+	return (
+		<div className={`@@void-scope ${isDark ? 'dark' : ''}`} style={{ width: '100%' }}>
+			<div className='oi-root oi-welcome'>
+				<OrchestraHero />
+				<OrchestraTutorial />
 			</div>
 		</div>
 	);
