@@ -277,6 +277,9 @@ CloudAgentService  ── IPC ──▶  CloudAgentMainService  ── HTTPS ─
 
 1. **作成**: `POST /api/cloud-sessions` でセッションを作ると、Division がサンドボックスを用意する (状態: アップロード中)。
    GitHub のリポジトリ / URL から始めるときは、2 のアップロードを飛ばして 3 の `/start` に `repo: { fullName | url, branch? }` を付け、サーバーが clone する。
+   GitHub のリポジトリは Claude Code のように複数選べる (最大 10 個、`state.githubPicks`)。2 個以上なら `repos: [...]` を送り、サーバーが
+   workspace 直下のそれぞれのフォルダ (リポジトリ名) に clone する。一覧・ヘッダーの出どころは `workspaceInfo.repos` から全部並べる。
+   複数リポジトリのセッションの PR はサーバー (`?repo=owner/name`) とモバイルが対応済みで、デスクトップのパネルはまだ PR ボタンを出さない。
 2. **アップロード**: main プロセスがワークスペースを tar.gz にまとめ、2 MiB ずつに切って `POST …/:id/upload` に順に送る。
    - git 管理のフォルダなら `git ls-files -co --exclude-standard` の結果 (= コミット済み + .gitignore されていない未追跡ファイル) を送る。
    - git 管理でなければフォルダを歩き、`node_modules` `.next` `dist` `build` `out` `.venv` `venv` `__pycache__` `.turbo` `.cache` `coverage` `target` は飛ばす。

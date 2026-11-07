@@ -64,6 +64,7 @@ import {
 	CLOUD_PR_ERROR_CODES,
 	CloudSession,
 	CloudSessionEvent,
+	CLOUD_MAX_SESSION_REPOS,
 	CloudStartRepo,
 	CloudWorkspaceInfo,
 	GITHUB_API_PREFIX,
@@ -132,6 +133,8 @@ const GITHUB_CONNECT_POLL_MS = 2_000;
 const GITHUB_CONNECT_TIMEOUT_MS = 5 * 60_000;
 /** 最後に選んだ GitHub のリポジトリとブランチ (StorageScope.APPLICATION) */
 const GITHUB_PICK_STORAGE_KEY = 'orchestra.cloudAgents.githubPick';
+/** 複数選択になってからの保存先 (無ければ GITHUB_PICK_STORAGE_KEY の 1 個を読む) */
+const GITHUB_PICKS_STORAGE_KEY = 'orchestra.cloudAgents.githubPicks';
 /** 最後に選んだモデル (StorageScope.APPLICATION) */
 const MODEL_PICK_STORAGE_KEY = 'orchestra.cloudAgents.modelPick';
 /** 最後に選んだ目標ループ (StorageScope.APPLICATION) */
@@ -362,6 +365,7 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		githubRepos: initialGitHubRepos(),
 		githubBranchesByRepo: {},
 		githubPick: null,
+		githubPicks: [],
 		modelPick: null,
 		goalLoopPick: CLOUD_GOAL_LOOP_DEFAULT,
 		approvalModePick: false,
@@ -418,7 +422,7 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		this._register(this._fileService.registerProvider(CLOUD_DOCUMENT_SCHEME, this._documents));
 
 		this._lastToken = this._tokenSignature();
-		this._state = { ...this._state, isLoggedIn: this._isLoggedIn(), workspaceName: this._workspaceFolder()?.name ?? null, githubPick: this._loadGitHubPick(), modelPick: this._loadModelPick(), goalLoopPick: this._loadGoalLoopPick(), approvalModePick: this._loadApprovalModePick() };
+		this._state = { ...this._state, isLoggedIn: this._isLoggedIn(), workspaceName: this._workspaceFolder()?.name ?? null, ...this._pickState(this._loadGitHubPicks()), modelPick: this._loadModelPick(), goalLoopPick: this._loadGoalLoopPick(), approvalModePick: this._loadApprovalModePick() };
 
 		this._register(this._settingsService.onDidChangeState(() => this._onSettingsChanged()));
 		this._register(this._workspaceService.onDidChangeWorkspaceFolders(() => {
@@ -811,20 +815,33 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		const count = Math.max(1, Math.min(CLOUD_AGENTS_MAX_PARALLEL, requested));
 		const source: CloudSessionSource = opts.source ?? (opts.includeWorkspace ? 'workspace' : 'empty');
 
-		// github / url: アップロードせず、サーバーに clone してもらう
-		let repo: CloudStartRepo | undefined;
+		// github / url: アップロードせず、サーバーに clone してもらう (github は複数可)
+		const repos: CloudStartRepo[] = [];
 		if (source === 'github' || source === 'url') {
-			const branch = (opts.repo?.branch ?? '').trim();
-			const target = source === 'github' ? (opts.repo?.fullName ?? '').trim() : (opts.repo?.url ?? '').trim();
-			const issue = (source === 'github' ? validateGitHubFullName(target) : validateCloudRepoUrl(target)) ?? validateCloudRepoBranch(branch);
-			if (issue) {
-				this._setState({ lastError: issue });
+			const wanted = source === 'github' && opts.repos?.length
+				? opts.repos.map(r => ({ target: (r.fullName ?? '').trim(), branch: (r.branch ?? '').trim() }))
+				: [{ target: source === 'github' ? (opts.repo?.fullName ?? '').trim() : (opts.repo?.url ?? '').trim(), branch: (opts.repo?.branch ?? '').trim() }];
+			if (wanted.length > CLOUD_MAX_SESSION_REPOS) {
+				this._setState({ lastError: `リポジトリは ${CLOUD_MAX_SESSION_REPOS} 個まで選べます。` });
 				return [];
 			}
-			repo = source === 'github'
-				? { fullName: target, ...(branch ? { branch } : {}) }
-				: { url: target, ...(branch ? { branch } : {}) };
+			for (const { target, branch } of wanted) {
+				const issue = (source === 'github' ? validateGitHubFullName(target) : validateCloudRepoUrl(target)) ?? validateCloudRepoBranch(branch);
+				if (issue) {
+					this._setState({ lastError: issue });
+					return [];
+				}
+				repos.push(source === 'github'
+					? { fullName: target, ...(branch ? { branch } : {}) }
+					: { url: target, ...(branch ? { branch } : {}) });
+			}
+			const keys = repos.map(r => `${('fullName' in r ? r.fullName : r.url).toLowerCase()}#${r.branch ?? ''}`);
+			if (new Set(keys).size !== keys.length) {
+				this._setState({ lastError: '同じリポジトリが重複しています。' });
+				return [];
+			}
 		}
+		const repo: CloudStartRepo | undefined = repos[0];
 
 		const folder = this._workspaceFolder();
 		const folderPath = source === 'workspace' && folder && folder.uri.scheme === 'file' ? folder.uri.fsPath : null;
@@ -833,9 +850,9 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		}
 		// 一覧と詳細に出す名前: リポジトリならリポジトリ名 (clone したフォルダ名)、フォルダを送るならフォルダ名
 		const workspaceName = repo
-			? cloudRepoFolderName(repo) || undefined
+			? repos.map(r => cloudRepoFolderName(r)).filter(Boolean).join(', ').slice(0, 200) || undefined
 			: (folderPath && folder ? folder.name : undefined);
-		const repoLabel = repo ? ('fullName' in repo ? repo.fullName : repo.url) : '';
+		const repoLabel = repos.map(r => ('fullName' in r ? r.fullName : r.url)).join(', ');
 		const baseTitle = (opts.title ?? '').trim();
 		const model = (opts.model ?? '').trim();
 		const projectId = (opts.projectId ?? '').trim();
@@ -901,7 +918,8 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 			}
 			const started = await this._request('POST', this._sessionPath(session.id, '/start'), {
 				...(workspaceInfo ? { workspaceInfo } : {}),
-				...(repo ? { repo } : {}),
+				// 1 個は従来どおり repo (古いサーバーでも動く)。2 個以上は repos
+				...(repos.length > 1 ? { repos } : repo ? { repo } : {}),
 			}, CREATE_TIMEOUT_MS);
 			if (!started.ok) {
 				errors.push(`エージェントを開始できませんでした: ${describeCloudAgentError(started)}`);
@@ -1818,14 +1836,48 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 	}
 
 	setGitHubPick(pick: CloudGitHubPick | null): void {
-		const next = pick && !validateGitHubFullName(pick.repo?.fullName ?? '')
-			? { repo: toGitHubRepo(pick.repo), branch: validateCloudRepoBranch(pick.branch ?? '') ? '' : (pick.branch ?? '').trim() }
-			: null;
-		this._setState({ githubPick: next });
+		this.setGitHubPicks(pick ? [pick] : []);
+	}
+
+	setGitHubPicks(picks: CloudGitHubPick[]): void {
+		const seen = new Set<string>();
+		const next: CloudGitHubPick[] = [];
+		for (const pick of picks) {
+			if (!pick || validateGitHubFullName(pick.repo?.fullName ?? '')) continue;
+			const key = pick.repo.fullName.toLowerCase();
+			if (seen.has(key) || next.length >= CLOUD_MAX_SESSION_REPOS) continue;
+			seen.add(key);
+			next.push({ repo: toGitHubRepo(pick.repo), branch: validateCloudRepoBranch(pick.branch ?? '') ? '' : (pick.branch ?? '').trim() });
+		}
+		this._setState(this._pickState(next));
 		try {
-			if (next) this._storageService.store(GITHUB_PICK_STORAGE_KEY, JSON.stringify(next), StorageScope.APPLICATION, StorageTarget.MACHINE);
-			else this._storageService.remove(GITHUB_PICK_STORAGE_KEY, StorageScope.APPLICATION);
+			if (next.length) {
+				this._storageService.store(GITHUB_PICKS_STORAGE_KEY, JSON.stringify(next), StorageScope.APPLICATION, StorageTarget.MACHINE);
+				// 古い版が読む 1 個も、先頭に合わせておく
+				this._storageService.store(GITHUB_PICK_STORAGE_KEY, JSON.stringify(next[0]), StorageScope.APPLICATION, StorageTarget.MACHINE);
+			} else {
+				this._storageService.remove(GITHUB_PICKS_STORAGE_KEY, StorageScope.APPLICATION);
+				this._storageService.remove(GITHUB_PICK_STORAGE_KEY, StorageScope.APPLICATION);
+			}
 		} catch { /* 覚えられなくても選択はできている */ }
+	}
+
+	toggleGitHubPick(repo: GitHubRepo): void {
+		const picks = this._state.githubPicks;
+		if (picks.some(p => p.repo.fullName === repo.fullName)) {
+			this.setGitHubPicks(picks.filter(p => p.repo.fullName !== repo.fullName));
+			return;
+		}
+		if (picks.length >= CLOUD_MAX_SESSION_REPOS) return;
+		this.setGitHubPicks([...picks, { repo, branch: repo.defaultBranch }]);
+	}
+
+	setGitHubPickBranch(fullName: string, branch: string): void {
+		this.setGitHubPicks(this._state.githubPicks.map(p => (p.repo.fullName === fullName ? { ...p, branch } : p)));
+	}
+
+	private _pickState(picks: CloudGitHubPick[]): Pick<CloudAgentState, 'githubPick' | 'githubPicks'> {
+		return { githubPicks: picks, githubPick: picks[0] ?? null };
 	}
 
 	setModelPick(pick: CloudModelPick | null): void {
@@ -1882,17 +1934,27 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		}
 	}
 
-	private _loadGitHubPick(): CloudGitHubPick | null {
-		try {
-			const raw = this._storageService.get(GITHUB_PICK_STORAGE_KEY, StorageScope.APPLICATION);
-			if (!raw) return null;
-			const parsed = JSON.parse(raw);
+	private _loadGitHubPicks(): CloudGitHubPick[] {
+		const toPick = (parsed: any): CloudGitHubPick | null => {
 			const repo = toGitHubRepo(parsed?.repo);
 			if (validateGitHubFullName(repo.fullName)) return null;
 			const branch = typeof parsed?.branch === 'string' && !validateCloudRepoBranch(parsed.branch) ? parsed.branch.trim() : '';
 			return { repo, branch };
+		};
+		try {
+			const many = this._storageService.get(GITHUB_PICKS_STORAGE_KEY, StorageScope.APPLICATION);
+			if (many) {
+				const parsed = JSON.parse(many);
+				if (Array.isArray(parsed)) {
+					return parsed.map(toPick).filter((p): p is CloudGitHubPick => !!p).slice(0, CLOUD_MAX_SESSION_REPOS);
+				}
+			}
+			const raw = this._storageService.get(GITHUB_PICK_STORAGE_KEY, StorageScope.APPLICATION);
+			if (!raw) return [];
+			const one = toPick(JSON.parse(raw));
+			return one ? [one] : [];
 		} catch {
-			return null;
+			return [];
 		}
 	}
 }

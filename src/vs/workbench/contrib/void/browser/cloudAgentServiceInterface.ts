@@ -166,7 +166,10 @@ export type CloudAgentState = {
 	githubRepos: CloudGitHubReposState;
 	/** fullName ("owner/name") → ブランチ一覧 */
 	githubBranchesByRepo: Record<string, CloudGitHubBranchesState>;
+	/** 選んだリポジトリの先頭 (githubPicks[0])。1 個だけ扱う古いコード用 */
 	githubPick: CloudGitHubPick | null;
+	/** 選んだリポジトリとブランチ (Claude Code のように複数選べる。最大 CLOUD_MAX_SESSION_REPOS 個) */
+	githubPicks: CloudGitHubPick[];
 	/** 最後に選んだモデル。null = まだ選んだことがない (パネルは使用中の Division プロジェクトがあれば Division Project を既定にする) */
 	modelPick: CloudModelPick | null;
 	/** 新しいエージェントの目標ループ (覚えておいて次回の初期値にする)。既定は auto */
@@ -214,6 +217,8 @@ export type CreateCloudSessionsOptions = {
 	source?: CloudSessionSource;
 	/** source が github なら fullName、url なら url (と、どちらも任意で branch) */
 	repo?: { fullName?: string; url?: string; branch?: string };
+	/** source が github のとき、複数のリポジトリ (repo より優先)。2 個以上はそれぞれ workspace 直下の別フォルダに clone される */
+	repos?: { fullName: string; branch?: string }[];
 	/** 旧オプション (source を省略したときだけ見る): ワークスペースを tar.gz にしてサンドボックスへ送る */
 	includeWorkspace?: boolean;
 	/** 同じ指示で並列に起動するセッション数 (1〜10) */
@@ -273,6 +278,12 @@ export interface ICloudAgentService {
 	loadGitHubBranches(fullName: string, force?: boolean): Promise<void>;
 	/** 選んだリポジトリとブランチを覚える (次回の初期値になる)。null で忘れる */
 	setGitHubPick(pick: CloudGitHubPick | null): void;
+	/** 選んだリポジトリの一覧を丸ごと置き換えて覚える */
+	setGitHubPicks(picks: CloudGitHubPick[]): void;
+	/** 一覧で押したリポジトリを足す (選んである物なら外す) */
+	toggleGitHubPick(repo: import('../common/cloudAgentTypes.js').GitHubRepo): void;
+	/** 選んであるリポジトリのブランチを変える */
+	setGitHubPickBranch(fullName: string, branch: string): void;
 
 	/** 選んだモデルを覚える (次回の初期値になる)。null で忘れる */
 	setModelPick(pick: CloudModelPick | null): void;
