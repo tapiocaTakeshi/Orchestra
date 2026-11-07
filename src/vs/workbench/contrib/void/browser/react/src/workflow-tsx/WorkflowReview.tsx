@@ -6,12 +6,90 @@
  *  then approve (as edited), send it back with feedback, or stop.
  *--------------------------------------------------------------------------------------*/
 
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Plus, RotateCcw, Trash2, X, UserCheck, Bot, Play, Flag, Repeat, CornerDownLeft, Split } from 'lucide-react';
+import { URI } from '../../../../../../../base/common/uri.js';
+import { VSBuffer } from '../../../../../../../base/common/buffer.js';
+import { useAccessor } from '../util/services.js';
 import {
 	DEFAULT_WHILE_ITERATIONS, DivisionWorkflow, MAX_LOOP_ITERATIONS, WorkflowNode, insertAfter, insertLoopAfter, insertParallelAfter, layoutWorkflow, loopLabel,
-	newWorkflowId, removeLoop, removeNode, setApprovalAfter, workflowErrors, workflowLoops, workflowSteps,
+	newWorkflowId, normalizeWorkflow, removeLoop, removeNode, setApprovalAfter, workflowErrors, workflowLoops, workflowSteps,
 } from '../../../../common/divisionWorkflow.js';
+
+/** The JSON written to .division/workflow.json, the same shape the Division Project run writes. */
+export const workflowToJson = (w: DivisionWorkflow): string => JSON.stringify(w, null, 2) + '\n';
+
+/** Nodes without positions (all at 0,0) are laid out; positions already set are kept. */
+const withLayout = (w: DivisionWorkflow): DivisionWorkflow =>
+	w.nodes.length > 1 && w.nodes.every(n => n.position.x === 0 && n.position.y === 0) ? layoutWorkflow(w) : w;
+
+const WRITE_DELAY_MS = 300;
+
+/**
+ * The workflow shown from .division/workflow.json: read when shown, read again whenever the file
+ * changes on disk (the workflow editor saved it, the JSON was edited, the run rewrote it), and
+ * edits are written back to the file. Without a uri (cloud sessions, answered reviews) it is just
+ * local state starting from `fallback`.
+ */
+const useWorkflowFile = (uri: URI | undefined, fallback: DivisionWorkflow) => {
+	const accessor = useAccessor();
+	const fileService = accessor.get('IFileService');
+	const [workflow, setWorkflowState] = useState<DivisionWorkflow>(() => layoutWorkflow(fallback));
+	const [fromFile, setFromFile] = useState(false);
+	/** The file's content as last read or written here: a change event with this content is our own write. */
+	const lastJson = useRef<string | null>(null);
+	const pendingWrite = useRef<{ timer: ReturnType<typeof setTimeout>; json: string } | null>(null);
+	const mounted = useRef(true);
+
+	const write = useCallback((json: string) => {
+		if (!uri) { return; }
+		fileService.writeFile(uri, VSBuffer.fromString(json)).catch(e => console.error('write workflow.json', e));
+	}, [fileService, uri]);
+
+	const load = useCallback(async () => {
+		if (!uri) { return; }
+		try {
+			const text = (await fileService.readFile(uri)).value.toString();
+			// An edit made here is about to be written: it is newer than what is on disk.
+			if (!mounted.current || pendingWrite.current || text === lastJson.current) { return; }
+			const parsed = normalizeWorkflow(text);
+			if (!parsed) { return; } // not a workflow (yet): keep showing the last good one
+			lastJson.current = text;
+			setWorkflowState(withLayout(parsed));
+			setFromFile(true);
+		} catch {
+			// No file (yet): keep showing the last good one
+		}
+	}, [fileService, uri]);
+
+	useEffect(() => {
+		mounted.current = true;
+		void load();
+		if (!uri) { return () => { mounted.current = false; }; }
+		const d = fileService.onDidFilesChange(e => { if (e.contains(uri)) { void load(); } });
+		return () => {
+			mounted.current = false;
+			d.dispose();
+			// Write an edit still waiting for its delay.
+			const p = pendingWrite.current;
+			if (p) { clearTimeout(p.timer); pendingWrite.current = null; write(p.json); }
+		};
+	}, [fileService, uri, load, write]);
+
+	const setWorkflow = useCallback((next: DivisionWorkflow) => {
+		setWorkflowState(next);
+		if (!uri) { return; }
+		const json = workflowToJson(next);
+		lastJson.current = json;
+		if (pendingWrite.current) { clearTimeout(pendingWrite.current.timer); }
+		pendingWrite.current = {
+			json,
+			timer: setTimeout(() => { pendingWrite.current = null; write(json); }, WRITE_DELAY_MS),
+		};
+	}, [uri, write]);
+
+	return { workflow, setWorkflow, fromFile };
+};
 
 const NODE_W = 190;
 const NODE_H = 58;
@@ -282,8 +360,10 @@ export const WorkflowNodeEditor = ({ workflow, selected, options, roleNames, cha
 export type WorkflowReviewStatus = 'pending' | 'approved' | 'revised' | 'rejected';
 
 /** Review and edit the leader's workflow, then approve / send back / stop. */
-export const WorkflowReview = ({ workflow: initial, status, leader, roleOptions, roleNames, onApprove, onRevise, onReject, busy }: {
+export const WorkflowReview = ({ workflow: initial, fileUri, status, leader, roleOptions, roleNames, onApprove, onRevise, onReject, busy }: {
 	workflow: DivisionWorkflow;
+	/** .division/workflow.json: when given, the diagram shows that file (and follows it), and edits are written to it */
+	fileUri?: URI;
 	status: WorkflowReviewStatus;
 	leader?: string;
 	/** Role slugs a step can be given (the project's assigned roles) */
@@ -295,9 +375,14 @@ export const WorkflowReview = ({ workflow: initial, status, leader, roleOptions,
 	onReject?: () => void;
 	busy?: boolean;
 }) => {
-	const [workflow, setWorkflow] = useState<DivisionWorkflow>(() => layoutWorkflow(initial));
-	const [edited, setEdited] = useState(false);
+	const { workflow, setWorkflow, fromFile } = useWorkflowFile(fileUri, initial);
+	// Edited = differs from the leader's plan, whether edited here or in workflow.json.
+	const initialJson = useMemo(() => workflowToJson(normalizeWorkflow(initial) ?? initial), [initial]);
+	const [editedHere, setEditedHere] = useState(false);
+	const edited = editedHere || (fromFile && workflowToJson(normalizeWorkflow(workflow) ?? workflow) !== initialJson);
 	const [selectedId, setSelectedId] = useState<string | null>(null);
+	// The file may drop the node being edited.
+	useEffect(() => { setSelectedId(id => (id && workflow.nodes.some(n => n.id === id) ? id : null)); }, [workflow]);
 	const [feedbackOpen, setFeedbackOpen] = useState(false);
 	const [feedback, setFeedback] = useState('');
 	const pending = status === 'pending';
@@ -305,7 +390,7 @@ export const WorkflowReview = ({ workflow: initial, status, leader, roleOptions,
 	const selected = workflow.nodes.find(n => n.id === selectedId) ?? null;
 	const options = useWorkflowRoleOptions(workflow, roleOptions);
 
-	const change = (next: DivisionWorkflow) => { setWorkflow(next); setEdited(true); };
+	const change = (next: DivisionWorkflow) => { setWorkflow(next); setEditedHere(true); };
 
 	const statusLabel = status === 'approved' ? '✅ 承認済み' : status === 'revised' ? '↩️ 差し戻し済み' : status === 'rejected' ? '⏹ 中止' : null;
 
@@ -316,6 +401,7 @@ export const WorkflowReview = ({ workflow: initial, status, leader, roleOptions,
 				{leader && <span style={{ fontSize: 11, color: 'var(--void-fg-3)' }}>{leader}</span>}
 				{statusLabel && <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--void-fg-3)' }}>{statusLabel}</span>}
 			</div>
+			{pending && fromFile && <div style={{ fontSize: 11, color: 'var(--void-fg-3)' }}>表示しているのは <code>.division/workflow.json</code> です。ここでの編集はファイルに書き込まれ、ファイルを保存するとここにも反映されます。</div>}
 			{pending && <div style={{ fontSize: 11.5, color: 'var(--void-fg-3)' }}>ノードを押すと編集できます。承認するとこの順で各ロールが実行し、「承認」ノードの所であなたの確認を待ちます。繰り返しは for / while ループ (目標はここに書きます)、同時に進めたい作業は並列ノードで組めます。</div>}
 			<WorkflowLoopSummary workflow={workflow} />
 

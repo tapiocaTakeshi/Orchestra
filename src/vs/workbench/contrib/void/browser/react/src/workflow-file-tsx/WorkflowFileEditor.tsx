@@ -12,7 +12,7 @@ import type { Event } from '../../../../../../../base/common/event.js';
 import { useAccessor, useDivisionProjectConfig, useIsDark } from '../util/services.js';
 import { DivisionWorkflow, layoutWorkflow, normalizeWorkflow, workflowErrors } from '../../../../common/divisionWorkflow.js';
 import { DIVISION_ROLES, divisionRoleLabel } from '../../../../common/voidSettingsTypes.js';
-import { WorkflowLoopSummary, WorkflowNodeEditor, useWorkflowRoleOptions } from '../workflow-tsx/WorkflowReview.js';
+import { WorkflowLoopSummary, WorkflowNodeEditor, useWorkflowRoleOptions, workflowToJson } from '../workflow-tsx/WorkflowReview.js';
 import { NODE_COLORS, NODE_ICONS, NODE_TYPE_LABEL, WORKFLOW_CANVAS_CSS, WorkflowCanvas, keepPositions, nodeTitle } from './WorkflowCanvas.js';
 import '../styles.css';
 
@@ -28,9 +28,6 @@ export type WorkflowFileBridge = {
 	/** Write now (the Save button). */
 	save: () => Promise<void>;
 };
-
-/** The JSON written back, the same shape the Division Project run writes. */
-export const workflowToJson = (w: DivisionWorkflow): string => JSON.stringify(w, null, 2) + '\n';
 
 const OPEN_WITH_COMMAND_ID = 'vscode.openWith';
 
