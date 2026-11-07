@@ -142,6 +142,8 @@ const MODEL_PICK_STORAGE_KEY = 'orchestra.cloudAgents.modelPick';
 /** 最後に選んだ目標ループ (StorageScope.APPLICATION) */
 const GOAL_LOOP_PICK_STORAGE_KEY = 'orchestra.cloudAgents.goalLoop';
 /** 最後に選んだ承認モード (StorageScope.APPLICATION) */
+/** The Orchestra Design extension's custom editor (extensions/orchestra-design): design pages drawn and edited visually */
+const DESIGN_EDITOR_ID = 'orchestra.designEditor';
 const APPROVAL_MODE_PICK_STORAGE_KEY = 'orchestra.cloudAgents.approvalMode';
 
 /** 覚えておけるモデルの選択か (壊れた値・古い形式は null) */
@@ -1090,8 +1092,27 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 	}
 
 	async openDocument(id: string, path: string): Promise<void> {
-		// workflow.json opens in the diagram editor and the design pages in the HTML editor, as they do locally.
-		await this._editorService.openEditor({ resource: cloudDocumentUri(id, path), options: { pinned: true } });
+		// workflow.json opens in the diagram editor, as it does locally. The design pages open in Design mode
+		// (the Orchestra Design extension: the page drawn as it looks, edited by selecting on it) whatever editor
+		// the user associated with .html; the resolver falls back to the text editor if the extension is missing.
+		const design = /^\.division\/(?:design\/[^/]+\.html?|DESIGN\.html)$/i.test(path);
+		await this._editorService.openEditor({ resource: cloudDocumentUri(id, path), options: { pinned: true, ...(design ? { override: DESIGN_EDITOR_ID } : {}) } });
+	}
+
+	async openDesign(id: string): Promise<boolean> {
+		const res = await this.listDocuments(id);
+		if ('error' in res) {
+			this._notificationService.notify({ severity: Severity.Warning, message: `デザインを開けませんでした: ${res.error}` });
+			return false;
+		}
+		// The server lists index.html (the design system and the links to every screen) first.
+		const page = res.documents.find(d => d.kind === 'design' && /\.html?$/i.test(d.path));
+		if (!page) {
+			this._notificationService.notify({ severity: Severity.Info, message: 'このセッションにはまだデザイン (.division/design/) がありません。' });
+			return false;
+		}
+		await this.openDocument(id, page.path);
+		return true;
 	}
 
 	async loadApproval(id: string): Promise<void> {

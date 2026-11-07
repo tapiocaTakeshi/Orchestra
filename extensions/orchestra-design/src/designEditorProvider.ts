@@ -23,7 +23,7 @@ import {
 	setStyleProperty, setTextContent, setAttribute, replaceOuterHtml, outerHtml, applyPatches,
 } from './htmlPatchService';
 import { DesignerClient } from './designerClient';
-import { createDesignPage, isPageFolder, listSiblingPages } from './designPages';
+import { createDesignPage, isPageFolder, listSiblingPages, pageFolderUri, pageNameOf as pageName } from './designPages';
 import { AssetReader, InlineOptions, MAX_DATA_URI_BYTES, inlinePreviewAssets, isLocalRef, linkedStylesheets } from './previewAssets';
 
 export const DESIGN_VIEW_TYPE = 'orchestra.designEditor';
@@ -87,7 +87,7 @@ export class DesignEditorProvider implements vscode.CustomTextEditorProvider {
 		};
 		const runScripts = () => previewRunsScripts();
 		const post = (msg: unknown) => panel.webview.postMessage(msg);
-		const pageNameOf = (u: vscode.Uri) => path.basename(u.fsPath);
+		const pageNameOf = pageName;
 		let pages: vscode.Uri[] = [document.uri];
 
 		// 別ファイルの CSS (<link rel="stylesheet">) とその url() の参照先。変わったらプレビューを読み直す
@@ -124,7 +124,7 @@ export class DesignEditorProvider implements vscode.CustomTextEditorProvider {
 				type: 'document',
 				reload,
 				version: document.version,
-				fileName: path.basename(document.uri.fsPath),
+				fileName: pageName(document.uri),
 				isDirty: document.isDirty,
 				source: doc.text,
 				html: reload ? renderPreview(doc) : undefined,
@@ -168,7 +168,7 @@ export class DesignEditorProvider implements vscode.CustomTextEditorProvider {
 		disposables.push(vscode.workspace.onDidGrantWorkspaceTrust(() => sendDocument(true)));
 		if (isPageFolder(document.uri)) {
 			// 同じフォルダにページが増えたり消えたりしたら、ページ切り替えの一覧を更新する
-			const pageWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(path.dirname(document.uri.fsPath)), '*.html'), false, true, false);
+			const pageWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(pageFolderUri(document.uri), '*.html'), false, true, false);
 			disposables.push(pageWatcher, pageWatcher.onDidCreate(() => sendPages()), pageWatcher.onDidDelete(() => sendPages()));
 		}
 		disposables.push(vscode.workspace.onDidChangeConfiguration(e => {

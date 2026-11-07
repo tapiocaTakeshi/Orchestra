@@ -323,6 +323,8 @@ export interface ICloudAgentService {
 	 * 保存するとサンドボックスのファイルに書く。workflow.json は図のエディタ、デザインは HTML のまま
 	 */
 	openDocument(id: string, path: string): Promise<void>;
+	/** デザイン (.division/design/ の先頭ページ) を Design モードで開く。無ければ知らせて false */
+	openDesign(id: string): Promise<boolean>;
 	/** 文書のエディタ上の URI (例: ワークフロー案の図を .division/workflow.json につなぐ) */
 	documentUri(id: string, path: string): import('../../../../base/common/uri.js').URI;
 
