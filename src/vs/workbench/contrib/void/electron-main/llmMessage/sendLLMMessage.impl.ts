@@ -1309,6 +1309,8 @@ type OrchestrationState = {
 		approvedWorkflow?: DivisionWorkflow;
 		feedback?: string;
 	};
+	/** 承認した .division/workflow.json のステップをそのまま実行している (最後に Reviewer を足さない) */
+	fromWorkflowFile?: boolean;
 	/** 目標ループを「ラウンドごとに確認」で止めたときの続きの情報 */
 	goalLoop?: {
 		goal: DivisionGoal | null;
@@ -3686,6 +3688,9 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 		// (approveOrchestration IPC 経由)。それ以外 (未承認 / 却下後の残骸) は無視して
 		// 通常どおり Leader からやり直す。
 		const isResuming = !!(resumeState && resumeState.approved && resumeState.workspaceFolderPath === workspaceFolderPath);
+		// 承認した workflow.json のとおりに動かす実行: ファイルのステップを、ファイルの順に、それだけ実行する
+		// (並べ替えず、最後に Reviewer も足さない)。承認ノードなどで止めて再開しても引き継ぐ。
+		let runFromWorkflowFile = isResuming && resumeState?.fromWorkflowFile === true;
 
 		let sessionId: string;
 		let tasks: DivisionTask[];
@@ -3724,6 +3729,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				nextIndex: completedIndex,
 				totalSteps,
 				reviewerDone,
+				...(runFromWorkflowFile ? { fromWorkflowFile: true } : {}),
 			});
 			onFinalMessage({
 				fullText,
@@ -4079,6 +4085,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					}
 					appendText(`## ✅ ワークフローを承認しました\n\n${source === 'chat' ? '図で編集した内容で' : source === 'file' ? 'workflow.json で編集した内容で' : 'Leader の案のまま'}実行します。\n\n`);
 					leaderResult = { sessionId: '', tasks: approved ? workflowToTasks(approved) : [], finalRole: 'coder', workflow: true };
+					runFromWorkflowFile = !!approved;
 				} else if (round === 1 && divisionFlowApprovalMode && workspaceFolderPath) {
 					// 承認モード: Leader はまず計画をワークフロー図として作り、ユーザーが図を見て承認・編集・差し戻しする。
 					const draft = await callDivisionWorkflowDraft(
@@ -4180,9 +4187,12 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 
 				// Leader が示した dependsOn 順に並べ替えてから、以降のフェーズは
 				// 常にこの並び (= tasks の配列順) を「唯一の実行順」として扱う。
-				const sortedTasks = topoSortTasks(tasks);
-				tasks.length = 0;
-				tasks.push(...sortedTasks);
+				// 承認した workflow.json のときは、ファイルのステップの順番がそのまま実行順 (並べ替えない)。
+				if (!runFromWorkflowFile) {
+					const sortedTasks = topoSortTasks(tasks);
+					tasks.length = 0;
+					tasks.push(...sortedTasks);
+				}
 
 				// 承認モードでなくても、Leader の計画をワークフロー図 (.division/workflow.json) として残す。
 				// (承認したワークフローを実行するときは、上で承認済みの図を書いている。)
@@ -4195,8 +4205,9 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				}
 
 				// Reviewer は Phase 3 でローカル実行される最終ステップなので、
-				// フロー表示上もステップ番号に含める。
-				totalSteps = tasks.length + 1;
+				// フロー表示上もステップ番号に含める。workflow.json のとおりに動かすときは足さない
+				// (レビューが要るならファイルに reviewer のステップがある)。
+				totalSteps = tasks.length + (runFromWorkflowFile ? 0 : 1);
 				taskOutputs = [];
 
 				// ファイル読み込み (filesearch) は AI を使わない準備ステップなので、番号付きの
@@ -4206,7 +4217,9 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				if (tasks.some(t => isFileSearchRole(t.role))) {
 					appendText(`📂 **準備:** 作業フォルダのファイルを読み込み、各 AI に渡します（AI は使いません）\n\n`);
 				}
-				appendText(fromWorkflow
+				appendText(runFromWorkflowFile
+					? `承認した **\`.division/workflow.json\`** のとおりに、以下の ${aiStepCount} ステップをこの順番で実行します。\n\n`
+					: fromWorkflow
 					? `${maxRounds > 1 ? `ラウンド ${round}: ` : ''}プロジェクトの**ワークフロー**どおりに、以下の ${aiStepCount} ステップを実行します (各ステップの指示は Leader が書きました)。\n\n`
 					: `${maxRounds > 1 ? `ラウンド ${round}: ` : ''}Leader が以下の ${aiStepCount} ステップのフローを作成しました。以降、各ロールの AI はこの順番通りに実行されます。\n\n`);
 				for (let i = 0; i < tasks.length; i++) {
@@ -4220,7 +4233,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					const depsPart = depSteps.length > 0 ? ` _(依存: ${depSteps.join(', ')})_` : '';
 					appendText(`${displayStepNumber(i)}. **${t.role}** — ${t.title || ''}${depsPart}${t.approval ? ' 🔒 _承認_' : ''}\n`);
 				}
-				appendText(`${aiStepCount}. **reviewer** — 最終レビュー\n`);
+				if (!runFromWorkflowFile) appendText(`${aiStepCount}. **reviewer** — 最終レビュー\n`);
 				if (divisionFlowApprovalMode) {
 					appendText(divisionFlowApprovalCoderWriterOnly
 						? `\n> 🔒 **承認モード有効 (coder / writer のみ)** — coder / writer の MD ファイルが完成したときだけ一時停止し、あなたの承認を待ちます。designer など他のロールは止まらずに進みます。\n`
@@ -4667,6 +4680,16 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 
 			// 承認モードでレビュー結果も承認済みなら、レビューを再実行せずそのまま完了させる。
 			if (isResuming && resumeState?.reviewerDone) {
+				if (sessionId) activeServerSessionIds.delete(sessionId);
+				if (workspaceFolderPath) clearOrchestrationState(workspaceFolderPath);
+				onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null });
+				flushCommandRunsAfterFinalMessage();
+				return;
+			}
+
+			// workflow.json のとおりに動かすときは、ファイルの最後のステップで終わる (最終レビューは足さない)。
+			if (runFromWorkflowFile) {
+				appendText(`\n---\n\n## ✅ ワークフローの最後のステップまで実行しました\n\n`);
 				if (sessionId) activeServerSessionIds.delete(sessionId);
 				if (workspaceFolderPath) clearOrchestrationState(workspaceFolderPath);
 				onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null });
