@@ -1601,8 +1601,8 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 							{divisionMode ? <Lock size={10} style={{ flexShrink: 0, opacity: 0.7 }} /> : <ChevronDown size={11} style={{ flexShrink: 0, opacity: 0.7 }} />}
 						</button>
 					)}
-					{/* 承認モードは Division Project のときだけ (coder 以外のロールの .division ファイルを承認する) */}
-					{divisionMode && (moreOpen || state.approvalModePick) && (
+					{/* 承認モードは Division Project のときだけ (coder 以外のロールの .division ファイルを承認する)。文書を確かめるタイミングなので常に見せる */}
+					{divisionMode && (
 						<button
 							type='button'
 							className='oca-chip'

@@ -367,6 +367,11 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 			if (readS.globalSettings.divisionFlowApprovalMode === undefined) {
 				readS.globalSettings.divisionFlowApprovalMode = defaultGlobalSettings.divisionFlowApprovalMode;
 			}
+			// 承認モードは既定オンになった: 以前の既定 (オフ) のまま保存されていた値を一度だけオンにする
+			if (!readS.globalSettings.divisionFlowApprovalModeDefaultOn) {
+				readS.globalSettings.divisionFlowApprovalMode = true;
+				readS.globalSettings.divisionFlowApprovalModeDefaultOn = true;
+			}
 			// add divisionFlowApprovalCoderWriterOnly (承認で止めるのを coder / writer だけにする)
 			if (readS.globalSettings.divisionFlowApprovalCoderWriterOnly === undefined) {
 				readS.globalSettings.divisionFlowApprovalCoderWriterOnly = defaultGlobalSettings.divisionFlowApprovalCoderWriterOnly;

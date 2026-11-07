@@ -374,7 +374,7 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		githubPicks: [],
 		modelPick: null,
 		goalLoopPick: CLOUD_GOAL_LOOP_DEFAULT,
-		approvalModePick: false,
+		approvalModePick: true,
 		approvalById: {},
 		pullRequestById: {},
 		decisions: { loaded: false, headline: '', items: [], unsupported: false, busyId: null },
@@ -886,7 +886,8 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 				...(projectId ? { projectId } : {}),
 				...(workspaceName ? { workspaceName } : {}),
 				// 繰り返し (ループ実行) はなくなった: 繰り返しと目標はワークフローのループノードで設定する
-				...(model === CLOUD_DIVISION_PROJECT_MODEL && approvalMode ? { approvalMode: true } : {}),
+				// 承認モードはサーバーの既定がオンなので、オフも明示して送る
+				...(model === CLOUD_DIVISION_PROJECT_MODEL ? { approvalMode } : {}),
 			}, CREATE_TIMEOUT_MS);
 			const session = created.ok ? created.data?.session as CloudSession | undefined : undefined;
 			if (!session?.id) {
@@ -2015,9 +2016,9 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		if (typeof fromSettings === 'boolean') return fromSettings;
 		try {
 			// 設定に一本化する前に起動の欄で選んでいた値
-			return this._storageService.getBoolean(APPROVAL_MODE_PICK_STORAGE_KEY, StorageScope.APPLICATION, false);
+			return this._storageService.getBoolean(APPROVAL_MODE_PICK_STORAGE_KEY, StorageScope.APPLICATION, true);
 		} catch {
-			return false;
+			return true;
 		}
 	}
 

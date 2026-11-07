@@ -14,7 +14,7 @@
 //   POST /api/cloud-sessions                  { prompt, title?, model?, projectId?, workspaceName?, goalLoop?, maxRounds?, approvalMode? } → { session }
 //        model: "provider/model" (単体のモデル) / "division-project" (projectId 必須。Division Project として動く) / 省略 (プロジェクトの coder)
 //        goalLoop: "auto" (既定。目標を立てて達成するまでラウンドを繰り返す) / "confirm" (未達のラウンドごとに止まる) / "off"
-//        approvalMode: true (Division Project のみ): coder 以外のロールの成果物 (.division/*.md) ができるたびに止まり、承認を待つ
+//        approvalMode (Division Project のみ。既定オン、false でオフ): coder 以外のロールの成果物 (.division/*.md) ができるたびに止まり、承認を待つ
 //   POST /api/cloud-sessions/:id/upload       { index, total, data(base64) }
 //   POST /api/cloud-sessions/:id/start        { workspaceInfo?, repo? } → { session }
 //   GET  /api/cloud-sessions?limit=50         → { sessions }
