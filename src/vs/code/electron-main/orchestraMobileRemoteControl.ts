@@ -261,21 +261,56 @@ async function setDivisionAccount(next: DivisionAccount | undefined): Promise<vo
 	startHeartbeat();
 }
 
-type VerifiedDivisionToken = { value: string; userId: string; email: string; expiresAt: number };
-let verifiedToken: VerifiedDivisionToken | undefined;
+/**
+ * A phone's Division JWT that Supabase already accepted. It is trusted until the JWT's own `exp`
+ * (Supabase access tokens live about an hour), so the phone's polling does not ask Supabase every
+ * 30 seconds, and a Supabase hiccup in between cannot make a signed-in phone look like another account.
+ */
+type VerifiedDivisionToken = { userId: string; email: string; expiresAt: number };
+const verifiedTokens = new Map<string, VerifiedDivisionToken>();
+const MAX_VERIFIED_TOKENS = 32;
+/** Without a readable `exp`, ask Supabase again after this long. */
+const VERIFIED_TOKEN_FALLBACK_MS = 5 * 60_000;
+
+/** Why a phone's Division token was not accepted. */
+class DivisionTokenError extends Error {
+	/** invalid: Supabase rejected it (expired, revoked); unavailable: Supabase could not be asked */
+	constructor(readonly reason: 'invalid' | 'unavailable', message: string) { super(message); }
+}
+
+function jwtExpiresAt(token: string): number | undefined {
+	try {
+		const payload = JSON.parse(Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf8')) as { exp?: unknown };
+		return typeof payload.exp === 'number' ? payload.exp * 1000 : undefined;
+	} catch {
+		return undefined;
+	}
+}
 
 async function getDivisionTokenUser(accessToken: string): Promise<{ userId: string; email: string }> {
-	if (verifiedToken?.value === accessToken && verifiedToken.expiresAt > Date.now()) {
-		return { userId: verifiedToken.userId, email: verifiedToken.email };
+	const now = Date.now();
+	const cached = verifiedTokens.get(accessToken);
+	if (cached && cached.expiresAt > now) return { userId: cached.userId, email: cached.email };
+	verifiedTokens.delete(accessToken);
+	const exp = jwtExpiresAt(accessToken);
+	if (exp !== undefined && exp <= now) throw new DivisionTokenError('invalid', 'Division session has expired');
+	let response: Response;
+	try {
+		response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+			headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${accessToken}` },
+			signal: AbortSignal.timeout(10_000),
+		});
+	} catch (error) {
+		throw new DivisionTokenError('unavailable', error instanceof Error ? error.message : String(error));
 	}
-	const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-		headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${accessToken}` },
-	});
-	if (!response.ok) throw new Error('Division session is invalid');
+	if (response.status === 401 || response.status === 403) throw new DivisionTokenError('invalid', 'Division session is invalid');
+	if (!response.ok) throw new DivisionTokenError('unavailable', `Supabase answered HTTP ${response.status}`);
 	const user = await response.json() as { id?: unknown; email?: unknown };
-	if (typeof user.id !== 'string') throw new Error('Division session has no user');
+	if (typeof user.id !== 'string') throw new DivisionTokenError('invalid', 'Division session has no user');
 	const verified = { userId: user.id, email: typeof user.email === 'string' ? user.email : '' };
-	verifiedToken = { value: accessToken, ...verified, expiresAt: Date.now() + 30_000 };
+	for (const [token, entry] of verifiedTokens) { if (entry.expiresAt <= now) verifiedTokens.delete(token); }
+	if (verifiedTokens.size >= MAX_VERIFIED_TOKENS) verifiedTokens.delete(verifiedTokens.keys().next().value!);
+	verifiedTokens.set(accessToken, { ...verified, expiresAt: Math.min(exp ?? now + VERIFIED_TOKEN_FALLBACK_MS, now + 60 * 60_000) });
 	return verified;
 }
 
@@ -289,13 +324,27 @@ async function authenticateDivisionAccount(raw: unknown): Promise<DivisionAccoun
 	return { userId: input.userId, accessToken: input.accessToken, email: user.email };
 }
 
-async function isMatchingMobileAccount(rawToken: unknown): Promise<boolean> {
-	if (!account) return false;
-	if (typeof rawToken !== 'string' || !rawToken) return false;
+/**
+ * Checks the phone's Division account against this desktop's. Only a phone signed in as another
+ * user gets `account_mismatch` (the phone disconnects on it). An expired token is 401
+ * `division_token_invalid` (the phone refreshes it and retries), and anything that only means
+ * "could not check right now" is 503, so the phone keeps the connection and tries again.
+ */
+async function checkMobileAccount(rawToken: unknown): Promise<{ status: number; body: unknown } | undefined> {
+	if (!account) {
+		return { status: 503, body: { error: 'pc_not_signed_in', detail: 'PC の Orchestra が Division にログインしていません。' } };
+	}
+	if (typeof rawToken !== 'string' || !rawToken) {
+		return { status: 401, body: { error: 'division_token_invalid', detail: 'Division のログイン情報がありません。' } };
+	}
 	try {
-		return (await getDivisionTokenUser(rawToken)).userId === account.userId;
-	} catch {
-		return false;
+		if ((await getDivisionTokenUser(rawToken)).userId === account.userId) return undefined;
+		return { status: 403, body: { error: 'account_mismatch', detail: '同じ Division アカウントでログインしてください。' } };
+	} catch (error) {
+		if (error instanceof DivisionTokenError && error.reason === 'invalid') {
+			return { status: 401, body: { error: 'division_token_invalid', detail: 'Division のログインの有効期限が切れています。' } };
+		}
+		return { status: 503, body: { error: 'auth_unavailable', detail: 'Division のログインを確認できませんでした。少し待ってからもう一度試します。' } };
 	}
 }
 
@@ -323,9 +372,8 @@ async function handleApiRequest(method: string, path: string, query: Record<stri
 	if (!pairing || orchestraToken !== pairing.token) {
 		return { status: 401, body: { error: 'invalid_token' } };
 	}
-	if (!await isMatchingMobileAccount(divisionAccessToken)) {
-		return { status: 403, body: { error: 'account_mismatch', detail: '同じ Division アカウントでログインしてください。' } };
-	}
+	const rejected = await checkMobileAccount(divisionAccessToken);
+	if (rejected) return rejected;
 	if (path.startsWith('/api/') && !path.startsWith('/api/internal/') && ALLOWED_METHODS.has(method)) {
 		const response = await forwardToWorkbench(method, path, query, body);
 		return { status: response.status, body: response.body };
