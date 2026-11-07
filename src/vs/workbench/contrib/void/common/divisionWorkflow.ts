@@ -289,3 +289,48 @@ export const workflowToTasks = (w: Pick<DivisionWorkflow, 'nodes' | 'edges'>): A
 		...(s.systemPrompt ? { systemPrompt: s.systemPrompt } : {}),
 		reason: 'ユーザーが承認したワークフローのステップ',
 	}));
+
+/**
+ * The leader's task list as a workflow graph (start → steps → end), laid out for the canvas.
+ * Used to write .division/workflow.json even when the plan was not reviewed (approval mode off),
+ * so the flow can always be opened, edited and reused as a diagram.
+ */
+export const tasksToWorkflow = (tasks: Array<{
+	taskId: string; role: string; title?: string; description?: string; input?: string;
+	dependsOn?: string[]; approval?: boolean; systemPrompt?: string;
+}>): DivisionWorkflow => {
+	const nodes: WorkflowNode[] = [{ id: 'start', type: 'start', position: { x: 0, y: 0 }, data: {} }];
+	const edges: WorkflowEdge[] = [];
+	const edge = (source: string, target: string) => edges.push({ id: `e-${source}-${target}`, source, target });
+	const list = tasks.slice(0, MAX_WORKFLOW_STEPS);
+	const indexOf = new Map(list.map((t, i) => [t.taskId, i] as const));
+	/** Where the steps after step i connect from: its approval node when it has one. */
+	const exitOf: string[] = [];
+	list.forEach((t, i) => {
+		const id = `step-${i + 1}`;
+		const data: WorkflowNodeData = { role: str(t.role, 100) };
+		const title = str(t.title, 120);
+		const instruction = str(t.input || t.description, 4000);
+		const systemPrompt = str(t.systemPrompt, 8000);
+		if (title) { data.title = title; }
+		if (instruction) { data.instruction = instruction; }
+		if (systemPrompt) { data.systemPrompt = systemPrompt; }
+		nodes.push({ id, type: 'role', position: { x: 0, y: 0 }, data });
+		const deps = [...new Set((t.dependsOn ?? []).map(d => indexOf.get(d)).filter((d): d is number => d !== undefined && d < i))];
+		if (deps.length) { for (const d of deps) { edge(exitOf[d], id); } }
+		else { edge('start', id); }
+		if (t.approval) {
+			const ok = `approval-${i + 1}`;
+			nodes.push({ id: ok, type: 'approval', position: { x: 0, y: 0 }, data: { title: `${title || t.role} を確認` } });
+			edge(id, ok);
+			exitOf.push(ok);
+		} else {
+			exitOf.push(id);
+		}
+	});
+	nodes.push({ id: 'end', type: 'end', position: { x: 0, y: 0 }, data: {} });
+	const used = new Set(edges.map(e => e.source));
+	for (const exit of exitOf) { if (!used.has(exit)) { edge(exit, 'end'); } }
+	if (!list.length) { edge('start', 'end'); }
+	return layoutWorkflow({ version: 1, enabled: true, nodes, edges });
+};
