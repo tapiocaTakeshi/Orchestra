@@ -707,7 +707,14 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		const lastMsg = thread.messages[thread.messages.length - 1]
 		if (!(lastMsg.role === 'flow_review' && lastMsg.status === 'pending')) return
 
-		this._editMessageInThread(threadId, thread.messages.length - 1, { ...lastMsg, status: 'approved' })
+		// The review keeps showing what was approved: the edited content, not the role's first draft.
+		const editedOf = (name: string) => editedOutputs?.find(e => e.mdFileName === name)?.mdContent
+		this._editMessageInThread(threadId, thread.messages.length - 1, {
+			...lastMsg,
+			status: 'approved',
+			mdContent: editedOf(lastMsg.mdFileName) ?? lastMsg.mdContent,
+			...(lastMsg.allFlowOutputs ? { allFlowOutputs: lastMsg.allFlowOutputs.map(o => ({ ...o, mdContent: editedOf(o.mdFileName) ?? o.mdContent })) } : {}),
+		})
 
 		// Update orchestration state file via IPC — must complete before resuming
 		await this._llmMessageService.approveOrchestration(editedOutputs)

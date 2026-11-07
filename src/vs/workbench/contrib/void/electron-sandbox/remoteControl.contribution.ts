@@ -47,17 +47,23 @@ import {
 	RemoteControlIpcRequest,
 	RemoteControlIpcResponse,
 	RemoteDivisionState,
+	RemoteDocument,
+	RemoteDocumentContent,
+	RemoteDocumentKind,
 	RemoteFileEntry,
 	RemoteGoalLoopMode,
 	RemoteIdeInfo,
 	RemotePendingReview,
 	RemotePendingWorkflow,
+	RemoteReviewOutputs,
 	RemoteSessionInfo,
 	RemoteThreadSummary,
 } from '../common/remoteControlTypes.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
 import { DivisionWorkflow, normalizeWorkflow, workflowErrors } from '../common/divisionWorkflow.js';
 import { AgentRole, providerNames, RoleAssignment } from '../common/voidSettingsTypes.js';
+import { DESIGN_DIR, LEGACY_DESIGN_FILE, sortDesignPageNames } from '../common/designPages.js';
+import { VSBuffer } from '../../../../base/common/buffer.js';
 
 Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).registerConfiguration({
 	id: 'orchestraRemoteControl',
@@ -97,6 +103,14 @@ const MAX_MESSAGE_CHARS = 4_000;
 const MAX_MESSAGES = 200;
 const MAX_THREADS = 50;
 const MAX_COMMANDS = 300;
+/** モバイルで開ける・保存できる文書の大きさの上限 */
+const MAX_DOCUMENT_BYTES = 2 * 1024 * 1024;
+/** 文書のフォルダ (ワークスペース直下) */
+const DIVISION_DIR = '.division';
+/** モバイルで読み書きできる文書の拡張子 (デザインのページが読む CSS も読める) */
+const DOCUMENT_EXTENSIONS = /\.(md|markdown|txt|html?|css)$/i;
+const PAPER_DOCUMENT = 'paper.md';
+const SPEC_DOCUMENT = 'specification.md';
 
 class HttpError extends Error {
 	constructor(readonly status: number, message: string, readonly detail?: string) {
@@ -124,6 +138,8 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 	static readonly ID = 'workbench.contrib.orchestraRemoteControl';
 
 	private _revision = Date.now();
+	/** .division の文書が変わるたびに進める (スナップショットの documentsRevision) */
+	private _documentsRevision = 1;
 	private readonly _routes: Route[] = [];
 
 	constructor(
@@ -155,6 +171,11 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 		this._register(this._settingsService.onDidChangeState(bump));
 		this._register(this._workspaceContextService.onDidChangeWorkspaceFolders(bump));
 		this._register(this._remoteSessionSyncService.onDidChangeSync(bump));
+		// .division の文書 (論文・仕様書・デザイン) が PC で書き換わったら、モバイルが開いている文書を読み直せるように
+		this._register(this._fileService.onDidFilesChange(e => {
+			const root = this._workspaceContextService.getWorkspace().folders[0]?.uri;
+			if (root && e.affects(joinPath(root, DIVISION_DIR))) { this._documentsRevision++; bump(); }
+		}));
 
 		this._registerRoutes();
 
@@ -412,9 +433,21 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 			const threadId = this._threadIdFrom(body);
 			this._requireAwaitingApproval(threadId);
 			if (this._pendingWorkflowReview(threadId)) await this._chatThreadService.approveWorkflowReview(threadId);
-			else if (this._pendingFlowReview(threadId)) await this._chatThreadService.approveFlowReview(threadId);
+			else if (this._pendingFlowReview(threadId)) await this._chatThreadService.approveFlowReview(threadId, this._editedOutputs(threadId, asObject(body).editedOutputs));
 			else this._chatThreadService.approveLatestToolRequest(threadId);
 			return this._chatState();
+		});
+		// 承認待ちの成果物の全文 (スナップショットの pendingReview.content は途中で切ってある)
+		this._route('GET', '/api/chat/review', (_, { query }) => {
+			const threadId = this._threadIdFrom({ threadId: query.threadId });
+			const review = this._pendingFlowReview(threadId);
+			if (!review) throw new HttpError(409, 'not_awaiting_review', '承認待ちの成果物はありません。');
+			const result: RemoteReviewOutputs = {
+				flowRole: review.flowRole,
+				title: review.mdFileName,
+				outputs: this._reviewOutputs(review).map(o => ({ role: o.role, mdFileName: o.mdFileName, mdFilePath: o.mdFilePath, content: o.mdContent })),
+			};
+			return result;
 		});
 		this._route('POST', '/api/chat/reject', (_, { body }) => {
 			chat();
@@ -495,6 +528,105 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 			if (stat.isDirectory) throw new HttpError(400, 'is_a_directory', path);
 			await this._editorService.openEditor({ resource: uri, options: { pinned: true } });
 		});
+
+		// --- 文書 (.division の論文・仕様書・デザイン・成果物) ---
+		this._route('GET', '/api/documents', async () => ({ documents: await this._listDocuments(), revision: this._documentsRevision }));
+		this._route('GET', '/api/documents/content', async (_, { query }) => {
+			const { uri, path } = this._resolveDocumentPath(query.path ?? '');
+			const stat = await this._fileService.stat(uri).catch(() => undefined);
+			if (!stat || stat.isDirectory) throw new HttpError(404, 'file_not_found', path);
+			if (stat.size > MAX_DOCUMENT_BYTES) throw new HttpError(413, 'document_too_large', `${path} は大きすぎて開けません。`);
+			const content = (await this._fileService.readFile(uri)).value.toString();
+			const result: RemoteDocumentContent = { path, content, size: stat.size, mtime: stat.mtime };
+			return result;
+		});
+		// 保存。baseMtime (開いたときの mtime) が今のファイルと違えば 409 (PC やエージェントが先に書き換えた)
+		this._route('POST', '/api/documents/content', async (_, { body }) => {
+			project();
+			const input = asObject(body);
+			const { uri, path } = this._resolveDocumentPath(requireString(input.path, 'path'));
+			if (typeof input.content !== 'string') throw new HttpError(400, 'invalid_request', 'content is required');
+			const buffer = VSBuffer.fromString(input.content);
+			if (buffer.byteLength > MAX_DOCUMENT_BYTES) throw new HttpError(413, 'document_too_large', `${path} は大きすぎて保存できません。`);
+			const stat = await this._fileService.stat(uri).catch(() => undefined);
+			if (stat?.isDirectory) throw new HttpError(400, 'is_a_directory', path);
+			if (typeof input.baseMtime === 'number' && stat && stat.mtime !== input.baseMtime) {
+				throw new HttpError(409, 'document_changed', `${path} は開いたあとで PC 側で書き換えられました。読み直してから保存してください。`);
+			}
+			const saved = await this._fileService.writeFile(uri, buffer);
+			this._documentsRevision++;
+			this._revision++;
+			const result: RemoteDocumentContent = { path, content: input.content, size: saved.size, mtime: saved.mtime };
+			return result;
+		});
+	}
+
+	/** 承認待ちのレビューの成果物 (複数の役割をまとめて確認するときは allFlowOutputs) */
+	private _reviewOutputs(review: NonNullable<ReturnType<OrchestraRemoteControlContribution['_pendingFlowReview']>>) {
+		return review.allFlowOutputs?.length
+			? review.allFlowOutputs
+			: [{ role: review.flowRole, mdFileName: review.mdFileName, mdFilePath: review.mdFilePath, mdContent: review.mdContent }];
+	}
+
+	/** POST /api/chat/approve の editedOutputs を検証する。承認待ちの成果物のうち、中身が変わったものだけを返す */
+	private _editedOutputs(threadId: string, raw: unknown): Array<{ mdFileName: string; mdContent: string }> | undefined {
+		if (raw === undefined || raw === null) return undefined;
+		if (!Array.isArray(raw)) throw new HttpError(400, 'invalid_request', 'editedOutputs must be an array');
+		const review = this._pendingFlowReview(threadId);
+		if (!review) return undefined;
+		const outputs = this._reviewOutputs(review);
+		const edited: Array<{ mdFileName: string; mdContent: string }> = [];
+		for (const entry of raw) {
+			const e = asObject(entry);
+			const name = requireString(e.mdFileName, 'editedOutputs[].mdFileName');
+			if (typeof e.mdContent !== 'string' || !e.mdContent.trim()) throw new HttpError(400, 'invalid_request', `${name} の中身が空です。`);
+			const original = outputs.find(o => o.mdFileName === name);
+			if (!original) throw new HttpError(400, 'invalid_request', `${name} は承認待ちの成果物ではありません。`);
+			if (e.mdContent !== original.mdContent) edited.push({ mdFileName: name, mdContent: e.mdContent });
+		}
+		if (!edited.length) return undefined;
+		// 編集しなかった成果物もそのまま送る (デスクトップのチャットの承認と同じ形)
+		return outputs.map(o => edited.find(e => e.mdFileName === o.mdFileName) ?? { mdFileName: o.mdFileName, mdContent: o.mdContent })
+			.filter(o => o.mdContent.trim());
+	}
+
+	/** .division の下の文書のパスだけを受け付ける (それ以外・'..' は 403) */
+	private _resolveDocumentPath(rawPath: string): { uri: URI; path: string } {
+		const { root, uri, path } = this._resolveWorkspacePath(rawPath);
+		if (!isEqualOrParent(uri, joinPath(root, DIVISION_DIR)) || !DOCUMENT_EXTENSIONS.test(path)) {
+			throw new HttpError(403, 'not_a_document', `${rawPath} は .division の文書ではありません。`);
+		}
+		return { uri, path };
+	}
+
+	private async _listDocuments(): Promise<RemoteDocument[]> {
+		const root = this._workspaceContextService.getWorkspace().folders[0]?.uri;
+		if (!root) throw new HttpError(409, 'no_workspace', 'IDE でフォルダが開かれていません。');
+		const dir = joinPath(root, DIVISION_DIR);
+		const stat = await this._fileService.resolve(dir, { resolveMetadata: true }).catch(() => undefined);
+		if (!stat?.isDirectory) return [];
+		const docs: RemoteDocument[] = [];
+		const entry = (resource: URI, name: string, kind: RemoteDocumentKind, size: number, mtime: number): RemoteDocument =>
+			({ path: relativePath(root, resource) ?? `${DIVISION_DIR}/${name}`, name, kind, size, mtime });
+		for (const child of stat.children ?? []) {
+			if (child.isDirectory) {
+				if (child.name !== DESIGN_DIR) continue;
+				const design = await this._fileService.resolve(child.resource, { resolveMetadata: true }).catch(() => undefined);
+				const pages = (design?.children ?? []).filter(c => !c.isDirectory && /\.html?$/i.test(c.name));
+				const order = sortDesignPageNames(pages.map(p => p.name));
+				for (const name of order) {
+					const page = pages.find(p => p.name === name)!;
+					docs.push(entry(page.resource, `${DESIGN_DIR}/${name}`, 'design', page.size ?? 0, page.mtime ?? 0));
+				}
+				continue;
+			}
+			if (child.name === LEGACY_DESIGN_FILE) { docs.push(entry(child.resource, child.name, 'design', child.size ?? 0, child.mtime ?? 0)); continue; }
+			if (!/\.(md|markdown)$/i.test(child.name)) continue;
+			const kind: RemoteDocumentKind = child.name === PAPER_DOCUMENT ? 'paper' : child.name === SPEC_DOCUMENT ? 'specification' : 'output';
+			docs.push(entry(child.resource, child.name, kind, child.size ?? 0, child.mtime ?? 0));
+		}
+		const rank: Record<RemoteDocumentKind, number> = { paper: 0, specification: 1, design: 2, output: 3 };
+		return docs.sort((a, b) => rank[a.kind] - rank[b.kind] || (a.kind === 'design' ? 0 : a.name.localeCompare(b.name)));
 	}
 
 	// -----------------------------------------------------------------------
@@ -509,6 +641,7 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 			chat: this._chatState(),
 			threads: this._threads(),
 			remoteSession: this._remoteSessionInfo(),
+			documentsRevision: this._documentsRevision,
 			revision: this._revision,
 			generatedAt: Date.now(),
 		};
@@ -608,6 +741,9 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 			content: truncate(review.mdContent),
 			completed: review.completedTaskIndex + 1,
 			total: review.totalTasks,
+			// goal-loop は成果物ではなく次のラウンドへ進むかの確認なので、編集するものは無い
+			...(review.flowRole === 'goal-loop' ? {} : { outputs: this._reviewOutputs(review).map(o => ({ role: o.role, mdFileName: o.mdFileName })) }),
+			contentTruncated: review.mdContent.length > MAX_MESSAGE_CHARS,
 		} : null;
 
 		const wr = awaitingApproval ? this._pendingWorkflowReview(threadId) : undefined;
