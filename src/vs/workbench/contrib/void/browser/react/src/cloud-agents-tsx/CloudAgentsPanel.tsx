@@ -76,6 +76,9 @@ import {
 	Wrench,
 	X,
 	XCircle,
+	ShieldAlert,
+	ShieldCheck,
+	ShieldX,
 } from 'lucide-react';
 
 import { useAccessor, useCloudAgentState, useDivisionProjectConfig, useDivisionProjects, useIsDark, useOrchestraUiMode, useRefreshModelState, useSettingsState } from '../util/services.js';
@@ -89,6 +92,8 @@ import {
 	CLOUD_DIVISION_PROJECT_MODEL,
 	CLOUD_PR_TITLE_MAX,
 	CloudApprovalEventData,
+	CloudCommandApprovalEventData,
+	CloudPendingCommandApproval,
 	CloudChange,
 	CloudDecision,
 	CloudDecisionOption,
@@ -3108,6 +3113,91 @@ const ApprovalEventRow = ({ data }: { data: CloudApprovalEventData }) => {
 	);
 };
 
+// --- 危険なコマンドの承認 (IDE と同じ規則。どのセッションでも、実行する前に止まる) ---
+
+/** command_approval イベント: 「承認待ち: 理由」+ コマンド / 「実行を許可」/「拒否: メモ」 */
+const CommandApprovalEventRow = ({ data, roleName }: { data: CloudCommandApprovalEventData; roleName?: string }) => {
+	const { t } = useTranslation();
+	const pending = data?.status === 'pending';
+	const denied = data?.status === 'denied';
+	const icon = pending
+		? <ShieldAlert size={13} style={{ color: C.warning }} />
+		: denied ? <ShieldX size={13} style={{ color: C.error }} /> : <ShieldCheck size={13} style={{ color: C.success }} />;
+	const line = pending
+		? t('cloudAgents.command.requestedLine').replace('{reason}', String((data as { reason?: string }).reason ?? ''))
+		: t(denied ? 'cloudAgents.command.deniedLine' : 'cloudAgents.command.approvedLine');
+	const feedback = !pending ? (data as { feedback?: string }).feedback : undefined;
+	return (
+		<div style={{ display: 'flex', alignItems: 'flex-start', gap: '7px', minWidth: 0, padding: '2px 6px', fontSize: '12px' }}>
+			<span style={{ display: 'inline-flex', marginTop: '2px', flexShrink: 0 }}>{icon}</span>
+			<div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+				<span style={{ color: C.fgMuted, fontSize: '11.5px' }}>
+					{roleName && <span style={{ marginRight: '6px' }}>{roleName}:</span>}
+					{line}
+				</span>
+				{pending && data.command && (
+					<code style={{ fontFamily: C.monoFont, fontSize: '11.5px', color: C.fg, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{data.command}</code>
+				)}
+				{feedback && <span style={{ color: C.fg, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{feedback}</span>}
+			</div>
+		</div>
+	);
+};
+
+/** 承認待ちのコマンドのカード: 内容と理由を見せて、実行を許可 / 拒否 (メモは任意。エージェントに伝わる) */
+const CommandApprovalCard = ({ session, command }: { session: CloudSession; command: CloudPendingCommandApproval }) => {
+	const { t } = useTranslation();
+	const accessor = useAccessor();
+	const cloudAgentService = accessor.get('ICloudAgentService');
+	const state = useCloudAgentState();
+	const approvalState = state.approvalById[session.id];
+	const submitting = !!approvalState?.submitting;
+	const [feedback, setFeedback] = useState('');
+	useEffect(() => { setFeedback(''); }, [command.requestSeq]);
+	const busy = submitting || !state.isLoggedIn;
+	const resolve = async (action: 'approve' | 'deny') => {
+		const ok = await cloudAgentService.resolveCommandApproval(session.id, { requestSeq: command.requestSeq, action, ...(action === 'deny' ? { feedback } : {}) });
+		if (ok) setFeedback('');
+	};
+	return (
+		<div style={{ border: `1px solid ${tint(C.warning, 45)}`, borderRadius: '8px', padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px', background: tint(C.warning, 5) }}>
+			<div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
+				<ShieldAlert size={14} style={{ color: C.warning, flexShrink: 0 }} />
+				<span style={{ fontSize: '12.5px', fontWeight: 600, color: C.fg, minWidth: 0, ...ellipsis }}>{t('cloudAgents.command.title')}</span>
+				<span style={{ flex: 1 }} />
+				{command.role && <RoleChip role={command.role} name={command.role} />}
+			</div>
+			<div style={{ fontSize: '11.5px', color: C.warning }}>{t('cloudAgents.command.reason').replace('{reason}', command.reason)}</div>
+			<pre style={{ margin: 0, fontFamily: C.monoFont, fontSize: '12px', lineHeight: 1.5, color: C.fg, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: '260px', overflowY: 'auto', padding: '8px 10px', borderRadius: '6px', border: `1px solid ${C.border}`, background: C.bgInput }}>
+				{command.command}
+			</pre>
+			<textarea
+				value={feedback}
+				onChange={e => setFeedback(e.target.value)}
+				placeholder={t('cloudAgents.command.feedbackPlaceholder')}
+				rows={2}
+				style={{ ...inputStyle, resize: 'vertical' }}
+			/>
+			{approvalState?.error && (
+				<div style={{ display: 'flex', gap: '6px', fontSize: '12px', color: C.error }}>
+					<AlertTriangle size={13} style={{ marginTop: '2px', flexShrink: 0 }} />
+					<span style={{ whiteSpace: 'pre-wrap' }}>{approvalState.error}</span>
+				</div>
+			)}
+			<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px', flexWrap: 'wrap' }}>
+				<button type='button' disabled={busy} title={t('cloudAgents.command.denyHint')} onClick={() => { void resolve('deny'); }} style={buttonStyle('secondary', busy)}>
+					<ShieldX size={12} />
+					{t('cloudAgents.command.deny')}
+				</button>
+				<button type='button' disabled={busy} onClick={() => { void resolve('approve'); }} style={buttonStyle('primary', busy)}>
+					{submitting ? <Spinner size={11} /> : <ShieldCheck size={12} />}
+					{t('cloudAgents.command.approve')}
+				</button>
+			</div>
+		</div>
+	);
+};
+
 /** The sandbox's workflow file: the leader's proposal is shown (and edited) as this file, like the local run */
 const WORKFLOW_DOCUMENT = '.division/workflow.json';
 
@@ -3140,6 +3230,7 @@ const ApprovalCard = ({ session }: { session: CloudSession }) => {
 	useEffect(() => { setFeedback(''); setMode('preview'); }, [approval?.taskSeq]);
 
 	if (session.status !== 'awaiting_approval') return null;
+	if (approvalState?.command) return <CommandApprovalCard session={session} command={approvalState.command} />;
 	const proposal = approvalState?.workflowProposal;
 	if (!approval && proposal) {
 		// Leader が計画をワークフロー図にした: 図で確認・編集して承認 / 差し戻す
@@ -3312,6 +3403,10 @@ const EventView = ({ event, onReview, division, active, onContinueGoal, continue
 			return <TaskEventRow data={data as CloudTaskEventData} position={division?.positionByTask.get(event.seq)} />;
 		case 'approval':
 			return <ApprovalEventRow data={data as CloudApprovalEventData} />;
+		case 'command_approval': {
+			const role = typeof data.role === 'string' && data.role ? data.role : '';
+			return <CommandApprovalEventRow data={data as CloudCommandApprovalEventData} roleName={role ? division?.roleNames.get(role) || role : undefined} />;
+		}
 		case 'workflow': {
 			// Leader が計画をワークフロー図にした (承認モード)
 			const workflow = normalizeWorkflow(data.workflow);

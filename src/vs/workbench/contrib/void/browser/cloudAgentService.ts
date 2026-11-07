@@ -58,6 +58,8 @@ import {
 	CloudChange,
 	CloudFileResponse,
 	CloudPendingApproval,
+	CloudPendingCommandApproval,
+	CloudCommandApprovalAction,
 	CloudPullRequest,
 	CloudPullRequestInfo,
 	CloudPullRequestResult,
@@ -551,14 +553,14 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 	private _maybeNotifyTransition(prev: CloudSession, next: CloudSession) {
 		if (!isCloudSessionActive(prev.status)) return;
 		if (next.status !== 'idle' && next.status !== 'failed' && next.status !== 'awaiting_approval') return;
-		if (next.status === 'awaiting_approval') this._setApproval(next.id, { approval: undefined });
+		if (next.status === 'awaiting_approval') this._setApproval(next.id, { approval: undefined, command: undefined });
 		if (this._paneVisible && this._state.selectedId === next.id) return;
 
 		const title = next.title || firstLine(next.prompt).slice(0, 60) || next.id;
 		const message = next.status === 'idle'
 			? `クラウドエージェント「${title}」が作業を終えました。${next.changedFiles ? ` (変更 ${next.changedFiles} ファイル)` : ''}`
 			: next.status === 'awaiting_approval'
-				? `クラウドエージェント「${title}」の成果物が承認待ちです。内容を確認して承認してください。`
+				? `クラウドエージェント「${title}」が承認待ちです。内容を確認して承認してください。`
 				: `クラウドエージェント「${title}」が失敗しました。${next.errorMsg ? ` ${next.errorMsg}` : ''}`;
 		this._notificationService.notify({
 			severity: next.status === 'failed' ? Severity.Warning : Severity.Info,
@@ -1095,6 +1097,20 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 	async loadApproval(id: string): Promise<void> {
 		if (this._state.approvalById[id]?.loading) return;
 		this._setApproval(id, { loading: true, error: undefined });
+		// 危険なコマンドの承認待ち (どのセッションでも起きる)。あればそれだけを見せる
+		const cmd = await this._request('GET', this._sessionPath(id, '/command-approval'), undefined, CHANGES_TIMEOUT_MS);
+		const rawCmd = cmd.ok ? cmd.data?.approval : null;
+		if (rawCmd && typeof rawCmd === 'object' && typeof rawCmd.requestSeq === 'number') {
+			const command: CloudPendingCommandApproval = {
+				requestSeq: rawCmd.requestSeq,
+				tool: String(rawCmd.tool ?? 'run_command'),
+				command: String(rawCmd.command ?? ''),
+				reason: String(rawCmd.reason ?? ''),
+				...(typeof rawCmd.role === 'string' && rawCmd.role ? { role: rawCmd.role } : {}),
+			};
+			this._setApproval(id, { loading: false, command, approval: null, workflowProposal: null });
+			return;
+		}
 		const res = await this._request('GET', this._sessionPath(id, '/approval'), undefined, CHANGES_TIMEOUT_MS);
 		if (!res.ok) {
 			this._setApproval(id, { loading: false, error: describeCloudAgentError(res) });
@@ -1122,7 +1138,33 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 			const workflow = p && typeof p.proposalSeq === 'number' ? normalizeWorkflow(p.workflow) : null;
 			if (p && workflow) workflowProposal = { proposalSeq: p.proposalSeq, workflow };
 		}
-		this._setApproval(id, { loading: false, approval, workflowProposal });
+		this._setApproval(id, { loading: false, approval, workflowProposal, command: null });
+	}
+
+	async resolveCommandApproval(id: string, params: { requestSeq: number; action: CloudCommandApprovalAction; feedback?: string }): Promise<boolean> {
+		if (this._state.approvalById[id]?.submitting) return false;
+		const feedback = (params.feedback ?? '').trim();
+		this._setApproval(id, { submitting: true, error: undefined });
+		try {
+			const res = await this._request('POST', this._sessionPath(id, '/command-approval'), {
+				requestSeq: params.requestSeq,
+				action: params.action,
+				...(feedback ? { feedback } : {}),
+			});
+			if (!res.ok) {
+				this._setApproval(id, { error: describeCloudAgentError(res) });
+				// 別の画面で先に答えた / 次のコマンドに変わった: 今の承認待ちを取り直す
+				if (res.status === 409) void this.loadApproval(id);
+				return false;
+			}
+			this._setApproval(id, { command: null });
+			if (res.data?.session) this._upsertSession(res.data.session as CloudSession);
+			this._scheduleList(LIST_INTERVAL_ACTIVE_MS);
+			void this._fetchEvents(id);
+			return true;
+		} finally {
+			this._setApproval(id, { submitting: false });
+		}
 	}
 
 	async resolveWorkflowProposal(id: string, params: { proposalSeq: number; action: CloudApprovalAction; workflow?: DivisionWorkflow; feedback?: string }): Promise<boolean> {
