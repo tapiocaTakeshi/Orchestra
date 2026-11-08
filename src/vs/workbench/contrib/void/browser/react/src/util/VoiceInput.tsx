@@ -14,6 +14,7 @@ import { createPortal } from 'react-dom';
 import { Mic } from 'lucide-react';
 import { useIsDark, useOrchestraUiMode, useSettingsState } from './services.js';
 import { TranslationKey, useTranslation } from './i18n.js';
+import { scopedCss } from './scopedCss.js';
 import { idleWaveValue, updateWaveAmplitudes, VOICE_WAVE, waveY } from '../../../../common/voiceInput.js';
 
 type Phase = 'starting' | 'recording' | 'transcribing' | 'error'
@@ -100,7 +101,7 @@ export const ButtonVoiceInput = ({ onTranscript, disabled, ownerKey, className, 
 
 	const label = isOpen ? t('chat.voice.recording') : t('chat.voice.start')
 	return <>
-		<style>{VOICE_CSS}</style>
+		<style>{scopedCss(VOICE_CSS)}</style>
 		<button
 			type='button'
 			className={`orchestra-voice-btn ${className ?? `p-1 rounded text-void-fg-3 transition-colors duration-150 ${disabled ? 'opacity-50 cursor-default' : 'cursor-pointer hover:text-void-fg-1 hover:bg-void-bg-2'}`}`}
@@ -492,7 +493,7 @@ const VoiceInputOverlay = ({ onClose, onTranscript }: { onClose: () => void, onT
 				animation: 'orchestra-voice-fade-in 160ms ease-out',
 			}}
 		>
-			<style>{VOICE_CSS}</style>
+			<style>{scopedCss(VOICE_CSS)}</style>
 
 			{phase !== 'error' ? <>
 				<canvas
