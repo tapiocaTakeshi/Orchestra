@@ -51,6 +51,7 @@ import { persistentTerminalNameOfId } from '../../../terminalToolService.js';
 import { removeMCPToolNamePrefix } from '../../../../common/mcpServiceTypes.js';
 import { LoginScreen } from '../void-login-tsx/LoginScreen.js';
 import { ButtonVoiceInput } from '../util/VoiceInput.js';
+import { appendVoiceTranscript } from '../../../../common/voiceInput.js';
 import { ReadAloudButton } from '../util/ReadAloud.js';
 import { StorageScope, StorageTarget } from '../../../../../../../platform/storage/common/storage.js';
 
@@ -6134,8 +6135,7 @@ export const SidebarChat = ({ viewOverride }: { viewOverride?: React.ReactNode }
 	// 音声入力の結果は、入力欄の今の文の後ろに足す (送信はユーザーが確かめてから)
 	const onVoiceTranscript = useCallback((text: string) => {
 		const current = textAreaRef.current?.value ?? ''
-		const sep = !current || /\s$/.test(current) ? '' : (/[\u3000-\u9fff\uff00-\uffef]$/.test(current) ? '' : ' ')
-		textAreaFnsRef.current?.setValue(current + sep + text)
+		textAreaFnsRef.current?.setValue(appendVoiceTranscript(current, text))
 		const ta = textAreaRef.current
 		if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length) }
 	}, [textAreaRef, textAreaFnsRef])

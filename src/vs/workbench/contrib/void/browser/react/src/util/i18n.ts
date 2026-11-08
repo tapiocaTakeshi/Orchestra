@@ -336,6 +336,8 @@ export const translations = {
 	'chat.dropFiles': { en: 'Drop files here', ja: 'ここにファイルをドロップ' },
 	'chat.voice.start': { en: 'Voice input', ja: '音声入力' },
 	'chat.voice.listening': { en: 'Listening…', ja: '聞き取り中…' },
+	'chat.voice.starting': { en: 'Preparing the microphone…', ja: 'マイクを準備中…' },
+	'chat.voice.recording': { en: 'Voice input in progress', ja: '音声入力中' },
 	'chat.voice.transcribing': { en: 'Turning speech into text…', ja: '文字に起こしています…' },
 	'chat.voice.done': { en: 'Done', ja: '完了' },
 	'chat.voice.cancel': { en: 'Cancel', ja: 'やめる' },

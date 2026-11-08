@@ -84,6 +84,8 @@ import {
 
 import { useAccessor, useCloudAgentState, useDivisionProjectConfig, useDivisionProjects, useIsDark, useOrchestraUiMode, useRefreshModelState, useSettingsState } from '../util/services.js';
 import { TranslationKey, useTranslation } from '../util/i18n.js';
+import { ButtonVoiceInput } from '../util/VoiceInput.js';
+import { appendVoiceTranscript } from '../../../../common/voiceInput.js';
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js';
 import { ChatMarkdownRender } from '../markdown/ChatMarkdownRender.js';
 import { AiLoading } from '../util/AiLoading.js';
@@ -969,6 +971,29 @@ const UrlSourceFields = ({ url, setUrl, branch, setBranch }: { url: string; setU
 
 const COMPOSER_MAX_HEIGHT = 240;
 
+/** 音声入力の結果を入力欄の最新の値の末尾に足し、フォーカスしてカーソルを末尾へ (送信はしない) */
+const appendVoiceToComposer = (textareaRef: React.MutableRefObject<HTMLTextAreaElement | null>, fallback: string, setValue: (v: string) => void, text: string) => {
+	const current = textareaRef.current?.value ?? fallback;
+	setValue(appendVoiceTranscript(current, text));
+	// 再描画で値が入ってからカーソルを動かす
+	requestAnimationFrame(() => {
+		const ta = textareaRef.current;
+		if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+	});
+};
+
+/** クラウドの入力欄に並べるマイクボタン (IDE と同じ共通コンポーネント) */
+const ComposerVoiceButton = ({ onTranscript, disabled, ownerKey }: { onTranscript: (text: string) => void; disabled?: boolean; ownerKey: string }) => (
+	<ButtonVoiceInput
+		onTranscript={onTranscript}
+		disabled={disabled}
+		ownerKey={ownerKey}
+		variant='icon'
+		className='oca-iconbtn'
+		style={{ width: '26px', height: '26px', borderRadius: '50%', flexShrink: 0 }}
+	/>
+);
+
 const ComposerBox = ({ value, onChange, onSubmit, placeholder, disabled, textareaRef, toolbar, actions, hintLeft, hintRight, above }: {
 	value: string;
 	onChange: (v: string) => void;
@@ -1629,12 +1654,15 @@ const NewAgentComposer = ({ draft, setDraft, textareaRef }: {
 				</div>
 			}
 			actions={
-				<SendButton
-					disabled={!canLaunch}
-					busy={state.creating}
-					title={state.creating ? t('cloudAgents.new.launching') : count > 1 ? t('cloudAgents.new.launchN').replace('{count}', String(count)) : t('cloudAgents.new.launch')}
-					onClick={() => { void launch(); }}
-				/>
+				<>
+					<ComposerVoiceButton ownerKey='new-agent' onTranscript={text => appendVoiceToComposer(textareaRef, prompt, v => setDraft({ prompt: v }), text)} />
+					<SendButton
+						disabled={!canLaunch}
+						busy={state.creating}
+						title={state.creating ? t('cloudAgents.new.launching') : count > 1 ? t('cloudAgents.new.launchN').replace('{count}', String(count)) : t('cloudAgents.new.launch')}
+						onClick={() => { void launch(); }}
+					/>
+				</>
 			}
 			hintLeft={state.creatingProgress
 				? <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}><Spinner size={10} /> {state.creatingProgress}</span>
@@ -3829,6 +3857,8 @@ const FollowUpComposer = ({ session, value, setValue }: { session: CloudSession;
 	const canSend = state.isLoggedIn && !sending && !awaitingApproval && !!value.trim();
 	const projectLabelOf = useProjectLabel();
 	const modelLabel = sessionModelLabel(session, projectLabelOf(session.projectId), t('cloudAgents.detail.modelDefault'));
+	const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+	const composerDisabled = !state.isLoggedIn || awaitingApproval;
 
 	const send = async () => {
 		if (!canSend) return;
@@ -3852,7 +3882,8 @@ const FollowUpComposer = ({ session, value, setValue }: { session: CloudSession;
 			value={value}
 			onChange={setValue}
 			onSubmit={() => { void send(); }}
-			disabled={!state.isLoggedIn || awaitingApproval}
+			disabled={composerDisabled}
+			textareaRef={textareaRef}
 			placeholder={!state.isLoggedIn ? t('cloudAgents.followup.loginRequired') : awaitingApproval ? t('cloudAgents.approval.composerHint') : t('cloudAgents.followup.placeholder')}
 			toolbar={
 				<span title={modelLabel} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: C.fgMuted, padding: '0 6px', minWidth: 0 }}>
@@ -3863,6 +3894,7 @@ const FollowUpComposer = ({ session, value, setValue }: { session: CloudSession;
 			actions={
 				<>
 					{(active || awaitingApproval) && <StopButton title={t('cloudAgents.composer.stop')} onClick={() => { void cloudAgentService.stop(session.id); }} />}
+					<ComposerVoiceButton ownerKey={`followup:${session.id}`} disabled={composerDisabled} onTranscript={text => appendVoiceToComposer(textareaRef, value, setValue, text)} />
 					{goalPaused && (
 						<button type='button' disabled={!state.isLoggedIn || sending} title={t('cloudAgents.goal.continueHint')} onClick={() => { void continueGoal(); }} style={buttonStyle('secondary', !state.isLoggedIn || sending)}>
 							<Repeat size={12} />
