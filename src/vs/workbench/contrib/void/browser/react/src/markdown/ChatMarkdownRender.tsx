@@ -15,6 +15,8 @@ import { separateOutFirstLine } from '../../../../common/helpers/util.js'
 import { BlockCode } from '../util/inputs.js'
 import { CodespanLocationLink } from '../../../../common/chatThreadServiceTypes.js'
 import { getBasename, getRelative, voidOpenFileFn } from '../sidebar-tsx/SidebarChat.js'
+import { decodeParallelLog, PARALLEL_LOG_LANG } from '../../../../common/parallelLog.js'
+import { ParallelLogBlock } from './ParallelLogBlock.js'
 
 
 export type ChatMessageLocation = {
@@ -282,6 +284,16 @@ const RenderToken = ({ token, inPTag, codeURI, chatMessageLocation, tokenIdx, ..
 	}
 
 	if (t.type === 'code') {
+		// A workflow's parallel branches: one lane per branch instead of a code block.
+		if (t.lang === PARALLEL_LOG_LANG) {
+			const log = decodeParallelLog(t.text)
+			if (!log) return null
+			return <ParallelLogBlock
+				log={log}
+				renderMarkdown={md => <ChatMarkdownRender string={md} chatMessageLocation={undefined} isLinkDetectionEnabled={options.isLinkDetectionEnabled} />}
+			/>
+		}
+
 		const [firstLine, remainingContents] = separateOutFirstLine(t.text)
 		const firstLineIsURI = isValidUri(firstLine) && !codeURI
 		const contents = firstLineIsURI ? (remainingContents?.trimStart() || '') : t.text // exclude first-line URI from contents
