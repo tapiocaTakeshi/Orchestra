@@ -4,6 +4,8 @@
  *--------------------------------------------------------------------------------------*/
 
 // A cloud agent's .division documents as files: orchestra-cloud://<session id>/.division/paper.md.
+// A session started from several repositories also lists each repository's own .division
+// (orchestra-cloud://<session id>/<repo dir>/.division/CODER.md).
 //
 // The local Division Project writes its workflow (.division/workflow.json), paper, specification and design
 // pages into the workspace, and the user opens and edits them in the editor. A cloud session writes the same
@@ -40,6 +42,23 @@ export const CLOUD_DOCUMENT_SCHEME = 'orchestra-cloud';
 const DIVISION_DIR = '.division';
 const DESIGN_DIR = '.division/design';
 
+/** The path from .division on: '.division/a.md' as is, '<repo dir>/.division/a.md' → '.division/a.md'; else null. */
+const divisionRelative = (path: string): string | null => {
+	if (path.startsWith(`${DIVISION_DIR}/`)) return path;
+	const m = /^[A-Za-z0-9_-][A-Za-z0-9._-]{0,120}\/(\.division\/.*)$/.exec(path);
+	return m ? m[1] : null;
+};
+
+/** The folders the documents live in ('', '.division', '.division/design', '<dir>', '<dir>/.division', …). */
+const documentFolders = (docs: CloudDocument[]): Set<string> => {
+	const out = new Set<string>(['', DIVISION_DIR, DESIGN_DIR]);
+	for (const d of docs) {
+		const parts = d.path.split('/');
+		for (let i = 1; i < parts.length; i++) out.add(parts.slice(0, i).join('/'));
+	}
+	return out;
+};
+
 export type CloudDocumentKind = 'workflow' | 'paper' | 'specification' | 'design' | 'output';
 /** One document as GET /api/cloud-sessions/:id/documents lists it */
 export type CloudDocument = { path: string; name: string; kind: CloudDocumentKind; size: number; mtime: number };
@@ -64,10 +83,11 @@ export const toCloudDocuments = (raw: unknown): CloudDocument[] => {
 	for (const d of list) {
 		if (!d || typeof d !== 'object') continue;
 		const o = d as Record<string, unknown>;
-		if (typeof o.path !== 'string' || !o.path.startsWith(`${DIVISION_DIR}/`)) continue;
+		const rel = typeof o.path === 'string' ? divisionRelative(o.path) : null;
+		if (typeof o.path !== 'string' || !rel) continue;
 		out.push({
 			path: o.path,
-			name: typeof o.name === 'string' && o.name ? o.name : o.path.slice(DIVISION_DIR.length + 1),
+			name: typeof o.name === 'string' && o.name ? o.name : rel.slice(DIVISION_DIR.length + 1),
 			kind: KINDS.includes(o.kind as CloudDocumentKind) ? o.kind as CloudDocumentKind : 'output',
 			size: typeof o.size === 'number' ? o.size : 0,
 			mtime: typeof o.mtime === 'number' ? o.mtime : 0,
@@ -183,7 +203,9 @@ export class CloudDocumentFileSystemProvider extends Disposable implements IFile
 		const { sessionId, path } = this._split(resource);
 		if (path === '' || path === DIVISION_DIR || path === DESIGN_DIR) return { type: FileType.Directory, mtime: 0, ctime: 0, size: 0 };
 		this._touch(sessionId);
-		const doc = (await this.listDocuments(sessionId)).find(d => d.path === path);
+		const docs = await this.listDocuments(sessionId);
+		const doc = docs.find(d => d.path === path);
+		if (!doc && documentFolders(docs).has(path)) return { type: FileType.Directory, mtime: 0, ctime: 0, size: 0 };
 		if (!doc) {
 			// Not listed (e.g. a design page's CSS): ask for the file itself.
 			const res = await this._request('GET', `/api/cloud-sessions/${encodeURIComponent(sessionId)}/documents/content?path=${encodeURIComponent(path)}`, undefined, TIMEOUT_MS);
@@ -196,18 +218,20 @@ export class CloudDocumentFileSystemProvider extends Disposable implements IFile
 
 	async readdir(resource: URI): Promise<[string, FileType][]> {
 		const { sessionId, path } = this._split(resource);
-		if (path === '') return [[DIVISION_DIR, FileType.Directory]];
-		if (path !== DIVISION_DIR && path !== DESIGN_DIR) throw createFileSystemProviderError(path, FileSystemProviderErrorCode.FileNotADirectory);
 		this._touch(sessionId);
 		const docs = await this.listDocuments(sessionId);
-		const prefix = `${path}/`;
-		const entries: [string, FileType][] = [];
-		if (path === DIVISION_DIR && docs.some(d => d.path.startsWith(`${DESIGN_DIR}/`))) entries.push(['design', FileType.Directory]);
+		if (!documentFolders(docs).has(path)) throw createFileSystemProviderError(path, FileSystemProviderErrorCode.FileNotADirectory);
+		const prefix = path ? `${path}/` : '';
+		const entries = new Map<string, FileType>();
+		if (path === '') entries.set(DIVISION_DIR, FileType.Directory);
 		for (const d of docs) {
+			if (!d.path.startsWith(prefix)) continue;
 			const rest = d.path.slice(prefix.length);
-			if (d.path.startsWith(prefix) && rest && !rest.includes('/')) entries.push([rest, FileType.File]);
+			const slash = rest.indexOf('/');
+			if (slash < 0) { if (rest) entries.set(rest, FileType.File); }
+			else entries.set(rest.slice(0, slash), FileType.Directory);
 		}
-		return entries;
+		return [...entries];
 	}
 
 	async readFile(resource: URI): Promise<Uint8Array> {
@@ -231,7 +255,7 @@ export class CloudDocumentFileSystemProvider extends Disposable implements IFile
 		if (cached && !cached.pending) {
 			const others = cached.docs.filter(d => d.path !== path);
 			const prev = cached.docs.find(d => d.path === path);
-			const name = path.slice(DIVISION_DIR.length + 1);
+			const name = (divisionRelative(path) ?? path).slice(DIVISION_DIR.length + 1);
 			const doc: CloudDocument = { path, name, kind: prev?.kind ?? 'output', size: saved?.size ?? content.byteLength, mtime: saved?.mtime ?? Date.now() };
 			this._lists.set(sessionId, { at: 0, docs: [...others, doc] });
 		}

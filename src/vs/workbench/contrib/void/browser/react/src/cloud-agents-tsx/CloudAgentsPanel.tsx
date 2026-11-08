@@ -3952,7 +3952,12 @@ const DocumentsMenu = ({ session }: { session: CloudSession }) => {
 	useEffect(() => { setOpen(false); setDocs(null); setError(null); }, [session.id]);
 
 	const groups = DOCUMENT_KIND_ORDER.map(kind => ({ kind, docs: (docs ?? []).filter(d => d.kind === kind) })).filter(g => g.docs.length);
-	const title = (d: CloudDocument) => (d.kind === 'workflow' || d.kind === 'paper' || d.kind === 'specification') ? DOCUMENT_KIND_LABEL[d.kind] : d.name.replace(/^design\//, '');
+	const title = (d: CloudDocument) => {
+		const base = (d.kind === 'workflow' || d.kind === 'paper' || d.kind === 'specification') ? DOCUMENT_KIND_LABEL[d.kind] : d.name.replace(/^design\//, '');
+		// A multi-repo session also lists each repository's own .division (<repo>/.division/…)
+		const repo = d.path.startsWith('.division/') ? '' : d.path.split('/')[0];
+		return repo ? `${repo} · ${base}` : base;
+	};
 	// The sandbox has no workspace yet while it is being prepared
 	const unavailable = session.status === 'provisioning' || session.status === 'uploading';
 
