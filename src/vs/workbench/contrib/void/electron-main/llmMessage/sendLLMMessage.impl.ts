@@ -47,6 +47,7 @@ import { DESIGN_DIR, DESIGN_INDEX_PAGE, LEGACY_DESIGN_FILE, sortDesignPageNames,
 import { CHANGES_FILE, CHANGES_HEADER, DRIFT_CHECK_PROMPT, DRIFT_FILE, GOAL_FILE, changeEntry, driftCheckInput, driftReport, goalDocument, goalInstructionBlock, hasDocumentsToCheck, latestChangeNote, lineChanges, parseDriftVerdict } from '../../common/divisionGoal.js';
 import { DivisionWorkflow, loopLabel, normalizeWorkflow, tasksToWorkflow, WORKFLOW_FILE_NAME, workflowErrors, WorkflowLoopTag, WorkflowWhileCheck, workflowToTasks } from '../../common/divisionWorkflow.js';
 import { extractSearchedSites, mergeSearchedSites, logSearchedSites, searchedSitesMarkdown, isDefaultWebSearchEnabled, isWebSearchRejectedError } from '../../common/searchedSites.js';
+import { ParallelLogBuilder } from '../../common/parallelLog.js';
 
 const getGoogleApiKey = async () => {
 	// module‑level singleton
@@ -3372,10 +3373,34 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			controller.abort();
 		});
 
+		// fullText = committedText + the parallel group still running (re-rendered as its branches write).
 		let fullText = '';
-		const appendText = (text: string) => {
-			fullText += text;
+		let committedText = '';
+		/** The parallel node's branches being run now: each has its own lane in the chat. */
+		let parallelLog = null as ParallelLogBuilder | null;
+		/** The branch whose step the loop is on: appendText writes into its lane. */
+		let parallelLane = null as number | null;
+		const publishText = () => {
+			fullText = committedText + (parallelLog ? parallelLog.render() : '');
 			onText({ fullText, fullReasoning: '' });
+		};
+		/** End the parallel group: its lanes stay in the message as they are. `seal` marks branches still going as stopped. */
+		const commitParallelLog = (seal: boolean) => {
+			if (!parallelLog) return;
+			if (seal) parallelLog.seal(Date.now());
+			committedText += parallelLog.render();
+			parallelLog = null;
+			parallelLane = null;
+			fullText = committedText;
+		};
+		const appendText = (text: string) => {
+			if (parallelLog && parallelLane !== null && parallelLog.has(parallelLane)) {
+				parallelLog.append(parallelLane, text);
+			} else {
+				commitParallelLog(false);
+				committedText += text;
+			}
+			publishText();
 		};
 		const pendingCommandRuns: CommandOperationItem[] = [];
 		const queueCommandRuns = (commands: CommandOperationItem[]) => {
@@ -3784,6 +3809,8 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				// 「coder / writer だけ承認」設定なら、それ以外のロールは保存だけして止めずに進む
 				if (divisionFlowApprovalCoderWriterOnly && !isCoderLikeRole(flowRole)) return false;
 			}
+			// 並列の分岐の途中で止まるなら、まだ動いている分岐は「停止」にしてレーンを閉じる (再開時に実行し直す)。
+			commitParallelLog(true);
 			writeOrchestrationState(workspaceFolderPath, {
 				approved: false,
 				workspaceFolderPath,
@@ -4337,24 +4364,36 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				if (isFileSearchRole(o.role)) absorbFileSearchReport(o.output || '');
 			}
 
-			// ストリームの出力先: 並列で先に始めたタスクは自分の番まで出力をためておき、番が来たらまとめて出す。
-			const makeTaskSink = (live: boolean) => {
-				let buffered = '';
-				let attached = live;
-				return {
-					write: (chunk: string) => { if (attached) { appendText(chunk); } else { buffered += chunk; } },
-					attach: () => { if (!attached) { attached = true; if (buffered) { appendText(buffered); } buffered = ''; } },
-				};
-			};
 			/** AI を Division API で呼ぶだけの普通のタスク (ファイル読み込み・画像生成・サーバー実行済みは除く) */
 			const isPlainAiTask = (t: DivisionTask): boolean => {
 				const r = (t.role || '').toLowerCase();
 				return !isFileSearchRole(r) && !isImageRole(r) && !(t.output && t.output.trim());
 			};
+			/** i から始まる並列ノードの分岐で、互いに待ち合わせがなく一緒に始められるタスク (1 つなら並列にしない)。 */
+			const parallelGroupAt = (i: number): number[] => {
+				const first = tasks[i];
+				if (!first.parallel || !isPlainAiTask(first)) return [i];
+				const group = new Set([first.taskId]);
+				const out = [i];
+				for (let j = i + 1; j < tasks.length; j++) {
+					const t = tasks[j];
+					if (t.parallel !== first.parallel || !isPlainAiTask(t) || t.whileCheck || (t.dependsOn || []).some(d => group.has(d))) { break; }
+					group.add(t.taskId);
+					out.push(j);
+				}
+				return out;
+			};
 			/** タスクへの入力を組み立てて Division API の実行を始める (並列の分岐はまとめて始める)。 */
-			const startTaskExecute = (task: DivisionTask, live: boolean) => {
+			const startTaskExecute = (task: DivisionTask, index: number) => {
 				const role = (task.role || '').toLowerCase();
-				const sink = makeTaskSink(live);
+				// 並列の分岐は、出力を自分のレーンへ流す (どの分岐も同時に見える)。
+				const lane = parallelLog && parallelLog.has(index) ? parallelLog : null;
+				lane?.start(index, Date.now());
+				const sink = {
+					write: lane
+						? (chunk: string) => { if (parallelLog === lane) { lane.append(index, chunk); publishText(); } }
+						: appendText,
+				};
 				const isDesigner = role === 'design' || role === 'designer';
 				const existingDesignPages = isDesigner && workspaceFolderPath ? listDesignPages(workspaceFolderPath) : [];
 				const taskInstruction = isDesigner
@@ -4474,7 +4513,15 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					]),
 					workspaceFolderPath, routingOptions, task.systemPrompt,
 				);
-				return { taskInput, roleContextBlock, result, sink };
+				if (lane) {
+					const finishLane = (status: 'done' | 'error') => {
+						if (parallelLog !== lane) return;
+						lane.finish(index, status, Date.now());
+						publishText();
+					};
+					result.then(r => finishLane(r.error ? 'error' : 'done'), () => finishLane('error'));
+				}
+				return { taskInput, roleContextBlock, result };
 			};
 			const prefetchedTasks = new Map<number, ReturnType<typeof startTaskExecute>>();
 			/** 目標を達成した while ループ: この回以降は飛ばす */
@@ -4512,6 +4559,15 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					}
 					appendText(`🔁 **まだ未達です。** もう一度繰り返します。${verdict.reason ? `\n\n${verdict.reason}` : ''}\n\n`);
 				}
+				// 並列ノードの分岐: 一緒に始める分岐のグループを開き、チャットでは分岐ごとのレーンに出す。
+				if (parallelLog && !parallelLog.has(i)) commitParallelLog(false);
+				if (!parallelLog) {
+					const group = parallelGroupAt(i);
+					if (group.length > 1) {
+						parallelLog = new ParallelLogBuilder(group.map(j => ({ key: j, step: displayStepNumber(j), role: tasks[j].role, title: tasks[j].title || '' })));
+					}
+				}
+				parallelLane = parallelLog ? i : null;
 				// ドリフト検証: coder が実装する前に、Reviewer が論文・仕様書・デザインを目的 (goal.md) と比べる。
 				// 目的から離れていたら、実装せずに止めてユーザーに確認する (承認すればこのまま実装する)。
 				const driftAcknowledgedHere = round === 1 && isResuming && i === resumeFromIndex && resumeState?.driftAcknowledged === true;
@@ -4552,7 +4608,10 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 							: `⚠️ ドリフト検証の結果を読み取れませんでした${check.error ? ` (${check.error})` : ''}。実装を続けます。\n\n`);
 					}
 				}
-				appendText(`\n---\n\n### ${displayStepNumber(i)}. ${task.role} — ${task.title || ''}${task.loops?.length ? ` _(${loopLabel(task.loops)})_` : ''}${task.parallel ? ' _(並列)_' : ''}\n\n`);
+				// 並列の分岐はレーンの見出しに番号とロールが出るので、本文の見出しは付けない。
+				if (parallelLane === null) {
+					appendText(`\n---\n\n### ${displayStepNumber(i)}. ${task.role} — ${task.title || ''}${task.loops?.length ? ` _(${loopLabel(task.loops)})_` : ''}${task.parallel ? ' _(並列)_' : ''}\n\n`);
+				}
 
 				// File Search はローカル実装でワークスペース全件走査
 				if (isFileSearchRole(role)) {
@@ -4667,23 +4726,16 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					continue;
 				}
 
-				// 並列ノードの分岐: 先に始めておいたタスクならその結果を使う (出力はここで順番どおりに出す)。
+				// 並列ノードの分岐: 先に始めておいたタスクならその結果を使う (出力はもう自分のレーンに出ている)。
 				let prepared = prefetchedTasks.get(i);
 				prefetchedTasks.delete(i);
-				if (prepared) {
-					prepared.sink.attach();
-				} else {
-					prepared = startTaskExecute(task, true);
-					// 同じ並列ノードから出た分岐で、互いに待ち合わせのない後続タスクを今すぐ一緒に始める。
-					if (task.parallel) {
-						const group = new Set([task.taskId]);
-						for (let j = i + 1; j < tasks.length; j++) {
-							const t = tasks[j];
-							if (t.parallel !== task.parallel || !isPlainAiTask(t) || t.whileCheck || (t.dependsOn || []).some(d => group.has(d))) { break; }
-							group.add(t.taskId);
-							prefetchedTasks.set(j, startTaskExecute(t, false));
+				if (!prepared) {
+					prepared = startTaskExecute(task, i);
+					// グループの最初の分岐なら、残りの分岐も今すぐ一緒に始める。
+					if (parallelLog && parallelLog.firstKey === i) {
+						for (const j of parallelLog.keys) {
+							if (j !== i) prefetchedTasks.set(j, startTaskExecute(tasks[j], j));
 						}
-						if (group.size > 1) { appendText(`> ⚡ 並列: このステップと続く ${group.size - 1} ステップを同時に実行しています。\n\n`); }
 					}
 				}
 				const { taskInput } = prepared;
@@ -4787,6 +4839,8 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 
 				if (mdInfo && maybePauseForApproval(task.role, output, mdInfo, i + 1, false, !!task.approval)) return;
 			}
+			commitParallelLog(false);
+			prefetchedTasks.clear();
 
 			// =============================================
 			// コマンド実行: このラウンドでエージェントが出したコマンドを作業フォルダで実行する
@@ -5002,7 +5056,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 				const jsonBlock = [...reviewText.matchAll(/```json[\s\S]*?```/g)].pop();
 				if (jsonBlock && jsonBlock.index !== undefined) {
 					const at = reviewStartInFullText + jsonBlock.index;
-					fullText = fullText.slice(0, at) + fullText.slice(at + jsonBlock[0].length);
+					committedText = fullText = fullText.slice(0, at) + fullText.slice(at + jsonBlock[0].length);
 					onText({ fullText, fullReasoning: '' });
 				}
 			}
