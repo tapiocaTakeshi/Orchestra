@@ -63,6 +63,7 @@ import { IVoidSettingsService } from '../common/voidSettingsService.js';
 import { DivisionWorkflow, normalizeWorkflow, workflowErrors } from '../common/divisionWorkflow.js';
 import { AgentRole, providerNames, RoleAssignment } from '../common/voidSettingsTypes.js';
 import { DESIGN_DIR, LEGACY_DESIGN_FILE, sortDesignPageNames } from '../common/designPages.js';
+import { truncateChatTextForRemote } from '../common/parallelLog.js';
 import { VSBuffer } from '../../../../base/common/buffer.js';
 
 Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).registerConfiguration({
@@ -735,7 +736,7 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 
 		// ストリーミング中の返答はまだ messages に入っていないので末尾に足す
 		if (stream?.isRunning === 'LLM' && stream.llmInfo.displayContentSoFar) {
-			messages.push({ role: 'assistant', text: truncate(stream.llmInfo.displayContentSoFar) });
+			messages.push({ role: 'assistant', text: truncateChatTextForRemote(stream.llmInfo.displayContentSoFar, MAX_MESSAGE_CHARS) });
 		} else if (stream?.isRunning === 'tool') {
 			messages.push({ role: 'tool', text: '実行中…', toolName: stream.toolInfo.toolName });
 		}
@@ -793,7 +794,7 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 			case 'user':
 				return { role: 'user', text: truncate(message.displayContent || message.content) };
 			case 'assistant':
-				return { role: 'assistant', text: truncate(message.displayContent) };
+				return { role: 'assistant', text: truncateChatTextForRemote(message.displayContent, MAX_MESSAGE_CHARS) };
 			case 'tool': {
 				const text = message.type === 'tool_request' ? '承認待ち'
 					: message.type === 'running_now' ? '実行中…'
