@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import * as assert from 'assert';
-import { decodeParallelLog, encodeParallelLog, formatLaneElapsed, laneElapsedMs, laneLastLine, PARALLEL_LOG_LANG, ParallelLogBuilder, parallelLogCounts } from '../../common/parallelLog.js';
+import { decodeParallelLog, encodeParallelLog, formatLaneElapsed, laneElapsedMs, laneLastLine, PARALLEL_LOG_LANG, ParallelLogBuilder, parallelLogCounts, truncateChatTextForRemote } from '../../common/parallelLog.js';
 
 const bodyOf = (block: string): string => {
 	const m = new RegExp('```' + PARALLEL_LOG_LANG + '\\n([\\s\\S]*?)\\n```').exec(block);
@@ -70,5 +70,43 @@ suite('Parallel log', () => {
 		assert.strictEqual(formatLaneElapsed(65_000), '1m 05s');
 		assert.strictEqual(formatLaneElapsed(3_720_000), '1h 02m');
 		assert.strictEqual(laneLastLine({ key: 0, step: 1, role: 'r', title: '', status: 'running', text: '## 見出し\n\n**本文** の途中\n\n' }), '本文 の途中');
+	});
+});
+
+suite('Parallel log on the phone (remote control)', () => {
+
+	const plan = '### 1. leader — 計画\n\n' + 'とても長い計画。'.repeat(800) + '\n\n';
+	const block = (() => {
+		const b = new ParallelLogBuilder([{ key: 1, step: 2, role: 'researcher', title: '調査' }, { key: 2, step: 3, role: 'designer', title: '画面' }]);
+		b.start(1, 0); b.append(1, '```js\n' + 'x();\n'.repeat(2000) + '```\n調査の結論');
+		b.start(2, 0); b.append(2, 'デザイン中');
+		return b.render();
+	})();
+
+	test('without a parallel block, keeps the beginning as before', () => {
+		assert.strictEqual(truncateChatTextForRemote('abcdef', 3), 'abc…');
+		assert.strictEqual(truncateChatTextForRemote('abc', 3), 'abc');
+	});
+
+	test('keeps the block whole and decodable, with each lane cut to its latest part', () => {
+		const out = truncateChatTextForRemote(plan + block + '\n後書き', 4_000);
+		const m = new RegExp('```' + PARALLEL_LOG_LANG + '\\n([^\\n]*)\\n```').exec(out);
+		assert.ok(m, 'block kept');
+		const log = decodeParallelLog(m![1])!;
+		assert.strictEqual(log.lanes.length, 2);
+		assert.ok(log.lanes[0].text.endsWith('調査の結論'));
+		assert.ok(log.lanes[0].text.length < 1_300);
+		assert.strictEqual(log.lanes[1].text, 'デザイン中');
+		assert.ok(out.endsWith('後書き'));
+		assert.ok(out.length < 4_000 + 3_000);
+		// the plan before it keeps its latest part, starting with "…"
+		assert.ok(out.startsWith('…'));
+	});
+
+	test('a cut inside a code fence reopens it, so the block after it is not swallowed', () => {
+		const text = 'intro\n```ts\n' + 'const a = 1;\n'.repeat(500) + '```\n' + block;
+		const out = truncateChatTextForRemote(text, 1_000);
+		const before = out.slice(0, out.indexOf('```' + PARALLEL_LOG_LANG));
+		assert.strictEqual((before.match(/^\s*```/gm) || []).length % 2, 0);
 	});
 });

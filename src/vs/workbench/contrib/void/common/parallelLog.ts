@@ -142,3 +142,59 @@ export class ParallelLogBuilder {
 
 	render(): string { return encodeParallelLog({ v: 1, lanes: this.lanes }); }
 }
+
+const PARALLEL_BLOCK_RE = new RegExp('```' + PARALLEL_LOG_LANG + '\\n([^\\n]*)\\n```', 'g');
+
+/** Keep only the latest part of each lane's log, so the block stays small enough to send to the phone. */
+export const compactParallelLogs = (text: string, laneMax = 1_200): string =>
+	text.replace(PARALLEL_BLOCK_RE, (whole, body: string) => {
+		const log = decodeParallelLog(body);
+		if (!log) { return whole; }
+		for (const lane of log.lanes) {
+			lane.text = markdownTail(lane.text, laneMax);
+		}
+		return encodeParallelLog(log).trim();
+	});
+
+/** The end of a piece of Markdown, at most `max` characters; reopens a code fence the cut fell inside. */
+const markdownTail = (text: string, max: number): string => {
+	if (text.length <= max) { return text; }
+	let tail = text.slice(-max);
+	const nl = tail.indexOf('\n');
+	if (nl >= 0 && nl < 200) { tail = tail.slice(nl + 1); }
+	const fences = (tail.match(/^\s*```/gm) || []).length;
+	return `…\n\n${fences % 2 === 1 ? '```\n' : ''}${tail}`;
+};
+
+/**
+ * A chat message cut down for the phone (remote control) to `max` characters of text.
+ * Without a parallel block it keeps the beginning, as before. With one, the parallel blocks are kept whole
+ * (each lane cut to its latest part) and the text keeps its latest part, so the block is never cut in the middle.
+ */
+export const truncateChatTextForRemote = (text: string, max: number): string => {
+	if (!text.includes('```' + PARALLEL_LOG_LANG)) {
+		return text.length > max ? `${text.slice(0, max)}…` : text;
+	}
+	const compacted = compactParallelLogs(text);
+	const parts: Array<{ block: boolean; text: string }> = [];
+	let at = 0;
+	for (const m of compacted.matchAll(PARALLEL_BLOCK_RE)) {
+		parts.push({ block: false, text: compacted.slice(at, m.index) });
+		parts.push({ block: true, text: m[0] });
+		at = m.index! + m[0].length;
+	}
+	parts.push({ block: false, text: compacted.slice(at) });
+
+	let budget = max;
+	const out: string[] = [];
+	for (let i = parts.length - 1; i >= 0; i--) {
+		const p = parts[i];
+		if (p.block) { out.unshift(p.text); continue; }
+		if (budget <= 0) { if (p.text.trim()) { out.unshift('…\n\n'); budget = -1; } continue; }
+		if (p.text.length <= budget) { out.unshift(p.text); budget -= p.text.length; continue; }
+		out.unshift(markdownTail(p.text, budget));
+		budget = -1;
+	}
+	// Separate runs of "…" placeholders collapse into one.
+	return out.join('').replace(/(…\n\n){2,}/g, '…\n\n');
+};
