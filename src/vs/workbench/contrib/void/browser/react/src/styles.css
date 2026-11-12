@@ -53,6 +53,13 @@
 	outline: none !important;
 }
 
+/* キーボードで移動したときだけ、ボタン類にフォーカスの輪を出す (マウスのクリックでは出ない)。
+   上の一括指定より詳細度が高いので、こちらが勝つ。入力欄は枠線の色でフォーカスを示すので対象外。 */
+:is(button, a[href], summary, [role='button'], [role='tab'], [role='switch'], [role='checkbox'], [role='menuitem']):focus-visible:not([class*='monaco']) {
+	outline: 1.5px solid var(--void-ring-color) !important;
+	outline-offset: 1px;
+}
+
 
 
 .inherit-bg-all-restyle > * {
@@ -184,7 +191,7 @@
    Cursor's chat panel. Matches both light and dark themes via void-fg tokens. */
 .void-chat-scroll {
 	overscroll-behavior: contain;
-	scrollbar-gutter: stable;
+	/* scrollbar-gutter は付けない: 幅の狭いサイドバーで本文が 8px 狭くなり、左右の余白が揃わなくなる */
 }
 .void-chat-scroll::-webkit-scrollbar {
 	width: 8px;

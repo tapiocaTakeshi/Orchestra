@@ -987,7 +987,7 @@ const ScrollToBottomContainer = ({ children, className, style, scrollContainerRe
 			<div
 				ref={divRef}
 				onScroll={onScroll}
-				className={`${className ?? ''} void-chat-scroll`}
+				className={`${className ?? ''} @@void-chat-scroll`}
 				style={{ flex: '1 1 0', minHeight: 0, height: '100%' }}
 			>
 				<div ref={contentRef}>
@@ -1002,7 +1002,7 @@ const ScrollToBottomContainer = ({ children, className, style, scrollContainerRe
 					onClick={jumpToBottom}
 					className='absolute bottom-3 left-1/2 -translate-x-1/2 z-10
 						h-7 px-2.5 rounded-full
-						conductor-glass border border-void-border-2
+						@@conductor-glass border border-void-border-2
 						flex items-center gap-1
 						cursor-pointer
 						text-[11px] text-void-fg-2 hover:text-void-fg-1
