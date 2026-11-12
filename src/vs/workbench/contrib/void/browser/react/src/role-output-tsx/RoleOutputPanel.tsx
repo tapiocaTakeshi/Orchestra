@@ -4,7 +4,8 @@
  *--------------------------------------------------------------------------------------*/
 
 import React, { useMemo, useState } from 'react';
-import { useChatThreadsState, useSettingsState } from '../util/services.js';
+import { useChatThreadsState, useIsDark, useSettingsState } from '../util/services.js';
+import '../styles.css';
 import { ChatMarkdownRender, ChatMessageLocation } from '../markdown/ChatMarkdownRender.js';
 import { ChevronDown, ChevronRight, FileText, Layers } from 'lucide-react';
 import { ChatMessage } from '../../../../common/chatThreadServiceTypes.js';
@@ -286,7 +287,7 @@ const RoleCard = ({ output, threadId }: { output: RoleOutput; threadId: string }
 
 type ViewMode = 'cards' | 'combined';
 
-export const RoleOutputPanel: React.FC = () => {
+const RoleOutputPanelInner: React.FC = () => {
 	const chatThreadsState = useChatThreadsState();
 	const settingsState = useSettingsState();
 	const [viewMode, setViewMode] = useState<ViewMode>('combined');
@@ -431,6 +432,16 @@ export const RoleOutputPanel: React.FC = () => {
 					))}
 				</div>
 			)}
+		</div>
+	);
+};
+
+// 色のトークン (--void-*) は `.void-scope` の中でしか定義されない。ほかのペインと同じく根を void-scope で包む。
+export const RoleOutputPanel: React.FC = () => {
+	const isDark = useIsDark();
+	return (
+		<div className={`@@void-scope ${isDark ? 'dark' : ''}`} style={{ height: '100%', width: '100%' }}>
+			<RoleOutputPanelInner />
 		</div>
 	);
 };

@@ -5,6 +5,10 @@
 
 import typography from '@tailwindcss/typography'
 
+// void の色はテーマの CSS 変数。そのまま 'var(--x)' で渡すと、Tailwind は `bg-void-bg-2/60` のような
+// 不透明度つきのクラスを作れず、何も出力しない (地のないカードになる)。color-mix で不透明度を掛けられる形にする。
+const voidColor = name => `color-mix(in srgb, var(${name}) calc(<alpha-value> * 100%), transparent)`
+
 /** @type {import('tailwindcss').Config} */
 export default {
 	darkMode: 'selector', // '{prefix-}dark' className is used to identify `dark:`
@@ -51,30 +55,30 @@ export default {
 			// common colors to use, ordered light to dark
 
 			colors: {
-				'void-bg-1': 'var(--void-bg-1)',
-				'void-bg-1-alt': 'var(--void-bg-1-alt)',
-				'void-bg-2': 'var(--void-bg-2)',
-				'void-bg-2-alt': 'var(--void-bg-2-alt)',
-				'void-bg-2-hover': 'var(--void-bg-2-hover)',
-				'void-bg-3': 'var(--void-bg-3)',
+				'void-bg-1': voidColor('--void-bg-1'),
+				'void-bg-1-alt': voidColor('--void-bg-1-alt'),
+				'void-bg-2': voidColor('--void-bg-2'),
+				'void-bg-2-alt': voidColor('--void-bg-2-alt'),
+				'void-bg-2-hover': voidColor('--void-bg-2-hover'),
+				'void-bg-3': voidColor('--void-bg-3'),
 
 
-				'void-fg-0': 'var(--void-fg-0)',
-				'void-fg-1': 'var(--void-fg-1)',
-				'void-fg-2': 'var(--void-fg-2)',
-				'void-fg-3': 'var(--void-fg-3)',
+				'void-fg-0': voidColor('--void-fg-0'),
+				'void-fg-1': voidColor('--void-fg-1'),
+				'void-fg-2': voidColor('--void-fg-2'),
+				'void-fg-3': voidColor('--void-fg-3'),
 				// 'void-fg-4': 'var(--vscode-tab-inactiveForeground)',
-				'void-fg-4': 'var(--void-fg-4)',
+				'void-fg-4': voidColor('--void-fg-4'),
 
-				'void-warning': 'var(--void-warning)',
+				'void-warning': voidColor('--void-warning'),
 
-				'void-border-1': 'var(--void-border-1)',
-				'void-border-2': 'var(--void-border-2)',
-				'void-border-3': 'var(--void-border-3)',
-				'void-border-4': 'var(--void-border-4)',
+				'void-border-1': voidColor('--void-border-1'),
+				'void-border-2': voidColor('--void-border-2'),
+				'void-border-3': voidColor('--void-border-3'),
+				'void-border-4': voidColor('--void-border-4'),
 
-				'void-ring-color': 'var(--void-ring-color)',
-				'void-link-color': 'var(--void-link-color)',
+				'void-ring-color': voidColor('--void-ring-color'),
+				'void-link-color': voidColor('--void-link-color'),
 
 				vscode: {
 					// see: https://code.visualstudio.com/api/extension-guides/webview#theming-webview-content

@@ -27,7 +27,8 @@ import {
 	X,
 } from 'lucide-react';
 
-import { useAccessor, useCloudAgentState, useDivisionProjectConfig, useKanbanServiceState, useSettingsState } from '../util/services.js';
+import { useAccessor, useCloudAgentState, useDivisionProjectConfig, useIsDark, useKanbanServiceState, useSettingsState } from '../util/services.js';
+import '../styles.css';
 import { ORCHESTRA_UI_SET_CLOUD_MODE_ACTION_ID } from '../../../orchestraUiModeTypes.js';
 import { useTranslation } from '../util/i18n.js';
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js';
@@ -782,8 +783,15 @@ const Banner = ({ color, icon, children }: { color: string; icon: React.ReactNod
 	</div>
 );
 
-export const KanbanBoard = () => (
-	<ErrorBoundary>
-		<KanbanBoardInner />
-	</ErrorBoundary>
-);
+// 色のトークン (--void-*) は `.void-scope` の中でしか定義されない。ほかのペインと同じく根を void-scope で
+// 包まないと、var(--void-*) がすべて未定義になり、カードやカラムの地・枠線が出ない。
+export const KanbanBoard = () => {
+	const isDark = useIsDark();
+	return (
+		<div className={`@@void-scope ${isDark ? 'dark' : ''}`} style={{ height: '100%', width: '100%' }}>
+			<ErrorBoundary>
+				<KanbanBoardInner />
+			</ErrorBoundary>
+		</div>
+	);
+};
