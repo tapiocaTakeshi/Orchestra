@@ -13,8 +13,8 @@
 //    (CloudAgentsFullscreen)。カンバンや取り込んだ差分などエディタ領域に何かが開いたら、その間だけ画面を下げ、
 //    右下の「クラウドエージェントに戻る」かタイトルバーの ☁ (Ctrl+Alt+A) で戻る。
 //  - 上級者モード (IDE 表示): これまでどおりエディタのタブとして開く。
-// タイトルバーの ☁ は「クラウドエージェントモードへ切り替える」(orchestraUiMode.ts) で、
-// クラウドエージェントモードのあいだだけ、この画面を前面に出すボタンになる。
+// タイトルバーの ☁ (Ctrl+Alt+A) はクラウドエージェントモードのあいだだけ出る「この画面を前面に出す」ボタン。
+// モードの切り替え (クラウドエージェント ⇄ IDE) は右端の切り替えボタン 1 つ (orchestraUiMode.ts)。
 
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { EditorInput } from '../../../common/editor/editorInput.js';
@@ -303,8 +303,8 @@ registerAction2(class extends Action2 {
 				weight: KeybindingWeight.WorkbenchContrib,
 				primary: KeyMod.CtrlCmd | KeyMod.Alt | KeyCode.KeyA,
 			},
-			// タイトルバーにはクラウドエージェントモードのときだけ出す。他のモードでは同じ位置に
-			// 「クラウドエージェントモードに切り替える」(orchestraUiMode.ts) が出る
+			// タイトルバーにはクラウドエージェントモードのときだけ出す。モードの切り替えは
+			// Orchestra のボタン群の右端にある切り替えボタン 1 つで行う (orchestraUiMode.ts)
 			menu: { id: MenuId.TitleBar, group: 'navigation', order: 5, when: ContextKeyExpr.equals(ORCHESTRA_UI_MODE_CONTEXT_KEY, 'cloud') },
 		});
 	}
