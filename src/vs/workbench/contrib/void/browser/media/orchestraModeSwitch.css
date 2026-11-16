@@ -1,0 +1,148 @@
+/*--------------------------------------------------------------------------------------
+ *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
+ *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
+ *--------------------------------------------------------------------------------------*/
+
+/*
+ * タイトルバーの表示モード切り替えスイッチ (orchestraModeSwitch.ts)。
+ *   ( ☁ クラウド | ☁̸ IDE )
+ * 2 つの区画は同じ幅 (grid 1fr 1fr) にして、つまみは translateX(0 / 100%) で滑らせるだけにする (幅の計測が要らない)。
+ * 色はタイトルバーの文字色 (currentColor) から作るので、テーマ・ウィンドウの非アクティブ状態にそのまま追従する。
+ */
+
+.monaco-workbench .action-item.orchestra-mode-switch-item {
+	display: flex;
+	align-items: center;
+	margin: 0 4px 0 6px;
+	border-radius: 999px;
+	outline-offset: 2px;
+	cursor: pointer;
+	-webkit-app-region: no-drag;
+}
+
+.orchestra-mode-switch {
+	--orchestra-switch-ease: cubic-bezier(0.3, 0.7, 0.2, 1);
+	position: relative;
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	align-items: stretch;
+	height: 22px;
+	padding: 2px;
+	box-sizing: border-box;
+	border-radius: 999px;
+	background-color: color-mix(in srgb, currentColor 7%, transparent);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 12%, transparent);
+	font-size: 11px;
+	line-height: 1;
+	user-select: none;
+	-webkit-user-select: none;
+	transition: background-color 120ms ease;
+}
+
+.orchestra-mode-switch-item:hover .orchestra-mode-switch {
+	background-color: color-mix(in srgb, currentColor 11%, transparent);
+}
+
+/* つまみ: 今のモードの区画の下に敷く */
+.orchestra-mode-switch-thumb {
+	position: absolute;
+	top: 2px;
+	bottom: 2px;
+	left: 2px;
+	width: calc(50% - 2px);
+	border-radius: 999px;
+	background-color: color-mix(in srgb, currentColor 17%, transparent);
+	box-shadow:
+		0 1px 2px rgba(0, 0, 0, 0.22),
+		inset 0 0 0 1px color-mix(in srgb, currentColor 10%, transparent);
+	transform: translateX(0);
+	transition: transform 220ms var(--orchestra-switch-ease);
+	pointer-events: none;
+}
+
+.orchestra-mode-switch[data-mode='pro'] .orchestra-mode-switch-thumb {
+	transform: translateX(100%);
+}
+
+.orchestra-mode-switch-segment {
+	position: relative; /* つまみより手前 */
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	padding: 0 9px;
+	border-radius: 999px;
+	white-space: nowrap;
+	opacity: 0.55;
+	transition: opacity 160ms ease;
+}
+
+.orchestra-mode-switch-segment:hover {
+	opacity: 0.85;
+}
+
+.orchestra-mode-switch-segment.active {
+	opacity: 1;
+	font-weight: 600;
+}
+
+.orchestra-mode-switch-icon.codicon {
+	position: relative;
+	font-size: 13px;
+	width: 13px;
+	height: 13px;
+	line-height: 13px;
+	color: inherit;
+}
+
+/* IDE 側: ☁ に左上→右下の斜線を重ねる */
+.orchestra-mode-switch-icon.orchestra-mode-switch-icon-off::after {
+	content: '';
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 15px;
+	height: 1.5px;
+	border-radius: 1px;
+	background-color: currentColor;
+	transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.orchestra-mode-switch-label {
+	letter-spacing: 0.01em;
+}
+
+/* キーボードで選んだときだけ枠を出す */
+.monaco-workbench .action-item.orchestra-mode-switch-item:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+}
+
+.monaco-workbench .action-item.orchestra-mode-switch-item.active .orchestra-mode-switch {
+	transform: scale(0.98);
+}
+
+/* 動きを減らす設定では滑らせない */
+.monaco-workbench.reduce-motion .orchestra-mode-switch-thumb,
+.monaco-workbench.reduce-motion .orchestra-mode-switch-segment {
+	transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.orchestra-mode-switch-thumb,
+	.orchestra-mode-switch-segment {
+		transition: none;
+	}
+}
+
+/* ハイコントラストテーマ: 半透明の色ではなく枠線で示す */
+.monaco-workbench.hc-black .orchestra-mode-switch,
+.monaco-workbench.hc-light .orchestra-mode-switch {
+	background-color: transparent;
+	box-shadow: inset 0 0 0 1px var(--vscode-contrastBorder);
+}
+
+.monaco-workbench.hc-black .orchestra-mode-switch-thumb,
+.monaco-workbench.hc-light .orchestra-mode-switch-thumb {
+	background-color: transparent;
+	box-shadow: inset 0 0 0 1px var(--vscode-contrastActiveBorder);
+}
