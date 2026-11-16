@@ -16,7 +16,8 @@ import { IStorageService } from '../../../../platform/storage/common/storage.js'
 import { Dimension } from '../../../../base/browser/dom.js';
 import { EditorPaneDescriptor, IEditorPaneRegistry } from '../../../browser/editor.js';
 import { SyncDescriptor } from '../../../../platform/instantiation/common/descriptors.js';
-import { Action2, MenuId, MenuRegistry, registerAction2 } from '../../../../platform/actions/common/actions.js';
+import { Action2, MenuRegistry, registerAction2 } from '../../../../platform/actions/common/actions.js';
+import { OrchestraTitleBarMoreMenu } from './orchestraTitleBarMenu.js';
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
 import { ORCHESTRA_UI_MODE_CONTEXT_KEY } from './orchestraUiModeTypes.js';
 import { Registry } from '../../../../platform/registry/common/platform.js';
@@ -248,14 +249,14 @@ registerAction2(class extends Action2 {
 
 // クラウドエージェントモードではチャット (上部のヘッダーにボードの開閉ボタンがある) を隠しているので、
 // タイトルバーにボードを開くボタンを出す。ボードはエディタ領域 (または別ウィンドウ) に開くので、チャットは戻らない。
-// 並びは Division プロジェクト (6) の次 (orchestraUiMode.ts の説明を参照)
-MenuRegistry.appendMenuItem(MenuId.TitleBar, {
+// タイトルバーにボタンを増やさないよう「⋯」の中に、Division プロジェクトの次に並べる (orchestraTitleBarMenu.ts)
+MenuRegistry.appendMenuItem(OrchestraTitleBarMoreMenu, {
 	command: {
 		id: VOID_OPEN_KANBAN_ACTION_ID,
 		title: nls.localize('orchestraTitleBarOpenKanban', "カンバンを開く"),
 		icon: Codicon.project,
 	},
-	group: 'navigation',
-	order: 7,
+	group: '1_orchestra',
+	order: 2,
 	when: ContextKeyExpr.equals(ORCHESTRA_UI_MODE_CONTEXT_KEY, 'cloud'),
 });

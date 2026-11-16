@@ -125,12 +125,13 @@ class OrchestraModeSwitchViewItem extends BaseActionViewItem {
 	}
 
 	override onClick(event: EventLike, preserveFocus = false): void {
-		// 区画を直接クリックしたら、そのモードにする (今のモードなら setUiMode 側で何もしないか、パネルを前面に出すだけ)
+		// 区画を直接クリックしたら、そのモードにする。今のモードの「クラウド」を押したときは、
+		// クラウドエージェントの画面を前面に出す (タイトルバーに専用の ☁ ボタンを置かない代わり)
 		const target = (event as { target?: unknown }).target;
 		const seg = isHTMLElement(target) ? target.closest<HTMLElement>('.orchestra-mode-switch-segment') : null;
 		const mode = seg?.dataset.mode;
 		if (mode === 'cloud' || mode === 'pro') {
-			if (mode !== this.mode) {
+			if (mode !== this.mode || mode === 'cloud') {
 				void this.commandService.executeCommand(mode === 'pro' ? ORCHESTRA_UI_SET_PRO_MODE_ACTION_ID : ORCHESTRA_UI_SET_CLOUD_MODE_ACTION_ID);
 			}
 			return;

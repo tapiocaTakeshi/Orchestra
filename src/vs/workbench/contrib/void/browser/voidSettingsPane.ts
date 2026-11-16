@@ -16,6 +16,7 @@ import { Dimension } from '../../../../base/browser/dom.js';
 import { EditorPaneDescriptor, IEditorPaneRegistry } from '../../../browser/editor.js';
 import { SyncDescriptor } from '../../../../platform/instantiation/common/descriptors.js';
 import { Action2, MenuId, MenuRegistry, registerAction2 } from '../../../../platform/actions/common/actions.js';
+import { OrchestraTitleBarMoreMenu } from './orchestraTitleBarMenu.js';
 import { Registry } from '../../../../platform/registry/common/platform.js';
 import { ServicesAccessor } from '../../../../editor/browser/editorExtensions.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
@@ -237,8 +238,8 @@ registerAction2(class extends Action2 {
 			category: nls.localize2('orchestraCategory', "Orchestra"),
 			f1: true,
 			icon: Codicon.organization,
-			// タイトルバーにはクラウドエージェントモードのときだけ (他のモードではチャットのプロジェクト選択から行ける)
-			menu: { id: MenuId.TitleBar, group: 'navigation', order: 6, when: isCloudModeContext },
+			// タイトルバーの「⋯」の中 (クラウドエージェントモードのときだけ出る。他のモードではチャットのプロジェクト選択から行ける)
+			menu: { id: OrchestraTitleBarMoreMenu, group: '1_orchestra', order: 1, when: isCloudModeContext },
 		});
 	}
 	async run(accessor: ServicesAccessor): Promise<void> {

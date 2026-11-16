@@ -25,7 +25,7 @@ import { Codicon } from '../../../../base/common/codicons.js';
 import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 import { localize, localize2 } from '../../../../nls.js';
 import { Registry } from '../../../../platform/registry/common/platform.js';
-import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
+import { Action2, MenuId, MenuRegistry, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { ConfigurationTarget, IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { Extensions as ConfigurationExtensions, IConfigurationDefaults, IConfigurationRegistry } from '../../../../platform/configuration/common/configurationRegistry.js';
 import { ContextKeyExpr, IContextKey, IContextKeyService, RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
@@ -63,6 +63,7 @@ import { CLOUD_AGENTS_OPEN_ACTION_ID } from '../common/cloudAgentTypes.js';
 import { registerIcon } from '../../../../platform/theme/common/iconRegistry.js';
 import './media/orchestraUiMode.css';
 import './orchestraModeSwitch.js';
+import { OrchestraTitleBarMoreMenu } from './orchestraTitleBarMenu.js';
 
 
 // ---------------------------------------------------------------------------------------
@@ -585,6 +586,18 @@ registerAction2(class extends Action2 {
 		await chatThreadService.focusCurrentChat();
 	}
 });
+
+// タイトルバーの「⋯」: クラウドエージェントモードで使う画面 (Division プロジェクト・カンバン) をまとめる。
+// タイトルバーに並ぶのは、この「⋯」とモード切り替えスイッチの 2 つだけにする。
+MenuRegistry.appendMenuItem(MenuId.TitleBar, {
+	submenu: OrchestraTitleBarMoreMenu,
+	title: localize('orchestraUi.titleBar.more', "その他"),
+	icon: Codicon.ellipsis,
+	group: 'navigation',
+	order: 9,
+	when: isCloudMode,
+});
+
 
 // ---------------------------------------------------------------------------------------
 // ホーム画面などから、文字列を 1 つ渡してそのままエージェントに送る

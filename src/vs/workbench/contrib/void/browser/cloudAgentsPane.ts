@@ -11,10 +11,10 @@
 // 出し方はモードで変わる:
 //  - クラウドエージェントモード: エディタのタブではなく、タイトルバーの下の画面全体をクラウドエージェントの画面にする
 //    (CloudAgentsFullscreen)。カンバンや取り込んだ差分などエディタ領域に何かが開いたら、その間だけ画面を下げ、
-//    右下の「クラウドエージェントに戻る」かタイトルバーの ☁ (Ctrl+Alt+A) で戻る。
+//    右下の「クラウドエージェントに戻る」か、タイトルバーのスイッチの「クラウド」(Ctrl+Alt+A) で戻る。
 //  - 上級者モード (IDE 表示): これまでどおりエディタのタブとして開く。
-// タイトルバーの ☁ (Ctrl+Alt+A) はクラウドエージェントモードのあいだだけ出る「この画面を前面に出す」ボタン。
-// モードの切り替え (クラウドエージェント ⇄ IDE) は右端の切り替えボタン 1 つ (orchestraUiMode.ts)。
+// タイトルバーに専用のボタンは置かない。モード切り替えスイッチ (orchestraModeSwitch.ts) が
+// 切り替えと「この画面を前面に出す」を兼ねる。
 
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { EditorInput } from '../../../common/editor/editorInput.js';
@@ -28,7 +28,7 @@ import { IStorageService } from '../../../../platform/storage/common/storage.js'
 import { Dimension } from '../../../../base/browser/dom.js';
 import { EditorPaneDescriptor, IEditorPaneRegistry } from '../../../browser/editor.js';
 import { SyncDescriptor } from '../../../../platform/instantiation/common/descriptors.js';
-import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
+import { Action2, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { Registry } from '../../../../platform/registry/common/platform.js';
 import { ServicesAccessor } from '../../../../editor/browser/editorExtensions.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
@@ -37,7 +37,7 @@ import { Codicon } from '../../../../base/common/codicons.js';
 import { Disposable, DisposableStore, toDisposable } from '../../../../base/common/lifecycle.js';
 import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 import { KeybindingWeight } from '../../../../platform/keybinding/common/keybindingsRegistry.js';
-import { ContextKeyExpr, IContextKeyService, RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
+import { IContextKeyService, RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
@@ -45,7 +45,7 @@ import { IWorkbenchLayoutService } from '../../../services/layout/browser/layout
 
 import { mountCloudAgents } from './react/out/cloud-agents-tsx/index.js';
 import { ICloudAgentService } from './cloudAgentServiceInterface.js';
-import { ORCHESTRA_UI_MODE_CONTEXT_KEY, ORCHESTRA_UI_MODE_SETTING, parseOrchestraUiMode } from './orchestraUiModeTypes.js';
+import { ORCHESTRA_UI_MODE_SETTING, parseOrchestraUiMode } from './orchestraUiModeTypes.js';
 import {
 	CLOUD_AGENTS_NEW_ACTION_ID,
 	CLOUD_AGENTS_OPEN_ACTION_ID,
@@ -303,9 +303,8 @@ registerAction2(class extends Action2 {
 				weight: KeybindingWeight.WorkbenchContrib,
 				primary: KeyMod.CtrlCmd | KeyMod.Alt | KeyCode.KeyA,
 			},
-			// タイトルバーにはクラウドエージェントモードのときだけ出す。モードの切り替えは
-			// Orchestra のボタン群の右端にある切り替えボタン 1 つで行う (orchestraUiMode.ts)
-			menu: { id: MenuId.TitleBar, group: 'navigation', order: 5, when: ContextKeyExpr.equals(ORCHESTRA_UI_MODE_CONTEXT_KEY, 'cloud') },
+			// タイトルバーには出さない: クラウドエージェントモードでは、モード切り替えスイッチの
+			// 「クラウド」側 (今のモード) を押すとこの画面が前面に出る (orchestraModeSwitch.ts)
 		});
 	}
 
