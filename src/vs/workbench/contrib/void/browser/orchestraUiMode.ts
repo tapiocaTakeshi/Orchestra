@@ -60,6 +60,8 @@ import {
 import { IChatThreadService } from './chatThreadServiceInterface.js';
 import { ICloudAgentService } from './cloudAgentServiceInterface.js';
 import { CLOUD_AGENTS_OPEN_ACTION_ID } from '../common/cloudAgentTypes.js';
+import { registerIcon } from '../../../../platform/theme/common/iconRegistry.js';
+import './media/orchestraUiMode.css';
 
 
 // ---------------------------------------------------------------------------------------
@@ -356,6 +358,10 @@ registerWorkbenchContribution2(OrchestraAgentActivityContribution.ID, OrchestraA
 // コマンド
 // ---------------------------------------------------------------------------------------
 
+// 「IDE モードに切り替える」ボタンのアイコン: ☁ に斜め線 (= クラウドを外す)。
+// codicon に斜線付きの雲は無いので、☁ のグリフに media/orchestraUiMode.css で斜線を重ねる。
+const cloudOffIcon = registerIcon('orchestra-cloud-off', Codicon.cloud, localize('orchestraUi.cloudOffIcon', "IDE モードに切り替えるボタンのアイコン (斜線の入った雲)"));
+
 export const isProMode = ContextKeyExpr.equals(ORCHESTRA_UI_MODE_CONTEXT_KEY, 'pro');
 export const isCloudMode = ContextKeyExpr.equals(ORCHESTRA_UI_MODE_CONTEXT_KEY, 'cloud');
 const isNotProMode = ContextKeyExpr.notEquals(ORCHESTRA_UI_MODE_CONTEXT_KEY, 'pro');
@@ -379,7 +385,7 @@ async function setUiMode(accessor: ServicesAccessor, mode: OrchestraUiMode): Pro
 	// レイアウト (チャットを隠す・戻す、パネルを開く) は OrchestraCloudModeLayout が設定の変化を見て行う。
 	await configurationService.updateValue(ORCHESTRA_UI_MODE_SETTING, mode === 'cloud' ? undefined : mode, ConfigurationTarget.USER);
 	notificationService.info(
-		mode === 'cloud' ? localize('orchestraUi.switchedToCloud', "クラウドエージェントモードに切り替えました。クラウドで動くエージェントの一覧と会話だけを表示します (右のチャットは隠れます)。タイトルバーの 🔧 (Ctrl+Alt+U) で IDE モードに切り替えられます。")
+		mode === 'cloud' ? localize('orchestraUi.switchedToCloud', "クラウドエージェントモードに切り替えました。クラウドで動くエージェントの一覧と会話だけを表示します (右のチャットは隠れます)。タイトルバーの斜線入りの ☁ (Ctrl+Alt+U) で IDE モードに切り替えられます。")
 			: localize('orchestraUi.switchedToPro', "上級者モードに切り替えました。IDE の全ての部品が表示されます。同じ場所のボタン ☁ (Ctrl+Alt+U) でいつでもクラウドエージェントモードに戻せます。"));
 }
 
@@ -390,7 +396,7 @@ registerAction2(class extends Action2 {
 			title: localize2('orchestraUi.setPro', "Orchestra: 上級者モード (IDE 表示) に切り替える"),
 			category: localize2('orchestraUi.category', "Orchestra"),
 			f1: true,
-			icon: Codicon.tools,
+			icon: cloudOffIcon,
 			precondition: isNotProMode,
 		});
 	}
@@ -438,10 +444,10 @@ registerAction2(class extends Action2 {
 			},
 			// タイトルバーの切り替えボタン。どちらのモードでも同じ位置 (Orchestra のボタン群の右端) に 1 つだけ出し、
 			// アイコンとツールチップで「押すとどちらへ切り替わるか」を示す:
-			//   クラウドエージェントモード中 → 🔧 「IDE モードに切り替える」
+			//   クラウドエージェントモード中 → 斜線入りの ☁ 「IDE モードに切り替える」
 			//   IDE モード (上級者モード) 中   → ☁ 「クラウドエージェントモードに切り替える」
 			// (クラウドエージェントモードでは左隣に ☁ パネルを前面に出す (5)・Division プロジェクト (6)・カンバン (7) が並ぶ)
-			icon: Codicon.tools,
+			icon: cloudOffIcon,
 			tooltip: localize('orchestraUi.titleBar.toPro', "IDE モード (上級者モード) に切り替える"),
 			toggled: {
 				condition: isProMode,
