@@ -1,0 +1,31 @@
+/*--------------------------------------------------------------------------------------
+ *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
+ *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
+ *--------------------------------------------------------------------------------------*/
+
+/*
+ * 「IDE モードに切り替える」ボタンのアイコン (orchestraUiMode.ts の orchestra-cloud-off)。
+ * ::before は codicon の ☁ のグリフ。::after で左下→右上ではなく左上→右下の斜線を重ねる
+ * (bell-slash などの codicon と同じ向き)。線の周りを背景色で縁取り、雲の線と交わる所を切れ目に見せる。
+ */
+.codicon.codicon-orchestra-cloud-off {
+	position: relative;
+}
+
+.codicon.codicon-orchestra-cloud-off::after {
+	content: '';
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 18px;
+	height: 1.5px;
+	border-radius: 1px;
+	background-color: currentColor;
+	box-shadow: 0 0 0 1px var(--vscode-titleBar-activeBackground);
+	transform: translate(-50%, -50%) rotate(45deg);
+	pointer-events: none;
+}
+
+.monaco-workbench .part.titlebar.inactive .codicon.codicon-orchestra-cloud-off::after {
+	box-shadow: 0 0 0 1px var(--vscode-titleBar-inactiveBackground);
+}
