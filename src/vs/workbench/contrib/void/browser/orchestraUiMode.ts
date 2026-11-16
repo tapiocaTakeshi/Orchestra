@@ -62,6 +62,7 @@ import { ICloudAgentService } from './cloudAgentServiceInterface.js';
 import { CLOUD_AGENTS_OPEN_ACTION_ID } from '../common/cloudAgentTypes.js';
 import { registerIcon } from '../../../../platform/theme/common/iconRegistry.js';
 import './media/orchestraUiMode.css';
+import './orchestraModeSwitch.js';
 
 
 // ---------------------------------------------------------------------------------------
@@ -385,8 +386,8 @@ async function setUiMode(accessor: ServicesAccessor, mode: OrchestraUiMode): Pro
 	// レイアウト (チャットを隠す・戻す、パネルを開く) は OrchestraCloudModeLayout が設定の変化を見て行う。
 	await configurationService.updateValue(ORCHESTRA_UI_MODE_SETTING, mode === 'cloud' ? undefined : mode, ConfigurationTarget.USER);
 	notificationService.info(
-		mode === 'cloud' ? localize('orchestraUi.switchedToCloud', "クラウドエージェントモードに切り替えました。クラウドで動くエージェントの一覧と会話だけを表示します (右のチャットは隠れます)。タイトルバーの斜線入りの ☁ (Ctrl+Alt+U) で IDE モードに切り替えられます。")
-			: localize('orchestraUi.switchedToPro', "上級者モードに切り替えました。IDE の全ての部品が表示されます。同じ場所のボタン ☁ (Ctrl+Alt+U) でいつでもクラウドエージェントモードに戻せます。"));
+		mode === 'cloud' ? localize('orchestraUi.switchedToCloud', "クラウドエージェントモードに切り替えました。クラウドで動くエージェントの一覧と会話だけを表示します (右のチャットは隠れます)。タイトルバー右のスイッチ (Ctrl+Alt+U) で IDE モードに切り替えられます。")
+			: localize('orchestraUi.switchedToPro', "上級者モードに切り替えました。IDE の全ての部品が表示されます。タイトルバー右のスイッチ (Ctrl+Alt+U) でいつでもクラウドエージェントモードに戻せます。"));
 }
 
 registerAction2(class extends Action2 {
@@ -442,18 +443,11 @@ registerAction2(class extends Action2 {
 				weight: KeybindingWeight.WorkbenchContrib,
 				primary: KeyMod.CtrlCmd | KeyMod.Alt | KeyCode.KeyU,
 			},
-			// タイトルバーの切り替えボタン。どちらのモードでも同じ位置 (Orchestra のボタン群の右端) に 1 つだけ出し、
-			// アイコンとツールチップで「押すとどちらへ切り替わるか」を示す:
-			//   クラウドエージェントモード中 → 斜線入りの ☁ 「IDE モードに切り替える」
-			//   IDE モード (上級者モード) 中   → ☁ 「クラウドエージェントモードに切り替える」
-			// (クラウドエージェントモードでは左隣に ☁ パネルを前面に出す (5)・Division プロジェクト (6)・カンバン (7) が並ぶ)
+			// タイトルバーの切り替えスイッチ。どちらのモードでも同じ位置 (Orchestra のボタン群の右端) に 1 つだけ出す。
+			// 見た目は orchestraModeSwitch.ts の「☁ クラウド | ☁̸ IDE」スイッチ (今のモードの側につまみが入る)。
+			// アイコンとツールチップは、スイッチを描けない所 (タイトルバー以外のメニュー) 向けの予備。
 			icon: cloudOffIcon,
-			tooltip: localize('orchestraUi.titleBar.toPro', "IDE モード (上級者モード) に切り替える"),
-			toggled: {
-				condition: isProMode,
-				icon: Codicon.cloud,
-				tooltip: localize('orchestraUi.titleBar.toCloud', "クラウドエージェントモードに切り替える"),
-			},
+			tooltip: localize('orchestraUi.titleBar.toggle', "クラウドエージェントモード / IDE モードを切り替える"),
 			menu: { id: MenuId.TitleBar, group: 'navigation', order: 10 },
 		});
 	}
