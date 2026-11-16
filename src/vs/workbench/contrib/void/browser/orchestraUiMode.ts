@@ -379,8 +379,8 @@ async function setUiMode(accessor: ServicesAccessor, mode: OrchestraUiMode): Pro
 	// レイアウト (チャットを隠す・戻す、パネルを開く) は OrchestraCloudModeLayout が設定の変化を見て行う。
 	await configurationService.updateValue(ORCHESTRA_UI_MODE_SETTING, mode === 'cloud' ? undefined : mode, ConfigurationTarget.USER);
 	notificationService.info(
-		mode === 'cloud' ? localize('orchestraUi.switchedToCloud', "クラウドエージェントモードに切り替えました。クラウドで動くエージェントの一覧と会話だけを表示します (右のチャットは隠れます)。タイトルバーの 🔧 で上級者モード (IDE 表示) に切り替えられます。")
-			: localize('orchestraUi.switchedToPro', "上級者モードに切り替えました。IDE の全ての部品が表示されます。タイトルバーの ☁ でいつでもクラウドエージェントモードに戻せます。"));
+		mode === 'cloud' ? localize('orchestraUi.switchedToCloud', "クラウドエージェントモードに切り替えました。クラウドで動くエージェントの一覧と会話だけを表示します (右のチャットは隠れます)。タイトルバーの 🔧 (Ctrl+Alt+U) で IDE モードに切り替えられます。")
+			: localize('orchestraUi.switchedToPro', "上級者モードに切り替えました。IDE の全ての部品が表示されます。同じ場所のボタン ☁ (Ctrl+Alt+U) でいつでもクラウドエージェントモードに戻せます。"));
 }
 
 registerAction2(class extends Action2 {
@@ -436,6 +436,19 @@ registerAction2(class extends Action2 {
 				weight: KeybindingWeight.WorkbenchContrib,
 				primary: KeyMod.CtrlCmd | KeyMod.Alt | KeyCode.KeyU,
 			},
+			// タイトルバーの切り替えボタン。どちらのモードでも同じ位置 (Orchestra のボタン群の右端) に 1 つだけ出し、
+			// アイコンとツールチップで「押すとどちらへ切り替わるか」を示す:
+			//   クラウドエージェントモード中 → 🔧 「IDE モードに切り替える」
+			//   IDE モード (上級者モード) 中   → ☁ 「クラウドエージェントモードに切り替える」
+			// (クラウドエージェントモードでは左隣に ☁ パネルを前面に出す (5)・Division プロジェクト (6)・カンバン (7) が並ぶ)
+			icon: Codicon.tools,
+			tooltip: localize('orchestraUi.titleBar.toPro', "IDE モード (上級者モード) に切り替える"),
+			toggled: {
+				condition: isProMode,
+				icon: Codicon.cloud,
+				tooltip: localize('orchestraUi.titleBar.toCloud', "クラウドエージェントモードに切り替える"),
+			},
+			menu: { id: MenuId.TitleBar, group: 'navigation', order: 10 },
 		});
 	}
 	run(accessor: ServicesAccessor) {
@@ -572,39 +585,6 @@ registerAction2(class extends Action2 {
 		await chatThreadService.focusCurrentChat();
 	}
 });
-
-// タイトルバーの右側: ☁ クラウドエージェントモードへ (5) / 🔧 上級者モードへ (9)。
-// 今のモード以外へのボタンだけを出す。クラウドエージェントモードの ☁ は「パネルを前面に出す」(cloudAgentsPane.ts)。
-// クラウドエージェントモードでは 6〜7 に Division プロジェクト (6)・カンバン (7) が並ぶ
-// (voidSettingsPane.ts / kanbanPane.ts。右のチャットが無くても、IDE モードと同じ画面をエディタ領域に開く)。
-registerAction2(class extends Action2 {
-	constructor() {
-		super({
-			id: 'orchestra.ui.titleBar.switchToCloud',
-			title: localize2('orchestraUi.titleBar.toCloud', "クラウドエージェントモードに切り替える"),
-			icon: Codicon.cloud,
-			menu: { id: MenuId.TitleBar, group: 'navigation', order: 5, when: isNotCloudMode },
-		});
-	}
-	run(accessor: ServicesAccessor) {
-		return setUiMode(accessor, 'cloud');
-	}
-});
-
-registerAction2(class extends Action2 {
-	constructor() {
-		super({
-			id: 'orchestra.ui.titleBar.switchToPro',
-			title: localize2('orchestraUi.titleBar.toPro', "上級者モード (IDE 表示) に切り替える"),
-			icon: Codicon.tools,
-			menu: { id: MenuId.TitleBar, group: 'navigation', order: 9, when: isNotProMode },
-		});
-	}
-	run(accessor: ServicesAccessor) {
-		return setUiMode(accessor, 'pro');
-	}
-});
-
 
 // ---------------------------------------------------------------------------------------
 // ホーム画面などから、文字列を 1 つ渡してそのままエージェントに送る
