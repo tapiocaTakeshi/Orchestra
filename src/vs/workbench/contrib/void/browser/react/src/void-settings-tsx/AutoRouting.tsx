@@ -9,15 +9,15 @@ type Plan = { quotes: Quote[]; totalEstimateUsd: number; allocatorCostUsd: numbe
 const DEFAULT_POLICY: Policy = { minPerformance: 70, maxCostUsd: 0.05, maxOutputTokens: 4096 };
 
 // スライダーの目盛り。金額と長さは桁が大きく変わるので、等間隔ではなく選びやすい値に刻む。
-const COST_STEPS = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5];
+export const COST_STEPS = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5];
 const LENGTH_STEPS = [256, 512, 1024, 2048, 4096, 8192, 16384, 32768];
 const AMOUNT_STEPS = [500, 2000, 8000, 32000, 128000];
 const AMOUNT_LABELS = ['少ない', 'ふつう', '多い', 'かなり多い', 'とても多い'];
 
-const nearestIndex = (steps: number[], value: number) =>
+export const nearestIndex = (steps: number[], value: number) =>
 	steps.reduce((best, v, i) => Math.abs(v - value) < Math.abs(steps[best] - value) ? i : best, 0);
 
-const formatUsd = (n: number): string => {
+export const formatUsd = (n: number): string => {
 	if (!Number.isFinite(n) || n <= 0) return '$0';
 	if (n < 0.0001) return '$0.0001 未満';
 	if (n >= 1) return `$${n.toFixed(2)}`;
@@ -31,13 +31,13 @@ const lengthLabel = (v: number) => v <= 1024 ? '短め' : v <= 4096 ? 'ふつう
 const ROLE_LABELS: Record<string, string> = {
 	leader: 'リーダー', search: 'サーチャー', searcher: 'サーチャー', research: 'リサーチャー', researcher: 'リサーチャー',
 	writing: 'ライター', writer: 'ライター', design: 'デザイナー', designer: 'デザイナー', coder: 'コーダー',
-	review: 'レビュアー', reviewer: 'レビュアー',
+	review: 'レビュアー', reviewer: 'レビュアー', 'file-searcher': 'ファイル調査',
 	// 廃止したロール (古い記録): 引き継ぎ先のロール名で出す
 	planner: 'ライター', ideaman: 'リサーチャー', image: 'デザイナー', imager: 'デザイナー',
 };
-const roleLabel = (role: string) => ROLE_LABELS[role.toLowerCase()] ?? role;
+export const roleLabel = (role: string) => ROLE_LABELS[role.toLowerCase()] ?? role;
 
-const friendlyError = (status: number, data: any, fallback?: string): string => {
+export const friendlyError = (status: number, data: any, fallback?: string): string => {
 	if (status === 0) return 'サーバーに接続できませんでした。ネットワークを確認して、もう一度お試しください。';
 	if (status === 401) return 'ログインの有効期限が切れています。ログインし直してください。';
 	if (status === 402) return 'クレジットが不足しています。';
@@ -45,7 +45,7 @@ const friendlyError = (status: number, data: any, fallback?: string): string => 
 	return (data && typeof data.error === 'string' && data.error) || fallback || `エラーが発生しました（${status}）`;
 };
 
-const Slider = ({ label, valueText, hint, min, max, value, onChange, left, right }: {
+export const Slider = ({ label, valueText, hint, min, max, value, onChange, left, right }: {
 	label: string; valueText: string; hint?: string; min: number; max: number; value: number;
 	onChange: (v: number) => void; left: string; right: string;
 }) => (
@@ -65,7 +65,7 @@ const Slider = ({ label, valueText, hint, min, max, value, onChange, left, right
 );
 
 // クラス名は className に直接書く (ビルド時の scope-tailwind は className の文字列しか書き換えない)
-const PrimaryButton = (props: React.ButtonHTMLAttributes<HTMLButtonElement>) =>
+export const PrimaryButton = (props: React.ButtonHTMLAttributes<HTMLButtonElement>) =>
 	<button type="button" {...props} className="rounded px-2.5 py-1 text-xs bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] hover:bg-[var(--vscode-button-hoverBackground)] disabled:opacity-40 disabled:cursor-not-allowed" />;
 
 export const AutoRouting = ({ endpoint, accessToken, refreshToken, policy, onChange, prompt }: {

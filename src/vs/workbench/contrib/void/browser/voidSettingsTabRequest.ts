@@ -5,7 +5,7 @@
 
 // Orchestra の設定画面 (voidSettingsPane.ts / React の Settings.tsx) を「どのタブで開くか」の受け渡し。
 //
-// コマンド (「Division プロジェクト」など) が requestVoidSettingsTab() でタブを頼み、
+// コマンド (「Division プロジェクト」「コスト管理」など) が requestVoidSettingsTab() でタブを頼み、
 //  - 設定画面がもう表示されていれば (React がマウント済み)、購読している Settings.tsx がその場で切り替える
 //  - まだなら、次にマウントされた Settings.tsx が consumeRequestedVoidSettingsTab() で受け取る
 //
@@ -19,6 +19,7 @@ export type VoidSettingsTab =
 	| 'providers'
 	| 'featureOptions'
 	| 'division'
+	| 'cost'
 	| 'general'
 	| 'mcp'
 	| 'skills'
@@ -28,7 +29,7 @@ export type VoidSettingsTab =
 	| 'all';
 
 export const VOID_SETTINGS_TABS: readonly VoidSettingsTab[] = [
-	'models', 'localProviders', 'providers', 'featureOptions', 'division',
+	'models', 'localProviders', 'providers', 'featureOptions', 'division', 'cost',
 	'general', 'mcp', 'skills', 'kanban', 'obsidian', 'updates', 'all',
 ];
 
