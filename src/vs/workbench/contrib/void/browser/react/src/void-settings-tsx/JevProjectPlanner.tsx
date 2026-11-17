@@ -13,13 +13,15 @@
 // Jev は値をそのまま使い、ロールと、条件を満たすモデルの中からロールごとに目的に合うものを選ぶ (picks)。
 // スライダーやロールを動かすと、Jev を呼ばずに同じ API で組み直す (料金はかからない)。
 // 「Division プロジェクトを作成」で POST /api/projects/from-plan に送り、Supabase から取り込んで使うプロジェクトにする。
+// 作ったあとは「ソーシャルに共有」で、その割り当てをそのまま投稿できる (SocialSettings.tsx と同じ /api/social/posts)。
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Check, Loader2, RotateCcw, Sparkles } from 'lucide-react';
 import { useAccessor } from '../util/services.js';
 import { fetchDivisionProfile } from '../void-login-tsx/divisionBilling.js';
 import { COST_STEPS, PrimaryButton, Slider, formatUsd, friendlyError, nearestIndex, roleLabel } from './AutoRouting.js';
-import { ORCHESTRA_OPEN_DIVISION_PROJECTS_ACTION_ID } from '../../../actionIDs.js';
+import { ORCHESTRA_OPEN_DIVISION_PROJECTS_ACTION_ID, ORCHESTRA_OPEN_SOCIAL_ACTION_ID } from '../../../actionIDs.js';
+import { createSocialApi } from './socialApi.js';
 
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 type Effort = typeof EFFORTS[number];
@@ -98,6 +100,7 @@ export const JevProjectPlanner = ({ endpoint, accessToken, refreshToken }: { end
 	const [busy, setBusy] = useState<'jev' | 'replan' | 'create' | null>(null);
 	const [error, setError] = useState('');
 	const [created, setCreated] = useState<{ id: string; name: string } | null>(null);
+	const [shared, setShared] = useState<'idle' | 'busy' | 'done'>('idle');
 	const [isPaid, setIsPaid] = useState<boolean | null>(null);
 
 	useEffect(() => {
@@ -169,6 +172,7 @@ export const JevProjectPlanner = ({ endpoint, accessToken, refreshToken }: { end
 			});
 			const id = typeof data?.id === 'string' ? data.id : '';
 			setCreated({ id, name: name.trim() });
+			setShared('idle');
 			// 作ったプロジェクトを Supabase から取り込み、使うプロジェクトにする
 			await divisionProjectService.fetchFromSupabase();
 			if (id && divisionProjectService.projects.some(p => p.projectId === id)) await divisionProjectService.setActiveProject(id);
@@ -176,6 +180,20 @@ export const JevProjectPlanner = ({ endpoint, accessToken, refreshToken }: { end
 			setError(e instanceof Error ? e.message : String(e));
 		} finally {
 			setBusy(null);
+		}
+	};
+
+	const shareToSocial = async () => {
+		if (!created?.id) return;
+		setShared('busy'); setError('');
+		try {
+			await createSocialApi(llmMessageService, accessToken, refreshToken).publish({
+				projectId: created.id, title: created.name.slice(0, 80), description: goal.trim().slice(0, 280) || undefined,
+			});
+			setShared('done');
+		} catch (e) {
+			setShared('idle');
+			setError(e instanceof Error ? e.message : String(e));
 		}
 	};
 
@@ -296,6 +314,13 @@ export const JevProjectPlanner = ({ endpoint, accessToken, refreshToken }: { end
 				<button type="button" className="text-void-link-color hover:underline" onClick={() => { void commandService.executeCommand(ORCHESTRA_OPEN_DIVISION_PROJECTS_ACTION_ID); }}>
 					Division プロジェクトを開く
 				</button>
+				{created.id && (shared === 'done'
+					? <button type="button" className="text-void-link-color hover:underline" onClick={() => { void commandService.executeCommand(ORCHESTRA_OPEN_SOCIAL_ACTION_ID); }}>
+						ソーシャルに共有しました · 見る
+					</button>
+					: <button type="button" disabled={shared === 'busy'} className="text-void-link-color hover:underline disabled:opacity-50" onClick={() => { void shareToSocial(); }}>
+						{shared === 'busy' ? '共有中…' : 'ソーシャルに共有'}
+					</button>)}
 			</div>}
 		</div>}
 

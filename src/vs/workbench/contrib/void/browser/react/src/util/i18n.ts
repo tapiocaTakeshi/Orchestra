@@ -20,6 +20,7 @@ export const translations = {
 	'tab.featureOptions': { en: 'Feature Options', ja: '機能オプション' },
 	'tab.division': { en: 'Division', ja: 'Division' },
 	'tab.cost': { en: 'Cost management', ja: 'コスト管理' },
+	'tab.social': { en: 'Social', ja: 'ソーシャル' },
 	'tab.general': { en: 'General', ja: '一般' },
 	'tab.mcp': { en: 'MCP', ja: 'MCP' },
 	'tab.skills': { en: 'Skills', ja: 'スキル' },
@@ -626,6 +627,8 @@ export const translations = {
 	'cloudAgents.nav.divisionProjectsHint': { en: 'Edit which model each role uses', ja: 'ロールごとのモデルの割り当てを編集します' },
 	'cloudAgents.nav.cost': { en: 'Cost management', ja: 'コスト管理' },
 	'cloudAgents.nav.costHint': { en: 'Plan a project with Jev, cost tuning, credits and usage', ja: 'Jev でプロジェクトを組む・コストの自動調整・クレジット・利用額' },
+	'cloudAgents.nav.social': { en: 'Social', ja: 'ソーシャル' },
+	'cloudAgents.nav.socialHint': { en: 'Share role assignments, like, comment and import', ja: 'ロール割り当ての共有・いいね・コメント・取り込み' },
 	'cloudAgents.nav.kanban': { en: 'Kanban', ja: 'カンバン' },
 	'cloudAgents.nav.kanbanHint': { en: 'Task board — run a card in the cloud from there', ja: 'タスクのボード。カードからクラウドで実行できます' },
 	'cloudAgents.project.label': { en: 'Project', ja: 'プロジェクト' },
@@ -781,6 +784,10 @@ export const translations = {
 	'cloudAgents.pr.draftBadge': { en: 'Draft', ja: '下書き' },
 	'cloudAgents.pr.shortcut': { en: 'Ctrl+Enter to submit', ja: 'Ctrl+Enter で送信' },
 	'cloudAgents.pr.shortcutMac': { en: '⌘+Enter to submit', ja: '⌘+Enter で送信' },
+
+	// Settings - Social
+	'social.title': { en: 'Social', ja: 'ソーシャル' },
+	'social.subtitle': { en: 'Share the role and model assignments of your Division projects, and like, comment on, save and import other people\'s. The same feed as the Division website and the mobile app.', ja: 'Division プロジェクトのロールとモデルの割り当てを共有し、ほかの人の構成にいいね・コメント・保存・取り込みができます。Division の Web サイトやモバイルアプリと同じフィードです。' },
 
 	// Settings - Cost management
 	'cost.title': { en: 'Cost management', ja: 'コスト管理' },

@@ -42,7 +42,8 @@ export interface ILLMMessageService {
 	divisionApiRequest: (params: DivisionApiRequestParams) => Promise<DivisionApiResponse>;
 }
 
-export type DivisionApiRequestParams = { endpoint: string; accessToken: string; path: string; body?: unknown };
+/** method defaults to GET without a body and POST with one. */
+export type DivisionApiRequestParams = { endpoint: string; accessToken: string; path: string; body?: unknown; method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' };
 export type DivisionApiResponse = { ok: boolean; status: number; data: any; error?: string };
 
 

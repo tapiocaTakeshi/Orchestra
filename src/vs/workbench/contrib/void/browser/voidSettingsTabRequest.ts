@@ -20,6 +20,7 @@ export type VoidSettingsTab =
 	| 'featureOptions'
 	| 'division'
 	| 'cost'
+	| 'social'
 	| 'general'
 	| 'mcp'
 	| 'skills'
@@ -29,7 +30,7 @@ export type VoidSettingsTab =
 	| 'all';
 
 export const VOID_SETTINGS_TABS: readonly VoidSettingsTab[] = [
-	'models', 'localProviders', 'providers', 'featureOptions', 'division', 'cost',
+	'models', 'localProviders', 'providers', 'featureOptions', 'division', 'cost', 'social',
 	'general', 'mcp', 'skills', 'kanban', 'obsidian', 'updates', 'all',
 ];
 

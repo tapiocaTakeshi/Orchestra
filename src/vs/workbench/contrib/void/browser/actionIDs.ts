@@ -46,3 +46,4 @@ export const ORCHESTRA_CHAT_SHOW_LOGIN_COMMAND_ID = 'orchestra.chat.showLogin'
 // コマンドパレットと (クラウドエージェントモードの) タイトルバーから開ける。voidSettingsPane.ts で登録する
 export const ORCHESTRA_OPEN_DIVISION_PROJECTS_ACTION_ID = 'orchestra.divisionProjects.open'
 export const ORCHESTRA_OPEN_COST_MANAGEMENT_ACTION_ID = 'orchestra.costManagement.open'
+export const ORCHESTRA_OPEN_SOCIAL_ACTION_ID = 'orchestra.social.open'
