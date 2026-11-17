@@ -792,8 +792,8 @@ export const translations = {
 	// Settings - Cost management
 	'cost.title': { en: 'Cost management', ja: 'コスト管理' },
 	'cost.subtitle': { en: 'Plan a Division project with Jev, automatic cost tuning, your credit balance and what cloud agents have cost, in one place.', ja: 'Jev によるプロジェクトの組み立て、コストの自動調整、クレジットの残高、クラウドエージェントの利用額をまとめて確認・設定します。' },
-	'cost.planner.title': { en: 'Let Jev set up a Division project', ja: 'Jev にプロジェクトを組んでもらう' },
-	'cost.planner.subtitle': { en: 'Describe what you want to build. Jev reads the per-role model rankings, sets effort, cost and performance, and picks a model for each role. Adjust the sliders, then create the project.', ja: '作りたいものを書くと、Jev がロール別のモデルのランキングを読んで、エフォート・コスト・性能を調整し、ロールごとのモデルを選びます。スライダーで調整してから、そのまま Division プロジェクトを作成できます。' },
+	'cost.planner.title': { en: 'Let Jev create a Division project', ja: 'Jev にプロジェクトを作ってもらう' },
+	'cost.planner.subtitle': { en: 'Write a prompt and set effort, cost and performance. Jev gets all of them, keeps your three values, reads the per-role model rankings, chooses the roles and a model for each, and creates the Division project.', ja: 'プロンプトとエフォート・コスト・性能を Jev に送ると、Jev は 3 つの値をそのまま使い、ロール別のモデルのランキングを読んで、ロールとモデルを選び、Division プロジェクトを作ります。' },
 	'cost.credits.title': { en: 'Credits & plan', ja: 'クレジットとプラン' },
 	'cost.credits.plan': { en: 'Plan', ja: 'プラン' },
 	'cost.credits.balance': { en: 'Credit balance', ja: 'クレジット残高' },

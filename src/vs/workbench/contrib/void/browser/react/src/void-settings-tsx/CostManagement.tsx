@@ -5,8 +5,8 @@
 
 // 設定画面の「コスト管理」タブ。
 //
-// いちばん上は「Jev にプロジェクトを組んでもらう」(JevProjectPlanner.tsx): 作りたいものから、Jev がロール別ランキングを読んで
-// エフォート・コスト・性能のスライダーを決め、ロールごとのモデルを選んだ Division プロジェクトを作る。
+// いちばん上は「Jev にプロジェクトを作ってもらう」(JevProjectPlanner.tsx): プロンプトとエフォート・コスト・性能を Jev に送ると、
+// Jev がロール別ランキングを読んでロールとモデルを選び、その Division プロジェクトを作る。
 //
 // チャットの「コスト調整」チップ (SidebarChat.tsx の CostTuningDropdown) と同じ AutoRouting を、チャットを開かずに
 // 使えるようにする (右のチャットを隠すクラウドエージェントモードでも、コマンド / タイトルバー / 左の列から開ける)。
@@ -109,7 +109,7 @@ const CreditsCard = ({ onOpenBilling }: { onOpenBilling: () => void }) => {
 	);
 };
 
-/** Jev がエフォート・コスト・性能を調整して Division プロジェクトを作る */
+/** プロンプトとエフォート・コスト・性能を Jev に送って Division プロジェクトを作る */
 const ProjectPlannerCard = () => {
 	const { t } = useTranslation();
 	const settingsState = useSettingsState();
