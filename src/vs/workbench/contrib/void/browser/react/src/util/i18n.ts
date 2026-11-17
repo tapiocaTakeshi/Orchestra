@@ -19,6 +19,7 @@ export const translations = {
 	'tab.providers': { en: 'Main Providers', ja: 'メインプロバイダー' },
 	'tab.featureOptions': { en: 'Feature Options', ja: '機能オプション' },
 	'tab.division': { en: 'Division', ja: 'Division' },
+	'tab.cost': { en: 'Cost management', ja: 'コスト管理' },
 	'tab.general': { en: 'General', ja: '一般' },
 	'tab.mcp': { en: 'MCP', ja: 'MCP' },
 	'tab.skills': { en: 'Skills', ja: 'スキル' },
@@ -619,10 +620,12 @@ export const translations = {
 	'cloudAgents.review.diffTruncated': { en: 'Showing only the first {n} lines.', ja: '長いため、最初の {n} 行だけを表示しています。' },
 	'cloudAgents.review.changesTruncated': { en: 'Too many changed files — only part of the list is shown.', ja: '変更ファイルが多いため、一覧の一部だけを表示しています。' },
 
-	// Cloud agents - workspace tools (Division projects / Kanban, reachable without the chat)
+	// Cloud agents - workspace tools (Division projects / cost management / Kanban, reachable without the chat)
 	'cloudAgents.nav.label': { en: 'Workspace', ja: 'ワークスペース' },
 	'cloudAgents.nav.divisionProjects': { en: 'Division projects', ja: 'Division プロジェクト' },
 	'cloudAgents.nav.divisionProjectsHint': { en: 'Edit which model each role uses', ja: 'ロールごとのモデルの割り当てを編集します' },
+	'cloudAgents.nav.cost': { en: 'Cost management', ja: 'コスト管理' },
+	'cloudAgents.nav.costHint': { en: 'Plan a project with Jev, cost tuning, credits and usage', ja: 'Jev でプロジェクトを組む・コストの自動調整・クレジット・利用額' },
 	'cloudAgents.nav.kanban': { en: 'Kanban', ja: 'カンバン' },
 	'cloudAgents.nav.kanbanHint': { en: 'Task board — run a card in the cloud from there', ja: 'タスクのボード。カードからクラウドで実行できます' },
 	'cloudAgents.project.label': { en: 'Project', ja: 'プロジェクト' },
@@ -779,6 +782,27 @@ export const translations = {
 	'cloudAgents.pr.shortcut': { en: 'Ctrl+Enter to submit', ja: 'Ctrl+Enter で送信' },
 	'cloudAgents.pr.shortcutMac': { en: '⌘+Enter to submit', ja: '⌘+Enter で送信' },
 
+	// Settings - Cost management
+	'cost.title': { en: 'Cost management', ja: 'コスト管理' },
+	'cost.subtitle': { en: 'Plan a Division project with Jev, automatic cost tuning, your credit balance and what cloud agents have cost, in one place.', ja: 'Jev によるプロジェクトの組み立て、コストの自動調整、クレジットの残高、クラウドエージェントの利用額をまとめて確認・設定します。' },
+	'cost.planner.title': { en: 'Let Jev set up a Division project', ja: 'Jev にプロジェクトを組んでもらう' },
+	'cost.planner.subtitle': { en: 'Describe what you want to build. Jev reads the per-role model rankings, sets effort, cost and performance, and picks a model for each role. Adjust the sliders, then create the project.', ja: '作りたいものを書くと、Jev がロール別のモデルのランキングを読んで、エフォート・コスト・性能を調整し、ロールごとのモデルを選びます。スライダーで調整してから、そのまま Division プロジェクトを作成できます。' },
+	'cost.credits.title': { en: 'Credits & plan', ja: 'クレジットとプラン' },
+	'cost.credits.plan': { en: 'Plan', ja: 'プラン' },
+	'cost.credits.balance': { en: 'Credit balance', ja: 'クレジット残高' },
+	'cost.credits.used': { en: 'Used', ja: '使用済み' },
+	'cost.credits.loading': { en: 'Loading…', ja: '読み込み中…' },
+	'cost.credits.error': { en: 'Could not load your plan.', ja: 'プラン情報を取得できませんでした。' },
+	'cost.credits.reload': { en: 'Reload', ja: '再読み込み' },
+	'cost.loginRequired': { en: 'Log in to Orchestra to see your credits and usage.', ja: 'クレジットと利用額を見るには、Orchestra にログインしてください。' },
+	'cost.autoRouting.title': { en: 'Automatic cost tuning', ja: 'コストの自動調整' },
+	'cost.autoRouting.subtitle': { en: 'Division picks a model that meets your performance and price limits for each request (the same setting as "Cost tuning" in the chat).', ja: '依頼ごとに、性能と料金の条件に合うモデルを Division が選びます (チャットの「コスト調整」と同じ設定です)。' },
+	'cost.cloud.title': { en: 'Cloud agent usage', ja: 'クラウドエージェントの利用額' },
+	'cost.cloud.subtitle': { en: 'Model cost billed per cloud agent (latest 50 agents).', ja: 'クラウドエージェントごとに課金されたモデルの料金です (最近の 50 件まで)。' },
+	'cost.cloud.total': { en: 'Total', ja: '合計' },
+	'cost.cloud.empty': { en: 'No cloud agent with a known cost yet.', ja: 'まだ料金の分かるクラウドエージェントはありません。' },
+	'cost.cloud.openAgent': { en: 'Open this agent', ja: 'このエージェントを開く' },
+	'cost.cloud.openAll': { en: 'Open cloud agents', ja: 'クラウドエージェントを開く' },
 
 	// Onboarding
 	'onboarding.welcome': { en: 'Welcome to Orchestra', ja: 'Orchestra へようこそ' },
