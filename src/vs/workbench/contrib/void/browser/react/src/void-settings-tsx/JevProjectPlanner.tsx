@@ -40,6 +40,13 @@ type Created = { id: string; name: string; plan: Plan };
 
 const DEFAULT_SLIDERS: Sliders = { effort: 'medium', maxCostUsd: 0.05, minPerformance: 70 };
 
+/**
+ * Division の標準ロール。最初は全部入れる (実行時、リーダーはタスクに要るロールにだけ仕事を振る)。
+ * 全部のままなら roles を送らず、Division が標準ロールに、目的に要る追加ロール (動画制作など) を Jev に足させる。
+ * 外したら、残したロールだけを roles で送る。リーダーは外せない。
+ */
+const STANDARD_ROLES = ['leader', 'searcher', 'file-searcher', 'researcher', 'writer', 'designer', 'coder', 'reviewer'] as const;
+
 const STATUS_TEXT: Record<Exclude<Status, 'ok'>, string> = {
 	'below-performance': '上限内に性能の下限を満たすモデルがないため、上限内でいちばん性能の高いモデルにしています',
 	'over-budget': '上限に収まるモデルがないため、いちばん安いモデルにしています',
@@ -87,6 +94,13 @@ export const JevProjectPlanner = ({ endpoint, accessToken, refreshToken }: { end
 	const [goal, setGoal] = useState('');
 	const [name, setName] = useState('');
 	const [sliders, setSliders] = useState<Sliders>(DEFAULT_SLIDERS);
+	const [roles, setRoles] = useState<string[]>([...STANDARD_ROLES]);
+	const allRoles = roles.length === STANDARD_ROLES.length;
+	const toggleRole = (slug: string) => {
+		if (slug === 'leader') return;
+		// 並びは標準ロールの順に保つ
+		setRoles(rs => STANDARD_ROLES.filter(r => r === slug ? !rs.includes(r) : rs.includes(r)));
+	};
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState('');
 	const [created, setCreated] = useState<Created | null>(null);
@@ -112,7 +126,7 @@ export const JevProjectPlanner = ({ endpoint, accessToken, refreshToken }: { end
 		try {
 			const res = await llmMessageService.divisionApiRequest({
 				endpoint, accessToken, path: '/api/routing/project',
-				body: { goal: goal.trim(), sliders, ...(projectName ? { name: projectName } : {}) },
+				body: { goal: goal.trim(), sliders, ...(allRoles ? {} : { roles }), ...(projectName ? { name: projectName } : {}) },
 			});
 			if (!res.ok) throw new Error(friendlyError(res.status, res.data, res.error));
 			if (seq !== requestSeq.current) return;
@@ -159,6 +173,25 @@ export const JevProjectPlanner = ({ endpoint, accessToken, refreshToken }: { end
 				/>
 			</label>
 			<SliderSet value={sliders} onChange={patch => setSliders(s => ({ ...s, ...patch }))} />
+			<div className="flex flex-col gap-1">
+				<span className="text-void-fg-2">ロール</span>
+				<div role="group" aria-label="プロジェクトに入れるロール" className="flex flex-wrap gap-1">
+					{STANDARD_ROLES.map(slug => {
+						const on = roles.includes(slug);
+						return <button
+							key={slug} type="button" aria-pressed={on} disabled={slug === 'leader'}
+							title={slug === 'leader' ? 'リーダーは常に入ります' : on ? 'クリックで外す' : 'クリックで入れる'}
+							onClick={() => toggleRole(slug)}
+							className={`px-2 py-0.5 rounded-full border text-[11px] disabled:cursor-default ${on ? 'border-[var(--vscode-button-background)] text-void-fg-1 bg-[color-mix(in_srgb,var(--vscode-button-background)_15%,transparent)]' : 'border-void-border-2 text-void-fg-3'}`}
+						>{nameOf(slug, slug)}</button>;
+					})}
+				</div>
+				<span className="text-[10px] text-void-fg-4">
+					{allRoles
+						? '標準のロールを全部入れます。動画制作などの追加ロールは、目的に要れば Jev が足します。'
+						: '選んだロールだけで作ります。'}
+				</span>
+			</div>
 			<label className="flex flex-col gap-1">
 				<span className="text-void-fg-2">プロジェクト名 (空ならプロンプトの 1 行目)</span>
 				<input
