@@ -216,7 +216,7 @@ export class LLMMessageChannel implements IServerChannel {
 
 	// Division API への GET / POST を中継する (レンダラーからだと CORS で失敗するため)。
 	// 汎用のプロキシにならないよう、http(s) の endpoint 配下の /api/ パスだけを通す。
-	private async _callDivisionApiRequest(params: { endpoint?: unknown; accessToken?: unknown; path?: unknown; body?: unknown }): Promise<{ ok: boolean; status: number; data: any; error?: string }> {
+	private async _callDivisionApiRequest(params: { endpoint?: unknown; accessToken?: unknown; path?: unknown; body?: unknown; method?: unknown }): Promise<{ ok: boolean; status: number; data: any; error?: string }> {
 		const endpoint = typeof params.endpoint === 'string' ? params.endpoint.replace(/\/$/, '') : '';
 		const path = typeof params.path === 'string' ? params.path : '';
 		let url: URL;
@@ -228,9 +228,13 @@ export class LLMMessageChannel implements IServerChannel {
 		if (!/^https?:$/.test(url.protocol) || !path.startsWith('/api/') || path.includes('..') || url.origin !== new URL(endpoint).origin) {
 			return { ok: false, status: 0, data: null, error: 'path not allowed' };
 		}
+		const method = params.method === undefined ? (params.body === undefined ? 'GET' : 'POST') : params.method;
+		if (typeof method !== 'string' || !['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+			return { ok: false, status: 0, data: null, error: 'method not allowed' };
+		}
 		try {
 			const res = await fetch(url, {
-				method: params.body === undefined ? 'GET' : 'POST',
+				method,
 				headers: {
 					...(typeof params.accessToken === 'string' && params.accessToken ? { Authorization: `Bearer ${params.accessToken}` } : {}),
 					'Content-Type': 'application/json',

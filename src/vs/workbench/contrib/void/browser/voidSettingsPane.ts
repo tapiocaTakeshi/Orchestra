@@ -27,7 +27,7 @@ import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextke
 import { mountVoidSettings } from './react/out/void-settings-tsx/index.js'
 import { Codicon } from '../../../../base/common/codicons.js';
 import { toDisposable } from '../../../../base/common/lifecycle.js';
-import { ORCHESTRA_OPEN_COST_MANAGEMENT_ACTION_ID, ORCHESTRA_OPEN_DIVISION_PROJECTS_ACTION_ID } from './actionIDs.js';
+import { ORCHESTRA_OPEN_COST_MANAGEMENT_ACTION_ID, ORCHESTRA_OPEN_DIVISION_PROJECTS_ACTION_ID, ORCHESTRA_OPEN_SOCIAL_ACTION_ID } from './actionIDs.js';
 import { ORCHESTRA_UI_MODE_CONTEXT_KEY } from './orchestraUiModeTypes.js';
 import { isVoidSettingsTab, requestVoidSettingsTab, VoidSettingsTab } from './voidSettingsTabRequest.js';
 
@@ -261,6 +261,23 @@ registerAction2(class extends Action2 {
 	}
 	async run(accessor: ServicesAccessor): Promise<void> {
 		await openVoidSettingsAtTab(accessor, 'cost');
+	}
+});
+
+registerAction2(class extends Action2 {
+	constructor() {
+		super({
+			id: ORCHESTRA_OPEN_SOCIAL_ACTION_ID,
+			title: nls.localize2('orchestraOpenSocial', "ソーシャルを開く (ロール割り当ての共有・いいね・コメント・フォロー)"),
+			category: nls.localize2('orchestraCategory', "Orchestra"),
+			f1: true,
+			icon: Codicon.commentDiscussion,
+			// タイトルバーの「⋯」の中、コスト管理の次 (カンバンはその後)
+			menu: { id: OrchestraTitleBarMoreMenu, group: '1_orchestra', order: 1.7, when: isCloudModeContext },
+		});
+	}
+	async run(accessor: ServicesAccessor): Promise<void> {
+		await openVoidSettingsAtTab(accessor, 'social');
 	}
 });
 

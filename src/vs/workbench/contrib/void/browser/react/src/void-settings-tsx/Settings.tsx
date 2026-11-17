@@ -36,6 +36,7 @@ import { KanbanSettings } from './KanbanSettings.js';
 import { UiModeSettings } from './UiModeSettings.js';
 import { ObsidianSettings } from './ObsidianSettings.js';
 import { CostManagementSettings } from './CostManagement.js';
+import { SocialSettings } from './SocialSettings.js';
 import { consumeRequestedVoidSettingsTab, onDidRequestVoidSettingsTab, type VoidSettingsTab } from '../../../voidSettingsTabRequest.js';
 import { uiLanguages, displayInfoOfUILanguage, DIVISION_ROLES, divisionRoleLabel } from '../../../../common/voidSettingsTypes.js';
 
@@ -1503,7 +1504,7 @@ export const Settings = () => {
 	// サイドバーは用途ごとにまとめる。「すべての設定」で縦に並べたときも、この順番で表示する。
 	const navGroups: { label: string; tabs: Tab[] }[] = [
 		{ label: t('tabGroup.ai'), tabs: ['models', 'providers', 'localProviders', 'featureOptions'] },
-		{ label: t('tabGroup.agents'), tabs: ['division', 'skills', 'mcp', 'kanban', 'obsidian'] },
+		{ label: t('tabGroup.agents'), tabs: ['division', 'social', 'skills', 'mcp', 'kanban', 'obsidian'] },
 		{ label: t('tabGroup.app'), tabs: ['general', 'cost', 'updates'] },
 	];
 	const tabLabel: Record<Tab, string> = {
@@ -1513,6 +1514,7 @@ export const Settings = () => {
 		featureOptions: t('tab.featureOptions'),
 		division: t('tab.division'),
 		cost: t('tab.cost'),
+		social: t('tab.social'),
 		general: t('tab.general'),
 		mcp: t('tab.mcp'),
 		skills: t('tab.skills'),
@@ -2166,6 +2168,15 @@ export const Settings = () => {
 									<h2 className="text-3xl mb-2">{t('cost.title')}</h2>
 									<h4 className="text-void-fg-3 mb-4">{t('cost.subtitle')}</h4>
 									<CostManagementSettings onOpenBilling={() => setShowBillingPanel(true)} />
+								</ErrorBoundary>
+							</div>
+
+							{/* Social section (Division プロジェクトのロール割り当ての共有) */}
+							<div className={shouldShowTab('social') ? `` : 'hidden'} style={sectionOrder('social')}>
+								<ErrorBoundary>
+									<h2 className="text-3xl mb-2">{t('social.title')}</h2>
+									<h4 className="text-void-fg-3 mb-4">{t('social.subtitle')}</h4>
+									<SocialSettings />
 								</ErrorBoundary>
 							</div>
 
