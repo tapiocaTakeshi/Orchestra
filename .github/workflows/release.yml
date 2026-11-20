@@ -706,3 +706,15 @@ jobs:
               $DRAFT_FLAG \
               artifacts/*
           fi
+
+  # ---------- 全アカウントへアップデートをメール通知 (Resend) ----------
+  # GITHUB_TOKEN で作成したリリースは release イベントを発火しないので、ここから直接呼ぶ。
+  # ドラフトの場合は送らず、GitHub 上で Publish した時点で notify-release.yml が送信する。
+  notify:
+    name: Notify accounts (Resend)
+    needs: [release]
+    if: ${{ needs.release.result == 'success' && inputs.draft != true }}
+    uses: ./.github/workflows/notify-release.yml
+    with:
+      tag: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+    secrets: inherit
