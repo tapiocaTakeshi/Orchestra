@@ -1,20 +1,25 @@
-name: Notify Release (Resend)
+name: Notify Release (AI + Resend)
 
-# Orchestra のリリース (アップデート) 内容を Resend で全アカウントにメール配信する。
+# Orchestra のリリース (アップデート) 時に
+#   1. AI (Claude) でアップデート情報とメール文面をコミット履歴から生成し
+#   2. GitHub Release のタイトル・本文 (= アプリ内のアップデート情報) を更新し
+#   3. Resend で全アカウントにメール配信する。
 #
 # 起動されるタイミング:
 #   - GitHub の画面でリリースを「Publish」したとき (release: published)
 #   - release.yml がドラフトでないリリースを作成したとき (workflow_call)
 #     ※ GITHUB_TOKEN で作ったリリースは release イベントを発火しないため、
 #       release.yml の最後から直接呼び出している
-#   - 手動実行 (workflow_dispatch)。dry_run で送信せずに確認だけもできる
+#   - 手動実行 (workflow_dispatch)。dry_run で Release 更新・送信をせずに生成結果だけ確認できる
 #
 # 同じタグの Broadcast が送信済みならスクリプト側でスキップするので二重送信はしない。
+# ANTHROPIC_API_KEY が無い / 生成に失敗した場合は Release 本文をそのまま使ってメールだけ送る。
 #
 # 必要な Secrets:
-#   RESEND_API_KEY, SUPABASE_SERVICE_ROLE_KEY
+#   RESEND_API_KEY, SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY
 # 任意の Variables:
-#   RESEND_FROM (既定 "Orchestra <updates@he-ro.io>"), RESEND_REPLY_TO, RESEND_SEGMENT_ID
+#   RESEND_FROM (既定 "Orchestra <updates@he-ro.io>"), RESEND_REPLY_TO, RESEND_SEGMENT_ID,
+#   ANTHROPIC_MODEL (既定 claude-opus-5-5)
 
 on:
   release:
@@ -29,6 +34,8 @@ on:
         required: false
       SUPABASE_SERVICE_ROLE_KEY:
         required: false
+      ANTHROPIC_API_KEY:
+        required: false
   workflow_dispatch:
     inputs:
       tag:
@@ -38,9 +45,14 @@ on:
         description: '送信せずに宛先数とプレビューだけ確認する'
         type: boolean
         default: true
+      regenerate:
+        description: 'メール送信済みのリリースでも、アップデート情報を AI で作り直して Release を更新する'
+        type: boolean
+        default: false
 
 permissions:
-  contents: read
+  # AI で生成したアップデート情報で GitHub Release を更新するため
+  contents: write
 
 concurrency:
   group: notify-release-${{ inputs.tag || github.event.release.tag_name }}
@@ -48,36 +60,47 @@ concurrency:
 
 jobs:
   notify:
-    name: Send release email to all accounts
+    name: Update release notes and email all accounts
     runs-on: ubuntu-latest
     if: ${{ github.event_name != 'release' || !github.event.release.prerelease }}
     steps:
       - uses: actions/checkout@v4
         with:
-          sparse-checkout: build/notify-release.mjs
+          sparse-checkout: build/release-notify
           sparse-checkout-cone-mode: false
 
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Send via Resend
+      - name: Install dependencies
+        working-directory: build/release-notify
+        run: npm ci --no-audit --no-fund
+
+      - name: Generate release notes with AI, update release, send via Resend
+        working-directory: build/release-notify
         env:
           RELEASE_TAG: ${{ inputs.tag || github.event.release.tag_name }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
+          AI_REGENERATE: ${{ github.event_name == 'workflow_dispatch' && inputs.regenerate && 'true' || 'false' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
           SUPABASE_URL: https://wmhrbhcnxglvqwvnbxlt.supabase.co
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           RESEND_FROM: ${{ vars.RESEND_FROM }}
           RESEND_REPLY_TO: ${{ vars.RESEND_REPLY_TO }}
           RESEND_SEGMENT_ID: ${{ vars.RESEND_SEGMENT_ID }}
-        run: node build/notify-release.mjs
+        run: node notify-release.mjs
 
-      - name: Upload email preview
+      - name: Upload preview (email + generated release notes)
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
         uses: actions/upload-artifact@v4
         with:
           name: release-email-preview
-          path: release-email-preview.html
+          path: |
+            build/release-notify/release-email-preview.html
+            build/release-notify/release-notes-preview.md
+            build/release-notify/release-ai-content.json
           if-no-files-found: ignore

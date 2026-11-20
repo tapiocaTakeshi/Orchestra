@@ -256,6 +256,31 @@ gh release upload v1.4.10 \
 gh release edit v1.4.10 --draft=false
 ```
 
+### `notify-release.yml` — アップデート情報の AI 生成 + 全アカウントへのメール配信
+
+リリースが公開されると (release.yml の最後 / GitHub 上での Publish / 手動実行) 次を自動で行います。
+スクリプト本体は `build/release-notify/notify-release.mjs` です。
+
+1. 前回の公開リリースから今回のタグまでのコミットと自動生成ノートを集め、
+   **Claude (既定 `claude-opus-5-5`) でリリースタイトル・アップデート情報・メール文面を生成**
+2. GitHub Release のタイトルと本文を生成結果で更新
+   (アプリの「アップデート」画面と HP のダウンロード欄はこの Release を読みます)
+3. Supabase のメール確認済みアカウントを Resend の Segment に同期し、Broadcast で一斉送信
+
+- 同じタグのメールが送信済みなら何もしません (二重送信防止)
+- `ANTHROPIC_API_KEY` が未登録 / 生成に失敗した場合は、Release 本文をそのまま使った従来の文面でメールだけ送ります
+- 手動実行の `dry_run` (既定 ON) では Release 更新もメール送信もせず、
+  生成結果 (`release-notes-preview.md` / `release-ai-content.json`) とメールのプレビューを Artifact に保存します
+- 手動実行の `regenerate` を ON にすると、送信済みのリリースでもアップデート情報を作り直して Release を更新します (メールは再送しません)
+
+| 種類 | 名前 | 用途 |
+|---|---|---|
+| Secret | `ANTHROPIC_API_KEY` | 文章生成 (Claude API) |
+| Secret | `RESEND_API_KEY` | メール配信 |
+| Secret | `SUPABASE_SERVICE_ROLE_KEY` | 宛先アカウントの取得 |
+| Variable (任意) | `ANTHROPIC_MODEL` | 生成に使うモデル (既定 `claude-opus-5-5`) |
+| Variable (任意) | `RESEND_FROM` / `RESEND_REPLY_TO` / `RESEND_SEGMENT_ID` | 差出人・返信先・配信先 Segment |
+
 ## オートアップデート機能との連携
 
 Orchestra のオートアップデート (`voidUpdateMainService.ts`) は
