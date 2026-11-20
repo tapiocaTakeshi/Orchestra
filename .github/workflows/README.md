@@ -266,6 +266,8 @@ gh release edit v1.4.10 --draft=false
 2. GitHub Release のタイトルと本文を生成結果で更新
    (アプリの「アップデート」画面と HP のダウンロード欄はこの Release を読みます)
 3. Supabase のメール確認済みアカウントを Resend の Segment に同期し、Broadcast で一斉送信
+   - HP のアカウントページ (通知・利用設定) で「Orchestra のアップデート情報を受け取る」を
+     オフにしたアカウント (`profiles.release_notifications = false`) には送らず、Segment からも外します
 
 - 同じタグのメールが送信済みなら何もしません (二重送信防止)
 - `ANTHROPIC_API_KEY` が未登録 / 生成に失敗した場合は、Release 本文をそのまま使った従来の文面でメールだけ送ります

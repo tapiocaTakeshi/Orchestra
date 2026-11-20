@@ -11,8 +11,11 @@
 //        メールの件名・プレヘッダー・導入文・主な変更点・締めの一文
 //   3. GitHub Release のタイトルと本文を生成結果で更新
 //      (アプリの自動アップデート画面と HP のダウンロード欄はこの Release を読む)
-//   4. Supabase Auth からメール確認済みのアカウントを全件取得
+//   4. Supabase Auth からメール確認済みのアカウントを全件取得し、
+//      HP のアカウントページで「Orchestra のアップデート情報を受け取る」を
+//      オフにしたアカウント (profiles.release_notifications = false) を除く
 //   5. Resend の Segment ("Orchestra Users") にコンタクトとして同期
+//      (受信をオフにしたアカウントは Segment から外す)
 //   6. その Segment 宛てに Broadcast を作成して即時送信
 //      (Broadcast なので配信停止リンク {{{RESEND_UNSUBSCRIBE_URL}}} が自動で効き、
 //       配信停止したユーザーには送られない)
@@ -162,11 +165,36 @@ async function updateRelease(release, { name, body }) {
 	return github('PATCH', `/repos/${repo}/releases/${release.id}`, { name, body });
 }
 
-// ---------- Supabase Auth: メール確認済みアカウント ----------
-async function getAccountEmails() {
-	const url = required('SUPABASE_URL').replace(/\/+$/, '');
-	const key = required('SUPABASE_SERVICE_ROLE_KEY');
-	const emails = new Map(); // lower(email) -> { email, first_name }
+// ---------- Supabase: メール確認済みアカウントと受信設定 ----------
+function supabase() {
+	return {
+		url: required('SUPABASE_URL').replace(/\/+$/, ''),
+		key: required('SUPABASE_SERVICE_ROLE_KEY'),
+	};
+}
+
+// HP のアカウントページでアップデートメールの受信をオフにしたユーザーの id
+async function getOptedOutUserIds() {
+	const { url, key } = supabase();
+	const ids = new Set();
+	for (let from = 0; ; from += 1000) {
+		const res = await fetch(`${url}/rest/v1/profiles?select=id&release_notifications=eq.false&order=id`, {
+			headers: { apikey: key, Authorization: `Bearer ${key}`, Range: `${from}-${from + 999}` },
+		});
+		if (!res.ok) { throw new Error(`Supabase profiles API failed (${res.status}): ${await res.text()}`); }
+		const rows = await res.json();
+		for (const r of rows) { ids.add(r.id); }
+		if (rows.length < 1000) { break; }
+	}
+	return ids;
+}
+
+// { recipients: 送る人, optedOut: 受信をオフにした人 }
+async function getAccounts() {
+	const { url, key } = supabase();
+	const optedOutIds = await getOptedOutUserIds();
+	const recipients = new Map(); // lower(email) -> { email, first_name }
+	const optedOut = new Map();
 	for (let page = 1; ; page++) {
 		const res = await fetch(`${url}/auth/v1/admin/users?page=${page}&per_page=1000`, {
 			headers: { apikey: key, Authorization: `Bearer ${key}` },
@@ -174,14 +202,22 @@ async function getAccountEmails() {
 		if (!res.ok) { throw new Error(`Supabase admin users API failed (${res.status}): ${await res.text()}`); }
 		const { users = [] } = await res.json();
 		for (const u of users) {
-			if (!u.email || !u.email_confirmed_at || u.banned_until || u.deleted_at || u.is_anonymous) { continue; }
+			if (!u.email) { continue; }
+			const lower = u.email.toLowerCase();
+			if (optedOutIds.has(u.id)) {
+				optedOut.set(lower, { email: u.email });
+				continue;
+			}
+			if (!u.email_confirmed_at || u.banned_until || u.deleted_at || u.is_anonymous) { continue; }
 			const meta = u.user_metadata || {};
 			const name = String(meta.full_name || meta.name || '').trim();
-			emails.set(u.email.toLowerCase(), { email: u.email, first_name: name.split(/\s+/)[0] || undefined });
+			recipients.set(lower, { email: u.email, first_name: name.split(/\s+/)[0] || undefined });
 		}
 		if (users.length < 1000) { break; }
 	}
-	return [...emails.values()];
+	// 同じメールで受信オンのアカウントが別にある場合はそちらを優先する
+	for (const email of recipients.keys()) { optedOut.delete(email); }
+	return { recipients: [...recipients.values()], optedOut: [...optedOut.values()] };
 }
 
 // ---------- Segment / Contacts ----------
@@ -210,6 +246,20 @@ async function syncContacts(segmentId, accounts) {
 		}
 	}
 	console.log(`コンタクト同期: ${added} 件 OK / ${failed} 件失敗`);
+}
+
+// 受信をオフにしたアカウントを Segment から外す (コンタクト自体と配信停止状態はそのまま)
+async function removeFromSegment(segmentId, accounts) {
+	let removed = 0;
+	for (const a of accounts) {
+		const r = await resend('DELETE', `/contacts/${encodeURIComponent(a.email)}/segments/${segmentId}`);
+		if (r.ok) { removed++; }
+		// 404 = もともと Segment に居ない / コンタクトが無い。問題ないので無視する
+		else if (r.status !== 404) {
+			console.warn(`::warning::Segment からの削除に失敗 (${r.status}): ${JSON.stringify(r.json)}`);
+		}
+	}
+	console.log(`受信オフのアカウント: ${accounts.length} 件 (Segment から ${removed} 件外しました)`);
 }
 
 async function alreadySent(name) {
@@ -432,8 +482,8 @@ async function main() {
 	}
 	const { subject, html } = buildEmail(release, ai);
 
-	const accounts = await getAccountEmails();
-	console.log(`メール確認済みアカウント: ${accounts.length} 件`);
+	const { recipients, optedOut } = await getAccounts();
+	console.log(`送信対象: ${recipients.length} 件 / 受信オフ: ${optedOut.length} 件`);
 
 	if (DRY_RUN) {
 		writeFileSync('release-email-preview.html', html);
@@ -443,7 +493,9 @@ async function main() {
 	}
 
 	const segmentId = await ensureSegment();
-	await syncContacts(segmentId, accounts);
+	// 先に外してから同期する (受信オフ → オンに戻した人は syncContacts で再追加される)
+	await removeFromSegment(segmentId, optedOut);
+	await syncContacts(segmentId, recipients);
 
 	const payload = { segment_id: segmentId, from: FROM, subject, html, name: broadcastName, send: true };
 	if (env.RESEND_REPLY_TO) { payload.reply_to = env.RESEND_REPLY_TO; }
