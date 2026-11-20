@@ -1,0 +1,83 @@
+name: Notify Release (Resend)
+
+# Orchestra のリリース (アップデート) 内容を Resend で全アカウントにメール配信する。
+#
+# 起動されるタイミング:
+#   - GitHub の画面でリリースを「Publish」したとき (release: published)
+#   - release.yml がドラフトでないリリースを作成したとき (workflow_call)
+#     ※ GITHUB_TOKEN で作ったリリースは release イベントを発火しないため、
+#       release.yml の最後から直接呼び出している
+#   - 手動実行 (workflow_dispatch)。dry_run で送信せずに確認だけもできる
+#
+# 同じタグの Broadcast が送信済みならスクリプト側でスキップするので二重送信はしない。
+#
+# 必要な Secrets:
+#   RESEND_API_KEY, SUPABASE_SERVICE_ROLE_KEY
+# 任意の Variables:
+#   RESEND_FROM (既定 "Orchestra <updates@he-ro.io>"), RESEND_REPLY_TO, RESEND_SEGMENT_ID
+
+on:
+  release:
+    types: [published]
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+    secrets:
+      RESEND_API_KEY:
+        required: false
+      SUPABASE_SERVICE_ROLE_KEY:
+        required: false
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '通知するリリースタグ (例: v1.4.10)'
+        required: true
+      dry_run:
+        description: '送信せずに宛先数とプレビューだけ確認する'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notify-release-${{ inputs.tag || github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    name: Send release email to all accounts
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'release' || !github.event.release.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: build/notify-release.mjs
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Send via Resend
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.event.release.tag_name }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          SUPABASE_URL: https://wmhrbhcnxglvqwvnbxlt.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RESEND_FROM: ${{ vars.RESEND_FROM }}
+          RESEND_REPLY_TO: ${{ vars.RESEND_REPLY_TO }}
+          RESEND_SEGMENT_ID: ${{ vars.RESEND_SEGMENT_ID }}
+        run: node build/notify-release.mjs
+
+      - name: Upload email preview
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-email-preview
+          path: release-email-preview.html
+          if-no-files-found: ignore
