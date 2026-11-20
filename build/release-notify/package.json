@@ -1,0 +1,10 @@
+{
+  "name": "orchestra-release-notify",
+  "private": true,
+  "type": "module",
+  "description": "リリース時に AI でアップデート情報とメール文面を生成し、GitHub Release を更新して Resend で配信する",
+  "dependencies": {
+    "@anthropic-ai/sdk": "1.11.0",
+    "zod": "^4.1.12"
+  }
+}
