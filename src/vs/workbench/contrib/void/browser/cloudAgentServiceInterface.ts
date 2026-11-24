@@ -316,7 +316,7 @@ export interface ICloudAgentService {
 
 	// --- 文書 (サンドボックスの .division。ローカルの Division Project と同じファイル) ---
 
-	/** GET .../documents: ワークフロー (workflow.json)・論文・仕様書・デザインのページ・各ロールの成果物 */
+	/** GET .../documents: ワークフロー (workflow.json)・マーケットリサーチ・仕様書・デザインのページ・各ロールの成果物 */
 	listDocuments(id: string): Promise<{ documents: CloudDocument[] } | { error: string }>;
 	/**
 	 * 文書をエディタで開く (orchestra-cloud://<id>/.division/…)。ローカルの文書と同じエディタで開き、

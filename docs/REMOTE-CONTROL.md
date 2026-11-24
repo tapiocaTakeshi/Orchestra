@@ -80,7 +80,7 @@ Orchestra Mobile と同期します。このメッセージは AI には送ら�
 | POST | `/api/chat/abort` | `{ threadId? }` | 実行を中断 |
 | POST | `/api/chat/new` | | 新しいスレッド |
 | POST | `/api/chat/threads/:id` | | スレッドを切り替え |
-| POST | `/api/chat/approve` | `{ threadId?, editedOutputs? }` | 承認待ちのツールを承認。フローのレビュー (`chat.pendingReview`。目標ループの「毎回確認」など) で止まっているときは、それを承認して続ける (目標ループなら次のラウンドへ)。`editedOutputs: [{ mdFileName, mdContent }]` を付けると、成果物 (論文・仕様書・デザインなど) を編集した内容で承認する (PC のチャットの「編集」と同じで、ファイルにも書き、次の役割はその内容を読む)。承認待ちでなければ `409 not_awaiting_approval` |
+| POST | `/api/chat/approve` | `{ threadId?, editedOutputs? }` | 承認待ちのツールを承認。フローのレビュー (`chat.pendingReview`。目標ループの「毎回確認」など) で止まっているときは、それを承認して続ける (目標ループなら次のラウンドへ)。`editedOutputs: [{ mdFileName, mdContent }]` を付けると、成果物 (マーケットリサーチ・仕様書・デザインなど) を編集した内容で承認する (PC のチャットの「編集」と同じで、ファイルにも書き、次の役割はその内容を読む)。承認待ちでなければ `409 not_awaiting_approval` |
 | GET | `/api/chat/review?threadId=` | | 承認待ちの成果物の全文 `{ flowRole, title, outputs: [{ role, mdFileName, mdFilePath, content }] }` (`pendingReview.content` は 4,000 文字で切ってある。成果物の一覧は `pendingReview.outputs`)。承認待ちでなければ `409 not_awaiting_review` |
 | POST | `/api/chat/reject` | `{ threadId? }` | 承認待ちのツールを却下。フローのレビューで止まっているときは、そこで止める |
 | POST | `/api/chat/goal-loop` | `{ mode: 'auto' \| 'confirm' }` | 目標ループの進め方 (PC のチャット欄の「ループ」) を変える。今の値は `chat.goalLoopMode` (チャットのモデルが Division API でなければ `null`) 現在は実行に影響しない (ループ実行はなくなり、繰り返しと目標はワークフローのループノードで設定する)。古いアプリのために受け付けるだけ |
@@ -138,13 +138,13 @@ Orchestra Mobile と同期します。このメッセージは AI には送ら�
 ファイルのパスは最初のワークスペースフォルダからの相対パスだけを受け付け、外へ出るものは
 `403 outside_workspace` にします。
 
-### 文書 (論文・仕様書・デザイン)
+### 文書 (マーケットリサーチ・仕様書・デザイン)
 
 `.division` の下の文書を、スマホで読んで編集するためのものです。
 
 | メソッド | パス | 内容 |
 | --- | --- | --- |
-| GET | `/api/documents` | `{ documents: [{ path, name, kind, size, mtime }], revision }`。kind は `paper` (paper.md) / `specification` (specification.md) / `design` (design/*.html、index.html が先頭。以前の DESIGN.html も) / `output` (ほかの *.md) |
+| GET | `/api/documents` | `{ documents: [{ path, name, kind, size, mtime }], revision }`。kind は `market-research` (market-research.md。以前の paper.md も `market-research`) / `specification` (specification.md) / `design` (design/*.html、index.html が先頭。以前の DESIGN.html も) / `output` (ほかの *.md) |
 | GET | `/api/documents/content?path=` | `{ path, content, size, mtime }` (2 MB まで) |
 | POST | `/api/documents/content` | `{ path, content, baseMtime? }` を保存して `{ path, content, size, mtime }`。`baseMtime` (開いたときの mtime) が今のファイルと違えば `409 document_changed` |
 

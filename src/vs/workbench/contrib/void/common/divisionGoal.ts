@@ -27,7 +27,7 @@ export const DRIFT_FILE = 'drift.md';
 /** goal.md written from the user's first request, when the project has none. */
 export const goalDocument = (request: string, date: Date = new Date()): string => `# 目的
 
-> このファイルはユーザーが最初に決めた目的で、論文・仕様書・デザイン・実装のすべてを判断する最上位の基準です。
+> このファイルはユーザーが最初に決めた目的で、マーケットリサーチ・仕様書・デザイン・実装のすべてを判断する最上位の基準です。
 > AI は変更しません。目的を変えるときは、ユーザーがこのファイルを直接編集してください。
 
 ## 最初の依頼 (${date.toISOString().slice(0, 10)})
@@ -39,7 +39,7 @@ ${request.trim()}
 export const goalInstructionBlock = (goal: string): string => goal.trim()
 	? [
 		`## 目的 (.division/${GOAL_FILE}) — 最上位の基準`,
-		`ユーザーが最初に決めた目的です。論文・仕様書・デザイン・実装のすべてをこれに照らして判断してください。仕様書どおりでも、目的から外れていれば正しくありません。`,
+		`ユーザーが最初に決めた目的です。マーケットリサーチ・仕様書・デザイン・実装のすべてをこれに照らして判断してください。仕様書どおりでも、目的から外れていれば正しくありません。`,
 		`このファイルは変更しないでください (目的を変えるのはユーザーだけです)。依頼や文書が目的と食い違うと思ったら、回答の最後にそう書いてください。`,
 		``,
 		'````markdown',
@@ -66,7 +66,7 @@ export const lineChanges = (before: string, after: string): { added: number; rem
 
 /**
  * Why the document was changed, as its author wrote it: the last entry of its "## 変更履歴" section
- * (the paper and the specification keep one), or '' when there is none.
+ * (the market research and the specification keep one), or '' when there is none.
  */
 export const latestChangeNote = (doc: string): string => {
 	const at = doc.search(/^##\s*変更履歴\s*$/m);
@@ -79,7 +79,7 @@ export const latestChangeNote = (doc: string): string => {
 	return last.replace(/^([-*]|\d+\.)\s+/, '').replace(/^\||\|$/g, '').replace(/\s*\|\s*/g, ' — ').trim();
 };
 
-export const CHANGES_HEADER = `# 変更履歴 (論文・仕様書・デザイン)
+export const CHANGES_HEADER = `# 変更履歴 (マーケットリサーチ・仕様書・デザイン)
 
 生きた文書を更新するたびに、何を・なぜ変えたかを記録します。新しい記録は下に追加されます。
 基準は .division/${GOAL_FILE} (ユーザーが最初に決めた目的) です。前の版は .division/history/ に残っています。
@@ -118,10 +118,10 @@ export const changeEntry = (c: ChangeEntry): string => {
 // ---------------------------------------------------------------------------
 
 export const DRIFT_CHECK_PROMPT = `あなたは AI エージェントチームの Reviewer として、実装を始める前に「ドリフト検証」を行います。
-ドリフトとは、AI が文書の修正を重ねるうちに、論文・仕様書・デザインがユーザーの当初の目的から少しずつ離れてしまうことです。
+ドリフトとは、AI が文書の修正を重ねるうちに、マーケットリサーチ・仕様書・デザインがユーザーの当初の目的から少しずつ離れてしまうことです。
 最上位の基準は .division/${GOAL_FILE} (ユーザーが最初に決めた目的) です。仕様書どおりであることと、目的どおりであることは別の問題です。仕様書そのものが目的から変質していないかを見てください。
 
-論文・仕様書・デザインのそれぞれを目的と比べ、次のどれかに当たるものを逸脱とします:
+マーケットリサーチ・仕様書・デザインのそれぞれを目的と比べ、次のどれかに当たるものを逸脱とします:
 - 目的が求めることを削った・弱めた・別のものに置き換えた
 - 目的に無い機能・対象ユーザー・方針を、目的の代わりに中心に据えている
 - 目的と矛盾する決定がある
@@ -131,14 +131,14 @@ export const DRIFT_CHECK_PROMPT = `あなたは AI エージェントチーム�
 JSON だけを返してください (説明文は不要。コードブロックも不要):
 {"drift": true | false, "issues": [{"document": "<文書>", "finding": "<何が目的から離れているか>", "goal": "<目的のどの点に反するか>"}], "notes": "<気になる点 (任意)>", "reason": "<判定の理由を 1〜2 文で>"}`;
 
-export type DriftDocuments = { goal: string; paper?: string; spec?: string; design?: string; changes?: string };
+export type DriftDocuments = { goal: string; research?: string; spec?: string; design?: string; changes?: string };
 
-export const hasDocumentsToCheck = (d: DriftDocuments): boolean => !!d.goal.trim() && !!(d.paper?.trim() || d.spec?.trim() || d.design?.trim());
+export const hasDocumentsToCheck = (d: DriftDocuments): boolean => !!d.goal.trim() && !!(d.research?.trim() || d.spec?.trim() || d.design?.trim());
 
 export const driftCheckInput = (d: DriftDocuments, request: string): string => [
 	`## 目的 (.division/${GOAL_FILE})\n${d.goal}`,
 	request.trim() ? `## 今回の依頼\n${request.trim().slice(0, 4000)}` : '',
-	d.paper ? `## 論文 (.division/paper.md)\n${d.paper}` : '',
+	d.research ? `## マーケットリサーチ (.division/market-research.md)\n${d.research}` : '',
 	d.spec ? `## 仕様書 (.division/specification.md)\n${d.spec}` : '',
 	d.design ? `## デザイン (.division/design/ のページ一覧と index.html)\n${d.design}` : '',
 	d.changes ? `## 変更履歴 (最近のもの)\n${d.changes}` : '',
