@@ -267,7 +267,7 @@ export type CloudCommandApprovalEventData =
 export type CloudCommandApprovalAction = 'approve' | 'deny';
 
 /**
- * POST /api/cloud-sessions/:id/documents/ai-edit: the role that writes the document (researcher → paper.md,
+ * POST /api/cloud-sessions/:id/documents/ai-edit: the role that writes the document (researcher → market-research.md,
  * writer → specification.md, designer → design/*.html, …) rewrites the selected part. Nothing is saved:
  * the user looks at the proposal and applies it to the document they are editing (then saves / approves).
  * content: the document as the client has it now (unsaved edits included); start / end are offsets in it.

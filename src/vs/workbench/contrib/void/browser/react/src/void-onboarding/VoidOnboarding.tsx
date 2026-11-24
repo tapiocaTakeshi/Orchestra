@@ -846,7 +846,7 @@ const VoidOnboardingContent = () => {
 			}
 		/>,
 
-		// 使い方: アニメーションのヒーローと、自動再生のチュートリアル (依頼 → ワークフロー → 論文・仕様書 → デザイン → 承認・編集)
+		// 使い方: アニメーションのヒーローと、自動再生のチュートリアル (依頼 → ワークフロー → マーケットリサーチ・仕様書 → デザイン → 承認・編集)
 		1: <OnboardingPageShell hasMaxWidth={false}
 			content={
 				<div className='w-full max-w-[960px] mx-auto px-6 flex flex-col gap-6 max-h-[70vh] overflow-y-auto'>

@@ -110,7 +110,9 @@ const MAX_DOCUMENT_BYTES = 2 * 1024 * 1024;
 const DIVISION_DIR = '.division';
 /** モバイルで読み書きできる文書の拡張子 (デザインのページが読む CSS も読める) */
 const DOCUMENT_EXTENSIONS = /\.(md|markdown|txt|html?|css)$/i;
-const PAPER_DOCUMENT = 'paper.md';
+const MARKET_RESEARCH_DOCUMENT = 'market-research.md';
+/** 以前のマーケットリサーチ (論文) のファイル名。マーケットリサーチとして扱う */
+const LEGACY_PAPER_DOCUMENT = 'paper.md';
 const SPEC_DOCUMENT = 'specification.md';
 
 class HttpError extends Error {
@@ -172,7 +174,7 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 		this._register(this._settingsService.onDidChangeState(bump));
 		this._register(this._workspaceContextService.onDidChangeWorkspaceFolders(bump));
 		this._register(this._remoteSessionSyncService.onDidChangeSync(bump));
-		// .division の文書 (論文・仕様書・デザイン) が PC で書き換わったら、モバイルが開いている文書を読み直せるように
+		// .division の文書 (マーケットリサーチ・仕様書・デザイン) が PC で書き換わったら、モバイルが開いている文書を読み直せるように
 		this._register(this._fileService.onDidFilesChange(e => {
 			const root = this._workspaceContextService.getWorkspace().folders[0]?.uri;
 			if (root && e.affects(joinPath(root, DIVISION_DIR))) { this._documentsRevision++; bump(); }
@@ -537,7 +539,7 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 			await this._editorService.openEditor({ resource: uri, options: { pinned: true } });
 		});
 
-		// --- 文書 (.division の論文・仕様書・デザイン・成果物) ---
+		// --- 文書 (.division のマーケットリサーチ・仕様書・デザイン・成果物) ---
 		this._route('GET', '/api/documents', async () => ({ documents: await this._listDocuments(), revision: this._documentsRevision }));
 		this._route('GET', '/api/documents/content', async (_, { query }) => {
 			const { uri, path } = this._resolveDocumentPath(query.path ?? '');
@@ -630,10 +632,10 @@ class OrchestraRemoteControlContribution extends Disposable implements IWorkbenc
 			}
 			if (child.name === LEGACY_DESIGN_FILE) { docs.push(entry(child.resource, child.name, 'design', child.size ?? 0, child.mtime ?? 0)); continue; }
 			if (!/\.(md|markdown)$/i.test(child.name)) continue;
-			const kind: RemoteDocumentKind = child.name === PAPER_DOCUMENT ? 'paper' : child.name === SPEC_DOCUMENT ? 'specification' : 'output';
+			const kind: RemoteDocumentKind = (child.name === MARKET_RESEARCH_DOCUMENT || child.name === LEGACY_PAPER_DOCUMENT) ? 'market-research' : child.name === SPEC_DOCUMENT ? 'specification' : 'output';
 			docs.push(entry(child.resource, child.name, kind, child.size ?? 0, child.mtime ?? 0));
 		}
-		const rank: Record<RemoteDocumentKind, number> = { paper: 0, specification: 1, design: 2, output: 3 };
+		const rank: Record<RemoteDocumentKind, number> = { 'market-research': 0, specification: 1, design: 2, output: 3 };
 		return docs.sort((a, b) => rank[a.kind] - rank[b.kind] || (a.kind === 'design' ? 0 : a.name.localeCompare(b.name)));
 	}
 

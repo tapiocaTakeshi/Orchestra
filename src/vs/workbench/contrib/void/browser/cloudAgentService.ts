@@ -1080,7 +1080,7 @@ class CloudAgentService extends Disposable implements ICloudAgentService {
 		});
 	}
 
-	// --- 文書 (サンドボックスの .division: ワークフロー・論文・仕様書・デザイン・成果物) ---
+	// --- 文書 (サンドボックスの .division: ワークフロー・マーケットリサーチ・仕様書・デザイン・成果物) ---
 
 	async listDocuments(id: string): Promise<{ documents: CloudDocument[] } | { error: string }> {
 		try {

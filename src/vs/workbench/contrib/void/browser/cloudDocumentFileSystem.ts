@@ -3,11 +3,11 @@
  *  Licensed under the MIT License. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-// A cloud agent's .division documents as files: orchestra-cloud://<session id>/.division/paper.md.
+// A cloud agent's .division documents as files: orchestra-cloud://<session id>/.division/market-research.md.
 // A session started from several repositories also lists each repository's own .division
 // (orchestra-cloud://<session id>/<repo dir>/.division/CODER.md).
 //
-// The local Division Project writes its workflow (.division/workflow.json), paper, specification and design
+// The local Division Project writes its workflow (.division/workflow.json), market research, specification and design
 // pages into the workspace, and the user opens and edits them in the editor. A cloud session writes the same
 // files into its sandbox; this provider puts them in the editor the same way, so they open with the same
 // editors (Markdown, the workflow.json diagram, the design pages) and saving writes to the sandbox.
@@ -59,23 +59,27 @@ const documentFolders = (docs: CloudDocument[]): Set<string> => {
 	return out;
 };
 
-export type CloudDocumentKind = 'workflow' | 'paper' | 'specification' | 'design' | 'output';
+export type CloudDocumentKind = 'workflow' | 'market-research' | 'specification' | 'design' | 'output';
 /** One document as GET /api/cloud-sessions/:id/documents lists it */
 export type CloudDocument = { path: string; name: string; kind: CloudDocumentKind; size: number; mtime: number };
 
-/** The editor's URI of a session's document (path: workspace-relative, e.g. .division/paper.md). */
+/** The editor's URI of a session's document (path: workspace-relative, e.g. .division/market-research.md). */
 export const cloudDocumentUri = (sessionId: string, path: string): URI =>
 	URI.from({ scheme: CLOUD_DOCUMENT_SCHEME, authority: sessionId, path: `/${path.replace(/^\/+/, '')}` });
 
 export const cloudDocumentLabel: Record<CloudDocumentKind, string> = {
 	workflow: 'ワークフロー',
-	paper: '論文',
+	'market-research': 'マーケットリサーチ',
 	specification: '仕様書',
 	design: 'デザイン',
 	output: '成果物',
 };
 
-const KINDS: CloudDocumentKind[] = ['workflow', 'paper', 'specification', 'design', 'output'];
+const KINDS: CloudDocumentKind[] = ['workflow', 'market-research', 'specification', 'design', 'output'];
+
+/** The kind the server sent; the legacy 'paper' (.division/paper.md) is market research. */
+const toKind = (kind: unknown): CloudDocumentKind =>
+	kind === 'paper' ? 'market-research' : KINDS.includes(kind as CloudDocumentKind) ? kind as CloudDocumentKind : 'output';
 
 export const toCloudDocuments = (raw: unknown): CloudDocument[] => {
 	const list = raw && typeof raw === 'object' && Array.isArray((raw as { documents?: unknown }).documents) ? (raw as { documents: unknown[] }).documents : [];
@@ -88,7 +92,7 @@ export const toCloudDocuments = (raw: unknown): CloudDocument[] => {
 		out.push({
 			path: o.path,
 			name: typeof o.name === 'string' && o.name ? o.name : rel.slice(DIVISION_DIR.length + 1),
-			kind: KINDS.includes(o.kind as CloudDocumentKind) ? o.kind as CloudDocumentKind : 'output',
+			kind: toKind(o.kind),
 			size: typeof o.size === 'number' ? o.size : 0,
 			mtime: typeof o.mtime === 'number' ? o.mtime : 0,
 		});

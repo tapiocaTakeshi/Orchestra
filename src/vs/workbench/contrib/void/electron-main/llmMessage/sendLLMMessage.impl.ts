@@ -1070,21 +1070,32 @@ const sendGeminiChat = async ({
 
 // --------- DIVISION API ---------
 
-// アプリ制作の生きた文書 (.division の下)。論文 → 仕様書 → デザイン の順に作り、coder は仕様書とデザインから実装する。
-const PAPER_FILE = 'paper.md';
+// アプリ制作の生きた文書 (.division の下)。マーケットリサーチ → 仕様書 → デザイン の順に作り、coder は仕様書とデザインから実装する。
+const MARKET_RESEARCH_FILE = 'market-research.md';
+/** 以前のマーケットリサーチ (論文) のファイル。market-research.md が無ければこれをマーケットリサーチとして読む */
+const LEGACY_PAPER_FILE = 'paper.md';
 const SPEC_FILE = 'specification.md';
-/** 生きた文書の以前の版の置き場 (.division/history/<paper|specification|design>/<時刻>/) */
+/** 生きた文書の以前の版の置き場 (.division/history/<market-research|specification|design>/<時刻>/) */
 const HISTORY_DIR = 'history';
 
-/** 論文・仕様書・デザインのどれかなら true (常に保存し、更新はするが一新しない) */
+/** マーケットリサーチ・仕様書・デザインのどれかなら true (常に保存し、更新はするが一新しない) */
 const isLivingDocument = (filename: string): boolean =>
-	filename === PAPER_FILE || filename === SPEC_FILE || filename.startsWith(`${DESIGN_DIR}/`);
+	filename === MARKET_RESEARCH_FILE || filename === LEGACY_PAPER_FILE || filename === SPEC_FILE || filename.startsWith(`${DESIGN_DIR}/`);
+
+/**
+ * 生きた文書の今の版があるファイル名。market-research.md がまだ無く、以前の paper.md があれば paper.md
+ * (その内容を引き継いで market-research.md に書く)。
+ */
+const livingSourceName = (divisionDir: string, filename: string): string =>
+	filename === MARKET_RESEARCH_FILE && !fs.existsSync(path.join(divisionDir, MARKET_RESEARCH_FILE)) && fs.existsSync(path.join(divisionDir, LEGACY_PAPER_FILE))
+		? LEGACY_PAPER_FILE : filename;
 
 /**
  * 生きた文書を書き換える前に、今の版を .division/history/ に写す。
  * ロールが文書を丸ごと書き直してしまっても、以前の版は失われない。
  */
-const snapshotLivingDocument = (divisionDir: string, filename: string): string | null => {
+const snapshotLivingDocument = (divisionDir: string, target: string): string | null => {
+	const filename = livingSourceName(divisionDir, target);
 	const isDesign = filename.startsWith(`${DESIGN_DIR}/`);
 	const source = path.join(divisionDir, isDesign ? DESIGN_DIR : filename);
 	if (!fs.existsSync(source)) return null;
@@ -1106,7 +1117,7 @@ const readLivingDocument = (divisionDir: string, filename: string): string => {
 			return sortDesignPageNames(fs.readdirSync(dir).filter(n => /\.html?$/i.test(n)))
 				.map(n => `<!-- ${n} -->\n${fs.readFileSync(path.join(dir, n), 'utf-8')}`).join('\n');
 		}
-		return fs.readFileSync(path.join(divisionDir, filename), 'utf-8');
+		return fs.readFileSync(path.join(divisionDir, livingSourceName(divisionDir, filename)), 'utf-8');
 	} catch { return ''; }
 };
 
@@ -1118,7 +1129,7 @@ const recordLivingDocumentChange = (divisionDir: string, filename: string, role:
 	const { added, removed } = lineChanges(before, after);
 	if (added === 0 && removed === 0) return;
 	const isDesign = filename.startsWith(`${DESIGN_DIR}/`);
-	const label = isDesign ? `デザイン (.division/${DESIGN_DIR}/)` : filename === PAPER_FILE ? `論文 (.division/${PAPER_FILE})` : `仕様書 (.division/${SPEC_FILE})`;
+	const label = isDesign ? `デザイン (.division/${DESIGN_DIR}/)` : (filename === MARKET_RESEARCH_FILE || filename === LEGACY_PAPER_FILE) ? `マーケットリサーチ (.division/${filename})` : `仕様書 (.division/${SPEC_FILE})`;
 	try {
 		const file = path.join(divisionDir, CHANGES_FILE);
 		if (!fs.existsSync(file)) fs.writeFileSync(file, CHANGES_HEADER, 'utf-8');
@@ -1155,6 +1166,10 @@ const readDivisionFile = (workspaceFolderPath: string | undefined, filename: str
 	try { return fs.readFileSync(path.join(workspaceFolderPath, '.division', filename), 'utf-8').trim(); } catch { return ''; }
 };
 
+/** マーケットリサーチの今の内容。market-research.md が無ければ以前の paper.md (どちらも無ければ '') */
+const readMarketResearchFile = (workspaceFolderPath: string | undefined): string =>
+	readDivisionFile(workspaceFolderPath, MARKET_RESEARCH_FILE) || readDivisionFile(workspaceFolderPath, LEGACY_PAPER_FILE);
+
 // Flow MD file management: save each flow's result as a structured MD document
 const FLOW_ROLE_TO_FILENAME: Record<string, string> = {
 	'leader': 'LEADER.md',
@@ -1163,19 +1178,19 @@ const FLOW_ROLE_TO_FILENAME: Record<string, string> = {
 	// designer は .division/design/ に画面ごとの HTML を書く (common/designPages.ts)。ここには先頭ページを置く。
 	'design': `${DESIGN_DIR}/${DESIGN_INDEX_PAGE}`,
 	'designer': `${DESIGN_DIR}/${DESIGN_INDEX_PAGE}`,
-	// アプリ制作の流れ: 論文 (paper.md) → 仕様書 (specification.md) → デザイン (design/) → coder の実装。
+	// アプリ制作の流れ: マーケットリサーチ (market-research.md) → 仕様書 (specification.md) → デザイン (design/) → coder の実装。
 	// この 3 つは常に保存され、更新はするが一新はしない (isLivingDocument)。
-	'search': PAPER_FILE,
-	'searcher': PAPER_FILE,
+	'search': MARKET_RESEARCH_FILE,
+	'searcher': MARKET_RESEARCH_FILE,
 	'file-search': 'FILE.md',
 	'filesearch': 'FILE.md',
 	'file_search': 'FILE.md',
 	'file-searcher': 'FILE.md',
 	'filesearcher': 'FILE.md',
-	'research': PAPER_FILE,
-	'researcher': PAPER_FILE,
-	'deep-research': PAPER_FILE,
-	'deep-researcher': PAPER_FILE,
+	'research': MARKET_RESEARCH_FILE,
+	'researcher': MARKET_RESEARCH_FILE,
+	'deep-research': MARKET_RESEARCH_FILE,
+	'deep-researcher': MARKET_RESEARCH_FILE,
 	'review': 'REVIEW.md',
 	'reviewer': 'REVIEW.md',
 	'writing': SPEC_FILE,
@@ -3658,37 +3673,37 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 			});
 		};
 
-		// 論文・仕様書を指示に入れるときの上限 (1 文書あたり)
+		// マーケットリサーチ・仕様書を指示に入れるときの上限 (1 文書あたり)
 		const MAX_LIVING_DOC_CHARS = 60_000;
 		const fenced = (text: string): string => ['````markdown', text, '````'].join('\n');
 
-		// 論文 (researcher / searcher) と仕様書 (writer) の担当への指示。
+		// マーケットリサーチ (researcher / searcher) と仕様書 (writer) の担当への指示。
 		// どちらも生きた文書なので、今の版を渡して「残したまま書き足す・直す」完全版を出させる
 		// (出力はそのまま .division/<file> に保存され、以前の版は .division/history/ に残る)。
 		const buildLivingDocumentInstruction = (file: string): string => {
-			const paper = file === PAPER_FILE;
-			const current = truncateForContext(readDivisionFile(workspaceFolderPath, file), MAX_LIVING_DOC_CHARS);
+			const research = file === MARKET_RESEARCH_FILE;
+			const current = truncateForContext(research ? readMarketResearchFile(workspaceFolderPath) : readDivisionFile(workspaceFolderPath, file), MAX_LIVING_DOC_CHARS);
 			const lines = [
 				``,
-				paper
-					? `### あなたの成果物: 論文 (.division/${PAPER_FILE})`
+				research
+					? `### あなたの成果物: マーケットリサーチ (.division/${MARKET_RESEARCH_FILE})`
 					: `### あなたの成果物: 仕様書 (.division/${SPEC_FILE})`,
-				paper
-					? `アプリの土台になる調査です。背景・課題・調査結果・根拠・選択肢とその得失を書き、主張ごとに出典 (URL) を付けてください。`
-					: `論文をもとに、目的・利用者・機能・画面と画面遷移・データ・非機能要件・受け入れ条件を書いてください。designer はこれをもとにデザインを、coder は仕様書とデザインからソフトウェアを作るので、抜けや曖昧さが無いようにしてください。`,
+				research
+					? `アプリの土台になる市場調査です。市場規模と成長性・競合 (主なサービスとその機能・価格・強み弱み)・ターゲットユーザー (誰が・どんな課題を抱えているか)・価格設定・トレンドを調べ、そこから言える機会と差別化の方針を書いてください。数値や主張ごとに出典 (URL) を付けてください。`
+					: `マーケットリサーチをもとに、目的・利用者・機能・画面と画面遷移・データ・非機能要件・受け入れ条件を書いてください。designer はこれをもとにデザインを、coder は仕様書とデザインからソフトウェアを作るので、抜けや曖昧さが無いようにしてください。`,
 				`この文書は常に保存され更新される生きた文書です。**一新しないでください。**`,
 				`- 既存の見出し・記述・決定事項はすべて残し、新しいことを書き足し、変わったことを直してください。変えた・取り下げた箇所にはその理由を書いてください。`,
 				`- 末尾に「## 変更履歴」を置き、今回の更新を 1 行追加してください: 日付・何を変えたか・なぜか (目的 .division/${GOAL_FILE} や依頼のどこに基づくか)。この行は .division/${CHANGES_FILE} に記録されます。`,
 				`- 目的 (.division/${GOAL_FILE}) から文書が離れないようにしてください。依頼が目的と食い違うときは、文書に反映する前にその旨を書いてください。`,
 				`- 回答は文書の完全版 (Markdown) だけにしてください。回答全体がそのまま .division/${file} に保存されます。前置き・後書きは書かないでください。`,
 			];
-			if (!paper) {
-				const paperDoc = truncateForContext(readDivisionFile(workspaceFolderPath, PAPER_FILE), MAX_LIVING_DOC_CHARS);
-				lines.push(``, paperDoc ? `#### 論文 (.division/${PAPER_FILE}) — 仕様書の根拠` : `#### 論文 (.division/${PAPER_FILE}) はまだありません。先行タスクの出力とユーザーの依頼をもとに書いてください。`);
-				if (paperDoc) lines.push(fenced(paperDoc));
+			if (!research) {
+				const researchDoc = truncateForContext(readMarketResearchFile(workspaceFolderPath), MAX_LIVING_DOC_CHARS);
+				lines.push(``, researchDoc ? `#### マーケットリサーチ (.division/${MARKET_RESEARCH_FILE}) — 仕様書の根拠` : `#### マーケットリサーチ (.division/${MARKET_RESEARCH_FILE}) はまだありません。先行タスクの出力とユーザーの依頼をもとに書いてください。`);
+				if (researchDoc) lines.push(fenced(researchDoc));
 			}
 			lines.push(``, current
-				? `#### 今の${paper ? '論文' : '仕様書'} (.division/${file}) — これを残したまま更新する`
+				? `#### 今の${research ? 'マーケットリサーチ' : '仕様書'} (.division/${file}) — これを残したまま更新する`
 				: `#### .division/${file} はまだありません。新しく書いてください。`);
 			if (current) lines.push(fenced(current));
 			return lines.join('\n');
@@ -4414,9 +4429,9 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					].join('\n')
 					: `直前の assistant メッセージに先行タスクの出力が添付されています（ある場合）。それを参考に、あなたの担当タスクを遂行してください。出力は Markdown 形式で、後続エージェントが直接利用できるよう具体的・網羅的にまとめてください。`;
 
-				// 論文・仕様書を書くロールには、今の文書 (と前段の文書) を渡し、一新せず更新させる
+				// マーケットリサーチ・仕様書を書くロールには、今の文書 (と前段の文書) を渡し、一新せず更新させる
 				const livingFile = FLOW_ROLE_TO_FILENAME[role];
-				const livingDocBlock = (livingFile === PAPER_FILE || livingFile === SPEC_FILE)
+				const livingDocBlock = (livingFile === MARKET_RESEARCH_FILE || livingFile === SPEC_FILE)
 					? buildLivingDocumentInstruction(livingFile)
 					: isDesigner ? buildDesignSourceBlock() : '';
 
@@ -4459,7 +4474,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 							``,
 							`### 仕様書 (.division/${SPEC_FILE}) — 仕様書とデザインからソフトウェアを作ること`,
 							`- 仕様書の機能・画面・データ・受け入れ条件をすべて満たす。仕様書とデザインに無いものは作らない。`,
-							`- 仕様書・デザイン・論文・目的 (.division/) は編集しない。実装して分かった不足や矛盾は回答の最後に書く。`,
+							`- 仕様書・デザイン・マーケットリサーチ・目的 (.division/) は編集しない。実装して分かった不足や矛盾は回答の最後に書く。`,
 							`- 仕様書より上に目的 (.division/${GOAL_FILE}) がある。仕様書に従うと目的に反する箇所があれば、仕様書の範囲で目的の意図に沿わせ、回答の最後にそう書く。`,
 							``,
 							'````markdown',
@@ -4568,7 +4583,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					}
 				}
 				parallelLane = parallelLog ? i : null;
-				// ドリフト検証: coder が実装する前に、Reviewer が論文・仕様書・デザインを目的 (goal.md) と比べる。
+				// ドリフト検証: coder が実装する前に、Reviewer がマーケットリサーチ・仕様書・デザインを目的 (goal.md) と比べる。
 				// 目的から離れていたら、実装せずに止めてユーザーに確認する (承認すればこのまま実装する)。
 				const driftAcknowledgedHere = round === 1 && isResuming && i === resumeFromIndex && resumeState?.driftAcknowledged === true;
 				if (workspaceFolderPath && isCodeRole(role) && livingDocsChangedSinceDriftCheck && !driftAcknowledgedHere) {
@@ -4576,7 +4591,7 @@ const sendDivisionAPIChat = async (params: SendChatParams_Internal): Promise<voi
 					const designPages = listDesignPages(workspaceFolderPath);
 					const docs = {
 						goal: readGoalFile(workspaceFolderPath).trim(),
-						paper: truncateForContext(readDivisionFile(workspaceFolderPath, PAPER_FILE), 30_000),
+						research: truncateForContext(readMarketResearchFile(workspaceFolderPath), 30_000),
 						spec: truncateForContext(readDivisionFile(workspaceFolderPath, SPEC_FILE), 40_000),
 						design: designPages.length
 							? [designPages.join('\n'), `--- ${DESIGN_INDEX_PAGE} ---`, truncateForContext(readDivisionFile(workspaceFolderPath, `${DESIGN_DIR}/${DESIGN_INDEX_PAGE}`), 12_000)].join('\n')

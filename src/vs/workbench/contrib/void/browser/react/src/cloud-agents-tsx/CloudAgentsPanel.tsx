@@ -3913,17 +3913,17 @@ const FollowUpComposer = ({ session, value, setValue }: { session: CloudSession;
 };
 
 // ---------------------------------------------------------------------------
-// 文書: サンドボックスの .division (ワークフロー・論文・仕様書・デザイン・成果物)。ローカルの Division Project と同じく
+// 文書: サンドボックスの .division (ワークフロー・マーケットリサーチ・仕様書・デザイン・成果物)。ローカルの Division Project と同じく
 // エディタで開いて直せる (orchestra-cloud://<id>/.division/…、保存するとサンドボックスに書く)
 // ---------------------------------------------------------------------------
 
-const DOCUMENT_KIND_LABEL: Record<CloudDocumentKind, string> = { workflow: 'ワークフロー', paper: '論文', specification: '仕様書', design: 'デザイン', output: '成果物' };
-const DOCUMENT_KIND_ORDER: CloudDocumentKind[] = ['workflow', 'paper', 'specification', 'design', 'output'];
+const DOCUMENT_KIND_LABEL: Record<CloudDocumentKind, string> = { workflow: 'ワークフロー', 'market-research': 'マーケットリサーチ', specification: '仕様書', design: 'デザイン', output: '成果物' };
+const DOCUMENT_KIND_ORDER: CloudDocumentKind[] = ['workflow', 'market-research', 'specification', 'design', 'output'];
 const documentIcon = (kind: CloudDocumentKind) => {
 	const props = { size: 13, style: { flexShrink: 0 } as React.CSSProperties };
 	switch (kind) {
 		case 'workflow': return <FileJson {...props} color='var(--vscode-charts-purple, #a371f7)' />;
-		case 'paper': return <BookOpen {...props} color='var(--vscode-charts-blue, #3b82f6)' />;
+		case 'market-research': return <BookOpen {...props} color='var(--vscode-charts-blue, #3b82f6)' />;
 		case 'specification': return <FileText {...props} color='var(--vscode-charts-purple, #a371f7)' />;
 		case 'design': return <LayoutTemplate {...props} color={C.success} />;
 		default: return <FileText {...props} color={C.fgMuted} />;
@@ -3956,7 +3956,7 @@ const DocumentsMenu = ({ session }: { session: CloudSession }) => {
 
 	const groups = DOCUMENT_KIND_ORDER.map(kind => ({ kind, docs: (docs ?? []).filter(d => d.kind === kind) })).filter(g => g.docs.length);
 	const title = (d: CloudDocument) => {
-		const base = (d.kind === 'workflow' || d.kind === 'paper' || d.kind === 'specification') ? DOCUMENT_KIND_LABEL[d.kind] : d.name.replace(/^design\//, '');
+		const base = (d.kind === 'workflow' || d.kind === 'market-research' || d.kind === 'specification') ? DOCUMENT_KIND_LABEL[d.kind] : d.name.replace(/^design\//, '');
 		// A multi-repo session also lists each repository's own .division (<repo>/.division/…)
 		const repo = d.path.startsWith('.division/') ? '' : d.path.split('/')[0];
 		return repo ? `${repo} · ${base}` : base;
@@ -3972,7 +3972,7 @@ const DocumentsMenu = ({ session }: { session: CloudSession }) => {
 				className='oca-iconbtn'
 				data-active={open}
 				disabled={unavailable}
-				title='文書 (ワークフロー・論文・仕様書・デザイン) をエディタで開く'
+				title='文書 (ワークフロー・マーケットリサーチ・仕様書・デザイン) をエディタで開く'
 				aria-label='文書'
 				aria-expanded={open}
 				onClick={() => setOpen(v => !v)}
@@ -4001,7 +4001,7 @@ const DocumentsMenu = ({ session }: { session: CloudSession }) => {
 					{error && <div style={{ fontSize: '11px', color: C.error, padding: '0 2px', whiteSpace: 'pre-wrap' }}>{error}</div>}
 					{docs && !groups.length && (
 						<div style={{ fontSize: '11px', color: C.fgMuted, padding: '2px 2px 4px', lineHeight: 1.5 }}>
-							まだ文書がありません。Division Project で作業すると、ワークフロー (.division/workflow.json)・論文 (paper.md)・仕様書 (specification.md)・デザイン (design/) ができ、ここから開いて直せます。
+							まだ文書がありません。Division Project で作業すると、ワークフロー (.division/workflow.json)・マーケットリサーチ (market-research.md)・仕様書 (specification.md)・デザイン (design/) ができ、ここから開いて直せます。
 						</div>
 					)}
 					{!docs && !error && <div style={{ display: 'flex', justifyContent: 'center', padding: '8px' }}><Spinner /></div>}

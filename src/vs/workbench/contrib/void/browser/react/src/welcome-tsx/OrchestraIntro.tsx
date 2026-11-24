@@ -6,8 +6,8 @@
 /*
  * The first-run onboarding's "how it works" page (void-onboarding/VoidOnboarding.tsx, after "Welcome to
  * Orchestra"): an animated hero, and a tutorial that plays itself and shows how a
- * Division Project run goes — the request, the workflow diagram (.division/workflow.json), the paper
- * (.division/paper.md) and the specification (.division/specification.md), the design (.division/design/)
+ * Division Project run goes — the request, the workflow diagram (.division/workflow.json), the market
+ * research (.division/market-research.md) and the specification (.division/specification.md), the design (.division/design/)
  * and approving / editing them — with buttons that open those files.
  * Animations are CSS only and stop when the OS asks for reduced motion.
  */
@@ -178,7 +178,7 @@ const SceneWorkflow = () => {
 	);
 };
 
-/** The paper and the specification being written: paper.md → specification.md, both kept up to date. */
+/** The market research and the specification being written: market-research.md → specification.md, both kept up to date. */
 const SceneDocs = () => {
 	const lines = (n: number, start: number) => Array.from({ length: n }, (_, i) => (
 		<div key={i} className='oi-in' style={{ width: `${88 - (i % 3) * 18}%`, ...delay(start + i * 0.18) }}><div className='oi-skeleton' style={{ height: 6 }} /></div>
@@ -194,7 +194,7 @@ const SceneDocs = () => {
 	);
 	return (
 		<div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '0 10px' }}>
-			{doc(<BookOpen size={11} />, 'paper.md', 'Searcher · Researcher', '#3b82f6', 0.1, lines(4, 0.4))}
+			{doc(<BookOpen size={11} />, 'market-research.md', 'Searcher · Researcher', '#3b82f6', 0.1, lines(4, 0.4))}
 			<svg width='22' height='14' viewBox='0 0 22 14' style={{ flexShrink: 0 }}><path className='oi-edge' d='M 1 7 L 19 7 M 14 2 L 20 7 L 14 12' style={delay(1.2)} /></svg>
 			{doc(<FileText size={11} />, 'specification.md', 'Writer', '#8b5cf6', 1.35, <>
 				{['機能', '画面', 'データ', '受け入れ条件'].map((h, i) => (
@@ -267,8 +267,9 @@ const useDivisionFiles = () => {
 	const fileService = accessor.get('IFileService');
 	const commandService = accessor.get('ICommandService');
 	const folder = workspace.getWorkspace().folders[0]?.uri as URI | undefined;
-	type Exists = { workflow: boolean; paper: boolean; spec: boolean; design: boolean; designIndex: boolean };
-	const [exists, setExists] = useState<Exists>({ workflow: false, paper: false, spec: false, design: false, designIndex: false });
+	// research: market-research.md, or the legacy paper.md (legacyResearch: only paper.md is there)
+	type Exists = { workflow: boolean; research: boolean; legacyResearch: boolean; spec: boolean; design: boolean; designIndex: boolean };
+	const [exists, setExists] = useState<Exists>({ workflow: false, research: false, legacyResearch: false, spec: false, design: false, designIndex: false });
 
 	const folderKey = folder?.toString() ?? '';
 	const latest = useRef({ folder, fileService });
@@ -277,10 +278,10 @@ const useDivisionFiles = () => {
 		const { folder: f, fileService: files } = latest.current;
 		if (!f) { return; }
 		const check = async (...parts: string[]) => { try { return await files.exists(URI.joinPath(f, '.division', ...parts)); } catch { return false; } };
-		const [workflow, paper, spec, design, designIndex] = await Promise.all([
-			check('workflow.json'), check('paper.md'), check('specification.md'), check('design'), check('design', 'index.html'),
+		const [workflow, research, legacyPaper, spec, design, designIndex] = await Promise.all([
+			check('workflow.json'), check('market-research.md'), check('paper.md'), check('specification.md'), check('design'), check('design', 'index.html'),
 		]);
-		const next: Exists = { workflow, paper, spec, design, designIndex };
+		const next: Exists = { workflow, research: research || legacyPaper, legacyResearch: !research && legacyPaper, spec, design, designIndex };
 		// Only re-render when something changed (this runs every few seconds).
 		setExists(prev => ((Object.keys(next) as Array<keyof Exists>).every(k => prev[k] === next[k]) ? prev : next));
 	}, [folderKey]);
@@ -293,14 +294,15 @@ const useDivisionFiles = () => {
 
 	const openFile = (name: string) => { if (folder) { void commandService.executeCommand('vscode.open', URI.joinPath(folder, '.division', name)); } };
 	const openWorkflow = () => openFile('workflow.json');
-	const openPaper = () => openFile('paper.md');
+	const researchFile = exists.legacyResearch ? 'paper.md' : 'market-research.md';
+	const openResearch = () => openFile(researchFile);
 	const openSpec = () => openFile('specification.md');
 	const openDesign = () => {
 		if (!folder) { return; }
 		if (exists.designIndex) { void commandService.executeCommand('vscode.open', URI.joinPath(folder, '.division', 'design', 'index.html')); }
 		else { void commandService.executeCommand('revealInExplorer', URI.joinPath(folder, '.division', 'design')); }
 	};
-	return { hasFolder: !!folder, exists, openWorkflow, openPaper, openSpec, openDesign };
+	return { hasFolder: !!folder, exists, researchFile, openWorkflow, openResearch, openSpec, openDesign };
 };
 
 /**
@@ -377,7 +379,7 @@ export const OrchestraTutorial = ({ hideable = true, showFiles = true }: { hidea
 				<div style={{ fontSize: 11, color: 'var(--void-fg-3)' }}>{t('intro.files.title')}</div>
 				{[
 					{ key: 'workflow', icon: <FileJson size={13} color='var(--oi-violet)' />, label: t('intro.files.workflow'), path: '.division/workflow.json', ok: files.exists.workflow, open: files.openWorkflow },
-					{ key: 'paper', icon: <BookOpen size={13} color='#3b82f6' />, label: t('intro.files.paper'), path: '.division/paper.md', ok: files.exists.paper, open: files.openPaper },
+					{ key: 'research', icon: <BookOpen size={13} color='#3b82f6' />, label: t('intro.files.research'), path: `.division/${files.researchFile}`, ok: files.exists.research, open: files.openResearch },
 					{ key: 'spec', icon: <FileText size={13} color='var(--oi-violet)' />, label: t('intro.files.spec'), path: '.division/specification.md', ok: files.exists.spec, open: files.openSpec },
 					{ key: 'design', icon: <LayoutTemplate size={13} color='var(--oi-green)' />, label: t('intro.files.design'), path: '.division/design/', ok: files.exists.design, open: files.openDesign },
 				].map(f => (

@@ -26,7 +26,7 @@ suite('Division goal (drift prevention)', () => {
 	test('latestChangeNote reads the last line of the document\'s change log', () => {
 		assert.strictEqual(latestChangeNote('# 仕様書\n\n## 変更履歴\n- 2026-11-01: 初版\n- 2026-11-07: 入力画面を追加。理由: 目的の「3 タップ以内」\n'), '2026-11-07: 入力画面を追加。理由: 目的の「3 タップ以内」');
 		assert.strictEqual(latestChangeNote('## 変更履歴\n| 日付 | 内容 |\n|---|---|\n| 2026-11-07 | 画面を追加 |\n\n## 付録\n- x'), '2026-11-07 — 画面を追加');
-		assert.strictEqual(latestChangeNote('# 論文\n\n本文'), '');
+		assert.strictEqual(latestChangeNote('# マーケットリサーチ\n\n本文'), '');
 	});
 
 	test('changeEntry records what changed, why and the diff', () => {
